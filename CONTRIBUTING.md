@@ -56,6 +56,16 @@ they clear is the same one the codebase already holds itself to.
 - **Commits:** explain the why at whatever length it takes; the history here is
   documentation. Reference the incident/ruling when there is one.
 
+## Releasing (maintainer ritual)
+
+Every substantive change that lands on `main` ships as a **versioned release**:
+the README `Status` line moves to the new version, and an annotated tag
+`vX.Y.Z` lands on the same commit — no untagged feature pushes. While 0.x:
+patch = fixes, docs, bundled skills; minor = new features, or **any**
+machine-contract change (see the GLOSSARY rule above — those also need the
+migration story). The tag and the README must never disagree about what
+version you are looking at.
+
 ## Scope guidance
 
 Good first contributions: additional runtime adapters (the seat contract is
