@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "verdict": { "type": "string", "enum": ["approve", "reject", "escalate"] },
+    "reason": { "type": "string" },
+    "checked": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string" },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string" },
+          "title": { "type": "string" },
+          "detail": { "type": "string" },
+          "cost": { "type": "string" },
+          "kind": { "type": "string", "enum": ["none", "apply"] },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": { "type": "string" },
+                "label": { "type": "string" },
+                "role": { "type": "string", "enum": ["apply", "rollback", "companion"] },
+                "archive_name": { "type": "string" }
+              },
+              "required": ["path", "label", "role"]
+            }
+          }
+        },
+        "required": ["key", "title", "detail", "cost", "kind", "files"]
+      }
+    },
+    "recommend": { "type": "string" }
+  },
+  "required": ["verdict", "reason", "checked", "summary", "options", "recommend"]
+}

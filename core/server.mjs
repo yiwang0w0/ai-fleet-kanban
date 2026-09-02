@@ -1458,12 +1458,37 @@ function statusFor(e, where) {
 //  that is outside this threat model. The target is "pages from other origins" and
 //  "random local scripts without the token".)
 const TOKEN_FILE = join(store.DATA_DIR, "board_token");
-let BOARD_TOKEN;
-try { BOARD_TOKEN = readFileSync(TOKEN_FILE, "utf8").trim(); } catch { BOARD_TOKEN = ""; }
-if (!BOARD_TOKEN) {
-  BOARD_TOKEN = randomUUID().replace(/-/g, "");
-  writeFileSync(TOKEN_FILE, BOARD_TOKEN, "utf8");
-}
+// ⭐ Three tokens, three capability classes (v0.2, after a live incident: an
+//   interactive agent granted the board FOLDER read board_token and self-approved
+//   its own card with resolved_by:'codex'). One token was one capability —
+//   "worker" and "ruler" were the same word. Now:
+//     board_token  = operator, full power (panel injection, board.py, humans)
+//     worker_token = the EXECUTION face only: claim / report / heartbeat /
+//                    attempt / derived-card create / own-line compact / forked /
+//                    pool report. A worker loop compromised through card text
+//                    can no longer close or re-scope anything.
+//     review_token = the RULING face of the auto-reviewer: resolve with
+//                    resolved_by=auto, autoreview, pool report. It cannot claim,
+//                    cannot edit, and cannot impersonate a human ruling.
+//   Endpoints not on a token's list refuse (unknown falls on the refusing side).
+const mintToken = (file) => {
+  let t = "";
+  try { t = readFileSync(file, "utf8").trim(); } catch {}
+  if (!t) { t = randomUUID().replace(/-/g, ""); writeFileSync(file, t, "utf8"); }
+  return t;
+};
+const BOARD_TOKEN = mintToken(TOKEN_FILE);
+const WORKER_TOKEN = mintToken(join(store.DATA_DIR, "worker_token"));
+const REVIEW_TOKEN = mintToken(join(store.DATA_DIR, "review_token"));
+
+const WORKER_WRITES = (p) =>
+  p === "/api/claim" || p === "/api/tasks" || p === "/api/pools/exhausted" ||
+  /^\/api\/tasks\/\d+\/(?:report|heartbeat|attempt)$/.test(p) ||
+  /^\/api\/context\/[a-z0-9_-]+\/compact$/.test(p) ||
+  /^\/api\/workers\/[a-z0-9_-]+\/forked$/.test(p);
+const REVIEW_WRITES = (p) =>
+  p === "/api/pools/exhausted" ||
+  /^\/api\/tasks\/\d+\/(?:resolve|autoreview)$/.test(p);
 // Requests with a foreign Origin are refused; no Origin (curl / CLI) is judged by
 // token. ⚠ BOARD_EXTRA_ORIGINS (comma-separated) widens this — the moment a
 // non-loopback origin is added, the write boundary is no longer "this machine":
@@ -1486,22 +1511,34 @@ function redact(text) {
     .replace(/\/(?:home|Users)\/[^\s/"']+/gi, "~");
 }
 
-function guardWrite(req, res) {
+/** Authenticate a write. Returns the caller's ROLE ("operator"/"worker"/"review")
+ *  or null after refusing. The role check lives HERE, at the single choke point —
+ *  per-endpoint "remember to add it" forgets exactly one. */
+function guardWrite(req, res, p) {
   const origin = req.headers.origin;
   if (origin && !ALLOWED_ORIGINS.has(origin)) {
     json(res, 403, { error: "跨来源的写请求被拒绝", origin });
-    return false;
+    return null;
   }
   const tok = req.headers["x-board-token"];
-  if (tok !== BOARD_TOKEN) {
+  const role = tok === BOARD_TOKEN ? "operator"
+             : tok === WORKER_TOKEN ? "worker"
+             : tok === REVIEW_TOKEN ? "review" : null;
+  if (!role) {
     // ⚠ Echoing TOKEN_FILE raw would hand an unauthenticated caller an absolute
     //   path with the username in it. "Remember to redact at echo time" fails at
     //   exactly one site — this one, once.
     json(res, 401, { error: "缺少或错误的 X-Board-Token",
                      hint: `令牌在 ${redact(TOKEN_FILE)};页面由服务端注入,CLI 自行读取` });
-    return false;
+    return null;
   }
-  return true;
+  const allowed = role === "operator" || (role === "worker" ? WORKER_WRITES(p) : REVIEW_WRITES(p));
+  if (!allowed) {
+    json(res, 403, { error: `${role} 令牌无权执行此操作 —— 裁定/编辑/治理动作只属于 operator 令牌(board_token)`,
+                     role, path: p });
+    return null;
+  }
+  return role;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -1512,7 +1549,11 @@ const server = http.createServer(async (req, res) => {
   try {
     // Reads pass; EVERY write goes through the gate here. Per-endpoint "remember to
     // add it" forgets exactly one.
-    if (m !== "GET" && m !== "HEAD" && !guardWrite(req, res)) return;
+    let boardRole = "operator";
+    if (m !== "GET" && m !== "HEAD") {
+      boardRole = guardWrite(req, res, p);
+      if (!boardRole) return;
+    }
 
     // ── static
     if (m === "GET" && ["/", "/panel.html"].includes(p)) {
@@ -1603,6 +1644,11 @@ const server = http.createServer(async (req, res) => {
 
     if (m === "POST" && p === "/api/tasks") {
       const b = await readBody(req);
+      // Worker-token creation is for DERIVED cards only (the out-of-scope-work
+      // channel): a parent is mandatory. A worker minting root goals would be a
+      // worker re-scoping the board.
+      if (boardRole === "worker" && b.parentId == null && b.parent_id == null)
+        return json(res, 403, { error: "worker 令牌只能创建派生卡(必须带 parentId)—— 立根目标是 operator 的动作" });
       if (badRoutable(res, b)) return;   // creation entrance for route/line domains (ONE criterion)
       const id = store.add(db, b);
       emit("task.created", { id });
@@ -1864,6 +1910,22 @@ const server = http.createServer(async (req, res) => {
         // can still have copied SQL = half-application.
         if (!["approve", "reject"].includes(b.verdict))
           throw store.err(store.ERR.BAD_INPUT, "verdict 必须是 approve 或 reject");
+        // ⭐ resolved_by caller domain (v0.2, incident pin): human / auto only —
+        //   'cascade' is store-internal bookkeeping; anything else is a caller
+        //   MINTING an authority (measured on a live deployment: an interactive
+        //   agent resolved its own card with resolved_by:'codex' and the board
+        //   accepted it). Role × value must also agree: the review token rules
+        //   only as auto; the operator token rules only as human.
+        const rb = b.resolved_by == null ? "human" : String(b.resolved_by);
+        if (!["human", "auto"].includes(rb))
+          throw store.err(store.ERR.BAD_INPUT,
+            `resolved_by 只接受 human / auto(cascade 由系统内部记账)—— 收到 ${JSON.stringify(rb)}。` +
+            `裁定身份不是自我声明:worker 令牌不能 resolve,review 令牌只能以 auto 裁定`);
+        if (boardRole === "review" && rb !== "auto")
+          throw store.err(store.ERR.BAD_INPUT, "review 令牌只能以 resolved_by=auto 裁定(机器审阅不得冒充人的裁定)");
+        if (boardRole === "operator" && rb === "auto")
+          throw store.err(store.ERR.BAD_INPUT,
+            "operator 令牌不能以 resolved_by=auto 裁定 —— auto 专属审阅线(review_token);人的裁定写 human");
         if (t.status !== "waiting")
           throw store.err(store.ERR.CONFLICT, `任务 ${id} 状态是 ${t.status},没有待裁定的产出`);
         // ⭐ Re-entry gate: hold_for_review KEEPS the card in waiting, so the

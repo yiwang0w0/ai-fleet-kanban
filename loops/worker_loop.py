@@ -295,11 +295,15 @@ def log(m): print(f"[{datetime.datetime.now():%H:%M:%S}] {m}", flush=True)
 
 
 def _board_token():
-    """令牌在 <DATA>/board_token,由 server 首次启动时生成。读不到就是空(=401 明确落地)。
+    """v0.2 起 worker 持 **worker_token**(只覆盖执行面:claim/report/heartbeat/派生建卡…;
+    裁定/编辑对它 403)。由 server 首次启动时生成在 <DATA>/worker_token。
+    ⚠ 不回退到 board_token —— 那是 operator 全权令牌,worker 拿到它就等于拿到裁定权
+      (实测事故:一个被授予看板目录的交互 agent 用 board_token 自批了自己的卡)。
+      文件读不到 = server 是 v0.2 之前的旧版,发空令牌让 401 响亮落地。
     ⚠ DATA 跟随 BOARD_DATA_DIR —— 要读的是**server 写令牌的那个地方**。
       钉死的话,面对临时板时会读到现役板的令牌而 401。"""
     try:
-        return io.open(os.path.join(DATA, "board_token"), encoding="utf-8").read().strip()
+        return io.open(os.path.join(DATA, "worker_token"), encoding="utf-8").read().strip()
     except Exception:
         return ""
 

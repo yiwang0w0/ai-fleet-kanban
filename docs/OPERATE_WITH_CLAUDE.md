@@ -57,6 +57,24 @@ worker 的工作目录,和交付物闸拿哪个仓的 `HEAD` 核对证据点名�
 **不受它影响**——三个锚各管各的:源码闸=看板代码自身 · 交付物闸+worker=
 `BOARD_REPO` · 运行时状态=`core/.data`。
 
+## 二点五、开自动审阅(v0.2)
+
+「等待中」堆的大多数东西有明摆着的判法,人再点一次头只是走过场。自动审阅替你
+过掉那些,把真正要人裁的留下来。开法:根 `fleet.config.json` 里
+`"roles": ["review"]`,重启 server,面板「自动拉取」行会出现 review 座席。
+
+它的纪律是结构给的,不是求出来的:每卡新会话(无惯性)、无 Edit/Bash(改不了
+码、跑不了命令)、先跑卡指名的 `verify_cmd`(红了不烧模型直接机械打回)、
+模型判 approve 之后还有**机器产出闸**(验收要机器验证而卡上零机器产出 ⇒ 机械
+降为 escalate,并给你三个可执行方案)。它的裁定永远记 `resolved_by=auto`,
+与你的 `human` 分得开——这不是措辞,是 server 强制:它持有的 `review_token`
+只能以 auto 裁定,worker 的 `worker_token` 根本不能裁定。
+
+**三令牌**(v0.2,一次真实事故换来的——见 INCIDENTS-12):`board_token`=
+操作员全权,`worker_token`=执行面,`review_token`=裁定面(仅 auto)。
+看板数据目录(`core/.data`)是操作员领地:**给 worker agent 的只有
+`BOARD_REPO`,永远不要把看板文件夹授权给它**——文件夹权限会一次交出全部令牌。
+
 ## 三点五、随仓 skills:常用操作已经预置好了
 
 在本仓打开 Claude Code,`.claude/skills/` 下的 skill 会被自动发现:

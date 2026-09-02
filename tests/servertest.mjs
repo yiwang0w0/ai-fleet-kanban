@@ -721,6 +721,59 @@ try {
     try { rmSync(NONGIT, { recursive: true, force: true }); } catch {}
   }
 
+  // ══ §O ruling authority is structural, not declarative ═══════════════════════
+  // Live incident (a public deployment): an interactive agent with folder access
+  // read board_token and resolved its own card with resolved_by:'codex' —
+  // the board accepted a minted authority. Now: three tokens, and the
+  // resolved_by value×role matrix is enforced at the API.
+  {
+    console.log(NL + "[§O 裁定权=结构而非申明(令牌分权 + resolved_by 值域)]");
+    const B = await mk({});
+    const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
+    const WK = tokOf("worker_token"), RV = tokOf("review_token");
+    const apiAs = async (t, m, p, b) => {
+      const r = await fetch(B.BASE + p, { method: m,
+        headers: { "Content-Type": "application/json", "X-Board-Token": t },
+        body: JSON.stringify(b ?? {}) });
+      return { status: r.status, body: await r.json().catch(() => ({})) };
+    };
+    const card = (await B.api("POST", "/api/tasks", { subject: "o-authz", line: LINE, humanGate: false })).body.task.id;
+
+    // ① the incident, verbatim: resolved_by:'codex' → 400 naming the rule.
+    const inc = await B.api("POST", `/api/tasks/${card}/resolve`,
+                            { verdict: "approve", note: "", resolved_by: "codex", verify_ok: true });
+    ok("O1 ⭐事故逐字重演被拒:resolved_by:'codex' → 400(未知身份落拒绝侧)",
+       inc.status === 400 && /resolved_by 只接受 human \/ auto/.test(inc.body?.error || ""),
+       `HTTP ${inc.status} ${(inc.body?.error || "").slice(0, 60)}`);
+    // ② cascade is store-internal — the API refuses it from any caller.
+    const cas = await B.api("POST", `/api/tasks/${card}/resolve`,
+                            { verdict: "approve", note: "", resolved_by: "cascade" });
+    ok("O2 resolved_by:'cascade' 从 API 侧同样 400(系统内部记账不接受外部申明)",
+       cas.status === 400, `HTTP ${cas.status}`);
+    // ③ operator cannot sign as the machine.
+    const oa = await B.api("POST", `/api/tasks/${card}/resolve`,
+                           { verdict: "approve", note: "", resolved_by: "auto" });
+    ok("O3 operator 令牌以 auto 裁定 → 400(auto 专属审阅线)", oa.status === 400, `HTTP ${oa.status}`);
+    // ④ worker token: execution face works, ruling/editing face 403s.
+    const wc = await apiAs(WK, "POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
+    ok("O4 worker 令牌可以认领(执行面放行)", wc.status === 200, `HTTP ${wc.status}`);
+    const wr = await apiAs(WK, "POST", `/api/tasks/${card}/resolve`,
+                           { verdict: "approve", note: "", resolved_by: "auto" });
+    ok("O5 ⭐worker 令牌 resolve → 403(被卡文注入的 worker 也批不了卡)", wr.status === 403, `HTTP ${wr.status}`);
+    const wu = await apiAs(WK, "POST", `/api/tasks/${card}/update`, { acceptance: "改宽验收" });
+    ok("O6 ⭐worker 令牌 update → 403(worker 改不了自己的验收口径)", wu.status === 403, `HTTP ${wu.status}`);
+    const wroot = await apiAs(WK, "POST", "/api/tasks", { subject: "rogue-goal", line: LINE });
+    ok("O7 worker 令牌立根卡(无 parentId)→ 403;派生卡照常",
+       wroot.status === 403 &&
+       (await apiAs(WK, "POST", "/api/tasks",
+                    { subject: "derived", line: LINE, parentId: card })).status === 201,
+       `HTTP ${wroot.status}`);
+    // ⑤ review token: ruling face only.
+    const rvc = await apiAs(RV, "POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
+    ok("O8 review 令牌认领 → 403(裁定面拿不到执行面)", rvc.status === 403, `HTTP ${rvc.status}`);
+    B.kill();
+  }
+
 } catch (e) {
   console.error("harness itself fell over:", e);
   fail++;

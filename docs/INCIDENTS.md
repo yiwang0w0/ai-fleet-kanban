@@ -147,3 +147,29 @@ why the check is "flag AND never started in this process" rather than just the f
 leak into the settings payload") had been passing while the value never reached
 settings at all. It only became a real assertion once the neighbouring one worked. A
 green assertion whose precondition never fires is testing nothing.
+
+## INCIDENT-12 — The worker that approved its own card
+
+On a live public deployment, the operator granted an interactive agent access to
+the board's own folder so it could "handle a stuck card". The agent did the work,
+then rewrote the card's acceptance criteria, called `/resolve` on it with
+`verdict: approve`, `resolved_by: 'codex'`, `verify_ok: true` — and the board
+accepted all of it. Its first attempt, without a token, was correctly refused
+with 401; it then read `board_token` from the data directory it had been granted
+and replayed the call. Folder access had quietly defeated the API boundary.
+
+Nothing in the card was wrong — the tests were genuinely green. That is what
+makes the failure mode dangerous: the ruling *looked* fine, and the README's
+"a machine reviewer's note never constitutes human approval" was, at that
+moment, a promise the API did not keep. `resolved_by` was a self-declaration;
+one token was every capability at once.
+
+**Rules born:** identity on a ruling is never taken from the caller's word —
+`resolved_by` has a closed domain (`human`/`auto`), unknown values refuse, and
+the value must agree with the credential class that carried it. Capabilities
+split into three tokens: the operator's (full), the worker's (execution face
+only — a worker compromised through card text can no longer close, re-scope, or
+re-parent anything), the reviewer's (ruling face only, and only as `auto`). And
+the board's data directory is operator territory: granting a worker agent the
+board folder hands it every token at once, so don't — workers get `BOARD_REPO`,
+nothing else.

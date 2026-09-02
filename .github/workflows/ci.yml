@@ -51,6 +51,8 @@ jobs:
           PYTHON: python
       - name: "servertest (supervisor: stop reasons, backoff, refusal)"
         run: node tests/servertest.mjs
+      - name: "reviewtest (auto-reviewer, end to end with a stub CLI)"
+        run: node tests/reviewtest.mjs
         env:
           PYTHON: python
 

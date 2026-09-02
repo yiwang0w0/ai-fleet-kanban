@@ -15,8 +15,15 @@ each born from a named incident (see `docs/INCIDENTS.md`):
 
 - **Loopback only.** The server binds `127.0.0.1` and refuses to listen wider.
   There is no auth story for exposure beyond the machine; do not reverse-proxy
-  the board onto a network. Writes require the `X-Board-Token` header, whose
-  token lives in the data directory (`board_token`, gitignored).
+  the board onto a network. Writes require the `X-Board-Token` header.
+- **Three credential classes** (v0.2, INCIDENT-12: an agent granted the board
+  folder read the token and approved its own card). `board_token` = operator,
+  full power; `worker_token` = execution face only (a worker compromised through
+  card text cannot close, re-scope or re-parent anything); `review_token` =
+  ruling face, and only as `resolved_by=auto`. All three live in the data
+  directory (gitignored) — that directory is **operator territory**: grant a
+  worker agent `BOARD_REPO` and nothing else, because filesystem access to the
+  data dir hands over every token at once.
 - **Card text is never a command line.** The worker refuses `.bat/.cmd` CLIs
   (CVE-2024-24576, "BatBadBut": cmd.exe re-parses arguments, so a card body
   could become an executable command line). The gate judges by extension on

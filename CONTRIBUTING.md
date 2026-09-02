@@ -9,12 +9,13 @@ they clear is the same one the codebase already holds itself to.
 
 1. **Machine assertions over prose.** A change to behavior comes with a harness
    assertion that goes red without it. "I tested it manually" does not survive
-   the next contributor. Six harnesses live in `tests/`; two more run as Python
-   selftests — eight in all:
+   the next contributor. Seven harnesses live in `tests/`; two more run as Python
+   selftests — nine in all:
 
    ```
    node tests/selftest.mjs && node tests/decisiontest.mjs && node tests/gatetest.mjs
    node tests/decomposetest.mjs && node tests/looptest.mjs && node tests/servertest.mjs
+   node tests/reviewtest.mjs
    python gates/gates_lib.py && python loops/worker_loop.py --codex-selftest
    ```
 

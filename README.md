@@ -8,7 +8,8 @@ Most agent boards solve *how to make a fleet of coding agents run*. This one sol
 
 - **Deliverable-existence gate** — evidence must name files, and the named files must exist in `HEAD`. Prose doesn't close cards.
 - **Fail-closed source gate** — the fleet refuses to run its own unreviewed code. A dirty governance subtree stops line startup, loudly.
-- **Adjudication authority chain** — a machine reviewer's note never constitutes human approval. Impersonating authority is a caught, named failure mode.
+- **Adjudication authority chain** — a machine reviewer's note never constitutes human approval, and since v0.2 that is structural: three capability tokens (operator / worker / reviewer) and a closed `resolved_by` domain. A worker cannot close, re-scope or approve anything — including its own card. Impersonating authority is a caught, named failure mode (INCIDENT-12 is the live specimen).
+- **Auto-review that cannot rubber-stamp** — a per-card fresh-session reviewer (no Edit, no Bash) pre-runs the card's named verification, and a mechanical gate after the model means "approve with zero machine output" downgrades to a human decision instead of closing the card.
 - **Human gate + handoff boundary** — cards awaiting a human decision never enqueue (zero attempts burn), and hand-applied deliverables land only in operator-authorized directories, with an execution receipt. Irreversible acts stay human.
 - **Read-only probe runner** (standalone tool, not wired into the board) — production verification through a forced read-only, single-statement, self-checked channel. `Success. No rows returned` is not proof of an apply.
 - **Per-attempt usage ledger** — every model call accounted, per card, per attempt.
@@ -18,7 +19,9 @@ Each gate exists because a real incident demanded it. The docs open with inciden
 
 ## Status
 
-**v0.1.4.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, the worker loop, the gates and all eight harnesses (540+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). New in v0.1.4, from watching a real deployment: seat configuration now IS seat assumption (the coordinator-seat skill mounts the sentries and asks about lines before real cards pile onto demo lines), doctor spots the native codex.exe PATH never shows, and the BOARD_REPO triangle is documented. v0.1.3 added `examples/AGENTS.template.md` — the worker-repo constraint template (the anti-overengineering scope gate). Since v0.1.1: fail-closed deliverable gate, landed-bytes handoff receipts, layout-blind public paths, walkthrough fixes. Since v0.1.0: bundled operator skills for your Claude.
+**v0.2.0.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (570+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+
+v0.2's theme is **ruling authority made structural**, driven by a live incident (INCIDENT-12: an agent self-approved its own card): three capability tokens (operator / worker / reviewer), a closed `resolved_by` domain, and the auto-reviewer — per-card fresh sessions, verify-first, and a machine-evidence gate that turns "approve with zero machine output" into a human decision. The 0.1.x line added bundled operator skills, the worker-repo constraint template, a fail-closed deliverable gate, landed-bytes handoff receipts, and cold-walkthrough fixes.
 
 This release ships the core board AND the governance gates together — a gateless launcher was never an option.
 
@@ -26,12 +29,12 @@ This release ships the core board AND the governance gates together — a gatele
 
 ```
 core/      store (SQLite state machine + gates), server (REST+SSE), panel (single-file UI)
-loops/     worker loop (reviewer loop ships post-v0.1, per ruling R1)
+loops/     worker loop · auto-reviewer loop (fresh session per card, machine-evidence gate)
 gates/     fail-closed source gate, deliverable-existence gate
 probe/     read-only production probe runner (standalone tool)
 cli/       board.py (the sanctioned entry; no raw curl) · doctor · init
 watchers/  the two sentries (SSE event watch · board health watch)
-tests/     six harnesses (two more run as python selftests) — 500+ machine assertions across all eight; the CI is the product's spine
+tests/     seven harnesses (two more run as python selftests) — 570+ machine assertions across all nine; the CI is the product's spine
 docs/      QUICKSTART · OPERATE_WITH_CLAUDE · GLOSSARY (frozen vocabulary) · INCIDENTS (the scar manual)
 examples/  fleet config · mock runtime adapter · demo seeds · worker-constraints template (the anti-overengineering scope gate)
 .claude/   skills auto-discovered by YOUR Claude Code (coordinator seat · add/propose lines · context window · pool/quota) — guardrails over existing entries, never new code

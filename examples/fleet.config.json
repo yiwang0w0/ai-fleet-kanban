@@ -5,7 +5,7 @@
     { "id": "design", "hint": "前端/UI/文案" },
     { "id": "coord",  "hint": "协调/裁定/跑命令" }
   ],
-  "_roles": "single-seat roles; add \"review\" only when its loop script exists under loops/ (reorg retired 2026-09-02)",
+  "_roles": "single-seat roles. \"review\" enables the auto-reviewer (loops/reviewer_loop.py): it pre-runs each waiting card's verify_cmd, judges with a fresh model session per card (no Edit/Bash), and rules ONLY as resolved_by=auto via its own review_token. Opt-in: set [\"review\"] and restart.",
   "roles": [],
   "routes": ["default"],
   "max_parallel": 3,
