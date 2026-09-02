@@ -41,7 +41,10 @@ A ruling can go three ways:
 
 CJK / non-ASCII text must travel via --file (write a file, pass its path), never
 as a command-line argument: on Windows, argv passes through ANSI conversion and
-UTF-8 arrives as U+FFFD (measured).
+UTF-8 arrives as U+FFFD (measured). The same rule covers Windows paths in card
+text: a bare backslash inside inline JSON is an escape error (measured — a card
+creation died on a C:\\ path), while a file passed via --file needs no escaping
+gymnastics; inside JSON strings write / or a doubled backslash.
 """
 import json, sys, io, os, urllib.request, urllib.error
 

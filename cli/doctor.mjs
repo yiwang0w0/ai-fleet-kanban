@@ -155,6 +155,18 @@ await new Promise((resolve) => {
 });
 
 // ── ⑦ second seat (optional) — only judged if the host says it exists ───────
+if (!process.env.BOARD_CODEX_CMD) {
+  // Not a finding either way — but the native exe hides in a place PATH never
+  // shows (a real deployment dug it out of %LOCALAPPDATA% by hand; the .cmd
+  // shim PATH offers is exactly what the BatBadBut gate refuses). If we can
+  // see it, say where it is.
+  const guesses = [
+    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "OpenAI", "Codex", "bin", "codex.exe"),
+    process.env.HOME && join(process.env.HOME, ".local", "bin", "codex"),
+  ].filter(Boolean);
+  const found = guesses.find((p) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } });
+  if (found) ok(`发现原生 codex 可执行文件(${found})`, "要启用第二座席:BOARD_CODEX_CMD 指向它 + BOARD_CODEX_RELEASED=1");
+}
 if (process.env.BOARD_CODEX_CMD) {
   const p = process.env.BOARD_CODEX_CMD;
   if (!isAbsolute(p)) no("BOARD_CODEX_CMD 不是绝对路径", "第二座席的门会拒绝它");
