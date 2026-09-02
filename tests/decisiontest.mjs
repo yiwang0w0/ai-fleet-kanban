@@ -95,6 +95,50 @@ try {
      /同名异内容/.test(multiConflict) &&
      !existsSync(join(handoffDir, "0997_first.sql")), multiConflict);
 
+  // ── ⭐ Landed-bytes verification (TOCTOU, outside review P1) ─────────────────
+  // The source is rewritten AFTER admission hashing but BEFORE the copy (via the
+  // logged test seam). The receipt must never vouch for bytes nobody checked:
+  // the confirm refuses AND removes what just landed.
+  const toctouSrc = join(migrations, "0994_toctou.sql");
+  writeFileSync(toctouSrc, "select 94 as admitted;\n", "utf8");
+  const toctouTask = { id: 13, decision_package: { ...pkg, options: [
+    { ...pkg.options[0], files: [
+      { path: "migrations/0994_toctou.sql", label: "t", role: "apply", archive_name: "0994_toctou.sql" },
+    ] }, ...pkg.options.slice(1)] } };
+  let toctouErr = "";
+  try {
+    D.archiveOptionFiles(toctouTask, "A", { ...CTX,
+      testOnly_beforeCopy: () => writeFileSync(toctouSrc, "select -94 as tampered;\n", "utf8") });
+  } catch (e) { toctouErr = e.message; }
+  ok("⭐ a source rewritten between admission and copy refuses the confirm (landed hash ≠ admitted hash)",
+     /在准入后被修改/.test(toctouErr), toctouErr || "(no error thrown)");
+  ok("⭐ ...and the tampered copy does NOT stay in the handoff dir (no unvouched bytes land)",
+     !existsSync(join(handoffDir, "0994_toctou.sql")));
+
+  // ── ⭐ Public surface never discloses the machine's layout (outside review P2) ─
+  // An ABSOLUTE in-allowlist declaration used to put drive letter + user name on
+  // /api/tasks via dir. Now it relativizes to repoRoot (layer preserved) and the
+  // error branch collapses to "…" instead of echoing the path's directory.
+  const absTask = { id: 14, decision_package: { ...pkg, options: [
+    { ...pkg.options[0], files: [
+      { path: join(root, "migrations", "0998_test.sql"), label: "abs", role: "apply", archive_name: "0998_test.sql" },
+    ] }, ...pkg.options.slice(1)] } };
+  const absPub = D.publicDecisionPackage(absTask, CTX);
+  ok("⭐ absolute in-allowlist declaration surfaces a repo-RELATIVE dir (layer, not layout)",
+     absPub.options[0].files[0].dir === "migrations", JSON.stringify(absPub.options[0].files[0].dir));
+  const rootMarker = root.replaceAll("\\", "/");
+  ok("⭐ the whole public package carries no trace of the host root path (denominator check)",
+     !JSON.stringify(absPub).replaceAll("\\\\", "/").includes(rootMarker));
+  const strayAbs = join(root, "..", "outside-root-dir", "stray.sql");
+  const strayTask = { id: 15, decision_package: { ...pkg, options: [
+    { ...pkg.options[0], files: [
+      { path: strayAbs, label: "stray", role: "apply", archive_name: "0993_stray.sql" },
+    ] }, ...pkg.options.slice(1)] } };
+  const strayPub = D.publicDecisionPackage(strayTask, CTX);
+  ok("⭐ the ERROR branch leaks nothing either: unresolvable absolute path → dir '…'",
+     strayPub.options[0].files[0].available === false && strayPub.options[0].files[0].dir === "…",
+     JSON.stringify({ dir: strayPub.options[0].files[0].dir, available: strayPub.options[0].files[0].available }));
+
   // ── Generalization: a non-SQL file to a cfg-only target ──────────────────────
   writeFileSync(join(migrations, "0995_app.cfg"), "key=value\n", "utf8");
   const cfgTask = { id: 10, decision_package: { ...pkg, options: [

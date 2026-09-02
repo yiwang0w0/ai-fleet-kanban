@@ -164,7 +164,16 @@ if (process.env.BOARD_CODEX_CMD) {
 }
 
 console.log(`\n${"─".repeat(56)}`);
+// ⚠ The closing command must CARRY the address when it is not the default —
+//   doctor honoured BOARD_PORT all along, then used to print the bare command;
+//   pasting that starts the server back on 47824 (measured in a cold-machine
+//   walkthrough — the exact failure step 3 of the QUICKSTART warns about).
+const envPrefix = process.env.BOARD_URL ? `BOARD_URL=${process.env.BOARD_URL} ` :
+  process.env.BOARD_PORT ? `BOARD_PORT=${process.env.BOARD_PORT} ` : "";
 console.log(`result: ${pass} PASS / ${warn} WARN / ${fail} FAIL` +
             (fail ? "\n⛔ 有 FAIL —— 修完再起板(每条 FAIL 下面都写了修法)"
-                  : warn ? "\n可以起板(WARN 不拦路,但建议看一眼)" : "\n一切就绪: node core/server.mjs"));
+                  : (warn ? "\n可以起板(WARN 不拦路,但建议看一眼): "
+                          : "\n一切就绪: ") +
+                    `${envPrefix}node core/server.mjs` +
+                    (envPrefix ? "(PowerShell 用 $env: 形式设同名变量)" : "")));
 process.exit(fail ? 1 : 0);

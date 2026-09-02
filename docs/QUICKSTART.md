@@ -21,6 +21,11 @@ node cli/doctor.mjs
 Doctor measures — requires the sqlite module, spawns the interpreter, binds the
 port — and every red line carries its fix. Green or warn = proceed.
 
+Doctor honours `BOARD_PORT`/`BOARD_URL` too: if you already know you'll run on
+a non-default port (or suspect 47824 is taken), give it the same value now —
+`BOARD_PORT=48500 node cli/doctor.mjs` — so it probes the port you will
+actually use, and its closing line prints the command with the address on it.
+
 ## 1 · (optional) name your fleet
 
 Skip this and you get two built-in lines (`alpha`, `coord`). To define your own
@@ -46,6 +51,10 @@ export BOARD_GATED_SUBTREE=.
 mkdir -p core/.data
 git rev-parse "HEAD:" > core/.data/accepted_rev
 ```
+
+(That trailing colon in `"HEAD:"` is not a typo: it addresses HEAD's **tree
+object** — the content snapshot — rather than the commit. That is exactly why
+any local edit to tracked files changes the hash and stops line startup.)
 
 ```powershell
 # PowerShell
@@ -82,6 +91,7 @@ the gate env comes along (skipping it is a guaranteed refusal, exit 3):
 
 ```bash
 export BOARD_GATED_SUBTREE=.        # the new shell needs it too
+# export BOARD_PORT=48500           # moved the port in step 3? the new shell needs THIS too
 node examples/seed_demo.mjs
 WORKER_CLI_ARGV='["python","examples/mock_worker_cli.py"]' \
   python loops/worker_loop.py --as alpha --once
@@ -89,6 +99,7 @@ WORKER_CLI_ARGV='["python","examples/mock_worker_cli.py"]' \
 
 ```powershell
 $env:BOARD_GATED_SUBTREE = "."      # the new shell needs it too
+# $env:BOARD_PORT = "48500"         # moved the port in step 3? the new shell needs THIS too
 $env:PYTHONUTF8 = "1"               # Windows pipes default to a legacy codepage
 node examples\seed_demo.mjs
 $env:WORKER_CLI_ARGV = '["python","examples/mock_worker_cli.py"]'
@@ -106,16 +117,22 @@ the mock adapter writes evidence, the loop delivers it, and the card lands in
 
 ## 5 · Rule on it — this part is yours
 
-On the panel, open the waiting card and approve it **with an empty note**: it
-closes (`done`). Ruling buttons are **two-press**: the first press arms (color
-and caption change), the second press within ~4 seconds fires — wait longer and
-it quietly disarms. No confirm() dialogs by design; a button that "did nothing"
-was an armed button that timed out. The distinction that matters, worth trying once deliberately:
+On the panel, find the waiting card — the note box and the ruling button are
+right on the card face (no need to open anything; the「双击展开」affordance
+expands the *evidence text*, not the ruling area). There is **one** ruling
+button, and its caption tells you what it will do:
 
-- **empty note + approve** = a clean pass → the card closes;
-- **anything written + approve or reject** = an instruction → the card goes BACK
-  to its line carrying your words, and the next claim reads them verbatim.
-  A written-on card is never silently closed — someone must act on what you said.
+- note box **empty** → the button reads **结案** (close): pressing it is a clean
+  pass and the card closes (`done`);
+- **anything written** → the same button becomes **回原线继续** (back to its
+  line): your words go BACK with the card as an instruction, and the next claim
+  reads them verbatim. A written-on card is never silently closed — someone
+  must act on what you said.
+
+The button is **two-press**: the first press arms (color and caption change),
+the second press within ~4 seconds fires — wait longer and it quietly disarms.
+No confirm() dialogs by design; a button that "did nothing" was an armed button
+that timed out.
 
 Also try the third card: it is **human-gated**. No worker can ever claim it and
 no attempts burn on it — governance stays with you, structurally.
@@ -153,6 +170,15 @@ never touch a live board.
 
 ## When something refuses
 
+- **The server console is quiet by design** — after the startup lines, claims,
+  deliveries and rulings print nothing there. The live view is the event
+  stream: `python watchers/sse_watch.py` prints one line per board event
+  (that's also the first sentry your Claude mounts in
+  `docs/OPERATE_WITH_CLAUDE.md`).
+- **`未配置 handoff 目标` at startup is normal for this walkthrough** — handoff
+  targets only matter when a ruling carries files to hand-apply; nothing in
+  this demo does. Configure `handoff_targets` (or `BOARD_HANDOFF_DIR`) when you
+  get there.
 - **exit 3 at line start** = a gate said no, on purpose, with the reason printed
   above the exit. Dirty tree → commit or revert, then re-bless. Wrong CLI shape
   (.cmd shim) → point `WORKER_CLAUDE_CLI` at the native executable.

@@ -860,6 +860,21 @@ function ensureShell(){
   return shell;
 }
 
+/** Arm a two-press button: swap the caption, then pin the button's width to the
+ *  wider of the two states. ⭐ Armed captions are longer than resting ones; without
+ *  the pin the button reflows on the FIRST press and the muscle-memory second
+ *  press aims at geometry that no longer exists (measured in a cold-machine
+ *  walkthrough: 25–30px center shift between the two presses). */
+function armSwap(b, text){
+  const w0 = b.offsetWidth;
+  b.textContent = text;
+  b.style.width = Math.max(w0, b.offsetWidth) + "px";
+}
+function disarmRestore(b){
+  b.style.width = "";
+  if (b.dataset.orig) b.textContent = b.dataset.orig;
+}
+
 /** Button captions follow whether the input holds text.
  *  ⭐ "What happens when I press" must be visible BEFORE pressing — measured without
  *  this, a human meant to pick option A and closed the card instead. */
@@ -879,8 +894,13 @@ function syncHandoff(scope){
     b.classList.toggle("handoff", on);
   }
   const h = scope.querySelector("[data-hoh]");
+  // ⭐ The bounce hint must state the REAL budget mechanics: a claim = a new
+  //   dispatch = the per-dispatch budget resets in full (store re-stamps
+  //   attempts_base). The old wording "续 1 次尝试预算" described a +1 that does
+  //   not exist — a cold-machine walkthrough read the API after a bounce, saw
+  //   nothing "+1", and correctly could not reconcile the two.
   if (h) h.textContent = on
-    ? "按下=**不结案** —— 这段文字作为指令交回原 Agent 继续,并给本卡续 1 次尝试预算"
+    ? "按下=**不结案** —— 这段文字作为指令交回原 Agent 继续;卡回到原线,下次认领按新一轮派发计算尝试预算(attempts 累计不清零,预算锚在认领时重打)"
     : "空白提交=**结案**(计入已完成)。需修改或继续:先在上方写明指示再提交 —— 未写指示不会产生后续动作";
 }
 
@@ -2260,17 +2280,18 @@ ${r.memo}`);
     }
     if (decide.dataset.armed !== "1"){
       decide.dataset.armed = "1"; decide.dataset.orig = decide.textContent;
-      decide.classList.add("armed"); decide.textContent = incompleteApply
+      decide.classList.add("armed");
+      armSwap(decide, incompleteApply
         ? `再按=交回 Agent 补齐 ${opt.key}`
         : executedApply && outcome === "failure" ? `再按=确认 ${opt.key} 执行失败并退回修正`
-        : executedApply ? `再按=确认 ${opt.key} 执行成功并附回执` : `再按=采用 ${opt.key}`;
+        : executedApply ? `再按=确认 ${opt.key} 执行成功并附回执` : `再按=采用 ${opt.key}`);
       setTimeout(() => { if (decide.dataset.armed === "1"){
-        decide.dataset.armed = ""; decide.classList.remove("armed");
+        decide.dataset.armed = ""; decide.classList.remove("armed"); decide.style.width = "";
         syncDecision(decide.closest("[data-decision-scope]") || decide.closest(".card"), t);
       } }, 4000);
       return;
     }
-    decide.dataset.armed = ""; decide.classList.remove("armed"); decide.disabled = true;
+    decide.dataset.armed = ""; decide.classList.remove("armed"); decide.style.width = ""; decide.disabled = true;
     const extra = (document.querySelector(`textarea[data-vin="${id}"]`)?.value || "").trim();
     try{
       await post(`/api/tasks/${id}/resolve`, { verdict:"approve", resolved_by:"human",
@@ -2291,14 +2312,15 @@ ${r.memo}`);
     const id = Number(finalClose.dataset.finalClose);
     if (finalClose.dataset.armed !== "1"){
       finalClose.dataset.armed = "1"; finalClose.dataset.orig = finalClose.textContent;
-      finalClose.classList.add("armed"); finalClose.textContent = "再按=确认无需后续";
+      finalClose.classList.add("armed"); armSwap(finalClose, "再按=确认无需后续");
       setTimeout(() => { if (finalClose.dataset.armed === "1"){
         finalClose.dataset.armed = ""; finalClose.classList.remove("armed");
-        finalClose.textContent = finalClose.dataset.orig || "无需后续 · 结案";
+        disarmRestore(finalClose);
+        if (!finalClose.dataset.orig) finalClose.textContent = "无需后续 · 结案";
       } }, 4000);
       return;
     }
-    finalClose.dataset.armed = ""; finalClose.classList.remove("armed"); finalClose.disabled = true;
+    finalClose.dataset.armed = ""; finalClose.classList.remove("armed"); disarmRestore(finalClose); finalClose.disabled = true;
     try{
       await post(`/api/tasks/${id}/resolve`, { verdict:"approve", note:"", resolved_by:"human" });
       verdictDraft.delete(id); decisionChoice.delete(id); receiptDraft.delete(id); outcomeDraft.delete(id);
@@ -2335,16 +2357,16 @@ ${r.memo}`);
     b.dataset.orig = b.textContent;
     b.classList.add("armed");
     const hasNote = ((document.querySelector(`textarea[data-vin="${id}"]`) || {}).value || "").trim();
-    b.textContent = a === "archive" ? "再按=确认归档"
-                  : hasNote ? "再按=交回原 Agent" : "再按=确认结案";
+    armSwap(b, a === "archive" ? "再按=确认归档"
+              : hasNote ? "再按=交回原 Agent" : "再按=确认结案");
     setTimeout(() => { if (b.dataset.armed === "1") {
       b.dataset.armed = ""; b.classList.remove("armed");
-      if (b.dataset.orig) b.textContent = b.dataset.orig;
+      disarmRestore(b);
     } }, 4000);
     return;
   }
   b.dataset.armed = ""; b.classList.remove("armed");
-  if (b.dataset.orig) b.textContent = b.dataset.orig;
+  disarmRestore(b);
   b.disabled = true;
   try{
     if (a === "approve" || a === "reject"){

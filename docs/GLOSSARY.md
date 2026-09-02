@@ -24,11 +24,11 @@ a change must land in both or the harnesses go red.
 | `human_gate` (1/0), `human_gate_src` = `detect` / `explicit` | machine | waits for a human decision; src records whether the lock was sniffed or deliberate |
 | `outcome` = `done` / `wait` | machine | report()'s two endings → waiting/review resp. waiting/decision |
 | `verdict` = `approve` / `reject` | machine | ruling values; invariant: verdict non-NULL ⟺ status = done |
-| 通过 / 打回 / 结案 | display | approve / bounce / close |
+| 通过 / 打回 / 结案 | display | approve / bounce / close — 打回 appears in ruling *records* (verdict notes), not as a button label: the waiting card's single button reads 结案 or 回原线继续 depending on the note box |
 | `disposition` = `close` / `hand_back` / `hold_for_review` | machine | caller-declared destination of a ruling |
 | `resolved_by` = `human` / `auto` / `cascade` | machine | who ruled |
 | `attempts` / `attempts_base` / `attempts_this_claim` / `max_attempts` | machine | lifetime total / anchor re-stamped at claim / this dispatch / per-dispatch budget |
-| `lock_key` / `oneof_key` (备选组) / `proves_parent` (证父) / `blocked_by` | machine | mutual exclusion / any-one-passes group / child's pass closes parent / dependency ids |
+| `lock_key` / `oneof_key` (备选组) / `proves_parent` (验证父卡) / `blocked_by` | machine | mutual exclusion / any-one-passes group / child's pass closes parent / dependency ids |
 | `verify_cmd` | machine | a verify-registry **key**, never a command string |
 | `prev_line` | machine | provenance: the immediately previous line; never a claim criterion |
 

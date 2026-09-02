@@ -119,16 +119,23 @@ const DECISION_CTX = { repoRoot: REPO_ROOT, targets: HANDOFF_TARGETS };
 // top-level names — hardcoded prefixes are blind on any other repo. Built once at
 // startup from `git ls-tree -z HEAD` (⚠ -z is mandatory: plain ls-tree quotes
 // non-ASCII paths and CJK files silently fall out).
+// ⭐ Unmeasurable is NOT "no violations" — they are different states (flagged by
+//   an outside review; also CONTRIBUTING rule 4: unknown values fall on the
+//   refusing side). When the gate cannot see HEAD, closes REFUSE by default;
+//   a deliberately git-less deployment says so explicitly with
+//   BOARD_DELIVERABLE_GATE=off, and every close under "off" logs.
+const GATE_OFF = process.env.BOARD_DELIVERABLE_GATE === "off";
 let extractor = null;
 try {
   const top = execFileSync("git", ["-C", REPO_ROOT, "ls-tree", "-z", "HEAD"],
                            { maxBuffer: 8 * 1024 * 1024 }).toString("utf8");
   const prefixes = dgate.topLevelPrefixes(top);
   if (prefixes.length) extractor = dgate.makeExtractor({ prefixes });
-  else console.error("⚠ 交付物闸已禁用:HEAD 没有顶层条目(空仓?)");
+  else console.error("⚠ 交付物闸不可测:HEAD 没有顶层条目(空仓?)" +
+    (GATE_OFF ? "—— 已显式关闭,结案不做入库核对" : "—— 结案将被拒绝(fail-closed);确属无 git 部署请显式 BOARD_DELIVERABLE_GATE=off"));
 } catch (e) {
-  console.error(`⚠ 交付物闸已禁用:读不到宿主仓 HEAD(${e.message})—— ` +
-                "结案将不做入库核对");
+  console.error(`⚠ 交付物闸不可测:读不到宿主仓 HEAD(${e.message})` +
+    (GATE_OFF ? "—— 已显式关闭,结案不做入库核对" : "—— 结案将被拒绝(fail-closed);确属无 git 部署请显式 BOARD_DELIVERABLE_GATE=off"));
 }
 let _headCache = { at: 0, set: null };
 const headFiles = () => {
@@ -143,10 +150,21 @@ const headFiles = () => {
   _headCache = { at: Date.now(), set };
   return set;
 };
+// Return contract: string[] = measured violations (possibly none); null = the
+// gate could not measure — the CALLER decides, and the default decision is
+// refuse (409). GATE_OFF converts null to a logged pass.
 const uncommittedOf = (t) => {
-  if (!extractor) return [];
+  if (!extractor) {
+    if (!GATE_OFF) return null;
+    console.log(`交付物闸显式关闭(BOARD_DELIVERABLE_GATE=off)—— #${t?.id} 结案未做入库核对`);
+    return [];
+  }
   const head = headFiles();
-  if (!head || head.size === 0) return [];   // unmeasurable ⇒ pass. Unmeasurable is NOT a violation.
+  if (!head || head.size === 0) {
+    if (!GATE_OFF) return null;              // unmeasurable ≠ no violations
+    console.log(`交付物闸显式关闭(BOARD_DELIVERABLE_GATE=off)—— #${t?.id} 结案未做入库核对(HEAD 不可读)`);
+    return [];
+  }
   // ⭐ Only the worker's delivered RESULT is read. description holds requirements,
   //   history and dependencies — probes from earlier investigations, other cards'
   //   in-flight files, reference specs all legitimately appear there. Mixing it in
@@ -194,11 +212,16 @@ const spanOf = (t) => {
   const s = Date.parse(last.s), e = last.e ? Date.parse(last.e) : Date.now();
   return Number.isFinite(s) ? { startMs: s, endMs: Number.isFinite(e) ? e : Date.now() } : null;
 };
-/** Uncommitted files touched inside this worker's span that the evidence never names. */
+/** Uncommitted files touched inside this worker's span that the evidence never names.
+ *  Same return contract as uncommittedOf: null = unmeasurable, caller refuses. */
 const unnamedOf = (t) => {
-  if (!extractor) return [];
+  if (!extractor) return GATE_OFF ? [] : null;
   const dirty = dirtyFiles();
-  if (!dirty) return [];                     // unmeasurable = not a violation (same polarity as headFiles)
+  if (!dirty) {
+    if (!GATE_OFF) return null;              // unmeasurable ≠ no violations
+    console.log(`交付物闸显式关闭(BOARD_DELIVERABLE_GATE=off)—— #${t?.id} 结案未做作业区间核对(git status 不可读)`);
+    return [];
+  }
   return extractor.unnamedTouched(dirty, extractor.extractPaths(String(t?.result || "")), spanOf(t));
 };
 
@@ -1927,6 +1950,13 @@ const server = http.createServer(async (req, res) => {
         //     closure get the gate itself switched off.
         if (disp === "close" && b.allow_uncommitted !== true) {
           const left = uncommittedOf(t);
+          // null = the gate could not measure. Refusing here is the point:
+          // "unmeasurable ⇒ pass" would make every git hiccup a free close.
+          if (left === null)
+            throw store.err(store.ERR.CONFLICT,
+              `结案被拦: 交付物闸不可测(读不到宿主仓 HEAD/git)—— 不可测不等于没有违规。` +
+              `\n  修复 git 环境后重试;确属无 git 部署,用 BOARD_DELIVERABLE_GATE=off 显式关闸(每次结案都会记录);` +
+              `\n  或对这一张卡人工担责:resolve 带 allow_uncommitted:true 并在裁定里写明理由。`);
           if (left.length)
             throw store.err(store.ERR.CONFLICT,
               `结案被拦: 证据里点名的 ${left.length} 个交付物在工作树里存在,但**没有入库**(HEAD 里找不到)` +
@@ -1937,6 +1967,10 @@ const server = http.createServer(async (req, res) => {
           // TIME (work_spans) — on a shared work tree, "is the tree dirty" cannot
           // attribute.
           const unnamed = unnamedOf(t);
+          if (unnamed === null)
+            throw store.err(store.ERR.CONFLICT,
+              `结案被拦: 交付物闸不可测(读不到 git status)—— 不可测不等于没有违规。` +
+              `\n  修复 git 环境后重试;或 resolve 带 allow_uncommitted:true 人工担责并写明理由。`);
           if (unnamed.length)
             throw store.err(store.ERR.CONFLICT,
               `结案被拦: 本卡作业区间内有 ${unnamed.length} 个文件被改动却**未入库、且证据里一个都没点名**` +

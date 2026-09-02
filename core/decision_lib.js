@@ -233,6 +233,24 @@ const dirOf = (p) => {
   return d || ".";
 };
 
+/** dirOf for the PUBLIC surface. A relative declaration passes through; an
+ *  absolute one relativizes against repoRoot or collapses to "…" — the LAYER is
+ *  what the screen needs, the machine's real layout is not. ⭐ Before this,
+ *  a card declaring an in-allowlist absolute path put the drive letter, user
+ *  name and repo directory on /api/tasks (flagged by an outside review), while
+ *  the comment below promised "the full path is NOT". Unresolvable paths take
+ *  the same route: the error branch leaks just as well as the happy one. */
+const publicDirOf = (p, repoRoot) => {
+  const norm = String(p || "").split(String.fromCharCode(92)).join("/");
+  if (!path.isAbsolute(norm)) return dirOf(norm);
+  try {
+    const rel = path.relative(repoRoot, path.resolve(norm));
+    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel))
+      return dirOf(rel.split(String.fromCharCode(92)).join("/"));
+  } catch {}
+  return "…";
+};
+
 function publicDecisionPackage(task, ctx) {
   const p = normalizeDecisionPackage(task && task.decision_package, task && task.verdict_note);
   if (!p) return null;
@@ -248,7 +266,7 @@ function publicDecisionPackage(task, ctx) {
         //   fragment once collapsed to the same name on screen — the LAYER tells
         //   them apart). The full path is NOT. Targets surface as id+label only —
         //   never their directories.
-        const publicFile = { label: f.label || x.name, name: x.name, dir: dirOf(f.path), role: f.role,
+        const publicFile = { label: f.label || x.name, name: x.name, dir: publicDirOf(f.path, ctx.repoRoot), role: f.role,
                              archive_name: f.archive_name, bytes: x.bytes, sha256: x.sha256,
                              available: true, executable,
                              ...(tgt ? { target: tgt.id, target_label: tgt.label } : {}) };
@@ -256,7 +274,7 @@ function publicDecisionPackage(task, ctx) {
         // viewable, but it must not impersonate an executable attachment.
         return executable ? { ...publicFile, download_url: fileUrl } : { ...publicFile, view_url: fileUrl };
       } catch (e) {
-        return { label: f.label || path.basename(f.path), name: path.basename(f.path), dir: dirOf(f.path),
+        return { label: f.label || path.basename(f.path), name: path.basename(f.path), dir: publicDirOf(f.path, ctx.repoRoot),
                  role: f.role, archive_name: f.archive_name, available: false, executable,
                  ...(tgt ? { target: tgt.id, target_label: tgt.label } : {}),
                  error: String(e.message || e) };
@@ -335,13 +353,32 @@ function archiveOptionFiles(task, optionKey, ctx) {
     }
     plan.push({ name, dest, target: x.tgt.id, source: x.file.path, sha256: x.file.sha256, status: "copied" });
   }
-  for (const x of plan) if (x.status === "copied")
+  // Test seam ONLY: lets the harness rewrite a source between admission and copy
+  // to prove the landed-bytes verification below goes red without it. Logs on use.
+  if (ctx && typeof ctx.testOnly_beforeCopy === "function") {
+    console.error("⚠ testOnly_beforeCopy seam active(仅供测试)");
+    ctx.testOnly_beforeCopy(plan);
+  }
+  for (const x of plan) if (x.status === "copied") {
     fs.copyFileSync(x.source, x.dest, fs.constants.COPYFILE_EXCL);
+    // ⭐ The receipt vouches for the LANDED bytes, not the admitted ones. Admission
+    //   (sha256 at package time) and apply (this copy) can be hours apart, and the
+    //   source path stays live in between — a worker, an editor, anything can
+    //   rewrite it (TOCTOU, flagged by an outside review). The already_present
+    //   branch above always re-hashed; the copied branch must too: verify the
+    //   destination against the admitted hash, and on mismatch remove what just
+    //   landed and refuse — a receipt for unchecked bytes is worse than none.
+    const landed = sha256(x.dest);
+    if (landed !== x.sha256) {
+      try { fs.unlinkSync(x.dest); } catch {}
+      throw new Error(`附件 "${x.name}" 在准入后被修改(落盘哈希 ≠ 准入哈希)—— 本次归档中止,请重新过目该方案`);
+    }
+  }
   return plan.map(({ name, sha256, status, target }) => ({ name, sha256, status, target }));
 }
 
 module.exports = {
   legacyDecisionPackage, normalizeDecisionPackage, publicDecisionPackage,
   decisionAttachmentSource, archiveOptionFiles, resolveAttachment,
-  normalizeTargets, targetOf, DEFAULT_NAME_PATTERN,
+  normalizeTargets, targetOf, DEFAULT_NAME_PATTERN, publicDirOf,
 };

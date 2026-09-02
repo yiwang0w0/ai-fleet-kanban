@@ -680,6 +680,47 @@ try {
        /\/api\/usage/.test(panelSrc) && /class="tok"/.test(panelSrc) && /fmtTok/.test(panelSrc), "");
   }
 
+  // ══ §N deliverable gate fails CLOSED when unmeasurable ═══════════════════════
+  // Outside review P1: HEAD unreadable used to return an empty violation list —
+  // "unmeasurable" and "no violations" were the same state, so every git hiccup
+  // was a free close. Now: refuse by default; BOARD_DELIVERABLE_GATE=off is the
+  // explicit, logged opt-out; allow_uncommitted:true stays the per-card human
+  // override.
+  {
+    console.log(NL + "[§N 交付物闸不可测 = 拒绝结案(fail-closed)]");
+    const NONGIT = mkdtempSync(join(tmpdir(), "servertest-nongit-"));
+    const flowToWaiting = async (B) => {
+      const id = (await B.api("POST", "/api/tasks", { subject: "n-case", line: LINE, humanGate: false })).body.task.id;
+      await B.api("POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
+      await B.api("POST", `/api/tasks/${id}/report`, { worker: "alpha", outcome: "done", evidence: "纯文字证据,不点名任何文件" });
+      return id;
+    };
+
+    const B = await mk({ env: { BOARD_REPO: NONGIT } });
+    ok("N1 启动就响亮声明 fail-closed(不可测≠已禁用)",
+       /交付物闸不可测/.test(B.out()) && /结案将被拒绝/.test(B.out()), B.out().split(NL).find((l) => /交付物闸/.test(l)) || "(no line)");
+    const idA = await flowToWaiting(B);
+    const rA = await B.api("POST", `/api/tasks/${idA}/resolve`, { verdict: "approve", note: "", resolved_by: "human" });
+    ok("N2 ⭐闸不可测 → 结案 409,且拒绝文案把三条出路都写明",
+       rA.status === 409 && /不可测不等于没有违规/.test(rA.body?.error || "") &&
+       /BOARD_DELIVERABLE_GATE=off/.test(rA.body?.error || "") && /allow_uncommitted/.test(rA.body?.error || ""),
+       `HTTP ${rA.status} ${(rA.body?.error || "").slice(0, 80)}`);
+    const rB = await B.api("POST", `/api/tasks/${idA}/resolve`,
+                           { verdict: "approve", note: "", resolved_by: "human", allow_uncommitted: true });
+    ok("N3 同一张卡 allow_uncommitted:true = 人工担责通道仍然打开",
+       rB.status === 200 && rB.body?.task?.status === "done", `HTTP ${rB.status}`);
+    B.kill();
+
+    const C = await mk({ env: { BOARD_REPO: NONGIT, BOARD_DELIVERABLE_GATE: "off" } });
+    const idC = await flowToWaiting(C);
+    const rC = await C.api("POST", `/api/tasks/${idC}/resolve`, { verdict: "approve", note: "", resolved_by: "human" });
+    ok("N4 显式 off = 结案放行,且每次结案都留下记录(escape hatches log)",
+       rC.status === 200 && /BOARD_DELIVERABLE_GATE=off/.test(C.out()) && new RegExp(`#${idC} 结案未做入库核对`).test(C.out()),
+       `HTTP ${rC.status}`);
+    C.kill();
+    try { rmSync(NONGIT, { recursive: true, force: true }); } catch {}
+  }
+
 } catch (e) {
   console.error("harness itself fell over:", e);
   fail++;
