@@ -26,16 +26,26 @@ const decision = require_("./decision_lib.js");
 const decompose = require_("./decompose_lib.js");
 const dgate = require_("../gates/deliverable_gate.js");
 
-const REPO_ROOT = process.env.BOARD_REPO || resolve(__dirname, "..");
+const CODE_ROOT = resolve(__dirname, "..");
 const LOOPS_DIR = join(__dirname, "..", "loops");
 
 // ── Fleet configuration ───────────────────────────────────────────────────────
 // The fleet vocabulary (lines, routes, seats) is the OPERATOR's, not this file's.
-// BOARD_CONFIG points at a JSON file; default <repo>/fleet.config.json. A MISSING
-// file falls back to built-in defaults; a PRESENT-BUT-BROKEN file refuses startup
-// (an operator config error is deterministic — silently running on defaults would
-// wear the operator's config as a costume).
-const CONFIG_FILE = process.env.BOARD_CONFIG || join(REPO_ROOT, "fleet.config.json");
+// BOARD_CONFIG points at a JSON file; default <BOARD repo>/fleet.config.json — the
+// config is the board operator's file and lives with the BOARD install, never in
+// the work repo (v0.3: it used to follow BOARD_REPO, which sent a deployment
+// looking for its config inside the WORK repo). A MISSING file falls back to
+// built-in defaults; a PRESENT-BUT-BROKEN file refuses startup (an operator
+// config error is deterministic — silently running on defaults would wear the
+// operator's config as a costume).
+//
+// v0.3: the config is the single DEPLOYMENT source of truth too — optional keys
+// `port` / `repo` / `gated_subtree` replace the env choreography that produced a
+// whole class of measured incidents (a moved port whose clients knocked on the
+// default; a second shell missing the gate env). Env vars still WIN when set;
+// the config is the floor under them, written once, read by server and every
+// client alike (core/env.mjs · core/board_env.py).
+const CONFIG_FILE = process.env.BOARD_CONFIG || join(CODE_ROOT, "fleet.config.json");
 const BUILTIN_CONFIG = {
   lines: [
     { id: "alpha", hint: "实装" },
@@ -87,6 +97,16 @@ if (existsSync(CONFIG_FILE)) {
     process.exit(1);
   }
 }
+// Deployment keys (env > config > default). REPO_ROOT anchors the deliverable
+// gate and the workers' cwd; the board's own code stays anchored at CODE_ROOT.
+const REPO_ROOT = process.env.BOARD_REPO || (CFG.repo ? resolve(String(CFG.repo)) : CODE_ROOT);
+const CFG_GATED_SUBTREE = process.env.BOARD_GATED_SUBTREE || (CFG.gated_subtree ? String(CFG.gated_subtree) : "");
+// Migration hint: a config sitting where the OLD default looked (the work repo)
+// is silently ignored now — say so once, loudly, instead of wearing defaults.
+if (!process.env.BOARD_CONFIG && REPO_ROOT !== CODE_ROOT &&
+    !existsSync(CONFIG_FILE) && existsSync(join(REPO_ROOT, "fleet.config.json")))
+  console.error(`⚠ ${join(REPO_ROOT, "fleet.config.json")} 不再被读取 —— 配置属于看板安装,` +
+                `请移到 ${CONFIG_FILE}(或用 BOARD_CONFIG 显式指定)`);
 
 // ── Handoff targets (operator ruling 2026-09-01: hand-executed deliverables are
 //    not necessarily SQL). The operator AUTHORIZES local directories as classified
@@ -238,7 +258,7 @@ const taskOut = (t) => t ? {
 } : t;
 
 const HOST = process.env.BOARD_HOST || "127.0.0.1";
-const PORT = Number(process.env.BOARD_PORT || 47824);
+const PORT = Number(process.env.BOARD_PORT || CFG.port || 47824);
 const STARTED = Date.now();
 
 const db = store.open();
@@ -1019,6 +1039,12 @@ function slotEnv(line, k, ag, isReview) {
            //   REAL board (refused only because the data dir's token did not match).
            //   The port is known here; passing it removes the guess.
            BOARD_URL: `http://127.0.0.1:${PORT}`,
+           // Same principle for the gate env and the work repo: the server KNOWS
+           // the resolved values — pass them so a supervised child never depends
+           // on the shell it happened to inherit (a second shell missing
+           // BOARD_GATED_SUBTREE was a measured cold-walkthrough trap).
+           ...(CFG_GATED_SUBTREE ? { BOARD_GATED_SUBTREE: CFG_GATED_SUBTREE } : {}),
+           BOARD_REPO: REPO_ROOT,
            WORKER_MODEL: ag.model, WORKER_EFFORT: ag.effort,
            WORKER_RUNTIME: ag.runtime || RUNTIME_IDS[0],
            REVIEWER_MODEL: ag.model, REVIEWER_EFFORT: ag.effort,

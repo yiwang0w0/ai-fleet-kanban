@@ -56,6 +56,12 @@ for _s in (sys.stdout, sys.stderr):
     try: _s.reconfigure(encoding="utf-8", errors="replace")
     except Exception: pass
 
+# fleet.config.json 的部署键(port/repo/gated_subtree)回填 env 缺省 —— 部署真相
+# 写一次,server 与全部客户端同读(v0.3;env 已设者永远优先)。
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "core"))
+import board_env
+board_env.apply()
+
 # BOARD_PORT is honoured as a fallback — the preflight recommends it on a port
 # clash, and ignoring it here would aim this client at the DEFAULT port's board.
 BASE = os.environ.get("BOARD_URL") or (

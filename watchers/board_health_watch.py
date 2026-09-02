@@ -15,7 +15,9 @@ Run under your Claude's persistent monitor:
 Env:
   BOARD_URL             board base URL         (default http://127.0.0.1:47824)
   BOARD_DATA_DIR        data dir (board_token, review verdicts)  (default <repo>/.data)
-  BOARD_REPO            host repo for the tree check             (default parent of this file's dir)
+  (the tree check and data-dir default anchor the board's OWN tree — v0.3
+   dropped the BOARD_REPO knob here: it aimed the check at the WORK repo on
+   split deployments, which is the wrong repo for a claims-refuse gate)
   BOARD_GATED_SUBTREE   subtree whose dirtiness blocks claims — same variable the
                         source gate uses; unset = skip the tree check
   BOARD_WATCH_IGNORE_LINES  comma-separated lines deliberately stopped (their
@@ -33,11 +35,22 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.environ.get("BOARD_REPO") or os.path.dirname(HERE)
+# fleet.config.json 部署键回填 env 缺省(v0.3;env 已设者优先)——含 gated_subtree,
+# 让本哨的受闸子树检查与 server/loop 读同一处真相。
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "core"))
+import board_env
+board_env.apply()
+# ⚠ The tree check and the data dir anchor the BOARD'S OWN tree (CODE_ROOT) —
+#   NOT BOARD_REPO. The claims-refuse gate measures the board's gated subtree,
+#   and the token/verdict files live under the board's core/.data. In the origin
+#   deployment the board lived inside the work repo so the two were one; split
+#   deployments (BOARD_REPO = the work repo) made the old BOARD_REPO anchor
+#   check the WRONG repo and read tokens from a path that never existed.
+CODE_ROOT = os.path.dirname(HERE)
 BASE = os.environ.get("BOARD_URL") or (
     "http://127.0.0.1:" + os.environ["BOARD_PORT"] if os.environ.get("BOARD_PORT")
     else "http://127.0.0.1:47824")
-DATA = os.environ.get("BOARD_DATA_DIR") or os.path.join(REPO, "core", ".data")   # the store's default (core/store.js)
+DATA = os.environ.get("BOARD_DATA_DIR") or os.path.join(CODE_ROOT, "core", ".data")   # the store's default (core/store.js)
 SUBTREE = os.environ.get("BOARD_GATED_SUBTREE") or ""
 IGNORE_LINES = {x.strip() for x in os.environ.get("BOARD_WATCH_IGNORE_LINES", "").split(",") if x.strip()}
 INTERVAL = max(30, int(os.environ.get("BOARD_WATCH_INTERVAL", "600")))
@@ -167,7 +180,7 @@ while True:
     if SUBTREE:
         try:
             r = subprocess.run(["git", "status", "--short", "--", SUBTREE],
-                               cwd=REPO, capture_output=True, text=True,
+                               cwd=CODE_ROOT, capture_output=True, text=True,
                                encoding="utf-8", timeout=30)
             dirty = [l for l in (r.stdout or "").splitlines() if l.strip()]
             if dirty:

@@ -30,6 +30,11 @@ HERE   = os.path.dirname(os.path.abspath(__file__))
 CODE_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(CODE_ROOT, "gates"))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(CODE_ROOT, "core"))
+# fleet.config.json 部署键回填 env 缺省(v0.3;env 已设者优先)。⚠先于 gates_lib
+# import —— DEFAULT_SUBTREE 在那一刻就照 env 快照了。
+import board_env
+board_env.apply()
 import gates_lib          # revision 绑定门 + 全局预算(诸 loop 共用,勿各自复写)
 import codex_runtime
 import context_lib

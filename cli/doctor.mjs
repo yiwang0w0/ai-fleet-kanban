@@ -13,6 +13,7 @@ import { existsSync, readFileSync, accessSync, constants } from "node:fs";
 import { createServer } from "node:net";
 import { join, dirname, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyConfigDefaults } from "../core/env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -23,6 +24,12 @@ const wr = (name, detail = "") => { warn++; console.log(`  WARN  ${name}${detail
 const no = (name, fix = "") => { fail++; console.log(`  FAIL  ${name}${fix ? "\n        修法: " + fix : ""}`); };
 
 console.log("[AI Fleet Kanban · doctor]\n");
+
+// fleet.config 的部署键(port/repo/gated_subtree)回填 env 缺省(v0.3)。记住
+// 端口的来源 —— 收尾行照来源措辞,教操作者用他实际用的机制。
+const HAD_PORT_ENV = !!process.env.BOARD_PORT;
+const CFG0 = applyConfigDefaults();
+const PORT_SRC = HAD_PORT_ENV ? "BOARD_PORT" : CFG0.port != null ? "fleet.config" : "默认";
 
 // ── ① node:sqlite — the store's engine ──────────────────────────────────────
 try {
@@ -51,6 +58,12 @@ for (const c of pyCands) {
 }
 if (!PY) no("找不到 python(试过: " + pyCands.join(" / ") + ")",
             "装 Python 3 或设 BOARD_PYTHON 指向解释器。worker 循环没有它起不来。");
+// Windows pipes default to a legacy codepage; a single CJK char in a card
+// subject can kill a piped harness/CLI with UnicodeEncodeError (measured in
+// the cold walkthrough's environment notes). Warn, don't fail — the shipped
+// entrypoints pin utf-8 themselves; this protects the operator's OWN pipes.
+if (process.platform === "win32" && process.env.PYTHONUTF8 !== "1")
+  wr("PYTHONUTF8 未设(Windows)", 'PowerShell 里 $env:PYTHONUTF8 = "1" —— 管道默认走旧码页,中文输出会被毁');
 
 // ── ③ git — the revision gate's ground ──────────────────────────────────────
 try {
@@ -150,7 +163,7 @@ await new Promise((resolve) => {
     resolve();
   });
   srv.listen(port, "127.0.0.1", () => {
-    srv.close(() => { ok(`端口 ${port} 可用`); resolve(); });
+    srv.close(() => { ok(`端口 ${port} 可用(来源: ${PORT_SRC})`); resolve(); });
   });
 });
 
@@ -176,12 +189,13 @@ if (process.env.BOARD_CODEX_CMD) {
 }
 
 console.log(`\n${"─".repeat(56)}`);
-// ⚠ The closing command must CARRY the address when it is not the default —
-//   doctor honoured BOARD_PORT all along, then used to print the bare command;
-//   pasting that starts the server back on 47824 (measured in a cold-machine
-//   walkthrough — the exact failure step 3 of the QUICKSTART warns about).
+// ⚠ The closing command must CARRY the address when it came from THIS SHELL's
+//   env — pasting the bare command elsewhere would start the server back on the
+//   default port (measured in a cold-machine walkthrough). A port from
+//   fleet.config needs NO prefix: the server reads the same file itself —
+//   that is the whole point of the config being the deployment truth (v0.3).
 const envPrefix = process.env.BOARD_URL ? `BOARD_URL=${process.env.BOARD_URL} ` :
-  process.env.BOARD_PORT ? `BOARD_PORT=${process.env.BOARD_PORT} ` : "";
+  HAD_PORT_ENV ? `BOARD_PORT=${process.env.BOARD_PORT} ` : "";
 console.log(`result: ${pass} PASS / ${warn} WARN / ${fail} FAIL` +
             (fail ? "\n⛔ 有 FAIL —— 修完再起板(每条 FAIL 下面都写了修法)"
                   : (warn ? "\n可以起板(WARN 不拦路,但建议看一眼): "

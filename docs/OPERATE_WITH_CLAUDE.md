@@ -52,10 +52,13 @@ worker 家规(范围闸门四问=防过度工程化、pathspec 提交、密钥�
 `CLAUDE.md`)并填好方括号——约束放在 worker 眼皮底下才生效,看板仓里的 skill
 管不到它。
 
-活不在看板仓里?设 **`BOARD_REPO` 指向工作仓**。它一个变量决定两件事:
-worker 的工作目录,和交付物闸拿哪个仓的 `HEAD` 核对证据点名的文件。源码闸
-**不受它影响**——三个锚各管各的:源码闸=看板代码自身 · 交付物闸+worker=
-`BOARD_REPO` · 运行时状态=`core/.data`。
+活不在看板仓里?把 **`"repo"` 写进 `fleet.config.json`**(v0.3;或临时用
+`BOARD_REPO` env,env 优先)。它一个键决定两件事:worker 的工作目录,和
+交付物闸拿哪个仓的 `HEAD` 核对证据点名的文件。源码闸**不受它影响**——三个
+锚各管各的:源码闸=看板代码自身 · 交付物闸+worker=`repo` · 运行时状态=
+`core/.data`。同理 `"port"` 与 `"gated_subtree"` 也住配置里:写一次,server
+与全部客户端(CLI/两哨/两 loop/doctor/seed)同读,不再有「两个 shell 各设
+一遍」的编排。
 
 ## 二点五、开自动审阅(v0.2)
 

@@ -21,29 +21,40 @@ node cli/doctor.mjs
 Doctor measures — requires the sqlite module, spawns the interpreter, binds the
 port — and every red line carries its fix. Green or warn = proceed.
 
-Doctor honours `BOARD_PORT`/`BOARD_URL` too: if you already know you'll run on
-a non-default port (or suspect 47824 is taken), give it the same value now —
-`BOARD_PORT=48500 node cli/doctor.mjs` — so it probes the port you will
-actually use, and its closing line prints the command with the address on it.
+Doctor reads `fleet.config.json` (and `BOARD_PORT`/`BOARD_URL`, which override
+it), so after step 1 it probes the port you will actually use — its closing
+line even tells you where the port came from.
 
-## 1 · (optional) name your fleet
-
-Skip this and you get two built-in lines (`alpha`, `coord`). To define your own
-lines and handoff directories:
+## 1 · Install your config (recommended)
 
 ```
-node cli/init.mjs        # copies examples/fleet.config.json to the repo root
+node cli/init.mjs        # copies examples/fleet.config.json to the BOARD repo root
 ```
 
-Edit `lines[]` and `handoff_targets[]` — or skip the editor entirely and tell
-your Claude what your work looks like (see `docs/OPERATE_WITH_CLAUDE.md`).
-The config is gitignored; it names YOUR directories and stays on your machine.
+The config is two things at once. It is your **fleet vocabulary** — edit
+`lines[]` and `handoff_targets[]`, or skip the editor and tell your Claude what
+your work looks like (`docs/OPERATE_WITH_CLAUDE.md`). And since v0.3 it is the
+**deployment truth**: optional `port` / `repo` / `gated_subtree` keys that the
+server AND every client read alike, so nothing below needs to be exported in
+two shells. The example already carries `gated_subtree: "."`. The file is
+gitignored; it names YOUR directories and stays on your machine.
+
+(Skipping this step works too — you get two built-in lines, `alpha`/`coord`,
+and the env-variable spellings shown below.)
 
 ## 2 · Bless what you're about to run
 
 The fleet **refuses to run unreviewed governance code** — that is the fail-closed
 source gate, and on a standalone clone the governance code is the whole tree.
-Blessing = recording "this exact tree is what I accept":
+Blessing = recording "this exact tree is what I accept". With the step-1 config
+in place it is one command:
+
+```
+python cli/board.py bless
+```
+
+(No config? Same act, spelled by hand — and the gate subtree must then be
+exported in EVERY shell that runs a loop:)
 
 ```bash
 # bash / CI
@@ -52,10 +63,6 @@ mkdir -p core/.data
 git rev-parse "HEAD:" > core/.data/accepted_rev
 ```
 
-(That trailing colon in `"HEAD:"` is not a typo: it addresses HEAD's **tree
-object** — the content snapshot — rather than the commit. That is exactly why
-any local edit to tracked files changes the hash and stops line startup.)
-
 ```powershell
 # PowerShell
 $env:BOARD_GATED_SUBTREE = "."
@@ -63,11 +70,13 @@ New-Item -ItemType Directory -Force core\.data | Out-Null
 git rev-parse "HEAD:" | Out-File -Encoding ascii core\.data\accepted_rev
 ```
 
+(That trailing colon in `"HEAD:"` is not a typo: it addresses HEAD's **tree
+object** — the content snapshot — rather than the commit. That is exactly why
+any local edit to tracked files changes the hash and stops line startup.)
+
 Two things follow, both deliberate: **any local edit to tracked files stops line
 startup** (exit 3, with the reason printed — that is the gate working, not a
-crash), and after you commit a change you re-bless with the same one-liner.
-Set `BOARD_GATED_SUBTREE` in the same shell that starts the server — worker
-lines inherit it from there.
+crash), and after you commit a change you re-bless the same way.
 
 ## 3 · Board up
 
@@ -76,39 +85,40 @@ node core/server.mjs
 ```
 
 Open http://127.0.0.1:47824 — the panel is for your eyes; agents use the API.
+The tab title carries the waiting-card count, so a delivered card is visible
+even from another tab.
 
 **If doctor warned that 47824 is taken** (another board, or anything else):
-pick a port and give it to BOTH sides — `BOARD_PORT` moves the server, and every
-client command in this guide then needs the same value (they honour `BOARD_PORT`
-too, or set `BOARD_URL=http://127.0.0.1:<port>` once). Moving only the server
-sends your commands to whatever answers on the OLD port — on a shared machine
-that can be somebody else's live board.
+write `"port": 48500` into `fleet.config.json` — the server and every client
+read the same file, so one edit moves the whole deployment. (`BOARD_PORT` /
+`BOARD_URL` env vars still override the config for one-off runs; if you use
+them, every shell needs the same value — moving only the server sends your
+commands to whatever answers on the OLD port, which on a shared machine can be
+somebody else's live board.)
 
 ## 4 · Seed the demo and run the mock cycle (zero tokens)
 
-In a second shell — and a NEW shell knows nothing your first shell exported, so
-the gate env comes along (skipping it is a guaranteed refusal, exit 3):
+In a second shell. With the step-1 config, the new shell needs **no exports** —
+port and gate subtree come from the config:
 
 ```bash
-export BOARD_GATED_SUBTREE=.        # the new shell needs it too
-# export BOARD_PORT=48500           # moved the port in step 3? the new shell needs THIS too
 node examples/seed_demo.mjs
 WORKER_CLI_ARGV='["python","examples/mock_worker_cli.py"]' \
   python loops/worker_loop.py --as alpha --once
 ```
 
 ```powershell
-$env:BOARD_GATED_SUBTREE = "."      # the new shell needs it too
-# $env:BOARD_PORT = "48500"         # moved the port in step 3? the new shell needs THIS too
 $env:PYTHONUTF8 = "1"               # Windows pipes default to a legacy codepage
 node examples\seed_demo.mjs
 $env:WORKER_CLI_ARGV = '["python","examples/mock_worker_cli.py"]'
 python loops\worker_loop.py --as alpha --once
 ```
 
-(The line name `alpha` is the built-in default; if you installed a config in
-step 1, use YOUR first line — the seed prints the exact commands. If you moved
-the board's port in step 3, these shells need the same `BOARD_PORT` too.)
+(No config? Then this shell needs the same `BOARD_GATED_SUBTREE` — and
+`BOARD_PORT` if you moved it — exported again: a NEW shell knows nothing your
+first shell exported, and skipping the gate env is a guaranteed refusal, exit 3.
+The line name `alpha` is the built-in default; if you named your own lines in
+step 1, use YOUR first line — the seed prints the exact commands.)
 
 The seed plants one goal and three cards (and refuses a board that already has
 cards — demo data never mixes into real work). The `--once` run claims card #2,

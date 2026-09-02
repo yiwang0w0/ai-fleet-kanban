@@ -34,9 +34,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 #   REPO      = 舰队作业的目标仓(cwd / git status / 提示词里的路径)。
 #   ⚠ 按 BOARD_REPO 去 import 会在 BOARD_REPO 指向别处(试验的临时仓)时直接崩。
 CODE_ROOT = os.path.dirname(HERE)
-REPO = os.environ.get("BOARD_REPO", CODE_ROOT)
 sys.path.insert(0, os.path.join(CODE_ROOT, "gates"))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(CODE_ROOT, "core"))
+# fleet.config.json 部署键回填 env 缺省(v0.3;env 已设者优先)。⚠必须先于
+# gates_lib 的 import —— DEFAULT_SUBTREE 在那一刻就照 env 快照了。
+import board_env
+board_env.apply()
+REPO = os.environ.get("BOARD_REPO", CODE_ROOT)
 
 import gates_lib          # revision 绑定门 + 全局预算(诸 loop 共用,勿各自复写)
 import codex_runtime

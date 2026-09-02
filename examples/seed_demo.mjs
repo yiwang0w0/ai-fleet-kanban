@@ -8,9 +8,11 @@ import { readFileSync } from "node:fs";
 
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyConfigDefaults } from "../core/env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
+applyConfigDefaults();   // fleet.config 的 port 等回填 env 缺省(env 已设者优先)
 // Everything lives in main() so a refusal is a RETURN, not a process.exit():
 // on Windows, exiting (or throwing) while fetch keep-alive sockets are live dies
 // of 0xC0000409 AFTER printing — right words, lying exit code (measured, twice).

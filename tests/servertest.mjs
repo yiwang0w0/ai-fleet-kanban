@@ -93,7 +93,7 @@ async function freePort() {
     if (ok) return p;
   }
 }
-async function board({ script = SERVER, env = {}, dataDir = null, files = {} } = {}) {
+async function board({ script = SERVER, env = {}, dataDir = null, files = {}, configPort = false } = {}) {
   const PORT = await freePort();
   const BASE = `http://127.0.0.1:${PORT}`;
   const DATA = dataDir || mkdtempSync(join(tmpdir(), "servertest-data-"));
@@ -101,15 +101,23 @@ async function board({ script = SERVER, env = {}, dataDir = null, files = {} } =
     mkdirSync(DATA, { recursive: true });
     writeFileSync(join(DATA, name), JSON.stringify(body, null, 1), "utf8");
   }
+  // §P: configPort=true hands the port over via a fleet.config file INSTEAD of
+  // the BOARD_PORT env — measuring the v0.3 "config is the deployment truth" path.
+  if (configPort) {
+    mkdirSync(DATA, { recursive: true });
+    writeFileSync(join(DATA, "p-fleet.config.json"), JSON.stringify({ port: PORT }), "utf8");
+    env = { ...env, BOARD_CONFIG: join(DATA, "p-fleet.config.json") };
+  }
   let out = "";
-  const proc = spawn(process.execPath, [script], {
-    env: { ...process.env, BOARD_PORT: String(PORT), BOARD_DATA_DIR: DATA,
+  const spawnEnv = { ...process.env, BOARD_PORT: String(PORT), BOARD_DATA_DIR: DATA,
            BOARD_DB: join(DATA, "t.db"), BOARD_ALLOW_UNPINNED: "1",
            BOARD_POOL_TEST_MODE: "1", BOARD_POOL_TEST_PROBE: "ok",
            ...(PYTHON ? { BOARD_PYTHON: PYTHON } : {}),
-           PYTHONIOENCODING: "utf-8", ...env },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+           PYTHONIOENCODING: "utf-8", ...env };
+  // Delete, not just omit — a BOARD_PORT inherited from the caller's shell
+  // would override the config and quietly turn §P's measurement into env's.
+  if (configPort) delete spawnEnv.BOARD_PORT;
+  const proc = spawn(process.execPath, [script], { env: spawnEnv, stdio: ["ignore", "pipe", "pipe"] });
   proc.stdout.on("data", (b) => (out += b));
   proc.stderr.on("data", (b) => (out += b));
   proc.on("error", (e) => (out += `\n[server spawn error] ${e.message}\n`));
@@ -772,6 +780,51 @@ try {
     const rvc = await apiAs(RV, "POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
     ok("O8 review 令牌认领 → 403(裁定面拿不到执行面)", rvc.status === 403, `HTTP ${rvc.status}`);
     B.kill();
+  }
+
+  // ══ §P fleet.config as the deployment truth (v0.3) ═══════════════════════════
+  // The env choreography (same port exported in two shells, gate env re-exported
+  // in every shell) produced a measured incident class: the side that forgot
+  // knocked on the default port's live board. The config is now the floor under
+  // the env — written once, read by server and clients alike.
+  {
+    console.log(NL + "[§P fleet.config = 部署真相(port 入配置·env 仍覆写)]");
+    const B = await board({ configPort: true });
+    boards.push(B);
+    const h = await fetch(`${B.BASE}/health`).then((r) => r.json()).catch(() => null);
+    ok("P1 ⭐端口只写在 fleet.config 里(无 BOARD_PORT env)→ server 就绑它",
+       h?.status === "ok" && Number(h?.port) === B.PORT, JSON.stringify(h));
+    B.kill();
+
+    // env beats config: config names a DIFFERENT (dead) port; the board must
+    // answer on the env's port and never bind the config's.
+    const D2 = mkdtempSync(join(tmpdir(), "servertest-cfg-"));
+    writeFileSync(join(D2, "cfg.json"), JSON.stringify({ port: 1 }), "utf8"); // port 1: privileged/dead
+    const C = await mk({ env: { BOARD_CONFIG: join(D2, "cfg.json") } });
+    const h2 = await fetch(`${C.BASE}/health`).then((r) => r.json()).catch(() => null);
+    ok("P2 BOARD_PORT env 优先于配置(配置写着死端口,server 仍答在 env 端口)",
+       h2?.status === "ok" && Number(h2?.port) === C.PORT, JSON.stringify(h2));
+    C.kill();
+    try { rmSync(D2, { recursive: true, force: true }); } catch {}
+
+    // config.repo reaches the deliverable gate: a non-git work repo named by the
+    // CONFIG (no BOARD_REPO env) must make closes refuse as unmeasurable.
+    const NONGIT2 = mkdtempSync(join(tmpdir(), "servertest-cfgrepo-"));
+    writeFileSync(join(NONGIT2, "cfg.json"), JSON.stringify({ repo: NONGIT2 }), "utf8");
+    const E = await mk({ env: { BOARD_CONFIG: join(NONGIT2, "cfg.json") } });
+    const idE = (await E.api("POST", "/api/tasks", { subject: "p-case", line: LINE, humanGate: false })).body.task.id;
+    await E.api("POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
+    await E.api("POST", `/api/tasks/${idE}/report`, { worker: "alpha", outcome: "done", evidence: "纯文字" });
+    const rE = await E.api("POST", `/api/tasks/${idE}/resolve`, { verdict: "approve", note: "", resolved_by: "human" });
+    ok("P3 ⭐config.repo 接进交付物闸(非 git 工作仓 → 结案 409 不可测)",
+       rE.status === 409 && /不可测/.test(rE.body?.error || ""), `HTTP ${rE.status}`);
+    E.kill();
+    try { rmSync(NONGIT2, { recursive: true, force: true }); } catch {}
+
+    // The tab-title badge consumes the same counts (source-shape pin, M8 style).
+    const panelSrc = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
+    ok("P4 面板把等待数写进标签页标题(等待卡不再无声的最便宜一层)",
+       /document\.title = c\.waiting > 0/.test(panelSrc), "");
   }
 
 } catch (e) {

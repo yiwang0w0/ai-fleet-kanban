@@ -1742,6 +1742,11 @@ function renderNow(){
   set("f-arch", meta.archived_count);
   set("f-up", meta.uptime_sec == null ? "–" : fmtUp(meta.uptime_sec));
   set("f-ns", c.not_started); set("f-ip", c.in_progress); set("f-wa", c.waiting); set("f-dn", c.done);
+  // ⭐ The browser TAB is the cheapest notification surface there is. A card
+  //   landing in waiting used to be silent unless the sentries were mounted
+  //   (measured on a live deployment: delivered cards sat unheard) — the tab
+  //   title now carries the waiting count, visible from any other tab.
+  document.title = c.waiting > 0 ? `(${c.waiting} 待裁)AI 舰队看板` : "AI 舰队看板";
   document.getElementById("f-when").textContent = "刷新于 " + new Date().toTimeString().slice(0,8);
 }
 const set = (id, v) => { document.getElementById(id).textContent = v == null ? "–" : v; };

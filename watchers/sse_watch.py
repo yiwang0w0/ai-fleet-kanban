@@ -29,6 +29,10 @@ import urllib.request
 import datetime
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+# fleet.config.json 部署键回填 env 缺省(v0.3;env 已设者优先)。
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "core"))
+import board_env
+board_env.apply()
 BASE = os.environ.get("BOARD_URL") or (
     "http://127.0.0.1:" + os.environ["BOARD_PORT"] if os.environ.get("BOARD_PORT")
     else "http://127.0.0.1:47824")

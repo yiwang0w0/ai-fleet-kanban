@@ -1,5 +1,7 @@
 {
-  "_comment": "Fleet vocabulary. Copy to <repo>/fleet.config.json (or point BOARD_CONFIG at it). A missing file = built-in defaults; a broken file refuses startup.",
+  "_comment": "Fleet vocabulary. Copy to <board repo>/fleet.config.json (or point BOARD_CONFIG at it). A missing file = built-in defaults; a broken file refuses startup.",
+  "_deploy": "Deployment truth (v0.3, all optional; env vars override when set). port: the board's port, read by the server AND every client — set it once here instead of in two shells. repo: the WORK repo workers act in (worker cwd + deliverable-gate anchor); omit for a standalone board. gated_subtree: the source gate's subtree — '.' = the whole tree, the honest anchor for a standalone clone; with it here, no shell ever needs to export BOARD_GATED_SUBTREE.",
+  "gated_subtree": ".",
   "lines": [
     { "id": "engine", "hint": "代码/SQL/迁移" },
     { "id": "design", "hint": "前端/UI/文案" },
