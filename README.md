@@ -19,7 +19,7 @@ Each gate exists because a real incident demanded it. The docs open with inciden
 
 ## Status
 
-**v0.2.1.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (570+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+**v0.2.2.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (570+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 
 v0.2's theme is **ruling authority made structural**, driven by a live incident (INCIDENT-12: an agent self-approved its own card): three capability tokens (operator / worker / reviewer), a closed `resolved_by` domain, and the auto-reviewer — per-card fresh sessions, verify-first, and a machine-evidence gate that turns "approve with zero machine output" into a human decision. The 0.1.x line added bundled operator skills, the worker-repo constraint template, a fail-closed deliverable gate, landed-bytes handoff receipts, and cold-walkthrough fixes.
 

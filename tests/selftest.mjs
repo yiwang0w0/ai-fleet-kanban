@@ -174,7 +174,22 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
   //   "transaction removed entirely" while half of it survives. Harmless today (the
   //   child only calls claim), but a mutant that is not what it says it is WILL
   //   deceive someone later.
+  // ⚠ Removing the transaction is NECESSARY but not SUFFICIENT for the positive
+  //   control: on a slow, serialized runner each child's SELECT→UPDATE completes
+  //   inside one timeslice and the mutant never interleaves — measured on a
+  //   private-mirror windows runner: 8 rounds of "1w/0err" and the probe honestly
+  //   reported it could not measure (red on healthy code). A positive control
+  //   that depends on scheduler luck is flaky BY CONSTRUCTION. So the mutant also
+  //   HOLDS THE WINDOW OPEN: a 120ms spin between picking the card and stamping
+  //   it, making the interleave certain on any runner. The spin exists only in
+  //   the mutant — the real store is untouched, and the real-race section above
+  //   still measures the genuine article.
+  const SPIN_ANCHOR = 'if (!pick) { db.exec("COMMIT"); return null; }';
+  ok("mutant window anchor present exactly once (rot check)",
+     src.split(SPIN_ANCHOR).length === 2, `occurrences=${src.split(SPIN_ANCHOR).length - 1}`);
   const mNoTx = mkMutant("m_notx.js", (x) => x
+    .replaceAll(SPIN_ANCHOR, SPIN_ANCHOR +
+      '\n    { const _w0 = Date.now(); while (Date.now() - _w0 < 120) {} } // mutant-only: hold the select->update window open')
     .replaceAll('db.exec("BEGIN IMMEDIATE");', '/* no tx */')
     .replaceAll('db.exec("COMMIT");', '/* no commit */')
     .replaceAll('try { db.exec("ROLLBACK"); } catch {}', '/* no rollback */'));
