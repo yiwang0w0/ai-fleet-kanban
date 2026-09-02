@@ -21,6 +21,14 @@ jobs:
       # windows-latest pipes default to cp1252; the harnesses print CJK. Without
       # this, codex-selftest dies of UnicodeEncodeError before its first assertion.
       PYTHONUTF8: "1"
+    defaults:
+      run:
+        # One shell on both platforms, and one failure contract: every harness
+        # step runs through `hrun`, which on red surfaces the FAIL lines as
+        # ::error:: ANNOTATIONS. Annotations are visible on the run page even
+        # logged out — raw logs are not, and a maintainer diagnosing a
+        # platform-only red from outside a browser session gets nothing else.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,30 +37,43 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: define hrun (FAIL lines become annotations)
+        run: |
+          cat > hrun.sh <<'SH'
+          set -o pipefail
+          "$@" 2>&1 | tee harness.log
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            grep -a "FAIL" harness.log | head -10 | while IFS= read -r l; do
+              printf '::error::%s\n' "$l"
+            done
+          fi
+          exit $rc
+          SH
 
       # Pure layers first: store, rulings, gates, prompt library.
-      - name: selftest (store, 316 assertions)
-        run: node tests/selftest.mjs
+      - name: selftest (store)
+        run: bash hrun.sh node tests/selftest.mjs
       - name: decisiontest (rulings + handoff)
-        run: node tests/decisiontest.mjs
+        run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)
-        run: node tests/gatetest.mjs
+        run: bash hrun.sh node tests/gatetest.mjs
       - name: decomposetest (decompose prompt)
-        run: node tests/decomposetest.mjs
+        run: bash hrun.sh node tests/decomposetest.mjs
       - name: gates_lib selftest (revision pin + budget)
-        run: python gates/gates_lib.py
+        run: bash hrun.sh python gates/gates_lib.py
       - name: worker_loop codex selftest (pure functions)
-        run: python loops/worker_loop.py --codex-selftest
+        run: bash hrun.sh python loops/worker_loop.py --codex-selftest
 
       # Process layers: the real loop against an isolated board, then the supervisor.
       - name: looptest (worker loop, end to end with a stub CLI)
-        run: node tests/looptest.mjs
+        run: bash hrun.sh node tests/looptest.mjs
         env:
           PYTHON: python
       - name: "servertest (supervisor: stop reasons, backoff, refusal)"
-        run: node tests/servertest.mjs
+        run: bash hrun.sh node tests/servertest.mjs
       - name: "reviewtest (auto-reviewer, end to end with a stub CLI)"
-        run: node tests/reviewtest.mjs
+        run: bash hrun.sh node tests/reviewtest.mjs
         env:
           PYTHON: python
 
