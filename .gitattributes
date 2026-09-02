@@ -1,0 +1,12 @@
+# The index holds LF everywhere (verified with `git ls-files --eol` before adding
+# this file — adding it renormalizes nothing). This pins that state so a future
+# contributor with autocrlf=false cannot commit CRLF and break the Linux CI lane.
+* text=auto
+*.py text eol=lf
+*.sh text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.html text eol=lf

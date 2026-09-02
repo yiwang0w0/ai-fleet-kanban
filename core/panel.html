@@ -1,0 +1,2398 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>AI 舰队看板</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212a; --line:#2a2f3a;
+    --fg:#e6e9ef; --dim:#8b93a3; --dim2:#5d6472;
+    --cc:#5b9dff; --l0:#c084fc;
+    --ok:#3ecf8e; --warn:#e8b93a; --bad:#f2555a; --wait:#e8b93a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7f9; --panel:#fff; --panel2:#f0f2f5; --line:#dfe3ea;
+           --fg:#1a1d23; --dim:#666e7d; --dim2:#98a0ae; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:13px/1.5 "Segoe UI",system-ui,sans-serif}
+  header{display:flex;align-items:baseline;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:12px}
+  .live{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .dot.off{background:var(--bad)}
+
+  .task-find{display:flex;align-items:center;gap:7px;padding:8px 16px;border-bottom:1px solid var(--line);
+             background:var(--panel)}
+  .task-find label{color:var(--dim);font-size:11.5px;white-space:nowrap}
+  .task-find input{width:180px;max-width:42vw;background:var(--panel2);color:var(--fg);
+                   border:1px solid var(--line);border-radius:7px;padding:5px 8px;font:12px inherit}
+  .task-find input:focus{outline:none;border-color:var(--cc);box-shadow:0 0 0 2px color-mix(in srgb,var(--cc) 18%,transparent)}
+  .task-find .note{color:var(--dim);font-size:11px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .task-find .note.ok{color:var(--ok)}
+  .task-find .note.bad{color:var(--bad)}
+  @media (max-width:620px){
+    .task-find{flex-wrap:wrap}
+    .task-find input{width:min(190px,55vw);max-width:none}
+    .task-find .note{flex-basis:100%}
+  }
+
+  /* ⚠ 1fr = minmax(auto,1fr): the `auto` means "never narrower than content", so one
+     long card title inflates its column and crushes the others (measured: 247px →
+     542px). minmax(0,1fr) removes the floor — NO column can inflate from content.
+     Chasing individual elements with min-width:0 is whack-a-mole; seal the container. */
+  .cols{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:12px 16px 60px;align-items:start}
+  @media (max-width:1400px){ .cols{grid-template-columns:repeat(3,minmax(0,1fr))} }
+  @media (max-width:1100px){ .cols{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (max-width:620px){ .cols{grid-template-columns:minmax(0,1fr)} }
+
+  .col{background:var(--panel);border:1px solid var(--line);border-radius:10px;min-height:120px}
+  .col > h2{margin:0;padding:9px 12px;font-size:12px;font-weight:600;
+            border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .col > h2 .n{color:var(--dim);font-weight:400}
+  .col[data-s="goal"] > h2{box-shadow:inset 3px 0 0 var(--l0)}
+  .col[data-s="not_started"] > h2{box-shadow:inset 3px 0 0 var(--dim2)}
+  .col[data-s="in_progress"] > h2{box-shadow:inset 3px 0 0 var(--cc)}
+  .col[data-s="waiting"]     > h2{box-shadow:inset 3px 0 0 var(--wait)}
+  .col[data-s="done"]        > h2{box-shadow:inset 3px 0 0 var(--ok)}
+  .list{padding:8px;display:flex;flex-direction:column;gap:7px}
+  .empty{color:var(--dim2);padding:14px 12px;font-size:12px}
+
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 9px;
+        transition:border-color .12s,box-shadow .12s}
+  .card.rel{border-width:2px;border-color:var(--cc);box-shadow:0 0 0 1px color-mix(in srgb,var(--cc) 30%,transparent)}
+
+  /* ── Card movement (FLIP) ─────────────────────────────────────────────
+     ⭐ Animation starts ONLY after the server confirmed the state. render() is only
+     called from refresh() (= after a fresh GET), so "the show finished but the DB
+     never changed" is structurally impossible. Nothing moves optimistically. */
+  .card.flip{position:relative;z-index:6;box-shadow:0 12px 28px rgba(0,0,0,.45);will-change:transform}
+  .card.enter{animation:cardIn .28s cubic-bezier(.2,.7,.3,1) both}
+  @keyframes cardIn{from{opacity:0;transform:translateY(-7px) scale(.96)}to{opacity:1;transform:none}}
+  .card.leaving{pointer-events:none;overflow:hidden;opacity:0;transform:scale(.94);
+    max-height:0!important;margin-top:-7px;padding-top:0;padding-bottom:0;border-width:0;
+    transition:opacity .2s ease,transform .2s ease,max-height .22s ease,margin .22s ease,
+               padding .22s ease,border-width .22s ease}
+  /* Flash the landing column so the eye can follow where it went */
+  .col.landed > h2{background:color-mix(in srgb,var(--cc) 20%,transparent)}
+  .col > h2{transition:background .45s ease}
+  @media (prefers-reduced-motion: reduce){
+    .card.flip,.card.enter,.card.leaving{animation:none!important;transition:none!important}
+    .card.flip{transform:none!important;box-shadow:none}
+    .col > h2,.col.landed > h2{transition:none}
+  }
+  .card.self{border-color:var(--ok);box-shadow:0 0 0 1px color-mix(in srgb,var(--ok) 35%,transparent)}
+  .card.located{border-color:var(--l0);box-shadow:0 0 0 2px color-mix(in srgb,var(--l0) 40%,transparent),
+                0 10px 24px color-mix(in srgb,var(--l0) 14%,transparent)}
+  .goalbox{padding:8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+  .goalbox textarea{width:100%;min-height:52px;resize:vertical;background:var(--panel2);color:var(--fg);
+                    border:1px solid var(--line);border-radius:7px;padding:6px 7px;font:12px inherit}
+  .goalbox .rowb{display:flex;gap:6px;align-items:center}
+  .goalbox select{flex:1;background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+                  border-radius:7px;padding:4px 6px;font:11px inherit}
+  .kids{margin-top:6px;color:var(--dim);font-size:10.5px}
+  .subs{margin-top:7px;padding-top:6px;border-top:1px dashed var(--line);
+        display:flex;flex-direction:column;gap:4px}
+  .subs .h{color:var(--dim);font-size:10.5px}
+  .sub{display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 0}
+  .sub .sid{font:600 10px/1 ui-monospace,Consolas,monospace;color:var(--dim)}
+  .sub .stt{font-size:9.5px;padding:1px 5px;border-radius:4px;border:1px solid var(--line);
+            white-space:nowrap;color:var(--dim)}
+  .sub .stt.in_progress{color:var(--cc);border-color:color-mix(in srgb,var(--cc) 45%,transparent)}
+  .sub .stt.waiting{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .sub .stt.done{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  /* ⚠ min-width:0 is required: a flex item's default is min-width:auto = never
+     narrower than content — the ellipsis never fires and a long child title widens
+     the whole column (measured). */
+  .sub .sj{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .divider{display:flex;align-items:center;gap:8px;color:var(--dim2);font-size:10.5px;margin:4px 2px 0}
+  .divider:before,.divider:after{content:"";flex:1;height:1px;background:var(--line)}
+  /* ⭐ Fold switch: the divider doubles as the section toggle; hover brightens. */
+  .tag.oneof{background:#2b2a4a;color:#b9b6ff;border-color:#3d3a6b}
+  .tag.casc{background:#22333f;color:#8fd0e8;border-color:#2f4a5a}
+  .divider.fold{cursor:pointer;user-select:none}
+  .divider.fold:hover{color:var(--dim)}
+  .card .top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .id{font:600 11px/1 ui-monospace,Consolas,monospace;color:var(--dim)}
+  .subj{margin:5px 0 0;font-size:12.5px;word-break:break-word}
+  .meta{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+        color:var(--dim);font-size:11px}
+  .tag{font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid var(--line);
+       line-height:1.5;white-space:nowrap}
+  .tag.hold{color:var(--dim2)}
+  .tag.lineage{color:var(--dim);border-style:dashed}
+  .tok{color:var(--dim);font-variant-numeric:tabular-nums}
+  .tok small{opacity:.75;margin-left:2px}
+  .tag.lock{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .tag.wf{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .tag.wf.dep{color:var(--dim)}
+  /* confirm = auto-review looked and passed it to a human; louder than untouched review. */
+  .tag.wf.confirm{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 55%,transparent);font-weight:600}
+  .tag.wf.decision{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 55%,transparent)}
+  .tag.auto{color:var(--l0);border-color:color-mix(in srgb,var(--l0) 45%,transparent)}
+  .tag.manual{color:var(--dim)}
+  /* The moment text is typed, the look changes. Knowing BEFORE pressing is the point. */
+  button.handoff{border-color:var(--dim);color:var(--fg)}
+  .hoh{margin-top:4px;font-size:10.5px;color:var(--warn);min-height:0}
+  .tag.tocoord{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 55%,transparent)}
+  .tag.pinned{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
+  .line-badge{font-size:10px;padding:1px 5px;border-radius:4px;color:#0b0d11;font-weight:600}
+  .hb{font-variant-numeric:tabular-nums}
+  .hb.fresh{color:var(--ok)} .hb.stale{color:var(--warn)} .hb.dead{color:var(--bad);font-weight:600}
+  .att{font-variant-numeric:tabular-nums}
+  .att.hot{color:var(--warn)}
+  .ev{margin-top:6px;padding:6px 8px;background:var(--bg);border:1px solid var(--line);
+      border-radius:6px;cursor:pointer;user-select:none}
+  .ev:hover{border-color:var(--cc)}
+  .ev .evh{display:flex;justify-content:space-between;gap:8px;color:var(--dim);font-size:10.5px;
+           margin-bottom:3px}
+  .ev .evh .hint{color:var(--dim2)}
+  .ev .evp{font-size:11px;line-height:1.45;color:var(--fg);opacity:.85;
+           display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .decision{margin-top:9px;border:1px solid color-mix(in srgb,var(--wait) 55%,var(--line));
+            border-radius:9px;background:color-mix(in srgb,var(--wait) 5%,var(--bg));overflow:hidden}
+  .decision-h{padding:9px 11px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+  .decision-h b{font-size:12px}.decision-h .rec{margin-left:auto;color:var(--ok);font-size:10.5px}
+  .decision-summary{padding:10px 11px;font-size:12px;line-height:1.65;white-space:pre-wrap}
+  .decision-options{padding:0 9px 9px;display:grid;gap:7px}
+  .dopt{display:block;border:1px solid var(--line);border-radius:8px;padding:9px 10px;cursor:pointer;
+        background:var(--panel2);transition:border-color .12s,background .12s}
+  .dopt:hover{border-color:var(--cc)}
+  .dopt.chosen{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,var(--panel2))}
+  .dopt.recommended{box-shadow:inset 3px 0 0 var(--ok)}
+  .dopt.unready{border-color:color-mix(in srgb,var(--bad) 55%,var(--line));
+                background:color-mix(in srgb,var(--bad) 4%,var(--panel2))}
+  .dopt-head{display:flex;align-items:flex-start;gap:7px;font-size:12px;font-weight:600}
+  .dopt-head input{margin:2px 0 0}.dopt-head .key{color:var(--cc);font:700 12px ui-monospace,Consolas,monospace}
+  .dopt-head .flag{margin-left:auto;color:var(--ok);font-size:10px;white-space:nowrap}
+  .dopt-detail{margin:6px 0 0 22px;color:var(--fg);font-size:11.5px;line-height:1.55}
+  .dopt-cost{margin:5px 0 0 22px;color:var(--warn);font-size:10.8px;line-height:1.5}
+  .hf-files{margin:7px 0 0 22px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .hf-files a{color:var(--cc);text-decoration:none;border:1px solid color-mix(in srgb,var(--cc) 45%,var(--line));
+               border-radius:6px;padding:3px 7px;font-size:10.5px;background:var(--bg)}
+  .hf-files a:hover{background:var(--line)}
+  .hf-dir{opacity:.55;font-weight:400}
+  .hf-companion{display:inline-flex;align-items:center;gap:6px;border:1px dashed color-mix(in srgb,var(--warn) 55%,var(--line));
+                 border-radius:6px;padding:3px 7px;font-size:10.5px;background:color-mix(in srgb,var(--warn) 5%,var(--bg))}
+  .hf-companion b{color:var(--warn);font-weight:600}
+  .hf-companion a{border:0;padding:0;background:transparent;text-decoration:underline;text-underline-offset:2px}
+  .hf-companion a:hover{background:transparent;color:var(--fg)}
+  .hf-warn{margin:6px 0 0 22px;color:var(--bad);font-size:10.5px}
+  .hf-receipt{margin-top:9px;border:1px solid color-mix(in srgb,var(--cc) 45%,var(--line));
+               border-radius:8px;padding:9px 10px;background:color-mix(in srgb,var(--cc) 4%,var(--panel2))}
+  .hf-receipt label{display:block;font-size:11.5px;font-weight:600;margin-bottom:6px;color:var(--cc)}
+  .hf-outcome-title{font-size:11.5px;font-weight:600;margin-bottom:6px;color:var(--cc)}
+  .hf-outcomes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:9px}
+  .hf-outcomes label{display:flex;align-items:flex-start;gap:7px;margin:0;padding:7px 8px;border:1px solid var(--line);
+                      border-radius:7px;color:var(--fg);font-size:11px;font-weight:500;cursor:pointer}
+  .hf-outcomes label:has(input:checked){border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,var(--panel2))}
+  .hf-outcomes label.failure:has(input:checked){border-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--panel2))}
+  .hf-outcomes input{margin:2px 0 0;flex:0 0 auto}
+  .hf-outcomes small{display:block;margin-top:2px;color:var(--dim);font-size:10px;font-weight:400}
+  .hf-receipt textarea{width:100%;box-sizing:border-box;resize:vertical}
+  .hf-receipt .hint{margin-top:5px;color:var(--dim);font-size:10.5px;line-height:1.5}
+  .decision-foot{padding:0 11px 10px;color:var(--dim);font-size:10.5px;line-height:1.5}
+  .decision-actions{padding-top:2px}
+  .decision.compact .decision-summary{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+  .decision.compact .decision-open{margin:0 10px 10px;width:calc(100% - 20px);color:var(--cc);border-color:var(--cc)}
+  #decision-modal .box{width:min(1060px,100%)}
+  #decision-modal .bd{font:13px/1.55 inherit;white-space:normal;padding:14px;overflow:auto}
+  #decision-modal .decision{margin-top:0}
+  button:disabled{cursor:not-allowed;opacity:.45}
+  .modal{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);display:none;
+         align-items:center;justify-content:center;padding:32px}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+              width:min(920px,100%);max-height:100%;display:flex;flex-direction:column;
+              box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .modal .hd{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .modal .hd h3{margin:0;font-size:13px;font-weight:600}
+  .modal .hd .sp{margin-left:auto;display:flex;gap:6px}
+  .modal .bd{padding:14px 16px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+             font:13.5px/1.75 ui-monospace,Consolas,monospace}
+  .vin{width:100%;min-height:46px;resize:vertical;margin-top:7px;background:var(--bg);color:var(--fg);
+       border:1px solid var(--line);border-radius:7px;padding:6px 8px;font:11.5px/1.5 inherit}
+  .vin:focus{outline:none;border-color:var(--cc)}
+  .acts{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap}
+  button{font:11px/1 inherit;padding:5px 9px;border-radius:6px;cursor:pointer;
+         border:1px solid var(--line);background:transparent;color:var(--fg)}
+  button:hover{background:var(--line)}
+  button.pri{border-color:color-mix(in srgb,var(--ok) 55%,transparent);color:var(--ok)}
+  button.danger{border-color:color-mix(in srgb,var(--bad) 55%,transparent);color:var(--bad)}
+
+  .rig{display:flex;gap:7px;flex-wrap:wrap;padding:9px 16px;border-bottom:1px solid var(--line);
+       align-items:center;background:var(--panel)}
+  .rig .lbl{color:var(--dim);font-size:11.5px;margin-right:2px}
+  .wk{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;
+      padding:3px 4px 3px 9px;font-size:11.5px}
+  .wk .nm{font-weight:600}
+  .wk .st{width:7px;height:7px;border-radius:50%;background:var(--dim2)}
+  .wk.on .st{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
+  .wk .tail{color:var(--dim);font-size:10.5px;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wk button{padding:2px 8px;border-radius:999px;font-size:10.5px}
+  .wk .gear{padding:2px 6px;border-radius:999px;font-size:11px;line-height:1}
+  .cfg{position:fixed;z-index:10;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+       padding:12px 13px;display:none;min-width:264px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .cfg.show{display:block}
+  .cfg h4{margin:0 0 9px;font-size:12px;font-weight:600}
+  .cfg .row{margin-bottom:11px}
+  .cfg .cap{color:var(--dim);font-size:11px;margin-bottom:5px;display:flex;justify-content:space-between}
+  .cfg .cap b{color:var(--fg);font-weight:600}
+  .cfg select{width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+              border-radius:7px;padding:5px 7px;font:12px inherit}
+  .cfg input[type=range]{width:100%;accent-color:var(--cc)}
+  .cfg .ends{display:flex;justify-content:space-between;color:var(--dim2);font-size:10.5px;margin-top:2px}
+  .cfg label.chk{display:flex;align-items:center;gap:7px;color:var(--dim);font-size:11.5px;cursor:pointer}
+  .cfg .note{color:var(--warn);font-size:10.5px;margin-top:8px;min-height:13px}
+  button.armed{background:var(--warn)!important;color:#1a1a1a!important;border-color:var(--warn)!important;font-weight:700}
+  #cfg{width:302px;max-height:82vh;overflow-y:auto}
+  #cfg fieldset.agent{border:1px solid var(--line);border-radius:8px;padding:6px 9px 9px;margin:0 0 10px}
+  #cfg fieldset.agent legend{font-size:11px;font-weight:600;padding:0 4px}
+  #cfg legend .sub{color:var(--dim);font-weight:400;font-size:10px;margin-left:5px}
+  #cfg legend .ax{margin-left:8px;padding:0 6px;font-size:10px;color:var(--bad)}
+  #cfg .duo{display:flex;gap:7px}
+  #cfg .duo>span{flex:1;min-width:0}
+  #cfg #cfg-add{width:100%;margin-top:2px}
+  .pick{position:fixed;z-index:9;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+        padding:6px;display:none;gap:4px;flex-direction:column;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+  .pick.show{display:flex}
+  .pick button{text-align:left;min-width:120px}
+  .line-badge{cursor:pointer}
+  .line-badge.ro{cursor:default}
+  .ctxwrap{padding:0 16px}
+  .ctxwrap + .ctxwrap{padding-top:8px}
+  /* ── Timeline (SourceTree-style horizontal graph) ── */
+  #tl-scroll{overflow:auto;max-height:72vh}
+  .tl-lab{font:10px ui-monospace,Consolas,monospace;fill:var(--fg);opacity:.82}
+  .tl-ghead{font:600 10.5px system-ui;cursor:pointer}
+  #tl-bar{display:flex;align-items:center;gap:6px;padding-bottom:6px}
+  #tl-bar input{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+                border-radius:6px;padding:2px 6px;font:11px inherit}
+  #tl-bar button{padding:2px 8px}
+  #tl-note{color:var(--dim);font-size:10.5px;margin-left:4px}
+  .tl-rowband{opacity:.05}
+  .tl-rowlab{font:600 10px system-ui}
+  .tl-cont{font:9px ui-monospace,Consolas,monospace;fill:var(--dim)}
+  .tl-band{opacity:.28}
+  .tl-cluster{cursor:zoom-in}
+  .tl-cluster text{font:600 9px ui-monospace,Consolas,monospace;fill:#fff;pointer-events:none}
+  .tl-seg.sel .tl-work{stroke-width:7}
+  #tl-svg{display:block}
+  .tl-seg{cursor:pointer}
+  .tl-seg .tl-life{stroke-width:1;opacity:.22}
+  .tl-seg .tl-work{stroke-width:5;stroke-linecap:round}
+  .tl-seg line{stroke-linecap:round}
+  .tl-seg.not_started{opacity:.38}
+  .tl-seg.waiting line{stroke-dasharray:4 3}
+  .tl-seg.goal line{stroke-width:5;opacity:.55}
+  .tl-head{font:600 10px system-ui}
+  .tl-seg.dimmed{opacity:.15}
+  .tl-seg text{font:9.5px ui-monospace,Consolas,monospace;fill:var(--fg);opacity:.85;pointer-events:none}
+  .tl-edge{fill:none;stroke:var(--dim2);stroke-width:1;opacity:.55}
+  .tl-edge.merge{stroke:var(--ok)}
+  .tl-tick{stroke:var(--line);stroke-width:1}
+  .tl-ticklab{font:9px ui-monospace,Consolas,monospace;fill:var(--dim)}
+  .ctx{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .ctx > h2{margin:0;padding:9px 12px;font-size:12px;font-weight:600;border-bottom:1px solid var(--line);
+            display:flex;align-items:center;gap:8px;cursor:pointer}
+  .ctx > h2 .n{color:var(--dim);font-weight:400}
+  .ctx .body{padding:8px 12px 11px;display:none;gap:8px;flex-direction:column}
+  .ctx.open .body{display:flex}
+  .cl{display:grid;grid-template-columns:88px 1fr auto auto;gap:10px;align-items:center;font-size:11.5px}
+  .cl .nm{font-weight:600}
+  .bar{height:7px;border-radius:99px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)}
+  .bar i{display:block;height:100%;background:var(--ok)}
+  .bar.warn i{background:var(--warn)} .bar.bad i{background:var(--bad)}
+  .cl .num{color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .cl .none{color:var(--dim2)}
+  footer{position:fixed;left:0;right:0;bottom:0;background:var(--panel);
+         border-top:1px solid var(--line);padding:7px 16px;color:var(--dim);font-size:11.5px;
+         display:flex;gap:16px;flex-wrap:wrap}
+  footer b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<header>
+  <h1>AI 舰队看板</h1>
+  <span class="live"><span class="dot" id="dot"></span><span id="livetxt">连接中</span></span>
+</header>
+
+<form class="task-find" id="task-find" role="search">
+  <label for="task-find-id">按卡号定位</label>
+  <input id="task-find-id" type="search" inputmode="numeric" autocomplete="off"
+         placeholder="例如 215 或 #215" aria-describedby="task-find-note">
+  <button class="pri" type="submit">定位到栏顶</button>
+  <button type="button" id="task-find-clear" disabled>清除</button>
+  <span class="note" id="task-find-note" aria-live="polite">输入号码后,该卡会临时置于所属栏最上方</span>
+</form>
+
+<div class="rig" id="rig"></div>
+<div class="pick" id="pick"></div>
+<div class="cfg" id="cfg"></div>
+<!-- The edit popup borrows class="cfg" WHOLESALE (no new visual language = zero new
+     CSS); only the id differs so open/close is independent. -->
+<div class="cfg" id="edit"></div>
+<div class="modal" id="modal"><div class="box">
+  <div class="hd"><h3 id="modal-t"></h3>
+    <span class="sp"><button id="modal-copy">复制</button><button id="modal-x">关闭</button></span></div>
+  <div class="bd" id="modal-b"></div>
+</div></div>
+<div class="modal" id="decision-modal"><div class="box" data-decision-scope>
+  <div class="hd"><h3 id="decision-modal-t">最终裁定</h3>
+    <span class="sp"><button id="decision-modal-x">关闭</button></span></div>
+  <div class="bd" id="decision-modal-b"></div>
+</div></div>
+
+<div class="ctxwrap"><section class="ctx" id="ctx">
+  <h2>上下文 <span class="n" id="ctx-sum"></span></h2>
+  <div class="body" id="ctx-body"></div>
+</section></div>
+
+<div class="ctxwrap"><section class="ctx" id="tl">
+  <h2>时间轴 <span class="n" id="tl-sum"></span></h2>
+  <div class="body" id="tl-body"><div id="tl-bar"><button id="tl-mode-lin">谱系</button><button id="tl-mode-load">负载</button><span style="width:6px"></span><button id="tl-prev">◀</button><input type="date" id="tl-date"><button id="tl-next">▶</button><button id="tl-fit" class="pri">聚焦活动</button><button id="tl-day">全天</button><span id="tl-note"></span></div><div id="tl-scroll"></div></div>
+</section></div>
+
+<div class="cols" id="cols"></div>
+
+<footer>
+  <span>归档 <b id="f-arch">–</b> 件</span>
+  <span>uptime <b id="f-up">–</b></span>
+  <span>未开始 <b id="f-ns">–</b> · 进行中 <b id="f-ip">–</b> · 等待中 <b id="f-wa">–</b> · 已完成 <b id="f-dn">–</b></span>
+  <span style="margin-left:auto" id="f-when">–</span>
+</footer>
+
+<script>
+// Writes carry the token; the server injects it into the page (readable same-origin only).
+const WH = { "Content-Type":"application/json", "X-Board-Token": window.__BOARD_TOKEN || "" };
+// Five columns. Goal is a KIND, not a status — the state machine still has four values.
+const COLS = [
+  ["goal",        "目标"],
+  ["not_started", "未开始"],
+  ["in_progress", "进行中"],
+  ["waiting",     "等待中"],
+  ["done",        "已完成"],
+];
+// ⚠ This label table is deliberately the same thing written in two places — the CLI
+//   (cli/board.py, WF) carries its own copy. Grow only one side and the other shows
+//   the raw code (measured: `confirm` was the one missing).
+const WF_LABEL = { review:"待验收", confirm:"待确认", decision:"待裁定", dep:"待依赖", rearm:"等待重审" };
+// Line colors are assigned from a palette by the line's index in the server-sent
+// LINES (lines are fleet config, not this file's business). Roles keep the accent.
+const PALETTE = ["#5b9dff","#f0883e","#3ecf8e","#f2555a","#c084fc","#e8b93a","#6fd3c7","#d38fd3"];
+const lineColor = (l) => {
+  const root = String(l || "").replace(/@\d+$/, "");
+  if (root === "review") return "#c084fc";
+  const i = LINES.indexOf(root);
+  return i >= 0 ? PALETTE[i % PALETTE.length] : "#5d6472";
+};
+const lineLabel = (l) => String(l || "") || "未指派";
+// Runtime badge text: conventional short forms with a generic fallback.
+const RT_BADGE = { claude: "CC", codex: "CX" };
+const rtColor = (rt) => rt === "codex" ? "#b07dd8" : "var(--cc)";
+// ⭐ Post-decompose hint. ONE copy of the wording (two decompose entrances; written
+//   separately, only one gets fixed — measured, twice, including a hint that
+//   promised an action this panel cannot perform). It states only who releases and
+//   what happens here, which is correct for every reader.
+const HOLD_HINT = `拆出的子卡已就位,但**目标未放行前,一张也不会被领**(祖先放行不变量)。
+放行整链 = 放行这个目标(board.py release <目标id>);只想放一部分,给其余子卡 hold。
+在此检查内容;有问题就在输入框写明(=回原线继续),或用 [编辑]。`;
+
+let tasks = [], taskEvents = [], meta = {}, skew = 0;   // skew = server time - local time
+let usageByCard = {};                                    // card id -> aggregated token usage
+// Token counts read at a glance: 1234 -> 1.2k, 2456789 -> 2.5M. One decimal is
+// plenty for a card face; the ledger holds the exact numbers.
+const fmtTok = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+
+// What a human typed must survive re-renders (same logic as the evidence box that
+// used to fold one second after opening).
+const verdictDraft = new Map();
+const decisionChoice = new Map();
+const receiptDraft = new Map();
+const outcomeDraft = new Map();
+document.addEventListener("input", (e) => {
+  const receiptId = e.target.dataset?.handoffReceipt;
+  if (receiptId){
+    receiptDraft.set(Number(receiptId), e.target.value);
+    const scope = e.target.closest("[data-decision-scope]") || e.target.closest(".card");
+    if (scope) syncDecision(scope, byId.get(Number(receiptId)));
+    return;
+  }
+  const id = e.target.dataset?.vin; if (!id) return;
+  verdictDraft.set(Number(id), e.target.value);
+  const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
+  if (scope) syncHandoff(scope);
+});
+document.addEventListener("change", (e) => {
+  const outcomeId = e.target.dataset?.handoffOutcome;
+  if (outcomeId){
+    outcomeDraft.set(Number(outcomeId), e.target.value);
+    const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
+    if (scope) syncDecision(scope, byId.get(Number(outcomeId)));
+    return;
+  }
+  const id = e.target.dataset?.choice; if (!id) return;
+  decisionChoice.set(Number(id), e.target.value);
+  const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
+  if (scope) syncDecision(scope, byId.get(Number(id)));
+});
+
+const modal = document.getElementById("modal");
+function openModal(title, text){
+  document.getElementById("modal-t").textContent = title;
+  document.getElementById("modal-b").textContent = text;
+  modal.classList.add("show");
+}
+const closeModal = () => modal.classList.remove("show");
+document.getElementById("modal-x").addEventListener("click", closeModal);
+modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeModal(); closeDecisionModal(); } });
+document.getElementById("modal-copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(document.getElementById("modal-b").textContent);
+        document.getElementById("modal-copy").textContent = "已复制";
+        setTimeout(() => document.getElementById("modal-copy").textContent = "复制", 1200); }
+  catch { document.getElementById("modal-copy").textContent = "复制失败"; }
+});
+const decisionModal = document.getElementById("decision-modal");
+const closeDecisionModal = () => decisionModal.classList.remove("show");
+document.getElementById("decision-modal-x").addEventListener("click", closeDecisionModal);
+decisionModal.addEventListener("click", (e) => { if (e.target === decisionModal) closeDecisionModal(); });
+function openDecisionModal(t){
+  document.getElementById("decision-modal-t").textContent = `#${t.id} 最终裁定 — ${t.subject}`;
+  const box = document.getElementById("decision-modal-b");
+  box.innerHTML = decisionPanel(t) +
+    `<div class="hf-receipt" data-receipt-wrap="${t.id}" hidden>` +
+      `<div class="hf-outcome-title">执行结果(必选)</div>` +
+      `<div class="hf-outcomes" role="radiogroup" aria-label="执行结果">` +
+        `<label><input type="radio" name="hf-outcome-${t.id}" data-handoff-outcome="${t.id}" value="success">` +
+          `<span>执行成功<small>已应用;交回 Agent 做结果验证</small></span></label>` +
+        `<label class="failure"><input type="radio" name="hf-outcome-${t.id}" data-handoff-outcome="${t.id}" value="failure">` +
+          `<span>执行失败<small>算已尝试;未应用;交回 Agent 修正</small></span></label></div>` +
+      `<label for="hf-receipt-${t.id}">执行回执(必填,原文保留)</label>` +
+      `<textarea id="hf-receipt-${t.id}" data-handoff-receipt="${t.id}" rows="3" ` +
+        `placeholder="粘贴你应用之处返回的原始回执;成功或报错都可以。请另补执行时间、环境和影响范围。"></textarea>` +
+      `<div class="hint">失败也算实际执行过,但不会记成已应用。不要粘贴密钥或客户明细;回执会逐字交回原 Agent。</div></div>` +
+    `<textarea class="vin" data-vin="${t.id}" rows="2" placeholder="可选:补充给原 Agent 的一句指示"></textarea>` +
+    `<div class="hoh" data-hoh></div><div class="acts decision-actions">` +
+    `<button class="pri" data-decide="${t.id}" disabled>先选择 A / B / C</button>` +
+    `<button data-final-close="${t.id}">无需后续 · 结案</button></div>`;
+  const vin = box.querySelector("[data-vin]");
+  if (vin) vin.value = verdictDraft.get(t.id) || "";
+  const receipt = box.querySelector("[data-handoff-receipt]");
+  if (receipt) receipt.value = receiptDraft.get(t.id) || "";
+  syncHandoff(decisionModal.querySelector("[data-decision-scope]"));
+  decisionModal.classList.add("show");
+}
+document.addEventListener("dblclick", (e) => {
+  const box = e.target.closest("[data-ev]"); if (!box) return;
+  const [id, kind] = box.dataset.ev.split(":");
+  const t = byId.get(Number(id)); if (!t) return;
+  openModal(`#${t.id} ${kind === "ev" ? "证据 / 原因" : "裁定记录"} — ${t.subject}`,
+            (kind === "ev" ? t.result : t.verdict_note) || "");
+});
+
+const byId = new Map();
+let focusId = null, relSet = new Set(), DECOMP = [];
+let locatedId = null, locateScrollPending = false;
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const now = () => Date.now() + skew;
+
+const taskColumn = (t) => t.status === "done" ? "done" : (t.kind === "goal" ? "goal" : t.status);
+function setFindNote(text, tone=""){
+  const note = document.getElementById("task-find-note");
+  note.textContent = text;
+  note.className = "note" + (tone ? " " + tone : "");
+}
+function clearLocated({ clearInput=true }={}){
+  locatedId = null; locateScrollPending = false;
+  if (clearInput) document.getElementById("task-find-id").value = "";
+  document.getElementById("task-find-clear").disabled = true;
+  setFindNote("输入号码后,该卡会临时置于所属栏最上方");
+  render();
+}
+function locateByInput(){
+  const input = document.getElementById("task-find-id");
+  const m = input.value.match(/^\s*#?\s*(\d+)\s*$/);
+  if (!m){ setFindNote("请输入卡号,例如 215 或 #215", "bad"); input.select(); return; }
+  const id = Number(m[1]), task = byId.get(id);
+  if (!task){ setFindNote(`#${id} 不在当前看板中(可能已归档)`, "bad"); input.select(); return; }
+  locatedId = id; locateScrollPending = true;
+  document.getElementById("task-find-clear").disabled = false;
+  setFindNote(`#${id} 已定位到「${COLS.find(([k]) => k === taskColumn(task))?.[1] || task.status}」栏顶`, "ok");
+  render();
+}
+document.getElementById("task-find").addEventListener("submit", (e) => { e.preventDefault(); locateByInput(); });
+document.getElementById("task-find-clear").addEventListener("click", () => clearLocated());
+document.getElementById("task-find-id").addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && (locatedId != null || e.target.value)) { e.stopPropagation(); clearLocated(); }
+});
+
+function decisionPanel(t, compact=false){
+  const p = t.decision_package;
+  if (!p || !Array.isArray(p.options) || !p.options.length) return "";
+  if (compact) return `<section class="decision compact">
+    <div class="decision-h"><b>最终裁定</b>${p.recommend ? `<span class="rec">推荐 ${esc(p.recommend)}</span>` : ""}</div>
+    <div class="decision-summary">${esc(p.summary || p.reason || "需要你选择后续方案。")}</div>
+    <button class="decision-open" data-open-decision="${t.id}">展开 A / B / C 与附件</button>
+  </section>`;
+  const picked = decisionChoice.get(t.id) || "";
+  const opts = p.options.map((o) => {
+    const chosen = picked === o.key;
+    const rec = String(p.recommend || "").toUpperCase() === o.key;
+    // ⚠ Measured: showing names alone collapsed `migrations/0119_….sql` (the apply
+    //   body, absent) and `tools/verify/0119.sql` (a fragment, present) into
+    //   the same "0119" on screen — readable as "0119 does not exist yet 0119 can
+    //   be downloaded". The DIRECTORY rides along; the full path does not (telling
+    //   them apart needs only the layer).
+    const dirTag = (f) => f.dir ? `<span class="hf-dir">${esc(f.dir)}/</span>` : "";
+    const files = (o.files || []).map((f) => {
+      const name = `${dirTag(f)}${esc(f.archive_name || f.name || "file")}`;
+      // Split by ROLE only — never guess from file names or dirs: companions are
+      // viewable but are not executable downloads.
+      if (f.role === "companion") {
+        const view = f.available && f.view_url
+          ? `<a data-stop data-handoff-action="reference" href="${esc(f.view_url)}" target="_blank" rel="noopener">查看内容</a>`
+          : `<span class="hf-warn">${esc(f.error || "不可查阅")}</span>`;
+        return `<span class="hf-companion" data-handoff-role="companion"><span>ⓘ ${name}</span><b>非执行用 · 仅供查阅</b>${view}</span>`;
+      }
+      return f.available && f.download_url
+        ? `<a class="hf-download" data-stop data-handoff-role="${esc(f.role)}" data-handoff-action="download" href="${esc(f.download_url)}" download="${esc(f.archive_name || f.name)}">↓ 执行用下载 · ${name} · ${esc(f.role)}${f.target_label ? " · →" + esc(f.target_label) : ""}</a>`
+        : `<span class="hf-warn" data-handoff-role="${esc(f.role)}">${name} · ${esc(f.role)}: ${esc(f.error || "不可下载")}</span>`;
+    }).join("");
+    const warn = o.kind === "apply" && !o.ready
+      ? `<div class="hf-warn">⚠ 本方案的文件尚未补齐;仍可选择本方案,并交回 Agent 补齐文件。当前不会应用或归档任何文件。</div>` : "";
+    return `<label class="dopt${chosen ? " chosen" : ""}${rec ? " recommended" : ""}${!o.ready ? " unready" : ""}">
+      <div class="dopt-head"><input type="radio" name="decision-${t.id}" data-choice="${t.id}" value="${esc(o.key)}"
+        ${chosen ? "checked" : ""}>
+        <span class="key">${esc(o.key)}</span><span>${esc(o.title)}</span>
+        ${rec ? `<span class="flag">recommended</span>` : ""}</div>
+      ${o.detail ? `<div class="dopt-detail">${esc(o.detail)}</div>` : ""}
+      ${o.cost ? `<div class="dopt-cost"><b>Cost / risk:</b> ${esc(o.cost)}</div>` : ""}
+      ${files ? `<div class="hf-files">${files}</div>` : ""}${warn}
+    </label>`;
+  }).join("");
+  return `<section class="decision" data-decision="${t.id}">
+    <div class="decision-h"><b>Final ruling</b><span class="tag wf confirm">请选择 A / B / C</span>
+      ${p.recommend ? `<span class="rec">recommended: ${esc(p.recommend)}</span>` : ""}</div>
+    <div class="decision-summary">${esc(p.summary || p.reason || "需要你选择后续方案。")}</div>
+    <div class="decision-options">${opts}</div>
+    <div class="decision-foot">文件未补齐:可直接选该方案并交回 Agent 补齐。文件已齐且实际应用过(成功或失败):选择结果并填写原始回执后确认;系统不会替你执行任何操作,只记录选择、结果、回执,并把本轮文件归档到已授权的 handoff 目标。</div>
+  </section>`;
+}
+
+function ago(ms){
+  if (ms == null) return null;
+  const s = Math.max(0, Math.round((now() - ms) / 1000));
+  if (s < 60) return s + "s 前";
+  if (s < 3600) return Math.floor(s/60) + "m" + (s%60 ? (s%60)+"s" : "") + " 前";
+  return Math.floor(s/3600) + "h" + Math.floor((s%3600)/60) + "m 前";
+}
+
+// The DB stores ISO UTC. Slicing the string shows the wrong wall time — always
+// pass through the local timezone.
+function localTime(iso){
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso).slice(5,16).replace("T"," ");
+  const p = (n) => String(n).padStart(2,"0");
+  return `${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// ⭐ With many parallel windows this is THE thing to watch: telling "running" from
+//   "dead but the lease has not expired yet".
+function hbClass(t){
+  if (t.status !== "in_progress") return "";
+  if (t.lease_until && now() > t.lease_until) return "dead";   // lease over = dead for sure
+  if (!t.heartbeat_at) return "dead";
+  const age = (now() - t.heartbeat_at) / 1000;
+  // Heartbeats come every 30s. Three minutes of silence = dead even with lease left —
+  // "yellow until the lease expires" leaves a card that died 20 minutes ago sitting
+  // in a calm color.
+  if (age > 180) return "dead";
+  return age > 60 ? "stale" : "fresh";
+}
+
+// Returns CONTENT only, no nodes. Node creation/reuse is upsert()'s job — merged,
+// "same card = same node" cannot hold and the thing to animate vanishes each time.
+function cardParts(t){
+  const lc = lineColor(t.line);
+  const who = t.status === "in_progress" ? (t.worker || t.line) : t.line;
+
+  let top = `<span class="id">#${t.id}</span>`;
+  // ⭐ Badge semantics: unclaimed = executor family (route); once claimed = the
+  //   ACTUAL runtime (last_runtime, stamped by the loop at claim). ⛔ route never
+  //   becomes runtime-valued — cards must not nominate runtimes (rung/quota
+  //   allocation never belongs to card authors); the badge only reports afterwards.
+  const rtKey = t.last_runtime || t.route;
+  const rtTxt = t.last_runtime
+    ? (RT_BADGE[t.last_runtime] || String(t.last_runtime).toUpperCase())
+    : t.route.toUpperCase();
+  top += `<span class="tag" style="color:${t.last_runtime ? rtColor(t.last_runtime) : "var(--dim)"};border-color:color-mix(in srgb,${t.last_runtime ? rtColor(t.last_runtime) : "var(--dim)"} 45%,transparent)" title="${t.last_runtime
+    ? `运行: ${esc(t.last_runtime)}` : `路由族: ${esc(t.route)}(未领,认领后显示实际运行方)`}">${esc(rtTxt)}</span>`;
+  // Derived cards state their origin (chains like #8→#51→#83 are untraceable
+  // without it). The chain is walked from the local full set; clicking lights the
+  // family (existing focus machinery).
+  if (t.parent_id != null){
+    const chain = []; let cur = byId.get(t.parent_id), g = 0;
+    while (cur && g++ < 10){ chain.unshift("#" + cur.id); cur = cur.parent_id != null ? byId.get(cur.parent_id) : null; }
+    if (t.parent_id != null && !chain.length) chain.push("#" + t.parent_id + "(已归档)");
+    const pt = byId.get(t.parent_id);
+    const pv = pt ? (pt.kind === "goal" ? "#c084fc" : lineColor(pt.line)) : "#5d6472";
+    top += `<span class="tag lineage" style="color:${pv}" title="派生链(染色=父卡的线) · 点卡可高亮全家">↳${chain.join("→")}</span>`;
+  }
+  const editable = t.status === "not_started" || t.status === "waiting";
+  top += `<span class="line-badge${editable ? "" : " ro"}" style="background:${lineColor(who)}"` +
+         (editable ? ` data-pick="${t.id}"` : "") + `>${esc(lineLabel(who))}</span>`;
+  // Provenance badge: display/reference only (never routing). The full move audit
+  // is in the card description.
+  if (t.prev_line){
+    const pc2 = lineColor(t.prev_line);
+    top += `<span class="line-badge ro" style="background:transparent;border:1px dashed ${pc2};color:${pc2};opacity:.8" title="来历: 由 ${esc(lineLabel(t.prev_line))} 线移来(移线审计见卡面描述)">←${esc(lineLabel(t.prev_line))}</span>`;
+  }
+  if (t.pinned_at) top += `<span class="tag pinned">置顶</span>`;
+  // A card a human wrote on and handed back. Explains "approved yet sitting in
+  // not_started". Criterion = last_verdict (this round's ruling): verdict now
+  // belongs to closed cards only, so the old criterion would never show this badge
+  // again. `|| t.verdict` covers older boards.
+  if ((t.last_verdict || t.verdict) && t.status === "not_started")
+    // No approval/bounce vocabulary — a badge keeping deleted vocabulary breeds
+    // "where is the bounce button". State only what happened.
+    top += `<span class="tag tocoord">你写了指示 · 回原线继续</span>`;
+  if (!t.released && t.kind !== "goal") {
+    // Show the card's age in the staging area — an uplifted card once sat unnoticed
+    // for days.
+    const ageH = Math.floor((Date.now() - Date.parse(t.updated_at || t.created_at || 0)) / 3600000);
+    top += `<span class="tag hold"${ageH >= 48 ? ' style="outline:1px solid var(--warn)"' : ""}>未放行${
+      ageH >= 24 ? "·" + Math.floor(ageH / 24) + "天" : ""}</span>`;
+  }
+  // ⭐ Human-gated: out of the queue, attempts unburned — the board must show WHO it
+  //   is waiting for.
+  if (t.human_gate) top += `<span class="tag hold">待人工</span>`;
+  if (t.lock_key) top += `<span class="tag lock">🔒${esc(t.lock_key)}</span>`;
+  // ── Linked closure: the declaration is the FORECAST, cascade is the RESULT.
+  //   Both show — forecast alone leaves "why did it close" unreadable, result alone
+  //   leaves "why could it close".
+  if (t.oneof_key) top += `<span class="tag oneof" title="同一个父下,这一组只要有一张走通(且通过机器验证),其余自动关闭">备选组·${esc(t.oneof_key)}</span>`;
+  if (t.proves_parent) top += `<span class="tag oneof" title="本卡的验证通过即回答了父卡的问题 —— 父卡会联动结案">验证父卡</span>`;
+  if (t.resolved_by === "cascade") top += `<span class="tag casc" title="非人工裁定:同链另一张卡通过机器验证,本卡因此不再需要。理由见卡面裁定记录">联动关闭</span>`;
+  if (t.status === "waiting" && t.waiting_for)
+    top += `<span class="tag wf ${t.waiting_for}">${WF_LABEL[t.waiting_for] || t.waiting_for}</span>`;
+
+  let meta2 = [];
+  if (t.status === "in_progress"){
+    meta2.push(`<span class="hb" data-live="hb"></span>`);
+    if (t.lease_until) meta2.push(`<span data-live="lease"></span>`);
+  }
+  if (t.attempts > 0){
+    const hot = t.attempts >= t.max_attempts ? " hot" : "";
+    meta2.push(`<span class="att${hot}">尝试 ${t.attempts}/${t.max_attempts}</span>`);
+  }
+  // ⭐ What this card has actually burned, on its face. 输入+输出 is the money side;
+  //   缓存读 rides cheap and is shown apart so a big number is readable as "warm
+  //   cache", not "expensive card". Cards that never ran a model show nothing.
+  {
+    const u = usageByCard[t.id];
+    if (u && (u.in || u.out || u.cr || u.cc)) {
+      meta2.push(`<span class="tok" title="token 消耗(本卡累计,自 usage_ledger)
+输入 ${u["in"]} · 输出 ${u.out} · 缓存读 ${u.cr} · 缓存写 ${u.cc} · 调用 ${u.calls} 次">` +
+        `tok ${fmtTok(u["in"] + u.out)}` + (u.cr ? `<small>+缓存读${fmtTok(u.cr)}</small>` : ``) + `</span>`);
+    }
+  }
+  if (t.blocked_by && t.blocked_by.length) meta2.push(`<span>依赖 #${t.blocked_by.join(" #")}</span>`);
+  if (t.status === "done"){
+    if (t.resolved_by === "auto") meta2.push(`<span class="tag auto">自动通过</span>`);
+    else if (t.resolved_by) meta2.push(`<span class="tag manual">手动通过</span>`);
+    if (t.updated_at) meta2.push(`<span>${esc(localTime(t.updated_at))}</span>`);
+  }
+
+  let body = `<div class="top">${top}</div><div class="subj">${esc(t.subject)}</div>`;
+  if (meta2.length) body += `<div class="meta">${meta2.join("")}</div>`;
+  if (t.status === "waiting") body += decisionPanel(t, true);
+  // Folded text is too small to read — show a digest, DOUBLE-CLICK opens the full
+  // text large.
+  const ev = (k, label, text) =>
+    `<div class="ev" data-ev="${t.id}:${k}" title="双击查看全文">
+       <div class="evh"><span>${label}</span><span class="hint">双击展开</span></div>
+       <div class="evp">${esc(String(text).replace(/\s+/g, " ").slice(0, 160))}</div>
+     </div>`;
+  if (t.result) body += ev("ev", "evidence / reason", t.result);
+  if (t.verdict_note) body += ev("vn", t.decision_package ? "自动审阅原始记录" : "裁定记录", t.verdict_note);
+
+  // ⛔ No "stuck" column exists. Both flavors of waiting are told apart by the
+  //   waiting_for badge.
+  let acts = "";
+  if (t.kind === "goal"){
+    // A goal card carries only pin. Release is the children's business; decompose
+    // belongs to the input box above.
+    const on = !!t.pinned_at;
+    acts += `<button class="${on ? "pri" : ""}" data-pin="${t.id}" data-on="${on ? 1 : 0}">` +
+            `${on ? "已置顶 · 取消" : "置顶"}</button>`;
+    // A goal whose decomposition came up empty must be re-runnable from here.
+    if (!tasks.some((x) => x.parent_id === t.id) && t.status !== "done")
+      acts += `<button data-dec="${t.id}">重新拆解</button>`;
+  }
+  if (t.status === "waiting"){
+    // A place to write your own words BEFORE ruling; the same box serves both roads.
+    // ⚠ Draft content is NOT embedded in the html — embedded, every keystroke would
+    //   change the signature, replace innerHTML and throw the caret. Values are
+    //   poured in afterwards.
+    if (!t.decision_package?.options?.length){
+      body += `<textarea class="vin" data-vin="${t.id}" rows="2" placeholder="可选:补充给原 Agent 的一句指示"></textarea>`;
+      body += `<div class="hoh" data-hoh></div>`;
+    }
+    // ⭐ Ruling: the human "bounce" button is GONE. The button chooses CLOSE OR NOT —
+    //   write = hand back, empty = close. One button says it all. (The machine
+    //   bounce — auto-review — is a separate road; the API's verdict:'reject' is
+    //   unchanged.)
+    if (!t.decision_package?.options?.length){
+      acts += `<button class="pri" data-a="approve" data-id="${t.id}">结案</button>`;
+    }
+    // [Edit]: fix line/route/caps WITHOUT rebuilding the card. Bounce-and-rebuild
+    // severs attempts, derivations and ruling records — untraceable afterwards.
+    acts += `<button data-edit="${t.id}">编辑</button>`;
+  }
+  if (t.status === "done" || t.status === "waiting" || t.kind === "goal")
+    acts += `<button class="danger" data-a="archive" data-id="${t.id}">归档</button>`;
+  if (acts) body += `<div class="acts">${acts}</div>`;
+
+  if (t.kind === "goal"){
+    const kids = tasks.filter((x) => x.parent_id === t.id);
+    const d = kids.filter((k) => k.status === "done").length;
+    body += `<div class="kids">子任务卡 ${d}/${kids.length} 完成</div>`;
+  } else {
+    // In-flight cards spawn their own children (subagent splits, discoveries cut
+    // out mid-run). Without hanging them under the parent, the board loses which
+    // stream they came from.
+    const kids = tasks.filter((x) => x.parent_id === t.id);
+    if (kids.length){
+      const ST = { not_started:"未开始", in_progress:"进行中", waiting:"等待中", done:"已完成" };
+      body += `<div class="subs"><div class="h">子任务卡 ${kids.filter((k) => k.status === "done").length}/${kids.length}</div>` +
+        kids.map((k) => `<div class="sub"><span class="sid">#${k.id}</span>` +
+          `<span class="stt ${k.status}">${ST[k.status] || k.status}</span>` +
+          `<span class="sj">${esc(k.subject)}</span></div>`).join("") + `</div>`;
+    }
+  }
+  let cls = "card";
+  if (focusId != null && relSet.has(t.id)) cls += (t.id === focusId ? " self" : " rel");
+  if (t.id === locatedId) cls += " located";
+  return { html: body, cls };
+}
+
+// The per-second pass ONLY rewrites running numbers. The DOM is not rebuilt = open
+// state, scroll position and text selection all survive.
+function tick(){
+  for (const el of document.querySelectorAll(".card[data-id]")){
+    const t = byId.get(Number(el.dataset.id));
+    if (!t || t.status !== "in_progress") continue;
+    const hb = el.querySelector('[data-live="hb"]');
+    if (hb){
+      hb.className = "hb " + hbClass(t);
+      hb.textContent = "♥ " + (t.heartbeat_at ? ago(t.heartbeat_at) : "无心跳");
+    }
+    const ls = el.querySelector('[data-live="lease"]');
+    if (ls && t.lease_until){
+      const left = Math.round((t.lease_until - now())/1000);
+      if (left > 0){ ls.className = ""; ls.textContent = `租约 ${Math.floor(left/60)}:${String(left%60).padStart(2,"0")}`; }
+      else { ls.className = "hb dead"; ls.textContent = "租约已过"; }
+    }
+  }
+}
+
+function rowsFor(key){
+  if (key === "goal")  return tasks.filter((t) => t.kind === "goal" && t.status !== "done")
+    .sort((a, b) => String(b.pinned_at || "").localeCompare(String(a.pinned_at || "")) || a.id - b.id);
+  if (key === "done")  return null;   // done is drawn split into goals and children
+  if (key === "waiting"){
+    // Ruling: what waits on a HUMAN ruling floats up. confirm topmost; the
+    // machine-tended re-review sits at the bottom (no human attention needed now).
+    // Stable id order within a tier.
+    const pri = { confirm: 0, decision: 1, review: 2, dep: 3, rearm: 4 };
+    return tasks.filter((t) => t.kind !== "goal" && t.status === "waiting")
+      .sort((a, b) => (pri[a.waiting_for] ?? 9) - (pri[b.waiting_for] ?? 9) || a.id - b.id);
+  }
+  return tasks.filter((t) => t.kind !== "goal" && t.status === key);
+}
+// Related items float up: gather the stream around the one thing being looked at.
+const pinRelated = (rows) => focusId == null ? rows
+  : [...rows].sort((a, b) => (relSet.has(b.id) ? 1 : 0) - (relSet.has(a.id) ? 1 : 0));
+
+// ── Node identity ──────────────────────────────────────────────────────
+// The foundation of everything: rebuilding cards each time means "the same thing to
+// move" never exists — no animation is possible. Not rebuilding ALSO protects
+// drafts, open state, scroll position and selection (they used to vanish every 15s).
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
+const cardNodes = new Map();     // id -> DOM
+let shell = null;                // key -> { col, list, n, empty, divider }
+
+function ensureShell(){
+  if (shell) return shell;
+  const root = document.getElementById("cols");
+  root.innerHTML = "";
+  shell = new Map();
+  for (const [key, label] of COLS){
+    const col = document.createElement("section");
+    col.className = "col"; col.dataset.s = key;
+    const h2 = document.createElement("h2");
+    h2.innerHTML = `${label}<span class="n"></span>`;
+    col.appendChild(h2);
+    if (key === "goal"){
+      // ⚠ Built ONCE. When it was rebuilt every cycle, the 15s refresh erased goals
+      //   being typed.
+      const box = document.createElement("div");
+      box.className = "goalbox";
+      box.innerHTML = `<textarea id="goal-in" placeholder="写下一个目标"></textarea>
+        <div class="rowb">
+          <select id="goal-prev" title="衔接既往目标:拆解时参考其完成记录,避免重做已完成的工作"></select>
+        </div>
+        <div class="rowb">
+          <select id="goal-model">${DECOMP.map((m) => `<option value="${m.id}">${esc(m.label)}</option>`).join("")}</select>
+          <button class="pri" id="goal-add">加入并拆解</button>
+        </div>`;
+      col.appendChild(box);
+    }
+    const list = document.createElement("div"); list.className = "list";
+    col.appendChild(list); root.appendChild(col);
+    const empty = document.createElement("div"); empty.className = "empty"; empty.textContent = "—";
+    const divider = document.createElement("div"); divider.className = "divider";
+    shell.set(key, { col, list, n: h2.querySelector(".n"), empty, divider });
+  }
+  return shell;
+}
+
+/** Button captions follow whether the input holds text.
+ *  ⭐ "What happens when I press" must be visible BEFORE pressing — measured without
+ *  this, a human meant to pick option A and closed the card instead. */
+function syncHandoff(scope){
+  const vin = scope.querySelector("[data-vin]");
+  if (!vin) return;
+  const tid = Number(vin.dataset.vin);
+  if (scope.querySelector("[data-decision]")){
+    syncDecision(scope, byId.get(tid));
+    return;
+  }
+  const on = vin.value.trim().length > 0;
+  // ⭐ One button, TWO meanings — the caption says which, literally. It used to say
+  //   "approve" while text present meant not-closing: display and behavior split.
+  for (const b of scope.querySelectorAll("[data-a='approve']")){
+    b.textContent = on ? "回原线继续" : "结案";
+    b.classList.toggle("handoff", on);
+  }
+  const h = scope.querySelector("[data-hoh]");
+  if (h) h.textContent = on
+    ? "按下=**不结案** —— 这段文字作为指令交回原 Agent 继续,并给本卡续 1 次尝试预算"
+    : "空白提交=**结案**(计入已完成)。需修改或继续:先在上方写明指示再提交 —— 未写指示不会产生后续动作";
+}
+
+function syncDecision(scope, t){
+  if (!t?.decision_package) return;
+  const key = decisionChoice.get(t.id) || scope.querySelector(`[data-choice="${t.id}"]:checked`)?.value || "";
+  const opt = (t.decision_package.options || []).find((o) => o.key === key);
+  for (const radio of scope.querySelectorAll(`[data-choice="${t.id}"]`)){
+    radio.checked = radio.value === key;
+    radio.closest(".dopt")?.classList.toggle("chosen", radio.checked);
+  }
+  const incompleteApply = opt?.kind === "apply" && !opt.ready;
+  const executedApply = opt?.kind === "apply" && opt.ready;
+  const outcome = outcomeDraft.get(t.id) ||
+    scope.querySelector(`[data-handoff-outcome="${t.id}"]:checked`)?.value || "";
+  for (const radio of scope.querySelectorAll(`[data-handoff-outcome="${t.id}"]`))
+    radio.checked = radio.value === outcome;
+  const receiptWrap = scope.querySelector(`[data-receipt-wrap="${t.id}"]`);
+  const receipt = scope.querySelector(`[data-handoff-receipt="${t.id}"]`);
+  if (receiptWrap) receiptWrap.hidden = !executedApply;
+  if (receipt && receipt.value !== (receiptDraft.get(t.id) || ""))
+    receipt.value = receiptDraft.get(t.id) || "";
+  const hasOutcome = !executedApply || Boolean(outcome);
+  const hasReceipt = !executedApply || Boolean((receipt?.value || "").trim());
+  const b = scope.querySelector(`[data-decide="${t.id}"]`);
+  if (b){
+    b.disabled = !opt || !hasOutcome || !hasReceipt;
+    b.textContent = !opt ? "先选择 A / B / C"
+      : incompleteApply ? `按 ${opt.key} 方向 · 交回 Agent 补齐文件`
+      : executedApply && !hasOutcome ? `先选择 ${opt.key} 的执行结果`
+      : executedApply && !hasReceipt ? `先填写 ${opt.key} 的执行回执`
+      : executedApply && outcome === "failure" ? `确认 ${opt.key} · 已尝试执行但失败`
+      : executedApply ? `确认 ${opt.key} · 执行成功并附回执`
+      : `采用 ${opt.key} · 交回原 Agent`;
+  }
+  const h = scope.querySelector("[data-hoh]");
+  if (h) h.textContent = !opt ? "先阅读摘要、做法和代价,再选择一个方案。"
+    : incompleteApply
+      ? "确认后不会应用或归档任何文件:只会锁定这个方案方向,并交回原 Agent 补齐缺失文件。"
+    : executedApply
+      ? outcome === "failure"
+        ? "本次会记录为已尝试执行但失败:保留错误回执、把本轮文件归档到 handoff 目标,并交回原 Agent 修正;不会冒充已应用。"
+        : outcome === "success"
+          ? "本次会记录为执行成功:保留回执、把文件归档到 handoff 目标,并交回原 Agent 做结果验证。"
+          : "先取走并自行应用上面的文件,再明确选择成功或失败并填写原始回执。"
+      : "确认后不会结案:选择与补充指示会原样交回原 Agent 继续。";
+}
+
+function upsert(t, wanted){
+  wanted.add(t.id);
+  const { html, cls } = cardParts(t);
+  let el = cardNodes.get(t.id);
+  if (el && el.dataset.leaving){ el.remove(); el = null; }   // never reuse a departing ghost
+  const fresh = !el;
+  if (fresh){
+    el = document.createElement("div");
+    el.dataset.id = t.id;
+    cardNodes.set(t.id, el);
+  }
+  // ⚠ Overwriting className raw strips mid-flight flip/enter classes. SSE arrives
+  //   right after actions, so renders ALWAYS overlap animations (measured: correct
+  //   inversion values, class stripped, cards teleporting).
+  const keep = ["flip", "enter"].filter((k) => el.classList.contains(k));
+  el.className = keep.length ? cls + " " + keep.join(" ") : cls;
+  if (el.__sig !== html){
+    el.innerHTML = html;
+    el.__sig = html;
+    // Drafts live OUTSIDE the signature; poured back only when the node is rebuilt.
+    const vin = el.querySelector("[data-vin]");
+    if (vin) vin.value = verdictDraft.get(t.id) || "";
+    syncHandoff(el);
+  }
+  if (fresh && !REDUCED.matches) el.classList.add("enter");
+  return el;
+}
+
+/** Converge to the wanted order with minimal moves; correctly-placed nodes stay. */
+function placeList(list, nodes){
+  let ref = list.firstChild;
+  for (const node of nodes){
+    if (ref === node){ ref = ref.nextSibling; continue; }
+    list.insertBefore(node, ref);
+  }
+  while (ref){                       // strip leftovers (empty/divider etc.)
+    const next = ref.nextSibling;
+    if (!(ref instanceof Element && ref.classList.contains("card"))) ref.remove();
+    ref = next;
+  }
+}
+
+// ⭐ Never render twice in one frame. SSE right after refresh() is the NORM; without
+//   folding, the second pass snapshots "already moved" as FIRST and erases the
+//   first inversion (measured as teleporting cards). One render is also cheaper.
+let renderQueued = false;
+/** The "continue an earlier goal" options follow the board (done goals keep
+ *  growing). Rebuilt only when the set changes — never interrupts a selection. */
+function syncGoalPrev(){
+  const sel = document.getElementById("goal-prev");
+  if (!sel) return;
+  const dones = tasks.filter((t) => t.kind === "goal" && t.status === "done").sort((a, b) => b.id - a.id);
+  const sig = dones.map((d) => d.id).join(",");
+  if (sel.__sig === sig) return;
+  sel.__sig = sig;
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">(不衔接既往目标)</option>` +
+    dones.map((d) => `<option value="${d.id}">衔接 #${d.id} ${esc(String(d.subject).slice(0, 22))}</option>`).join("");
+  sel.value = cur;
+}
+
+/* ── Timeline (two views: lineage = default / load) ─────────────────────
+   Ruling: the old single view stacked real-time × lines × waiting bands ×
+   relation edges and read like nothing. Split in two:
+   ① Lineage (default): vertical = parent/child topology with auto lane
+      allocation (lines only COLOR nodes — moving lines never rewrites history).
+      Horizontal = EVENT ORDER, equidistant (real time crushes second-long work
+      spans at day scale — times live in node titles).
+      Derivation = ╲  merge = ╱ (COMPLETED cards only). Waiting = hollow circle.
+   ② Load: per-line work segments + waiting-count bands + start clusters.
+      Carries NO lineage (edges removed) + explicit cross-day labels. */
+const TL = { PXH: 56, ROWH: 34, BANDH: 10, AXH: 22, LABW: 96, STEP: 26, LROW: 20 };
+let tlDate = null;
+let tlMode = "lineage";
+let tlView = "fit";          // load-view window: "fit" | "day" | {from,to} = cluster zoom
+function tlDayStr(d){ const p=(n)=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+const fmtMD = (ms) => { const d = new Date(ms); return `${d.getMonth()+1}/${d.getDate()}`; };
+const fmtHM = (ms) => { const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+// Cross-day ranges name both dates ("23:00–1:00" otherwise reads as two hours)
+const fmtRange = (a, b) => fmtMD(a) === fmtMD(b)
+  ? `${fmtMD(a)} ${fmtHM(a)}–${fmtHM(b)}`
+  : `${fmtMD(a)} ${fmtHM(a)}–${fmtMD(b)} ${fmtHM(b)}`;
+
+function renderTimeline(){
+  const wrap = document.getElementById("tl-scroll");
+  if (!document.getElementById("tl").classList.contains("open")) return;
+  if (!tlDate) tlDate = tlDayStr(new Date());
+  const dp = document.getElementById("tl-date");
+  if (dp.value !== tlDate) dp.value = tlDate;
+  document.getElementById("tl-mode-lin").classList.toggle("pri", tlMode === "lineage");
+  document.getElementById("tl-mode-load").classList.toggle("pri", tlMode === "load");
+  for (const idb of ["tl-fit", "tl-day"])
+    document.getElementById(idb).style.display = tlMode === "load" ? "" : "none";
+  if (tlMode === "lineage") return renderLineage(wrap);
+  document.getElementById("tl-fit").classList.toggle("pri", tlView === "fit");
+  document.getElementById("tl-day").classList.toggle("pri", tlView === "day");
+  renderLoad(wrap);
+}
+
+/* ── ① Lineage view: horizontal = event order (git-like, non-proportional),
+      vertical = active branches (lanes reclaimed on completion) ──
+   Standing rulings:
+   - out-of-window ancestors = ONE "from before" entry node (history stays out of
+     the coordinate system)
+   - lanes occupy only while active; reclaimed and reused when done
+   - no proportional time scale (mixing it with equidistant events misleads);
+     times = node titles + small change-of-hour labels
+   - focus = a TRUE re-layout (the family alone)
+   - grouped per goal; other groups fold to a summary row */
+let tlOpenGroups = null;   // Set of open group keys; null = first render (open the busiest)
+function renderLineage(wrap){
+  const P = Date.parse, now2 = Date.now();
+  const day0 = new Date(tlDate + "T00:00:00").getTime();
+  const d0 = day0 - 3600_000, d1 = day0 + 25 * 3600_000;
+  const byId = new Map(tasks.filter((t) => !t.archived_at).map((t) => [t.id, t]));
+  const focusing = focusId != null && relSet.size > 0;
+
+  // ⭐ The history comes from the IMMUTABLE RECORD, not from the card's current
+  //   values. Deriving it from created_at / work_spans / status meant a card moved to
+  //   another line today made yesterday's work look like it happened on the new line;
+  //   a re-hang rerouted the whole family tree backwards.
+  const evsByTask = new Map();
+  for (const e of taskEvents){
+    if (!evsByTask.has(e.task_id)) evsByTask.set(e.task_id, []);
+    evsByTask.get(e.task_id).push(e);
+  }
+  /** One recorded event → what the timeline draws. `release` carries two different
+   *  meanings and is told apart by its detail (an in-flight card coming back is the
+   *  end of a work span; a hold/release of the flag is not). */
+  const visualKind = (e) => {
+    if (e.kind === "snapshot" || e.kind === "add") return "birth";
+    if (e.kind === "claim") return "open";
+    if (e.kind === "report") return "close";
+    if (e.kind === "reap") return "close";
+    if (e.kind === "resolve" && e.detail.status === "done") return "done";
+    if (e.kind === "release" && e.detail.from_status === "in_progress") return "close";
+    return e.kind;
+  };
+  // Raw events → keep ONLY the window's (out-of-window history stays out)
+  const winEvsOf = (t) => {
+    const src = evsByTask.get(t.id) || [];
+    const raw = src.map((e) => ({ k: visualKind(e), at: P(e.at), w: e.actor, ev: e }))
+                   .filter((e) => Number.isFinite(e.at));
+    // A board migrated before this table existed has one snapshot and nothing else;
+    // fall back to the birth marker so such a card still appears at all.
+    if (!raw.length) raw.push({ k: "birth", at: P(t.created_at) });
+    raw.sort((a, b) => a.at - b.at);
+    if (t.status !== "done" && (t.work_spans || []).some((sp) => !sp.e))
+      raw.push({ k: "now", at: now2 });
+    return { win: raw.filter((e) => e.at >= d0 && e.at < d1), pre: raw[0].at < d0 };
+  };
+  /** The parent this card had AS OF THE END OF THE DISPLAYED WINDOW, from the record.
+   *  Reading the current parent_id would redraw an old day's tree with today's shape.
+   *  ⚠ Known remaining gap: a card re-hung mid-history is drawn under one parent per
+   *  day, not as one family spanning both — see the ledger entry for #97's second half
+   *  (the union-of-historical-links grouping the origin does). */
+  const parentAt = (id) => {
+    const src = evsByTask.get(id) || [];
+    for (let i = src.length - 1; i >= 0; i--){
+      const e = src[i];
+      if (P(e.at) > d1) continue;                     // not yet true within this window
+      if (e.detail?.parent_id !== undefined) return e.detail.parent_id == null ? null : Number(e.detail.parent_id);
+    }
+    return byId.get(id)?.parent_id ?? null;
+  };
+
+  // Participants: cards with in-window events (focus = the family only, a true
+  // re-layout) + ancestors (entry nodes only)
+  const inc = new Map();
+  for (const t of byId.values()){
+    if (focusing && !relSet.has(t.id)) continue;
+    const { win, pre } = winEvsOf(t);
+    if (win.length) inc.set(t.id, { t, win, pre });
+  }
+  const addAnc = (id) => { const t = id != null ? byId.get(id) : null;
+    if (!t || inc.has(t.id)) return;
+    if (focusing && !relSet.has(t.id)) return;
+    const { win, pre } = winEvsOf(t);
+    inc.set(t.id, { t, win, pre });
+    addAnc(parentAt(t.id)); };
+  for (const { t } of [...inc.values()]) addAnc(parentAt(t.id));
+
+  if (!inc.size){ wrap.innerHTML = `<div class="empty">这一天没有事件</div>`;
+    document.getElementById("tl-sum").textContent = "";
+    document.getElementById("tl-note").textContent = ""; return; }
+
+  const kids = new Map();
+  for (const { t } of inc.values()){
+    const pid = parentAt(t.id);
+    if (pid != null && inc.has(pid)){
+      if (!kids.has(pid)) kids.set(pid, []);
+      kids.get(pid).push(t.id);
+    }
+  }
+  // First-drawn time (= entry node placement). Pre-window/eventless ancestors get
+  // one entry node just before min(own first in-window event, children's first draw).
+  const fdMemo = new Map();
+  const firstDrawnAt = (id) => {
+    if (fdMemo.has(id)) return fdMemo.get(id);
+    const r = inc.get(id);
+    let v = r.win.length ? r.win[0].at : Infinity;
+    for (const c of kids.get(id) || []) v = Math.min(v, firstDrawnAt(c));
+    if (r.pre || !r.win.length) v = v - 1;
+    fdMemo.set(id, v); return v;
+  };
+  for (const [id, r] of inc){
+    r.evs = [...r.win];
+    if (r.pre || !r.win.length) r.evs.unshift({ k: "entry", at: firstDrawnAt(id) });
+  }
+
+  // Grouping: goal-rooted → that group / goalless roots → one "loose" group
+  const rootOf = (id) => { let cur = id, guard = 0;
+    while (guard++ < 99){ const pp = parentAt(cur);
+      if (pp == null || !inc.has(pp)) return cur; cur = pp; }
+    return cur; };
+  const groups = new Map();
+  for (const id of inc.keys()){
+    const rid = rootOf(id), rt = inc.get(rid).t;
+    const key = rt.kind === "goal" ? String(rid) : "misc";
+    if (!groups.has(key)) groups.set(key, { key, root: rt.kind === "goal" ? rt : null, members: [] });
+    groups.get(key).members.push(id);
+  }
+  const gArr = [...groups.values()];
+  for (const g of gArr)
+    g.nev = g.members.reduce((a, m) => a + inc.get(m).evs.filter((e) => e.k !== "entry").length, 0);
+  gArr.sort((a, b) => b.nev - a.nev);
+  if (tlOpenGroups == null) tlOpenGroups = new Set(gArr.length ? [gArr[0].key] : []);
+
+  // How far (in time) a card needs its lane as a PARENT (children's junctions)
+  const asParentEnd = new Map();
+  for (const [id, r] of inc){
+    const pid = r.t.parent_id;
+    if (pid == null || !inc.has(pid)) continue;
+    const f = firstDrawnAt(id);
+    const doneEv = r.t.status === "done" ? r.evs.find((e) => e.k === "done") : null;
+    asParentEnd.set(pid, Math.max(asParentEnd.get(pid) || -Infinity, f, doneEv ? doneEv.at : f));
+  }
+
+  const CSTEP = 24, LROW = 20, HEADH = 22, GX0 = 74;
+  const colorOf = (t) => t.kind === "goal" ? "#c084fc" : lineColor(t.line);
+  const esc2 = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const NLC = String.fromCharCode(10);
+
+  // ── pass 1: per-group columns (event order, equidistant) and lanes (reclaimed) ──
+  let y = 6, ncolMax = 1, evTotal = 0, tMin = Infinity, tMax = -Infinity;
+  for (const g of gArr){
+    g.open = focusing || tlOpenGroups.has(g.key);
+    g.headY = y; y += HEADH;
+    if (!g.open) { y += 4; continue; }
+    g.rows = g.members.flatMap((m) => inc.get(m).evs.map((ev) => ({ id: m, ev })))
+      .sort((a, b) => a.ev.at - b.ev.at);
+    g.colX = new Map();
+    let ci = 0;
+    for (const rw of g.rows){ g.colX.set(rw.ev, GX0 + ci * CSTEP); ci++; }
+    g.ncols = ci; ncolMax = Math.max(ncolMax, ci);
+    for (const rw of g.rows) if (rw.ev.k !== "entry"){
+      evTotal++; tMin = Math.min(tMin, rw.ev.at); tMax = Math.max(tMax, rw.ev.at); }
+    // Lane reclaim: sweep active spans [firstDrawn, max(own last event, child
+    // junctions)]; freed lanes are reused
+    const spans = g.members.map((m) => {
+      const r = inc.get(m), s0 = firstDrawnAt(m);
+      let e0 = r.evs.length ? r.evs[r.evs.length - 1].at : s0;
+      e0 = Math.max(e0, asParentEnd.get(m) ?? -Infinity);
+      return { m, s0, e0 };
+    }).sort((a, b) => a.s0 - b.s0 || a.e0 - b.e0);
+    g.laneOf = new Map();
+    const laneFree = [];
+    for (const sp of spans){
+      let ln = laneFree.findIndex((f) => f < sp.s0);
+      if (ln === -1){ ln = laneFree.length; laneFree.push(-Infinity); }
+      laneFree[ln] = sp.e0; g.laneOf.set(sp.m, ln);
+    }
+    g.lanes = laneFree.length;
+    g.y0 = y + 4; y = g.y0 + g.lanes * LROW + 10;
+  }
+  const W = Math.max(720, GX0 + ncolMax * CSTEP + 50), H = y + 6;
+
+  // ── pass 2: draw ─────────────────────────────────────────────────────
+  let svg = "";
+  for (const g of gArr){
+    const root = g.root, gc = root ? colorOf(root) : "#5d6472";
+    const glab = root ? `目标#${root.id} ${esc2(String(root.subject).slice(0, 30))}` : "散卡(无目标)";
+    svg += `<g class="tl-ghead" data-tlgroup="${g.key}">` +
+      `<rect x="2" y="${g.headY}" width="${W - 4}" height="${HEADH - 4}" fill="${gc}" opacity=".07" rx="4"/>` +
+      `<text x="8" y="${g.headY + 13}" fill="${gc}">${g.open ? "▾" : "▸"} ${glab} · ${g.members.length} 张 · ${g.nev} 事件</text>` +
+      `<title>${g.open ? "点击折叠" : "点击展开"}</title></g>`;
+    if (!g.open) continue;
+    const X = (ev) => g.colX.get(ev);
+    const Y = (m) => g.y0 + g.laneOf.get(m) * LROW + 10;
+
+    // Small labels only at hour changes (not a proportional scale — positions stay
+    // the event columns)
+    let prevHK = "", lastLabX = -1e9;
+    for (const rw of g.rows){
+      if (rw.ev.k === "entry") continue;
+      const d = new Date(rw.ev.at), dayk = fmtMD(rw.ev.at), hk = dayk + "#" + d.getHours();
+      if (hk === prevHK) continue;
+      const first = prevHK === ""; prevHK = hk;
+      const x = X(rw.ev);
+      if (x - lastLabX < 40) continue;
+      lastLabX = x;
+      svg += `<text class="tl-ticklab" x="${x}" y="${g.y0 - 1}" text-anchor="middle">${first || d.getHours() === 0 ? dayk + " " : ""}${fmtHM(rw.ev.at)}</text>`;
+    }
+    // Edges first (nodes go on top). Both ends are visible nodes (parents get a
+    // junction dot).
+    for (const m of g.members){
+      const r = inc.get(m), pid = r.t.parent_id;
+      if (pid == null || !inc.has(pid) || !g.laneOf.has(pid)) continue;
+      const py = Y(pid), cy2 = Y(m), pc = colorOf(inc.get(pid).t);
+      const bEv = r.evs[0], bx = X(bEv);
+      svg += `<circle cx="${bx - 9}" cy="${py}" r="2.2" fill="${pc}" opacity=".9"/>` +
+        `<path class="tl-edge" d="M ${bx - 9} ${py} Q ${bx} ${py} ${bx} ${cy2}"/>`;
+      if (r.t.status === "done"){
+        const dEv = r.evs.find((e) => e.k === "done");
+        if (dEv){ const dx2 = X(dEv);
+          svg += `<circle cx="${dx2 + 9}" cy="${py}" r="2.2" fill="${pc}" opacity=".9"/>` +
+            `<path class="tl-edge merge" d="M ${dx2} ${cy2} Q ${dx2} ${py} ${dx2 + 9} ${py}"/>`; }
+      }
+    }
+    // Lanes + nodes per card. A lane spans only its own nodes ∪ junctions — never
+    // to the right edge.
+    for (const m of g.members){
+      const r = inc.get(m), t = r.t, c = colorOf(t), yy = Y(m);
+      const xs = r.evs.map((e) => X(e));
+      let x0 = Math.min(...xs), x1 = Math.max(...xs);
+      for (const cid of kids.get(m) || []){
+        const cr = inc.get(cid);
+        if (!g.colX.has(cr.evs[0])) continue;
+        x0 = Math.min(x0, X(cr.evs[0]) - 9);
+        const dEv = cr.t.status === "done" ? cr.evs.find((e) => e.k === "done") : null;
+        if (dEv) x1 = Math.max(x1, X(dEv) + 9);
+      }
+      let gg = `<text class="tl-ticklab" x="${x0 - 6}" y="${yy + 3}" text-anchor="end" fill="${c}">#${t.id}</text>`;
+      if (x1 > x0)
+        gg += `<line x1="${x0}" y1="${yy}" x2="${x1}" y2="${yy}" stroke="${c}" stroke-width="${t.kind === "goal" ? 2.4 : 1.3}" opacity="${t.kind === "goal" ? ".55" : ".4"}"/>`;
+      for (let i2 = 0; i2 < r.evs.length; i2++){        // work spans = thick segments (open→close/now)
+        if (r.evs[i2].k !== "open") continue;
+        const nxt = r.evs.slice(i2 + 1).find((e) => e.k === "close" || e.k === "now");
+        if (nxt) gg += `<line x1="${X(r.evs[i2])}" y1="${yy}" x2="${X(nxt)}" y2="${yy}" stroke="${c}" stroke-width="4.5" stroke-linecap="round" opacity=".95"/>`;
+      }
+      r.evs.forEach((e, i2) => {
+        const x = X(e), tt = `${fmtMD(e.at)} ${fmtHM(e.at)}`, last = i2 === r.evs.length - 1;
+        if (e.k === "entry")
+          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="none" stroke="${c}" stroke-width="1.5" stroke-dasharray="2 2"><title>#${t.id} 来自此前(窗口外历史未导入)${NLC}${esc2(t.subject)}</title></circle>`;
+        else if (e.k === "birth")
+          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="${c}"><title>#${t.id} 启动 ${tt}${NLC}${esc2(t.subject)}</title></circle>`;
+        else if (e.k === "open")
+          gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="${c}"><title>#${t.id} 开工 ${tt} · ${esc2(lineLabel(e.w))}</title></rect>`;
+        else if (e.k === "close"){
+          if (last && t.status === "waiting")
+            gg += `<circle cx="${x}" cy="${yy}" r="4" fill="var(--panel)" stroke="${c}" stroke-width="1.8"><title>#${t.id} 交付→等待${t.waiting_for ? "/" + esc2(WF_LABEL[t.waiting_for] || t.waiting_for) : ""} ${tt}</title></circle>`;
+          else
+            gg += `<circle cx="${x}" cy="${yy}" r="2.6" fill="${c}"><title>#${t.id} 收段 ${tt}</title></circle>`;
+        } else if (e.k === "done")
+          gg += `<circle cx="${x}" cy="${yy}" r="3.6" fill="${c}"><title>#${t.id} 完成 ${tt}</title></circle>`;
+        else if (e.k === "now")
+          gg += `<circle cx="${x}" cy="${yy}" r="3" fill="${c}" opacity=".5"><title>#${t.id} 进行中(现在)</title></circle>`;
+      });
+      if (t.status === "waiting" && r.evs[r.evs.length - 1].k === "birth")
+        gg += `<circle cx="${X(r.evs[r.evs.length - 1])}" cy="${yy}" r="5" fill="none" stroke="${c}" stroke-width="1.6"><title>#${t.id} 等待中(未经处理)</title></circle>`;
+      svg += `<g class="tl-seg${focusId === t.id ? " sel" : ""}" data-tlid="${t.id}">` +
+        `<title>#${t.id} ${esc2(t.subject)}${NLC}${esc2(lineLabel(t.line))} · ${esc2(t.status)}</title>${gg}</g>`;
+    }
+  }
+  wrap.innerHTML = `<svg id="tl-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+  const rangeLab = evTotal ? fmtRange(tMin, tMax) : "";
+  document.getElementById("tl-sum").textContent =
+    (focusing ? `谱系·聚焦 #${focusId} 家族 · ` : `谱系 · `) +
+    `${gArr.length} 组 · ${inc.size} 张 · ${evTotal} 事件${rangeLab ? " · " + rangeLab : ""}`;
+  document.getElementById("tl-note").textContent = focusing
+    ? `聚焦中: 只画 #${focusId} 家族(再点该卡节点=恢复全图)`
+    : `横=事件顺序(时刻见悬浮/时变小字) 纵=活跃分支(完成即回收轨道) ╮派生 ╯合流(仅完成) ●启动 ■开工 ○等待 ◌来自此前 · 点组行折叠/展开 · 点节点=只留该家族`;
+}
+document.addEventListener("click", (e) => {
+  const gh = e.target.closest("[data-tlgroup]");
+  if (gh && tlOpenGroups){
+    const k = gh.dataset.tlgroup;
+    if (tlOpenGroups.has(k)) tlOpenGroups.delete(k); else tlOpenGroups.add(k);
+    renderTimeline();
+  }
+});
+
+/* ── ② Load view (per-line load; carries no lineage) ─────────────────── */
+function renderLoad(wrap){
+  const day0 = new Date(tlDate + "T00:00:00").getTime();
+  const d0 = day0 - 3600_000, d1 = day0 + 25 * 3600_000;
+  const P = Date.parse, now2 = Date.now();
+  const colKey = (t) => t.kind === "goal" ? "goal" : (t.line || "unassigned");
+  const all = tasks.filter((t) => !t.archived_at);
+
+  // Cards relevant to the day (existence intersects the window)
+  const endOf = (t) => t.status === "done"
+    ? Math.max(P(t.resolved_at || t.updated_at), P(t.created_at) + 60_000)
+    : (t.status === "not_started" ? P(t.created_at) + 1 : now2);
+  const rows = all.map((t) => ({ t, s: P(t.created_at), e: endOf(t) }))
+    .filter((it) => it.s < d1 && it.e > d0);
+
+  // Window choice: fit = densest activity ± (min 4h); day = 26h; object = cluster
+  let w0 = d0, w1 = d1;
+  if (tlView === "fit"){
+    const ev = [];
+    for (const it of rows){
+      if (it.s >= d0 && it.s < d1) ev.push(it.s);
+      if (it.t.status === "done" && it.e >= d0 && it.e < d1) ev.push(it.e);
+      for (const sp of (it.t.work_spans || [])){
+        const a = P(sp.s), b = sp.e ? P(sp.e) : now2;
+        if (a < d1 && b > d0){ ev.push(Math.max(a, d0)); ev.push(Math.min(b, d1)); }
+      }
+    }
+    if (ev.length){
+      let lo = Math.min(...ev) - 1800_000, hi = Math.max(...ev) + 1800_000;
+      if (hi - lo < 4 * 3600_000){ const mid = (lo + hi) / 2;
+        lo = mid - 2 * 3600_000; hi = mid + 2 * 3600_000; }
+      w0 = Math.max(d0, lo); w1 = Math.min(d1, hi);
+    }
+  } else if (tlView !== "day"){ w0 = Math.max(d0, tlView.from); w1 = Math.min(d1, tlView.to); }
+
+  const vis = rows.filter((it) => it.s < w1 && it.e > w0);
+  if (!vis.length){ wrap.innerHTML = `<div class="empty">这一窗没有卡</div>`;
+    document.getElementById("tl-sum").textContent = ""; return; }
+  const lanesFirst = new Map();
+  for (const t of all){ const k = colKey(t), v = P(t.created_at);
+    if (!lanesFirst.has(k) || v < lanesFirst.get(k)) lanesFirst.set(k, v); }
+  const lanesK = [...new Set(vis.map((it) => colKey(it.t)))]
+    .sort((a, b) => lanesFirst.get(a) - lanesFirst.get(b));
+  // Work spans belong to the line that ACTUALLY worked them (span.w) — moving a
+  // card's line never rewrites history. Slot names (mail@2) drop the @k. If a
+  // span's line has no row yet, add one (a silently vanished span is a lie).
+  const lineOfW = (w2) => String(w2 || "").replace(/@\d+$/, "") || null;
+  for (const it of vis)
+    for (const sp of (it.t.work_spans || [])){
+      const a2 = P(sp.s), b2 = sp.e ? P(sp.e) : now2;
+      if (a2 >= w1 || b2 <= w0) continue;
+      const k2 = lineOfW(sp.w) || colKey(it.t);
+      if (!lanesK.includes(k2)) lanesK.push(k2);
+    }
+
+  const spanHours = (w1 - w0) / 3600_000;
+  const W = TL.LABW + Math.max(560, Math.round(spanHours * TL.PXH * (tlView === "day" ? 1 : 3))) + 14;
+  const plotW = W - TL.LABW - 14;
+  const X = (ms) => TL.LABW + (Math.min(Math.max(ms, w0), w1) - w0) / (w1 - w0) * plotW;
+
+  const rowY = new Map(); let cy = TL.AXH + 6;
+  for (const k of lanesK){ rowY.set(k, cy); cy += TL.ROWH; }
+  const H = cy + 8;
+  const colorOf = (k) => k === "goal" ? "#c084fc" : lineColor(k);
+  const esc2 = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const NLC = String.fromCharCode(10);
+
+  const rowIn = new Map();
+  for (const it of vis) if (it.s < w0) rowIn.set(colKey(it.t), (rowIn.get(colKey(it.t)) || 0) + 1);
+
+  let svg = "";
+  // Ticks (dates on day changes — without them 23:00–1:00 reads as two hours)
+  const stepH = spanHours > 12 ? 2 : spanHours > 5 ? 1 : 0.5;
+  // A day change = "the date differs from the previous tick" (a midnight test dies
+  // when epoch-aligned steps never hit local midnight — measured 0 cross-day
+  // ticks). The first tick also carries its date = the anchor.
+  let prevTickD = "";
+  for (let hms = Math.ceil(w0 / (stepH * 3600_000)) * stepH * 3600_000; hms <= w1; hms += stepH * 3600_000){
+    const x = X(hms), d = new Date(hms);
+    const dk = fmtMD(hms), dayChg = dk !== prevTickD; prevTickD = dk;
+    svg += `<line class="tl-tick" x1="${x}" y1="${TL.AXH - 5}" x2="${x}" y2="${H}"${dayChg ? ' stroke-width="2"' : ""}/>`;
+    svg += `<text class="tl-ticklab" x="${x + 2}" y="${TL.AXH - 8}">${dayChg ? dk + " " : ""}${String(d.getHours()).padStart(2, "0")}${d.getMinutes() ? ":30" : ""}</text>`;
+  }
+  // Row names (◀ carried-in count folds into the name) + row bands
+  for (const k of lanesK){
+    const y = rowY.get(k), c = colorOf(k);
+    svg += `<rect class="tl-rowband" x="${TL.LABW - 4}" y="${y - 4}" width="${W - TL.LABW}" height="${TL.ROWH - 6}" fill="${c}" rx="5" opacity="0.05"></rect>`;
+    const nm = k === "goal" ? "目标" : k === "unassigned" ? "未指派" : lineLabel(k);
+    svg += `<text class="tl-rowlab" x="4" y="${y + 8}" fill="${c}">${esc2(nm)}${rowIn.get(k) ? ` ·◀${rowIn.get(k)}` : ""}</text>`;
+  }
+  // Per row: waiting-count step band + work segments + start clusters
+  let clusterN = 0;
+  for (const k of lanesK){
+    const y = rowY.get(k) + 8, c = colorOf(k);
+    const mine = vis.filter((it) => colKey(it.t) === k);
+    // ── Waiting step band (simultaneous waits are not serial → count semantics)
+    const waitStarts = mine.filter((it) => it.t.status === "waiting")
+      .map((it) => { const sp = it.t.work_spans || [], last = sp[sp.length - 1];
+        return Math.max(w0, last && last.e ? P(last.e) : it.s); }).sort((a, b) => a - b);
+    if (waitStarts.length){
+      let path = "", cnt = 0, px = X(waitStarts[0]);
+      const yB = y + 7;
+      path = `M ${px} ${yB}`;
+      for (const ws of waitStarts){ const x = X(ws); path += ` L ${x} ${yB - cnt * 2} L ${x} ${yB - (cnt + 1) * 2}`; cnt++; }
+      path += ` L ${X(w1)} ${yB - cnt * 2} L ${X(w1)} ${yB} Z`;
+      svg += `<path class="tl-band" d="${path}" fill="${c}"><title>${esc2(k)}: 等待中 ${cnt} 张(阶梯=进入等待的时刻)</title></path>`;
+      svg += `<text class="tl-cont" x="${X(w1) - 16}" y="${yB - cnt * 2 - 2}">${cnt}</text>`;
+    }
+    // ── Work segments (thick, one lane) — spans go to span.w's row (from vis, not mine)
+    for (const it of vis){
+      const t = it.t;
+      const dim = focusId != null && !relSet.has(t.id);
+      for (const sp of (t.work_spans || [])){
+        if ((lineOfW(sp.w) || colKey(t)) !== k) continue;
+        const a = P(sp.s), b = sp.e ? P(sp.e) : now2;
+        if (a >= w1 || b <= w0) continue;
+        const x1 = X(a), x2 = Math.max(X(b), x1 + 3);
+        svg += `<g class="tl-seg${dim ? " dimmed" : ""}${focusId === t.id ? " sel" : ""}" data-tlid="${t.id}">` +
+          `<line class="tl-work" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${c}"></line>` +
+          `<title>#${t.id} ${esc2(t.subject)}${NLC}处理 ${((b - a) / 60000).toFixed(1)} 分 · ${esc2(lineLabel(sp.w))}</title></g>`;
+      }
+    }
+    // ── Start events: neighbors (<10px) cluster into ●N; click = zoom the cluster
+    const births = mine.filter((it) => it.s >= w0 && it.s <= w1)
+      .sort((a, b) => a.s - b.s);
+    let iB = 0;
+    while (iB < births.length){
+      const x0 = X(births[iB].s); let jB = iB + 1;
+      while (jB < births.length && X(births[jB].s) - x0 < 10) jB++;
+      const group = births.slice(iB, jB);
+      if (group.length === 1){
+        const it = group[0], t = it.t, x = X(it.s);
+        const dim = focusId != null && !relSet.has(t.id);
+        svg += `<g class="tl-seg${dim ? " dimmed" : ""}" data-tlid="${t.id}">` +
+          `<circle cx="${x}" cy="${y}" r="3" fill="${c}"${t.status === "not_started" ? "" : ' opacity=".65"'}></circle>` +
+          `<title>#${t.id} ${esc2(t.subject)}${NLC}${esc2(t.status)}${t.waiting_for ? "/" + esc2(t.waiting_for) : ""}</title></g>`;
+      } else {
+        const mid = (group[0].s + group[group.length - 1].s) / 2;
+        clusterN++;
+        svg += `<g class="tl-cluster" data-from="${group[0].s - 1800_000}" data-to="${group[group.length - 1].s + 1800_000}">` +
+          `<circle cx="${X(mid)}" cy="${y}" r="8" fill="${c}"></circle>` +
+          `<text x="${X(mid)}" y="${y + 3}" text-anchor="middle">${group.length}</text>` +
+          `<title>${group.length} 张卡在此启动: ${group.map((g) => "#" + g.t.id).join(" ")}${NLC}点击放大此段</title></g>`;
+      }
+      iB = jB;
+    }
+    // ── Card ids: only when a family is focused, with collision detection
+    if (focusId != null){
+      let lastEnd = -1e9;
+      for (const it of mine){
+        if (!relSet.has(it.t.id)) continue;
+        const sp = (it.t.work_spans || [])[0];
+        const x = X(sp ? P(sp.s) : it.s);
+        if (x - lastEnd < 30) continue;
+        svg += `<text class="tl-ticklab" x="${x + 4}" y="${y - 6}" fill="${c}">#${it.t.id}</text>`;
+        lastEnd = x + 30;
+      }
+    }
+  }
+  wrap.innerHTML = `<svg id="tl-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
+  const viewLab = tlView === "day" ? "全天 26h" : tlView === "fit" ? "聚焦活动" : "簇放大";
+  document.getElementById("tl-sum").textContent =
+    `负载 · ${lanesK.length} 条线 · ${vis.length} 张 · ${viewLab} ${fmtRange(w0, w1)}`;
+  document.getElementById("tl-note").textContent =
+    `粗=处理段 带=等待数量 ●N=同刻启动(点击放大) · 本图只表达负载,谱系见「谱系」`;
+}
+document.getElementById("tl-mode-lin").addEventListener("click", () => { tlMode = "lineage"; renderTimeline(); });
+document.getElementById("tl-mode-load").addEventListener("click", () => { tlMode = "load"; renderTimeline(); });
+document.getElementById("tl-fit").addEventListener("click", () => { tlView = "fit"; renderTimeline(); });
+document.getElementById("tl-day").addEventListener("click", () => { tlView = "day"; renderTimeline(); });
+document.addEventListener("click", (e) => {
+  const cl = e.target.closest(".tl-cluster");
+  if (cl){ tlView = { from: Number(cl.dataset.from), to: Number(cl.dataset.to) }; renderTimeline(); }
+});
+document.getElementById("tl-date").addEventListener("change", (e) => { tlDate = e.target.value; renderTimeline(); });
+document.getElementById("tl-prev").addEventListener("click", () => {
+  const d = new Date(tlDate + "T12:00:00"); d.setDate(d.getDate() - 1); tlDate = tlDayStr(d); renderTimeline(); });
+document.getElementById("tl-next").addEventListener("click", () => {
+  const d = new Date(tlDate + "T12:00:00"); d.setDate(d.getDate() + 1); tlDate = tlDayStr(d); renderTimeline(); });
+document.querySelector("#tl > h2").addEventListener("click", () => {
+  document.getElementById("tl").classList.toggle("open");
+  renderTimeline();
+});
+// Clicking a segment = same semantics as clicking a card: focus the family
+// (board columns and timeline highlight together)
+document.addEventListener("click", async (e) => {
+  const g = e.target.closest("[data-tlid]");
+  if (!g) return;
+  const id = Number(g.dataset.tlid);
+  if (focusId === id){ focusId = null; relSet = new Set(); }
+  else {
+    focusId = id;
+    try { relSet = new Set((await (await fetch(`/api/tasks/${id}/related`)).json()).ids); }
+    catch { relSet = new Set([id]); }
+  }
+  render(); renderTimeline();
+});
+
+function render(){
+  if (renderQueued) return;
+  renderQueued = true;
+  // ⚠⚠ NOT requestAnimationFrame: rAF freezes in background tabs, so the moment the
+  //   board goes behind, rendering stops and renderQueued sticks true forever
+  //   (measured: the first render ran in background and froze at 0 cards). Boards
+  //   are left open — updates must not depend on being watched. Fold with timeout
+  //   (fires in background too); rAF is used only for MEASURING below.
+  setTimeout(() => { renderQueued = false; renderNow(); }, 0);
+}
+
+// ⭐ Folding: the two ever-growing sections — done children and the not-started
+//   candidate pool — fold by default; the divider is the switch; state survives
+//   refresh (localStorage tb_folds). Folding = those cards skip items and leave via
+//   the existing exit animation; opening = next render rebuilds them. Column head
+//   counts stay FULL (information is stowed, never lost).
+const FOLDS = Object.assign({ donesub: true, cand: true },
+  JSON.parse(localStorage.getItem("tb_folds") || "{}"));
+function foldHead(divider, foldKey, foldedLabel, openLabel){
+  const folded = !!FOLDS[foldKey];
+  divider.textContent = folded ? `▸ ${foldedLabel}` : `▾ ${openLabel}`;
+  divider.classList.add("fold");
+  divider.title = folded ? "点击展开" : "点击收起";
+  divider.onclick = () => {
+    FOLDS[foldKey] = !FOLDS[foldKey];
+    try { localStorage.setItem("tb_folds", JSON.stringify(FOLDS)); } catch {}
+    render();
+  };
+  return folded;
+}
+
+function renderNow(){
+  const sh = ensureShell();
+
+  // Locating only rearranges the current page — no status writes, no pinned_at.
+  // The location survives refresh until Clear or the card leaves the view.
+  const locatedTask = locatedId == null ? null : byId.get(locatedId);
+  if (locatedId != null && !locatedTask){
+    const gone = locatedId;
+    locatedId = null; locateScrollPending = false;
+    document.getElementById("task-find-clear").disabled = true;
+    setFindNote(`#${gone} 已离开当前看板(可能已归档)`, "bad");
+  }
+
+  // ── FIRST: note the coordinates before anything moves
+  const first = new Map();
+  if (!REDUCED.matches)
+    for (const [id, el] of cardNodes)
+      if (el.isConnected && !el.dataset.leaving) first.set(id, el.getBoundingClientRect());
+
+  const wanted = new Set();
+
+  for (const [key, label] of COLS){
+    const { list, n, empty, divider } = sh.get(key);
+    const items = [];
+    const locatedHere = locatedTask && taskColumn(locatedTask) === key ? locatedTask : null;
+    // The located card goes first and leaves its original section — so even a
+    // folded pool shows the search result.
+    if (locatedHere) items.push(upsert(locatedHere, wanted));
+    if (key === "done"){
+      const allGoals = tasks.filter((t) => t.kind === "goal" && t.status === "done")
+        .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+      const allSubs = pinRelated(tasks.filter((t) => t.kind !== "goal" && t.status === "done")
+        .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))));
+      const goals = allGoals.filter((t) => t.id !== locatedId);
+      const subs = allSubs.filter((t) => t.id !== locatedId);
+      for (const t of pinRelated(goals)) items.push(upsert(t, wanted));
+      if (subs.length){
+        const folded = foldHead(divider, "donesub",
+          `子任务卡 ${allSubs.length} 张(已收起)`, `子任务卡 ${allSubs.length} 张`);
+        items.push(divider);
+        if (!folded) for (const t of subs) items.push(upsert(t, wanted));
+      }
+      if (!allGoals.length && !allSubs.length) items.push(empty);
+      n.textContent = allGoals.length;
+    } else if (key === "not_started"){
+      // ⭐ Pile anatomy: segmented claimable → budget-frozen → divider → candidate
+      //   pool. The segmentation SHARES claim's criteria (server-sent caps, never
+      //   local constants): ① frozen line = lifetime ceiling; ② descendants of
+      //   unreleased ancestors → pool; ③ human-gated → pool.
+      //   ⚠ The ancestor walk uses the local archived=false view: a broken link
+      //   (archived parent) counts as OPEN — this is a DISPLAY grouping; the claim
+      //   gate holds the verdict. Better to under-frighten here; the gate stops the
+      //   real thing.
+      const byId = new Map(tasks.map((x) => [Number(x.id), x]));
+      const ancOpen = (t) => {
+        let cur = t.parent_id, hops = 0;
+        while (cur != null && hops++ < 32) {
+          const p = byId.get(Number(cur));
+          if (!p) return true;
+          if (!p.released) return false;
+          cur = p.parent_id;
+        }
+        return true;
+      };
+      const lifeCap = (t) => Number(t.max_attempts) * ((meta.caps || {}).lifetime_dispatch || 4);
+      const rows0 = pinRelated(rowsFor(key));
+      const inQueue = (t) => t.released && !t.human_gate && ancOpen(t);
+      const claimableAll = rows0.filter((t) => inQueue(t) && Number(t.attempts) < lifeCap(t));
+      const frozenAll = rows0.filter((t) => inQueue(t) && Number(t.attempts) >= lifeCap(t));
+      const candAll = rows0.filter((t) => !inQueue(t));
+      const claimable = claimableAll.filter((t) => t.id !== locatedId);
+      const frozen = frozenAll.filter((t) => t.id !== locatedId);
+      const cand = candAll.filter((t) => t.id !== locatedId);
+      for (const t of claimable) items.push(upsert(t, wanted));
+      for (const t of frozen) items.push(upsert(t, wanted));
+      if (candAll.length){
+        const folded = foldHead(divider, "cand",
+          `队外(未放行/祖先未放行/待人工)${candAll.length} 张(已收起)`,
+          `队外(未放行/祖先未放行/待人工)${candAll.length} 张 —— 放行链根/人裁后才进队`);
+        items.push(divider);
+        if (!folded) for (const t of cand) items.push(upsert(t, wanted));
+      }
+      if (!rows0.length) items.push(empty);
+      n.textContent = candAll.length ? `${claimableAll.length + frozenAll.length}+${candAll.length}` : String(rows0.length);
+    } else {
+      const allRows = pinRelated(rowsFor(key));
+      const rows = allRows.filter((t) => t.id !== locatedId);
+      for (const t of rows) items.push(upsert(t, wanted));
+      if (!allRows.length) items.push(empty);
+      n.textContent = allRows.length;
+    }
+    placeList(list, items);
+  }
+
+  if (locateScrollPending && locatedId != null){
+    const target = cardNodes.get(locatedId);
+    if (target?.isConnected){
+      locateScrollPending = false;
+      target.tabIndex = -1;
+      requestAnimationFrame(() => {
+        target.scrollIntoView({ behavior: REDUCED.matches ? "auto" : "smooth", block:"start", inline:"nearest" });
+        target.focus({ preventScroll:true });
+      });
+    }
+  }
+
+  // ── Exit: shrink away, then remove — never blink out
+  for (const [id, el] of cardNodes){
+    if (wanted.has(id) || !el.isConnected || el.dataset.leaving) continue;
+    if (REDUCED.matches){ el.remove(); cardNodes.delete(id); continue; }
+    el.dataset.leaving = "1";
+    el.style.maxHeight = el.offsetHeight + "px";
+    requestAnimationFrame(() => el.classList.add("leaving"));
+    setTimeout(() => {
+      el.remove();
+      if (cardNodes.get(id) === el) cardNodes.delete(id);
+    }, 280);
+  }
+
+  // ── LAST → INVERT → PLAY
+  // Never animate while invisible. A leftover reservation replays with
+  // minutes-old coordinates on return (rAF only pauses; it does not cancel).
+  if (!REDUCED.matches && !document.hidden) requestAnimationFrame(() => {
+    const landed = new Set();
+    // ⚠ Measuring with an in-flight transform attached returns the VISUAL position,
+    //   not the layout one — the deltas double-cancel and interrupted cards jump.
+    //   FIRST may be visual (interruptions continue from there); LAST must be raw
+    //   layout — strip right before measuring.
+    for (const [, el] of cardNodes){
+      if (el.style.transform){ el.style.transition = "none"; el.style.transform = ""; }
+    }
+    const t = performance.now();
+    for (const [id, el] of cardNodes){
+      const a = first.get(id);
+      if (!a || !el.isConnected || el.dataset.leaving) continue;
+      const b = el.getBoundingClientRect();
+      // In flight AND the destination unchanged: don't rebuild the animation.
+      // SSE lands one beat after actions; naively rebuilding restarts the flight at
+      // the 20ms mark every time.
+      if (el.__flyUntil > t && el.__flyTo &&
+          Math.abs(el.__flyTo.left - b.left) < 1 && Math.abs(el.__flyTo.top - b.top) < 1){
+        el.style.transition = el.__flyEase; el.style.transform = "none";   // restore what was stripped
+        continue;
+      }
+      const dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      el.__flyTo = { left: b.left, top: b.top };
+      el.__flyUntil = t + 320;
+      el.classList.add("flip");
+      el.style.transition = "none";
+      // Lift slightly before crossing (scale returns to 1 on landing = settles in)
+      el.style.transform = `translate(${dx}px, ${dy}px) scale(1.03)`;
+      if (Math.abs(dx) > 2) landed.add(el.closest(".col"));   // landing flash only when crossing columns
+      el.__flyEase = "transform .3s cubic-bezier(.2,.7,.3,1)";
+      requestAnimationFrame(() => {
+        el.style.transition = el.__flyEase;
+        el.style.transform = "none";
+        setTimeout(() => {
+          el.classList.remove("flip");
+          el.style.transition = ""; el.style.transform = "";
+        }, 320);
+      });
+    }
+    for (const col of landed){
+      if (!col) continue;
+      col.classList.add("landed");
+      setTimeout(() => col.classList.remove("landed"), 520);
+    }
+  });
+
+  for (const el of document.querySelectorAll(".card.enter"))
+    setTimeout(() => el.classList.remove("enter"), 300);
+
+  syncGoalPrev();
+  renderTimeline();
+  tick();                       // fill the running numbers immediately (no 1s blank)
+  const c = meta.counts || {};
+  set("f-arch", meta.archived_count);
+  set("f-up", meta.uptime_sec == null ? "–" : fmtUp(meta.uptime_sec));
+  set("f-ns", c.not_started); set("f-ip", c.in_progress); set("f-wa", c.waiting); set("f-dn", c.done);
+  document.getElementById("f-when").textContent = "刷新于 " + new Date().toTimeString().slice(0,8);
+}
+const set = (id, v) => { document.getElementById(id).textContent = v == null ? "–" : v; };
+const fmtUp = (s) => s < 3600 ? Math.floor(s/60)+"m" : Math.floor(s/3600)+"h"+Math.floor((s%3600)/60)+"m";
+
+let workers = [], LINES = [], LINE_HINTS = {}, ROUTES = [], claimMisses = [];
+
+function renderRig(){
+  if (cfg.classList.contains("show")) return;   // don't redraw while settings are open (sliders vanish mid-drag)
+  const rig = document.getElementById("rig");
+  rig.innerHTML = `<span class="lbl">自动拉取</span>` + workers.map((w) => {
+    const label = lineLabel(w.line);
+    const slots = (w.slots || []).filter((sl) => sl.running);
+    const xN = slots.length > 1 ? `×${slots.length}` : "";
+    // ⭐ The rig does NOT guess a stop reason from the exit code — one code carries
+    //   three meanings. Show the structured text the server recorded at the point the
+    //   stop was initiated; fall back to the old code wording only for an older server
+    //   that does not send stop_text (rolling upgrades).
+    const tail = w.running ? (w.last_log?.[w.last_log.length-1] || "")
+                           : (w.stop_text || (w.exit_code == null ? "" : `已停止 code=${w.exit_code}`));
+    // Extra slots (2+) list their tails as ②③… — melted into one, "how many are
+    // running" loses its meaning
+    const extra = slots.filter((sl) => sl.slot > 1)
+      .map((sl) => `<span class="tail">${"⓪①②③④"[sl.slot] || "#" + sl.slot}${esc(sl.tail || "")}</span>`).join("");
+    return `<span class="wk${w.running ? " on" : ""}" title="${esc((w.last_log||[]).join(String.fromCharCode(10)))}">` +
+           `<span class="st"></span><span class="nm" style="color:${lineColor(w.line)}" title="${esc(LINE_HINTS[w.line] || "")}">${esc(label)}${xN}</span>` +
+           `<span class="tail">${esc(tail)}</span>` + extra +
+           `<button class="gear" data-cfg="${w.line}" title="模型 / 强度 / 并行">⚙</button>` +
+           `<button data-wk="${w.line}" data-op="${w.running ? "stop" : "start"}">${w.running ? "停止" : "启动"}</button></span>`;
+  }).join("")
+  // claim_misses onto the face — the API emitted them long before anyone read them
+  // (installed ≠ armed). Slot keys (alpha@2) match by root name; a root missing
+  // from the supervised set = the prime typo suspect ⇒ named in red.
+  + claimMisses.filter((m) => (m.n || 0) >= 3).map((m) => {
+      const root = String(m.worker || "").split("@")[0];
+      const known = workers.some((w) => w.line === root);
+      const mins = m.since ? Math.max(1, Math.round((Date.now() - m.since) / 60000)) : "?";
+      return `<span class="wk" title="route=${esc(m.route || "?")} line=${esc(m.line || "?")}">` +
+             `<span class="tail"${known ? "" : ' style="color:var(--bad)"'}>⚠${esc(m.worker)} 连续 ${m.n} 次空领` +
+             ` (≈${mins} 分)${known ? "" : " · 疑似打错 worker 名"}</span></span>`;
+    }).join("");
+}
+
+let MODELS = [], EFFORTS = [], RUNTIMES = [], MAXP = 0;  // MAXP=0 ⇒ old server, no parallel
+const cfg = document.getElementById("cfg");
+
+/* Settings unit = the Agent (slot): each block is CLI + model + effort + own
+   window. The "parallel count" counter is GONE — the number of blocks IS the
+   parallelism (never the same fact in two places). Agent1 = persistent session
+   (undeletable); Agent2+ = fresh session per card (✕ removable). Add = clone of
+   slot 1's config. */
+let cfgLine = null, cfgAgents = [], cfgLegacy = false, cfgSingle = false, cfgAnchor = null;
+// CAS revision: SAVE WITH THE REV YOU READ — without it, two panels doing
+// read-modify-write silently overwrite each other.
+let cfgRev = 0;
+
+function openCfg(anchor, line){
+  const w = workers.find((x) => x.line === line) || {};
+  const st = w.settings || {};
+  cfgLine = line;
+  cfgSingle = line === "review";
+  cfgLegacy = !Array.isArray(st.agents);            // old server ⇒ display only, saving blocked
+  cfgAgents = cfgLegacy
+    ? [{ runtime: st.runtime || "claude", model: st.model || (MODELS[0] || {}).id || "",
+         effort: st.effort || "high", window: !!st.window }]
+    : st.agents.map((a) => ({ ...a }));
+  cfgRev = Number(st.rev || 0);
+  cfgAnchor = anchor;
+  renderCfg();
+}
+
+function renderCfg(){
+  const w = workers.find((x) => x.line === cfgLine) || {};
+  const seatModels = (rt) => { const seat = RUNTIMES.find((r2) => r2.id === rt);
+    return (seat && seat.models && seat.models.length) ? seat.models : MODELS; };
+  // ⭐ Effort domains come from the SEAT's declaration (model > seat > global).
+  //   Using the global EFFORTS directly would offer forbidden rungs — and an
+  //   offerable choice is a de-facto permission.
+  const seatEfforts = (rt, model) => {
+    const seat = RUNTIMES.find((r2) => r2.id === rt);
+    if (!seat) return EFFORTS;
+    const m = (seat.models || []).find((x) => x.id === model);
+    return (m && m.efforts) || seat.efforts || EFFORTS;
+  };
+  const blocks = cfgAgents.map((a, i) => {
+    const dom = seatEfforts(a.runtime || "claude", a.model);
+    const ei = Math.max(0, dom.indexOf(a.effort));
+    return `
+    <fieldset class="agent">
+      <legend>Agent${i + 1}<span class="sub">${i === 0 ? "持续会话·继承记忆" : "逐卡新会话"}</span>${i > 0 ? `<button class="ax" data-del="${i}" title="删除此 Agent">✕</button>` : ""}</legend>
+      <div class="duo">
+        <span><div class="cap">CLI</div>
+          <select data-i="${i}" data-k="runtime">
+            ${(RUNTIMES.length ? RUNTIMES : [{ id: "claude", label: "Claude Code" }]).map((r2) =>
+              `<option value="${r2.id}"${(a.runtime || "claude") === r2.id ? " selected" : ""}${r2.disabled ? " disabled" : ""}>${esc(r2.label)}</option>`).join("")}
+          </select></span>
+        <span><div class="cap">模型名称</div>
+          <select data-i="${i}" data-k="model">
+            ${seatModels(a.runtime || "claude").map((m) =>
+              `<option value="${m.id}"${m.id === a.model ? " selected" : ""}>${esc(m.label)}</option>`).join("")}
+          </select></span>
+      </div>
+      <div class="cap" style="margin-top:7px">强度 <b>${esc(a.effort || "")}</b></div>
+      ${dom.length > 1
+        ? `<input type="range" min="0" max="${dom.length - 1}" step="1" value="${ei}" data-i="${i}" data-k="effort">
+           <div class="ends"><span>${esc(dom[0])}</span><span>${esc(dom[dom.length - 1])}</span></div>`
+        // ⭐ Single-rung models show NO slider. A max=0 slider is a decoration that
+        //   does nothing when pressed — the worst kind of UI.
+        : `<div class="ends"><span>此模型固定单档(座席裁定)</span></div>`}
+      <label class="chk" style="margin-top:5px"><input type="checkbox" data-i="${i}" data-k="window"${a.window ? " checked" : ""}> 用独立控制台窗口启动</label>
+    </fieldset>`;
+  }).join("");
+  cfg.innerHTML = `
+    <h4 style="color:${lineColor(cfgLine)}">${esc(lineLabel(cfgLine))}</h4>
+    ${blocks}
+    ${cfgSingle ? `<div class="ends"><span>${esc(cfgLine)} 职务单线 —— 只有一个 Agent</span></div>` : `
+    <button id="cfg-add"${cfgAgents.length >= (MAXP || 1) || cfgLegacy ? " disabled" : ""}>＋ 添加一个 Agent</button>
+    <div class="ends"><span>${cfgLegacy ? "服务器旧版 —— 重启看板进程后可用" : ""}</span><span>上限 ${MAXP || 3}(全线共享额度)</span></div>`}
+    <div class="note" id="cfg-note">${w.running && w.stale_settings ? "当前进程仍用旧设置,停止再启动才生效" : ""}</div>`;
+  const r = cfgAnchor.getBoundingClientRect();
+  cfg.style.left = Math.min(r.left - 90, innerWidth - 320) + "px";
+  cfg.style.top = (r.bottom + 6) + "px";
+  cfg.classList.add("show");
+}
+
+/** Save = the whole agents[] submitted. On failure, roll back to the server's real
+ *  state (no partial success left behind). */
+async function saveAgents(){
+  const n = document.getElementById("cfg-note");
+  if (cfgLegacy){ if (n) n.textContent = "服务器旧版 —— 重启看板进程后可用"; return false; }
+  try {
+    const r = await post(`/api/workers/${cfgLine}/settings`, { agents: cfgAgents, rev: cfgRev });
+    if (n) n.textContent = r.note || "";
+    const w = workers.find((x) => x.line === cfgLine); if (w) w.settings = r.settings;
+    cfgRev = Number((r.settings || {}).rev || 0);      // next save uses the new revision
+    return true;
+  } catch (err) {
+    // ⭐ 409 (someone else fixed it first) fetches THE REAL STATE before showing —
+    //   rolling back to our stale copy would display "their change erased" and the
+    //   next save would really erase it.
+    const conflict = /rev|已被他处改动/.test(String(err.message || ""));
+    if (conflict) {
+      try {
+        const fresh = await (await fetch("/api/workers")).json();
+        const w2 = (fresh.workers || []).find((x) => x.line === cfgLine);
+        if (w2 && w2.settings && Array.isArray(w2.settings.agents)) {
+          const w0 = workers.find((x) => x.line === cfgLine); if (w0) w0.settings = w2.settings;
+          cfgAgents = w2.settings.agents.map((a) => ({ ...a }));
+          cfgRev = Number(w2.settings.rev || 0);
+        }
+      } catch {}
+      renderCfg();
+      const nc = document.getElementById("cfg-note");
+      if (nc) nc.textContent = "另一处面板刚改过这条线 —— 已取回最新设置,请重新调整";
+      return false;
+    }
+    const w = workers.find((x) => x.line === cfgLine);
+    if (w && w.settings && Array.isArray(w.settings.agents))
+      cfgAgents = w.settings.agents.map((a) => ({ ...a }));
+    renderCfg();
+    const n2 = document.getElementById("cfg-note");
+    if (n2) n2.textContent = "保存失败:" + err.message;
+    return false;
+  }
+}
+
+cfg.addEventListener("input", (e) => {
+  const el = e.target.closest("[data-i][data-k]"); if (!el) return;
+  const i = Number(el.dataset.i), k = el.dataset.k;
+  const a = cfgAgents[i]; if (!a) return;
+  const domOf = (ag) => {
+    const seat = RUNTIMES.find((r2) => r2.id === (ag.runtime || "claude"));
+    if (!seat) return EFFORTS;
+    const m = (seat.models || []).find((x) => x.id === ag.model);
+    return (m && m.efforts) || seat.efforts || EFFORTS;
+  };
+  if (k === "effort"){
+    a.effort = domOf(a)[Number(el.value)] || a.effort;
+    const b = el.closest("fieldset").querySelector(".cap b"); if (b) b.textContent = a.effort;
+    saveAgents();
+  } else if (k === "window"){ a.window = el.checked; saveAgents(); }
+  else if (k === "model"){
+    a.model = el.value;
+    // A model change changes the effort domain (single-rung models exist); left
+    // outside, the save bounces 400.
+    const d2 = domOf(a);
+    if (!d2.includes(a.effort)) a.effort = d2[d2.length - 1];
+    saveAgents().then((okd) => { if (okd) renderCfg(); });
+  }
+  else if (k === "runtime"){
+    a.runtime = el.value;
+    // A CLI change swaps the model list to the seat's — if the current model is
+    // absent there, snap to the seat's first
+    const seat = RUNTIMES.find((r2) => r2.id === el.value);
+    const ms = (seat && seat.models && seat.models.length) ? seat.models : MODELS;
+    if (!ms.some((m) => m.id === a.model) && ms.length) a.model = ms[0].id;
+    const d3 = domOf(a);
+    if (!d3.includes(a.effort)) a.effort = d3[d3.length - 1];
+    saveAgents().then((okd) => { if (okd) renderCfg(); });
+  }
+});
+
+cfg.addEventListener("click", (e) => {
+  const del = e.target.closest("button[data-del]");
+  if (del){
+    cfgAgents.splice(Number(del.dataset.del), 1);
+    saveAgents().then((okd) => { if (okd) renderCfg(); });
+    return;
+  }
+  const add = e.target.closest("#cfg-add");
+  if (add && !add.disabled){
+    // Add = clone slot 1 (the expectation is "one more of what I have", not blanks)
+    cfgAgents.push({ ...cfgAgents[0] });
+    saveAgents().then((okd) => { if (okd) renderCfg(); });
+  }
+});
+
+// ── [Edit]: fix line / route / self-retry cap ─────────────────────────────────
+//   NEVER touches status (state transitions are report/resolve's sole
+//   responsibility; touching it here would open a second transition entrance).
+//   ⚠ Keys are camelCase: the server pours the body straight into store.update —
+//     writing max_attempts destructures to undefined, lands in no SET, and 200
+//     returns with ZERO columns changed. No exception, no witness. The `changed`
+//     return is therefore ALWAYS read below; 0 = say so on screen.
+const epop = document.getElementById("edit");
+
+function openEdit(anchor, taskId){
+  const t = byId.get(Number(taskId));
+  if (!t) return;
+  const ma = Number(t.max_attempts) || 3;
+  epop.innerHTML = `
+    <h4>编辑 #${t.id}</h4>
+    <div class="row">
+      <div class="cap">线</div>
+      <select data-eid="${t.id}" data-k="line">
+        <option value=""${!t.line ? " selected" : ""}>(不指定线 · 谁都能领)</option>
+        ${LINES.map((l) => `<option value="${l}"${t.line === l ? " selected" : ""}>${esc(lineLabel(l))}</option>`).join("")}
+      </select>
+    </div>
+    <div class="row">
+      <div class="cap">路由</div>
+      <select data-eid="${t.id}" data-k="route">
+        ${ROUTES.map((r) => `<option value="${r}"${t.route === r ? " selected" : ""}>${esc(r.toUpperCase())}</option>`).join("")}
+      </select>
+    </div>
+    <div class="row">
+      <div class="cap">自行尝试上限 <b id="edit-ma">${ma}</b></div>
+      <input type="range" min="1" max="9" step="1" value="${ma}" data-eid="${t.id}" data-k="maxAttempts">
+      <div class="ends"><span>1</span><span>9</span></div>
+    </div>
+    <div class="note" id="edit-note">已尝试 ${Number(t.attempts) || 0} 次 —— 改上限不会清空它。</div>`;
+  const r = anchor.getBoundingClientRect();
+  epop.style.left = Math.min(r.left - 90, innerWidth - 290) + "px";
+  epop.style.top = (r.bottom + 6) + "px";
+  epop.classList.add("show");
+}
+
+async function saveEdit(id, k, v){
+  const n = document.getElementById("edit-note");
+  const body = {}; body[k] = v;
+  try{
+    const r = await post(`/api/tasks/${id}/update`, body);
+    // ⭐ Reading `changed` is this function's point. 200 ≠ saved — a wrong key name
+    //   returns 200 with zero columns. "Accepted" and "applied" are shown apart.
+    // A notice (today: an in-progress description append is invisible to the running
+    // worker) outranks the count — it is the part the writer cannot see for themselves.
+    if (n) n.textContent = r.notice ? r.notice
+      : r.changed
+      ? `已保存(${r.changed} 项)`
+      : "服务端接受了请求,但一列都没改动 —— 键名或值可能不对";
+    await refresh();
+  }catch(err){
+    // Show the reason VERBATIM (post() carries the server's `error` in the message).
+    //   The main refusals landing here: ① an in-progress card is 409 for EVERY field —
+    //   only a pure tail-append to description is allowed through, and this dialog has
+    //   no description box, so from here in-progress always means 409; ② the domain gate
+    //   is 400 ("unknown route" / "unknown line").
+    if (n) n.textContent = "保存失败:" + err.message;
+  }
+}
+
+epop.addEventListener("input", (e) => {
+  const el = e.target.closest("[data-eid]"); if (!el) return;
+  const id = el.dataset.eid, k = el.dataset.k;
+  if (k === "maxAttempts"){
+    document.getElementById("edit-ma").textContent = el.value;
+    saveEdit(id, "maxAttempts", Number(el.value));
+  } else if (k === "line")  saveEdit(id, "line", el.value || null);
+  else if (k === "route")   saveEdit(id, "route", el.value);
+});
+
+const pick = document.getElementById("pick");
+// Elements that carry their own meaning inside a card — the focus toggle must not
+// eat them.
+const SELF_ACTING = "button, textarea, select, input, a, [data-ev], [data-pick], [data-cfg], [data-stop]";
+
+function openPick(anchor, taskId){
+  const cur = byId.get(Number(taskId));
+  pick.innerHTML = LINES.map((l) =>
+    `<button data-assign="${taskId}" data-line="${l}"${cur?.line === l ? " class=\"pri\"" : ""}>${lineLabel(l)}</button>`
+  ).join("") + `<button data-assign="${taskId}" data-line="">(不指定线 · 谁都能领)</button>`;
+  const r = anchor.getBoundingClientRect();
+  pick.style.left = Math.min(r.left, innerWidth - 160) + "px";
+  pick.style.top = (r.bottom + 4) + "px";
+  pick.classList.add("show");
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#pick") && !e.target.closest("[data-pick]")) pick.classList.remove("show");
+  if (!e.target.closest("#cfg") && !e.target.closest("[data-cfg]")) cfg.classList.remove("show");
+  // Same open/close etiquette; excluding the OPENING button itself is required or
+  // it closes itself on the way in (capture runs first).
+  if (!e.target.closest("#edit") && !e.target.closest("[data-edit]")) epop.classList.remove("show");
+}, true);
+
+let ctxLines = [];
+// 1M-window models set the gauge (Haiku 4.5 = 200K). The real window follows the
+// worker's model setting — this is a HINT; the measured token number above is what
+// counts. The bar exists to spot danger at a glance.
+const CTX_LIMITS = { "claude-opus-5":1e6, "claude-sonnet-5":1e6, "claude-fable-5":1e6,
+                     "claude-haiku-4-5":2e5 };
+const CTX_DEFAULT = 1e6;
+const ctxLimitOf = (line) =>
+  CTX_LIMITS[(workers.find((w) => w.line === line) || {}).settings?.model] ?? CTX_DEFAULT;
+const kfmt = (n) => n == null ? "—"
+  : n >= 1e6 ? (n/1e6).toFixed(1) + "M" : n >= 1000 ? (n/1000).toFixed(1) + "k" : String(n);
+
+document.getElementById("ctx").querySelector("h2")
+  .addEventListener("click", () => document.getElementById("ctx").classList.toggle("open"));
+
+function renderCtx(){
+  const body = document.getElementById("ctx-body");
+  const live = ctxLines.filter((c) => c.exists);
+  document.getElementById("ctx-sum").textContent =
+    live.length ? `${live.length} 条线有会话 · 最大 ${kfmt(Math.max(...live.map((c) => c.tokens || 0)))}` : "还没有会话";
+  body.innerHTML = ctxLines.map((c) => {
+    if (!c.exists){
+      // Memory carrier stated explicitly — "fresh session per card" is a design,
+      // not neglect, and the screen says so. (The origin shipped this branch with a
+      // brace-less if + const = a SyntaxError that would have killed the whole
+      // script; fixed in the port.)
+      const anch = c.anchor
+        ? `记忆载体=锚点档 ${esc(c.anchor)}` +
+          (c.anchor_mtime ? `(${new Date(c.anchor_mtime).toISOString().slice(5, 10)} 更新)` : "")
+        : "";
+      return `<div class="cl"><span class="nm" style="color:${lineColor(c.line)}">${esc(lineLabel(c.line))}</span>` +
+             `<span class="none">${c.no_session ? "每卡新会话 · " + (anch || "无锚点档") : "未开始过会话"}</span><span></span><span></span></div>`;
+    }
+    const lim = ctxLimitOf(c.line);
+    const pct = Math.min(100, Math.round((c.tokens || 0) / lim * 100));
+    const cls = pct >= 80 ? "bad" : pct >= 55 ? "warn" : "";
+    const lc = c.last_compact
+      ? `上次整理 ${kfmt(c.last_compact.pre)}→${kfmt(c.last_compact.post)}`
+      : (c.compactions ? "" : "未整理过");
+    return `<div class="cl">
+      <span class="nm" style="color:${lineColor(c.line)}">${esc(lineLabel(c.line))}</span>
+      <span class="bar ${cls}"><i style="width:${pct}%"></i></span>
+      <span class="num">${kfmt(c.tokens)} / ${kfmt(lim)} tok · ${c.messages} 条 · ${esc(lc)}</span>
+      <button data-ctx="${c.line}">整理上下文</button>
+    </div>`;
+  }).join("");
+}
+
+/** The immutable history, paged to the end. ⚠ Stops only when a page comes back
+ *  short; a cursor that fails to advance throws instead of looping forever. */
+async function loadTaskEvents(){
+  const out = [];
+  let after = 0;
+  for (;;) {
+    const page = await fetch(`/api/task-events?after=${after}&limit=50000`).then((x) => x.json());
+    const rows = page.events || [];
+    out.push(...rows);
+    if (rows.length < 50000) return out;
+    const next = Number(page.last_id || 0);
+    if (next <= after) throw new Error("task-events 分页没有前进");
+    after = next;
+  }
+}
+
+async function refresh(){
+  try{
+    const [r, mres, wres, cres, eres, ures] = await Promise.all([
+      fetch("/api/tasks?archived=false").then((x) => x.json()),
+      fetch("/api/meta").then((x) => x.json()),
+      fetch("/api/workers").then((x) => x.json()),
+      fetch("/api/context").then((x) => x.json()),
+      loadTaskEvents(),
+      fetch("/api/usage").then((x) => x.json()).catch(() => ({ cards: {} })),
+    ]);
+    ctxLines = cres.lines;
+    claimMisses = wres.claim_misses || [];
+    workers = wres.workers; LINES = wres.lines; MODELS = wres.models; EFFORTS = wres.efforts;
+    LINE_HINTS = wres.line_hints || {}; ROUTES = wres.routes || [];
+    RUNTIMES = wres.runtimes || []; MAXP = wres.max_parallel || 0;
+    DECOMP = wres.decompose_models || [];
+    if (r.server_now) skew = r.server_now - Date.now();
+    tasks = r.tasks; taskEvents = eres; usageByCard = (ures && ures.cards) || {};
+    meta = { ...mres, archived_count: r.archived_count, caps: r.caps || {} };
+    byId.clear(); for (const t of tasks) byId.set(t.id, t);
+    render(); renderRig(); renderCtx();
+  }catch(e){ live(false, "取数失败"); }
+}
+
+function live(on, txt){
+  document.getElementById("dot").className = "dot" + (on ? "" : " off");
+  document.getElementById("livetxt").textContent = txt;
+}
+
+document.addEventListener("click", async (e) => {
+  // ── Create goal + decompose
+  if (e.target.id === "goal-add"){
+    const ta = document.getElementById("goal-in");
+    const text = ta.value.trim();
+    if (!text) return;
+    const btn = e.target; btn.disabled = true; const lab = btn.textContent;
+    const [subject, ...rest] = text.split(String.fromCharCode(10));
+    try{
+      btn.textContent = "建目标…";
+      const g = await post("/api/goals", { subject, description: rest.join(String.fromCharCode(10)) , parentId: document.getElementById("goal-prev")?.value || null });
+      ta.value = "";
+      btn.textContent = "拆解中…";
+      const r = await post(`/api/goals/${g.task.id}/decompose`,
+                           { model: document.getElementById("goal-model").value });
+      await refresh();
+      alert(`目标 #${g.task.id} 拆出 ${r.count} 张子任务卡(${r.model})
+` + HOLD_HINT);
+    }catch(err){ alert("失败:" + err.message); }
+    finally{ btn.disabled = false; btn.textContent = lab; }
+    return;
+  }
+  const pin = e.target.closest("button[data-pin]");
+  if (pin){
+    pin.disabled = true;
+    try{ await post(`/api/tasks/${pin.dataset.pin}/pin`, { pinned: pin.dataset.on !== "1" }); }
+    catch(err){ alert("置顶失败:" + err.message); }
+    finally{ pin.disabled = false; await refresh(); }
+    return;
+  }
+
+  const dec = e.target.closest("button[data-dec]");
+  if (dec){
+    dec.disabled = true; const lab = dec.textContent; dec.textContent = "拆解中…";
+    try{
+      const r = await post(`/api/goals/${dec.dataset.dec}/decompose`,
+                           { model: (DECOMP[0] || {}).id });
+      await refresh();
+      alert(`拆出 ${r.count} 张子任务卡(${r.model})
+` + HOLD_HINT);
+    }catch(err){ alert("拆解失败:" + err.message); }
+    finally{ dec.disabled = false; dec.textContent = lab; }
+    return;
+  }
+
+  // ── Clicking a card = focus its stream
+  const cardEl = e.target.closest(".card[data-id]");
+  // ⚠ Everything NOT listed here turns into "card pressed = focus toggle", and
+  //   enumerations rot (measured: the line badge got eaten by this branch and
+  //   pressing it did nothing, invisibly, for a long time). One rule instead:
+  //   self-meaning elements carry data-stop — even when SELF_ACTING forgets them.
+  if (cardEl && !e.target.closest(SELF_ACTING)){
+    const id = Number(cardEl.dataset.id);
+    if (focusId === id){ focusId = null; relSet = new Set(); }
+    else {
+      focusId = id;
+      try{
+        const r = await (await fetch(`/api/tasks/${id}/related`)).json();
+        relSet = new Set(r.ids);
+      }catch{ relSet = new Set([id]); }
+    }
+    render();
+    return;
+  }
+  if (!cardEl && !e.target.closest(".goalbox") && !e.target.closest("#rig")
+      && !e.target.closest("#ctx") && !e.target.closest("#tl") && focusId != null){
+    focusId = null; relSet = new Set(); render(); return;
+  }
+
+  const badge = e.target.closest("[data-pick]");
+  if (badge){ openPick(badge, badge.dataset.pick); return; }
+
+  const as = e.target.closest("button[data-assign]");
+  if (as){
+    pick.classList.remove("show");
+    await post(`/api/tasks/${as.dataset.assign}/update`, { line: as.dataset.line || null });
+    await refresh(); return;
+  }
+
+  const cx = e.target.closest("button[data-ctx]");
+  if (cx){
+    const line = cx.dataset.ctx;
+    cx.disabled = true; const old = cx.textContent; cx.textContent = "整理中…";
+    try{
+      const r = await post(`/api/context/${line}/compact`, {});
+      alert(`${line} 整理完成
+${kfmt(r.before)} → ${kfmt(r.after)} tok
+
+它给自己写的保留指示:
+${r.memo}`);
+    }catch(err){ alert("整理失败:" + err.message); }
+    finally{ cx.disabled = false; cx.textContent = old; await refresh(); }
+    return;
+  }
+
+  const g = e.target.closest("button[data-cfg]");
+  if (g){ openCfg(g, g.dataset.cfg); return; }
+
+  const ed = e.target.closest("button[data-edit]");
+  if (ed){ openEdit(ed, ed.dataset.edit); return; }
+
+  const openDecision = e.target.closest("button[data-open-decision]");
+  if (openDecision){
+    const t = byId.get(Number(openDecision.dataset.openDecision));
+    if (t) openDecisionModal(t);
+    return;
+  }
+
+  // Structured final ruling: option confirmations always hand back to the original
+  // agent; "nothing further" is the only real close.
+  const decide = e.target.closest("button[data-decide]");
+  if (decide){
+    const id = Number(decide.dataset.decide), t = byId.get(id);
+    const key = decisionChoice.get(id);
+    const opt = t?.decision_package?.options?.find((o) => o.key === key);
+    if (!opt) return;
+    const incompleteApply = opt.kind === "apply" && !opt.ready;
+    const executedApply = opt.kind === "apply" && opt.ready;
+    const outcome = outcomeDraft.get(id) ||
+      document.querySelector(`[data-handoff-outcome="${id}"]:checked`)?.value || "";
+    const receipt = (document.querySelector(`textarea[data-handoff-receipt="${id}"]`)?.value || "").trim();
+    if (executedApply && !outcome){
+      alert("请先选择执行结果:成功或失败。");
+      return;
+    }
+    if (executedApply && !receipt){
+      alert("请先填写执行回执,再交回 Agent。");
+      return;
+    }
+    if (decide.dataset.armed !== "1"){
+      decide.dataset.armed = "1"; decide.dataset.orig = decide.textContent;
+      decide.classList.add("armed"); decide.textContent = incompleteApply
+        ? `再按=交回 Agent 补齐 ${opt.key}`
+        : executedApply && outcome === "failure" ? `再按=确认 ${opt.key} 执行失败并退回修正`
+        : executedApply ? `再按=确认 ${opt.key} 执行成功并附回执` : `再按=采用 ${opt.key}`;
+      setTimeout(() => { if (decide.dataset.armed === "1"){
+        decide.dataset.armed = ""; decide.classList.remove("armed");
+        syncDecision(decide.closest("[data-decision-scope]") || decide.closest(".card"), t);
+      } }, 4000);
+      return;
+    }
+    decide.dataset.armed = ""; decide.classList.remove("armed"); decide.disabled = true;
+    const extra = (document.querySelector(`textarea[data-vin="${id}"]`)?.value || "").trim();
+    try{
+      await post(`/api/tasks/${id}/resolve`, { verdict:"approve", resolved_by:"human",
+        selected_option:opt.key,
+        decision_action:incompleteApply ? "request_completion" : executedApply ? "confirm_executed" : "continue",
+        executed:executedApply, outcome:executedApply ? outcome : undefined,
+        receipt:executedApply ? receipt : undefined,
+        note:extra });
+      verdictDraft.delete(id); decisionChoice.delete(id); receiptDraft.delete(id); outcomeDraft.delete(id);
+      closeDecisionModal(); await refresh();
+    }catch(err){ alert("裁定失败:" + err.message); decide.disabled = false;
+      syncDecision(decide.closest("[data-decision-scope]") || decide.closest(".card"), t); }
+    return;
+  }
+
+  const finalClose = e.target.closest("button[data-final-close]");
+  if (finalClose){
+    const id = Number(finalClose.dataset.finalClose);
+    if (finalClose.dataset.armed !== "1"){
+      finalClose.dataset.armed = "1"; finalClose.dataset.orig = finalClose.textContent;
+      finalClose.classList.add("armed"); finalClose.textContent = "再按=确认无需后续";
+      setTimeout(() => { if (finalClose.dataset.armed === "1"){
+        finalClose.dataset.armed = ""; finalClose.classList.remove("armed");
+        finalClose.textContent = finalClose.dataset.orig || "无需后续 · 结案";
+      } }, 4000);
+      return;
+    }
+    finalClose.dataset.armed = ""; finalClose.classList.remove("armed"); finalClose.disabled = true;
+    try{
+      await post(`/api/tasks/${id}/resolve`, { verdict:"approve", note:"", resolved_by:"human" });
+      verdictDraft.delete(id); decisionChoice.delete(id); receiptDraft.delete(id); outcomeDraft.delete(id);
+      closeDecisionModal(); await refresh();
+    }catch(err){ alert("结案失败:" + err.message); finalClose.disabled = false; }
+    return;
+  }
+
+  const wk = e.target.closest("button[data-wk]");
+  if (wk){
+    wk.disabled = true;
+    try {
+      const r = await post(`/api/workers/${wk.dataset.wk}/${wk.dataset.op}`, {});
+      // "The process was not running" is not a failure. Silently succeeding looks
+      // like nothing happened — say WHAT happened (this path once threw 409 lies).
+      if (r && r.already_idle)
+        alert(`${wk.dataset.wk}: ${r.note}` + (r.released && r.released.length ? `
+在途 ${r.released.join(",")} 已收回未开始。` : ""));
+    }
+    catch(err){ alert("worker 操作失败:" + err.message); }
+    setTimeout(refresh, 400); return;
+  }
+
+  const b = e.target.closest("button[data-a]");
+  if (!b) return;
+  const id = b.dataset.id, a = b.dataset.a;
+  // ⭐ Two-press confirmation (close is final; archive mis-presses easily and the
+  //   two buttons are neighbors). First press = arm (color + caption change; 4s
+  //   without a second press disarms). No confirm() dialogs — dialogs train
+  //   "confirm" into a reflex; the armed state at least demands a conscious second
+  //   press, and disarming is the default direction (not pressing = nothing).
+  if ((a === "approve" || a === "archive") && b.dataset.armed !== "1") {
+    b.dataset.armed = "1";
+    b.dataset.orig = b.textContent;
+    b.classList.add("armed");
+    const hasNote = ((document.querySelector(`textarea[data-vin="${id}"]`) || {}).value || "").trim();
+    b.textContent = a === "archive" ? "再按=确认归档"
+                  : hasNote ? "再按=交回原 Agent" : "再按=确认结案";
+    setTimeout(() => { if (b.dataset.armed === "1") {
+      b.dataset.armed = ""; b.classList.remove("armed");
+      if (b.dataset.orig) b.textContent = b.dataset.orig;
+    } }, 4000);
+    return;
+  }
+  b.dataset.armed = ""; b.classList.remove("armed");
+  if (b.dataset.orig) b.textContent = b.dataset.orig;
+  b.disabled = true;
+  try{
+    if (a === "approve" || a === "reject"){
+      const ta = document.querySelector(`textarea[data-vin="${id}"]`);
+      const note = (ta?.value || "").trim();
+      await post(`/api/tasks/${id}/resolve`, { verdict: a, note, resolved_by: "human" });
+      verdictDraft.delete(Number(id));
+    }
+    // ⚠ These two are UNREACHABLE from the UI (no data-a="release"/"hold" keys exist
+    //   in this file — release moved to the CLI when execution rights were
+    //   consolidated). ⭐ Deliberately kept: the dispatcher is generic data-a → POST
+    //   (removing them shortens nothing), and if the ruling changes someday the
+    //   road is ready. Kept SILENTLY they mislead the next grep into "the UI has
+    //   release" — hence this note.
+    else if (a === "release") await post(`/api/tasks/${id}/release`, { released: true });
+    else if (a === "hold")    await post(`/api/tasks/${id}/release`, { released: false });
+    else if (a === "archive") await post(`/api/tasks/${id}/archive`, {});
+    await refresh();
+  }catch(err){ alert("操作失败:" + err.message); }
+  finally{ b.disabled = false; }
+});
+async function post(url, body){
+  const r = await fetch(url, { method:"POST", headers: WH,
+                               body: JSON.stringify(body) });
+  if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
+  return r.json();
+}
+
+// SSE: pushed on change only; heartbeat/lease countdowns are computed locally
+// (1s redraw, zero server load)
+const es = new EventSource("/api/events");
+es.onopen = () => live(true, "实时");
+es.onerror = () => live(false, "断线重连中");
+// ⭐ Event kinds are NOT enumerated here. Enumerated, every kind the server adds
+//   later silently stops arriving (measured: 8 of 16 subscribed). The server sends
+//   everything as `change`; the kind rides in data.type.
+es.addEventListener("change", refresh);
+// Worker stdout arrives per line; refreshing on all of it thrashes — throttle.
+let lastLogAt = 0;
+es.addEventListener("log", () => {
+  const t = Date.now();
+  if (t - lastLogAt < 1000) return;
+  lastLogAt = t; refresh();
+});
+
+refresh();
+setInterval(tick, 1000);        // running numbers update in place (no full redraw = open state survives)
+setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stale screen
+</script>
+</body>
+</html>

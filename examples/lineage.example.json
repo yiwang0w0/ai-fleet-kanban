@@ -1,0 +1,4 @@
+{
+  "_comment": "Line lineage: fork each worker line ONCE from a designated desktop conversation so it inherits memory. Copy to .data/lineage.json (gitignored - session ids are personal and must never enter the repo). Absent = no inheritance; the board runs fine.",
+  "engine": { "session": "00000000-0000-0000-0000-000000000000", "anchor": "docs/engine_anchor.md" }
+}

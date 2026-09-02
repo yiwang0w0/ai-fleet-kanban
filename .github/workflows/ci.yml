@@ -1,0 +1,66 @@
+# CI is a release gate on BOTH platforms (operator ruling R3, 2026-09-02):
+# ubuntu-latest is blocking, not advisory. The project was authored on Windows, so
+# Linux is exactly where the untested halves of every process.platform branch live —
+# an advisory Linux lane would rot into "always red, always ignored".
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  harness:
+    strategy:
+      fail-fast: false            # one platform's red must not hide the other's
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      # windows-latest pipes default to cp1252; the harnesses print CJK. Without
+      # this, codex-selftest dies of UnicodeEncodeError before its first assertion.
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24        # node:sqlite (DatabaseSync) — the store's engine
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Pure layers first: store, rulings, gates, prompt library.
+      - name: selftest (store, 316 assertions)
+        run: node tests/selftest.mjs
+      - name: decisiontest (rulings + handoff)
+        run: node tests/decisiontest.mjs
+      - name: gatetest (deliverable gate)
+        run: node tests/gatetest.mjs
+      - name: decomposetest (decompose prompt)
+        run: node tests/decomposetest.mjs
+      - name: gates_lib selftest (revision pin + budget)
+        run: python gates/gates_lib.py
+      - name: worker_loop codex selftest (pure functions)
+        run: python loops/worker_loop.py --codex-selftest
+
+      # Process layers: the real loop against an isolated board, then the supervisor.
+      - name: looptest (worker loop, end to end with a stub CLI)
+        run: node tests/looptest.mjs
+        env:
+          PYTHON: python
+      - name: "servertest (supervisor: stop reasons, backoff, refusal)"
+        run: node tests/servertest.mjs
+        env:
+          PYTHON: python
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # scan the whole history, not just the tip
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

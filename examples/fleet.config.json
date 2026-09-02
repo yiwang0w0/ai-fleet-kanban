@@ -1,0 +1,38 @@
+{
+  "_comment": "Fleet vocabulary. Copy to <repo>/fleet.config.json (or point BOARD_CONFIG at it). A missing file = built-in defaults; a broken file refuses startup.",
+  "lines": [
+    { "id": "engine", "hint": "代码/SQL/迁移" },
+    { "id": "design", "hint": "前端/UI/文案" },
+    { "id": "coord",  "hint": "协调/裁定/跑命令" }
+  ],
+  "_roles": "single-seat roles; add \"review\" only when its loop script exists under loops/ (reorg retired 2026-09-02)",
+  "roles": [],
+  "routes": ["default"],
+  "max_parallel": 3,
+  "default_agent": { "runtime": "claude", "model": "claude-opus-5", "effort": "high", "window": false },
+  "runtimes": [
+    { "id": "claude", "label": "Claude Code",
+      "models": [
+        { "id": "claude-opus-5",    "label": "Opus 5" },
+        { "id": "claude-sonnet-5",  "label": "Sonnet 5" },
+        { "id": "claude-haiku-4-5", "label": "Haiku 4.5" }
+      ],
+      "efforts": ["low", "medium", "high", "xhigh", "max"] },
+    { "id": "codex", "label": "Codex CLI",
+      "_comment": "reference seat (values measured on one deployment; an example, not an endorsement). Locked until release_env=1 AND cmd_env points at the CLI.",
+      "release_env": "BOARD_CODEX_RELEASED", "cmd_env": "BOARD_CODEX_CMD",
+      "models": [
+        { "id": "gpt-5.6-sol",         "label": "5.6-sol", "efforts": ["low", "medium", "high", "xhigh"] },
+        { "id": "gpt-5.3-codex-spark", "label": "Spark",   "efforts": ["xhigh"] }
+      ],
+      "efforts": ["low", "medium", "high", "xhigh"] }
+  ],
+  "decompose_models": [{ "id": "claude-opus-5", "label": "Opus 5" }],
+  "_language": "Natural language for GENERATED card text (subject/description/acceptance). Omit or null = the generator mirrors the board's own language. Set it to write cards in yours, e.g. \"English\" / \"日本語\".",
+  "language": null,
+  "_handoff": "Authorized local destinations for hand-applied ruling files. Only directories declared here are ever written; each target sets its own extension allowlist (omit = any) and admission name pattern (omit = four-digit serial, any extension). BOARD_HANDOFF_DIR alone synthesizes a single default target.",
+  "handoff_targets": [
+    { "id": "sql",  "label": "SQL 手交区", "dir": "C:/handoff/sql",  "exts": ["sql"] },
+    { "id": "docs", "label": "运维文档区",   "dir": "C:/handoff/docs", "name_pattern": "^[0-9]{4}[_-].+\\.(md|csv|pdf|cfg)$" }
+  ]
+}

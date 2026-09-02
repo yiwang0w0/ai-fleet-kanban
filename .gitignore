@@ -1,0 +1,26 @@
+# Runtime state — never enters the repository (threat model, iron rule)
+.data/
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets and local credentials — belt and suspenders on top of .data/
+board_token
+probe_conn
+*.pem
+*.key
+
+# Node / Python
+node_modules/
+__pycache__/
+*.pyc
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+
+# The operator's LOCAL fleet config (root only — examples/fleet.config.json stays
+# tracked). It names local directories (handoff targets); committing it would leak
+# one machine's layout into everyone's clone.
+/fleet.config.json
