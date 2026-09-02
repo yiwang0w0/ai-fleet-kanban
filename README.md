@@ -18,7 +18,7 @@ Each gate exists because a real incident demanded it. The docs open with inciden
 
 ## Status
 
-**v0.1.2.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, the worker loop, the gates and all eight harnesses (540+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). Since v0.1.1, driven by an independent review and a cold-machine walkthrough: the deliverable gate now **fails closed** when git is unmeasurable, handoff receipts verify the **landed bytes**, absolute attachment paths no longer disclose the host layout, and doctor/panel/QUICKSTART fixes from the walkthrough. Since v0.1.0: bundled operator skills for your Claude (coordinator seat · line ops · context/quota · authorization-gated line drafting).
+**v0.1.3.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, the worker loop, the gates and all eight harnesses (540+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md). New in v0.1.3: `examples/AGENTS.template.md` — the worker-repo constraint template (the scope-gate that keeps agents from overengineering, straight from the production deployment). Since v0.1.1: fail-closed deliverable gate, landed-bytes handoff receipts, layout-blind public paths, walkthrough fixes. Since v0.1.0: bundled operator skills for your Claude.
 
 This release ships the core board AND the governance gates together — a gateless launcher was never an option.
 
@@ -33,7 +33,7 @@ cli/       board.py (the sanctioned entry; no raw curl) · doctor · init
 watchers/  the two sentries (SSE event watch · board health watch)
 tests/     six harnesses (two more run as python selftests) — 500+ machine assertions across all eight; the CI is the product's spine
 docs/      QUICKSTART · OPERATE_WITH_CLAUDE · GLOSSARY (frozen vocabulary) · INCIDENTS (the scar manual)
-examples/  fleet config · mock runtime adapter · demo seeds
+examples/  fleet config · mock runtime adapter · demo seeds · worker-constraints template (the anti-overengineering scope gate)
 .claude/   skills auto-discovered by YOUR Claude Code (coordinator seat · add/propose lines · context window · pool/quota) — guardrails over existing entries, never new code
 ```
 

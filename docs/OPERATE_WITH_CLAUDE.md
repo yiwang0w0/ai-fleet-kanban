@@ -38,6 +38,12 @@
 把你的任务清单建成目标、让板拆解成可认领的卡。此后它还能**自行认领并执行**——
 你的 Claude 不只是书记员,也是一名 worker。
 
+顺手给**工作仓**装上执行约束:`examples/AGENTS.template.md` 是生产实害换来的
+worker 家规(范围闸门四问=防过度工程化、pathspec 提交、密钥禁区、范围外立卡)。
+让你的 Claude 把它安到工作仓根(Codex 读 `AGENTS.md`,Claude Code 读
+`CLAUDE.md`)并填好方括号——约束放在 worker 眼皮底下才生效,看板仓里的 skill
+管不到它。
+
 ## 三点五、随仓 skills:常用操作已经预置好了
 
 在本仓打开 Claude Code,`.claude/skills/` 下的 skill 会被自动发现:
