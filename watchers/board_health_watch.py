@@ -60,12 +60,49 @@ def stamp():
     return time.strftime("[%H:%M]")
 
 
+def _ts(iso):
+    """updated_at → epoch seconds; unparseable → None (garbage must not alarm)."""
+    try:
+        import datetime as _dt
+        return _dt.datetime.fromisoformat(str(iso).replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def review_stalled(now, newest_verdict, oldest_wait, threshold=2700):
+    """The review-stall verdict, BOTH conditions stale (measured on the origin
+    deployment: 3h idle + a card entering review 3 seconds before the probe =
+    certain false alarm under the old single condition — the reviewer was alive
+    and simply had had nothing to do).
+      newest_verdict : mtime of the newest verdict file (0 = none seen — review
+                       not deployed, never alarm; that polarity predates this fix)
+      oldest_wait    : the EARLIEST entered-review timestamp among waiting cards
+                       (0/None = unknown — don't alarm on what we can't date)"""
+    if not newest_verdict or not oldest_wait:
+        return False
+    return (now - newest_verdict > threshold) and (now - oldest_wait > threshold)
+
+
+if "--selftest" in sys.argv:
+    NOW = 1_000_000
+    cases = [
+        ("双钟皆陈旧 → 报", review_stalled(NOW, NOW - 3600, NOW - 3600) is True),
+        ("实测假阳性形: 判决旧但卡刚入审 3 秒 → 不报", review_stalled(NOW, NOW - 3 * 3600, NOW - 3) is False),
+        ("判决新鲜 → 不报(审阅活着)", review_stalled(NOW, NOW - 60, NOW - 3600) is False),
+        ("从无判决文件 = 审阅未部署 → 永不报", review_stalled(NOW, 0, NOW - 3600) is False),
+        ("卡时刻不可读 → 不报(垃圾不触警)", review_stalled(NOW, NOW - 3600, 0) is False),
+    ]
+    for name, o in cases:
+        print(("PASS " if o else "FAIL ") + name)
+    sys.exit(0 if all(o for _, o in cases) else 1)
+
 n = 0
 while True:
     n += 1
     problems = []
     lines_up = claimable = inprog = waiting = -1
     waiting_review = 0
+    review_oldest = 0
     try:
         d = get("/api/workers")
         rows = d if isinstance(d, list) else d.get("workers") or []
@@ -97,8 +134,11 @@ while True:
         # Stall detection watches ONLY waiting_for=review — confirm means "waiting
         # on the human", where an idle reviewer is CORRECT, not dead (measured
         # false alarm).
-        waiting_review = sum(1 for x in tasks if x.get("status") == "waiting"
-                             and x.get("waiting_for") == "review")
+        review_rows = [x for x in tasks if x.get("status") == "waiting"
+                       and x.get("waiting_for") == "review"]
+        waiting_review = len(review_rows)
+        review_oldest = min((t2 for t2 in (_ts(x.get("updated_at")) for x in review_rows)
+                             if t2), default=0)
         if refused:
             problems.append("门拒启动: " + ",".join(sorted(set(refused))))
         if claimable > 0 and lines_up <= 1 and inprog == 0:
@@ -109,13 +149,17 @@ while True:
     # Review playing dead: cards sit in review while the newest verdict file has
     # not moved for 45 minutes (measured: one card sat silent for 7 hours). The
     # carrier is the review line's verdict files; absent dir = review not deployed
-    # = skip, never alarm.
+    # = skip, never alarm. ⭐BOTH clocks must be stale (the verdict clock AND the
+    # oldest waiting card's clock) — the single-condition form fired a measured
+    # false alarm: 3h of idle made the newest verdict old, then a card entered
+    # review 3 seconds before the probe.
     try:
         if waiting_review > 0:
             vs = glob.glob(os.path.join(DATA, "review", "verdict-*.json"))
             newest = max((os.path.getmtime(v) for v in vs), default=0)
-            if newest and time.time() - newest > 2700:
-                problems.append(f"审阅疑似装死: {waiting_review} 卡待审但 "
+            if review_stalled(time.time(), newest, review_oldest):
+                problems.append(f"审阅疑似装死: {waiting_review} 卡待审(最旧已等 "
+                                f"{int((time.time() - review_oldest) / 60)} 分)且 "
                                 f"{int((time.time() - newest) / 60)} 分钟无新判决")
     except Exception:
         pass
