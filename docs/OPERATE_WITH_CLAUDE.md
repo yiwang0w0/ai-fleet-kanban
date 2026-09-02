@@ -10,6 +10,10 @@
 你的 Claude 会跑 `node core/server.mjs`、确认 `/health`,然后给你
 `http://127.0.0.1:47824`。面板给你的眼睛看;你的 Claude 走 API。
 
+**部署它的这个对话,从此就是你的主对话(协调席)**:改线、停线、查状态,
+直接在这里说,不用找别的入口。对话被压缩或关闭也不要紧——席位状态全在
+看板里,新开一个对话说「接管看板」即完成继任(`coordinator-seat` skill)。
+
 ## 二、挂上两哨
 
 > 「把两个哨兵挂到 persistent Monitor 下,持续盯着。」
@@ -36,11 +40,13 @@
 
 ## 三点五、随仓 skills:常用操作已经预置好了
 
-在本仓打开 Claude Code,`.claude/skills/` 下的三个 skill 会被自动发现:
+在本仓打开 Claude Code,`.claude/skills/` 下的 skill 会被自动发现:
 
 | skill | 覆盖的操作 | 要点 |
 |---|---|---|
+| `coordinator-seat` | 部署对话就任主对话(协调席) | 声明就任+挂两哨;继任=新对话说「接管看板」;双席治理=事故源 |
 | `add-line` | 添加/调整自动拉取线 | 唯一入口是 `fleet.config.json` 的 `lines[]`;改完必须重启 server |
+| `propose-lines` | 从你近期的会话起草线路 | **当轮明示授权才动**,只读检索+访谈确认,读了什么报账 |
 | `context-window` | 查各线上下文窗口占用 | `GET /api/context`;整理(compact)有缓存变冷的代价,默认不做 |
 | `pool-quota` | 查池状态与各卡 token 消耗 | `GET /api/pools` + `GET /api/usage`;池耗尽=状态不是故障,等恢复 |
 

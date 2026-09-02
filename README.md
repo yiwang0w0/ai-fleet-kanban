@@ -32,7 +32,7 @@ watchers/  the two sentries (SSE event watch · board health watch)
 tests/     six harnesses (two more run as python selftests) — 500+ machine assertions across all eight; the CI is the product's spine
 docs/      QUICKSTART · OPERATE_WITH_CLAUDE · GLOSSARY (frozen vocabulary) · INCIDENTS (the scar manual)
 examples/  fleet config · mock runtime adapter · demo seeds
-.claude/   skills auto-discovered by YOUR Claude Code (add a line · context window · pool/quota) — guardrails over existing entries, never new code
+.claude/   skills auto-discovered by YOUR Claude Code (coordinator seat · add/propose lines · context window · pool/quota) — guardrails over existing entries, never new code
 ```
 
 ## Try it
