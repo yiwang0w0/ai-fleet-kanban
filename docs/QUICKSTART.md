@@ -32,6 +32,12 @@ Doctor reads `fleet.config.json` (and `BOARD_PORT`/`BOARD_URL`, which override
 it), so after step 1 it probes the port you will actually use — its closing
 line even tells you where the port came from.
 
+It also runs your `claude --help` and compares it against the eleven flags the
+loops pass. **Re-run doctor after upgrading the CLI**: the harnesses cannot
+catch a renamed flag, because they drive a stub and a stub accepts anything. If
+this line goes red, the CLI on your machine and this board no longer agree, and
+a worker would fail at start time rather than at test time.
+
 ## 1 · Install your config (recommended)
 
 ```
