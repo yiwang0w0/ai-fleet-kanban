@@ -1,0 +1,18 @@
+{
+  "_comment": "Copy to core/verify_registry.json. Cards name a KEY from this file in their verify_cmd; the LOOP runs it and the output goes into the evidence. Cards never hold a command string — a worker that can write files could otherwise name its own script and have the loop run it, which is the execution right coming back through the side door.",
+  "_who": "Only the operator edits this file. Workers and the auto-reviewer can neither add keys nor change them; the reviewer will suggest a key it sees here, never invent one.",
+
+  "harness-all": ["node", "tests/selftest.mjs"],
+  "harness-server": ["node", "tests/servertest.mjs"],
+  "harness-review": ["node", "tests/reviewtest.mjs"],
+
+  "_page": "Front-end cards are the ones that cannot self-certify: no execution right means no machine output, so the machine-evidence gate correctly refuses them. These keys give the LOOP a way to produce that evidence. Point them at YOUR pages and YOUR assertions — one key per page is the intended shape. Needs a Chrome/Edge on the machine (doctor reports whether it found one).",
+  "page-board-renders": ["node", "examples/verify_page.mjs",
+    "--url", "http://127.0.0.1:47824",
+    "--expect", "AI 舰队看板",
+    "--expect-js", "document.querySelectorAll('.col').length >= 4",
+    "--no-console-errors",
+    "--wait-ms", "10000"],
+
+  "_page_note": "Assertions run against document.body.innerText (so <script>/<style> source never counts as page content) plus arbitrary JS expressions via --expect-js. --no-console-errors turns an uncaught exception into a red verification instead of a green one. Add --screenshot <path> to leave a picture a human can look at."
+}

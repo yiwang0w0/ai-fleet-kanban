@@ -167,6 +167,23 @@ await new Promise((resolve) => {
   });
 });
 
+// ── ⑥b browser (optional) — only front-end verification needs it ────────────
+// Not a failure when absent: most fleets never verify a page. But when a card
+// DOES touch the UI, this is the difference between machine evidence and "I
+// changed it, trust me" — so say whether it is available before someone needs it.
+{
+  const cands = [process.env.BOARD_BROWSER,
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter(Boolean);
+  const found = cands.find((p) => existsSync(p));
+  if (found) ok(`浏览器可用(${found.split(/[\\/]/).pop()})`, "前端卡可以用 examples/verify_page.mjs 产出机器证据");
+  else wr("没找到 Chrome/Edge", "只影响前端页面验证(examples/verify_page.mjs);其余功能不需要它。装一个,或设 BOARD_BROWSER");
+}
+
 // ── ⑦ second seat (optional) — only judged if the host says it exists ───────
 if (!process.env.BOARD_CODEX_CMD) {
   // Not a finding either way — but the native exe hides in a place PATH never

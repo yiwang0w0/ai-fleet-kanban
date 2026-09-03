@@ -98,6 +98,31 @@ worker 家规(范围闸门四问=防过度工程化、pathspec 提交、密钥�
 协调席 ack 后按钮下方的状态会变,做完标 done。**等了 5 分钟没人接手,状态会变成
 警告**——多半是哨没挂,这正是它要告诉你的事。
 
+## 二点四、让改前端的卡也能自证(v0.9)
+
+改前端的卡最难交付:worker 没有执行权,只能写「我改好了」,机器产出闸如实拦下它——
+卡在「零机器产出」上白空转一轮。缺的不是纪律,是**一条能产出机器证据的通道**。
+
+`examples/verify_page.mjs` 就是那条通道:用系统里已有的 Chrome/Edge(零依赖,Node 22
+内置 WebSocket 直接说 CDP),断言渲染后的页面。用法是把它**登记成验证键**——
+
+```
+// core/verify_registry.json(照 examples/verify_registry.example.json 抄)
+"page-board-renders": ["node", "examples/verify_page.mjs",
+  "--url", "http://127.0.0.1:47824",
+  "--expect", "AI 舰队看板",
+  "--expect-js", "document.querySelectorAll('.col').length >= 4",
+  "--no-console-errors"]
+```
+
+然后给卡挂 `verify_cmd: page-board-renders`。**循环**会代跑它,输出并进证据;红了机器
+直接打回,不烧模型。worker 自己拿不到这个键——「验证不采信被验证方」照旧。
+
+断言作用在 `document.body.innerText`(所以 `<script>` 里的源码不会被当成页面内容),
+外加任意 JS 表达式;`--no-console-errors` 让未捕获异常变成红色验证而不是绿色;
+`--screenshot` 留一张人能看的图。⚠ 它**等得到**异步渲染:页面保持活着轮询到断言成立
+(`chrome --dump-dom` 做不到——它在 load 那一刻取样,客户端渲染的数据还没回来)。
+
 ## 二点五、开自动审阅(v0.2)
 
 「等待中」堆的大多数东西有明摆着的判法,人再点一次头只是走过场。自动审阅替你
