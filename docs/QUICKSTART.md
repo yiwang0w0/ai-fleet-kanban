@@ -5,6 +5,13 @@ delivered with evidence, and closed by **your** ruling. First with a mock adapte
 (zero tokens), then with your real local CLI. Every step is a command you can
 paste; nothing here asks you to trust prose.
 
+**The short version (v0.6):** run doctor, start the board, open the panel — a
+**setup guide** sits at the top and walks you the rest of the way, one step at a
+time, telling you exactly what to do next until it says 配置完成. Every step is
+measured live, so it also walks BACKWARD: break something and the guide reopens
+at that step. The page below is the same walk, spelled out, for when you want to
+read ahead or work without the panel.
+
 ## 0 · What you need
 
 - **node ≥ 22.5** (24+ recommended — the store runs on `node:sqlite`)

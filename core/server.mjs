@@ -11,7 +11,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
 import { homedir } from "node:os";
@@ -101,6 +101,9 @@ if (existsSync(CONFIG_FILE)) {
 // gate and the workers' cwd; the board's own code stays anchored at CODE_ROOT.
 const REPO_ROOT = process.env.BOARD_REPO || (CFG.repo ? resolve(String(CFG.repo)) : CODE_ROOT);
 const CFG_GATED_SUBTREE = process.env.BOARD_GATED_SUBTREE || (CFG.gated_subtree ? String(CFG.gated_subtree) : "");
+// Snapshot of the deployment keys AS READ AT BOOT — the setup guide compares it
+// against the file on disk to answer "I edited the config, why nothing changed".
+const CFG_AT_BOOT = { port: CFG.port ?? null, repo: CFG.repo ?? null, gated_subtree: CFG.gated_subtree ?? null };
 // Migration hint: a config sitting where the OLD default looked (the work repo)
 // is silently ignored now — say so once, loudly, instead of wearing defaults.
 if (!process.env.BOARD_CONFIG && REPO_ROOT !== CODE_ROOT &&
@@ -402,6 +405,107 @@ const localIso = (ms) => { const d = new Date(ms), pad = (n) => String(n).padSta
 // here. Unknown values fall to the refusal side (a permission gate, so allowlist —
 // an unknown name passing through grows a ghost line in settings).
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// ── Setup guide (v0.6) ───────────────────────────────────────────────────────
+// Six steps to a working deployment, each one MEASURED here and now. States:
+//   done    — measured true
+//   todo    — measured false; `hint` says what to do, `action` offers the way
+//   blocked — an earlier decision is missing (say which), acting now is useless
+//   unknown — could not measure (git missing, unreadable file). NEVER "done":
+//             the whole product's polarity is that unmeasurable is not fine.
+/** The config as it is ON DISK right now (the process read its copy at boot). */
+function diskConfig() {
+  try { return JSON.parse(readFileSync(CONFIG_FILE, "utf8")); } catch { return null; }
+}
+/** Deployment keys changed on disk since boot → a restart is pending. Measured,
+ *  not remembered: this is the answer to "I edited the config, why nothing
+ *  changed" — only lines are hot-reloadable, port/repo/gated_subtree are not. */
+function configDrift() {
+  const d = diskConfig();
+  if (!d) return null;
+  const differs = ["port", "repo", "gated_subtree"]
+    .filter((k) => String(d[k] ?? "") !== String(CFG_AT_BOOT[k] ?? ""));
+  return differs.length ? differs : null;
+}
+
+function blessStep() {
+  if (!CFG_GATED_SUBTREE) {
+    const d = diskConfig();
+    if (d && d.gated_subtree)
+      return { state: "todo",
+               detail: `配置里已经写着 gated_subtree: "${d.gated_subtree}",但这个 server 是在那之前起的`,
+               hint: "重启 server 让它读到 —— 端口/工作仓/闸子树这三个键只在启动时读一次(加线才是免重启的)",
+               action: { type: "cmd", text: "node core/server.mjs" } };
+    return { state: "blocked",
+             detail: "还没决定闸住哪棵子树",
+             hint: '独立部署就写整棵树:在 fleet.config.json 里加 "gated_subtree": "."(生成的示例配置已经带了这一行,加完重启 server)' };
+  }
+  const revFile = join(store.DATA_DIR, "accepted_rev");
+  let head = null;
+  try {
+    const spec = CFG_GATED_SUBTREE === "." ? "" : CFG_GATED_SUBTREE;
+    head = execFileSync("git", ["-C", CODE_ROOT, "rev-parse", `HEAD:${spec}`],
+                        { encoding: "utf8", windowsHide: true }).trim();
+  } catch (e) {
+    return { state: "unknown", detail: `读不到 ${CFG_GATED_SUBTREE} 的树哈希(${String(e.message).slice(0, 60)})`,
+             hint: "看板目录得是一个 git 仓库 —— 源码闸就站在它上面" };
+  }
+  let accepted = null;
+  try { accepted = readFileSync(revFile, "utf8").trim(); } catch {}
+  if (!accepted)
+    return { state: "todo", detail: "还没有验收过任何版本", hint: "在看板目录里跑这一行,表示「这棵树我接受」",
+             action: { type: "cmd", text: "python cli/board.py bless" } };
+  if (accepted !== head)
+    return { state: "todo", detail: "代码变了,验收记录还停在旧版本(自动拉取会拒启,exit 3)",
+             hint: "看过改动后重新验收 —— 这不是故障,是闸在挡未验收的代码",
+             action: { type: "cmd", text: "python cli/board.py bless" } };
+  return { state: "done", detail: `已验收 ${CFG_GATED_SUBTREE} = ${accepted.slice(0, 12)}` };
+}
+
+function setupState() {
+  const c = store.counts(db);
+  const builtinIds = BUILTIN_CONFIG.lines.map((l) => l.id).join(",");
+  const custom = LINES.join(",") !== builtinIds;
+  const hasConfig = existsSync(CONFIG_FILE);
+  const steps = [
+    { key: "board", title: "看板已经起来了", state: "done",
+      detail: `你正在看它 —— 端口 ${PORT}` },
+    { key: "config", title: "有一份属于你的配置", ...(hasConfig
+        ? (() => { const drift = configDrift();
+                   return drift
+                     ? { state: "done", detail: `${CONFIG_FILE} —— ⚠ ${drift.join("/")} 改过了,这个 server 还在用启动时读到的值`,
+                         hint: "重启 server 让新值生效(这三个键只在启动时读;线是热的)",
+                         action: { type: "cmd", text: "node core/server.mjs" } }
+                     : { state: "done", detail: CONFIG_FILE }; })()
+        : { state: "todo", detail: "现在用的是内置缺省(线只有 alpha/coord)",
+            hint: "生成一份配置文件,之后线、端口、工作仓都写在里面;它被 gitignore,只属于这台机器",
+            action: { type: "api", method: "POST", path: "/api/setup/init-config", label: "生成配置文件" } }) },
+    { key: "lines", title: "定义你自己的线", ...(custom
+        ? { state: "done", detail: `线: ${LINES.join(" / ")}` }
+        : !hasConfig
+          ? { state: "blocked", detail: "先生成配置文件", hint: "线写在配置里,所以上一步先做" }
+          : { state: "todo", detail: `还是内置的 ${builtinIds}`,
+              hint: "用上面的「加线」框直接加(免重启),或让协调席看看你最近在干什么、替你起草",
+              action: { type: "quick", kind: "propose-lines", label: "让协调席替我起草线路" } }) },
+    { key: "bless", title: "验收这份代码(源码闸)", ...blessStep() },
+    { key: "sentry", title: "协调席在听", ...(sentries.size > 0
+        ? { state: "done", detail: `${sentries.size} 个哨连着 —— 板上的事会自动出现在那个对话里` }
+        : { state: "todo", detail: "没有哨连着:卡交付了、快捷指令按了,没人会被告知",
+            hint: "在看板目录开一个终端跑这行(让你的 Claude 挂在它的持续监视下最好)",
+            action: { type: "cmd", text: "python watchers/sse_watch.py" } }) },
+    { key: "cycle", title: "跑通一整轮", ...(c.done > 0
+        ? { state: "done", detail: `已经有 ${c.done} 张卡走完了全程` }
+        : (c.not_started + c.in_progress + c.waiting) > 0
+          ? { state: "todo", detail: "板上有卡,但还没有一张走完",
+              hint: "在「自动拉取」行按启动让线自己领;卡交付后会落到「等待中」等你裁定",
+              action: { type: "focus", target: "rig", label: "去「自动拉取」行" } }
+          : { state: "todo", detail: "板上还没有卡",
+              hint: "先种三张演示卡走一遍(不花 token),或在「目标」栏写下你真正的目标让它拆解",
+              action: { type: "cmd", text: "node examples/seed_demo.mjs" } }) },
+  ];
+  const doneN = steps.filter((s) => s.state === "done").length;
+  return { steps, done: doneN, total: steps.length, complete: doneN === steps.length };
+}
+
 const badLine = (res, line, allowed) => allowed.includes(line) ? false
   : (json(res, 400, { error: `未知的线名: ${line}`, allowed }), true);
 // ⭐ The value domain of the two DESTINATION columns (route / line). **One criterion,
@@ -1470,6 +1574,9 @@ function workerInfo(line) {
 // ── SSE: push on change only. Countdown/heartbeat freshness is computed client-
 //    side; no per-second broadcasting.
 const clients = new Set();
+// SSE clients that declared themselves sentries (watchers/sse_watch.py). A
+// subset of `clients` — emit() still broadcasts to everyone.
+const sentries = new Set();
 // ⚠ Receivers must NOT hand-maintain an event-type list — a type added later
 //   silently stops arriving (measured: the server emitted 16 kinds, the panel
 //   subscribed to 8; verdicts, lease reclaims, pins and reopens never arrived, and
@@ -1654,8 +1761,15 @@ const server = http.createServer(async (req, res) => {
       });
       res.write("retry: 2000\n\n");
       clients.add(res);
+      // ⭐ A sentry announces itself (`?as=sentry`) so "is the coordinator seat
+      //   actually listening" becomes MEASURABLE — the setup guide and the
+      //   request alarm both need it, and a panel tab is not a sentry. An older
+      //   sentry without the marker simply does not count as one: unknown falls
+      //   on the not-yet side, never on the "you're all set" side.
+      const isSentry = url.searchParams.get("as") === "sentry";
+      if (isSentry) sentries.add(res);
       const ka = setInterval(() => { try { res.write(": ka\n\n"); } catch {} }, 25000);
-      req.on("close", () => { clearInterval(ka); clients.delete(res); });
+      req.on("close", () => { clearInterval(ka); clients.delete(res); sentries.delete(res); });
       return;
     }
 
@@ -1689,6 +1803,23 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ── meta (the panel's bottom status line)
+    // ── v0.6 setup guide: the panel walks a first-time operator to a working
+    //    deployment. Every step is MEASURED on each request — never a stored
+    //    checkmark. So the guide walks BACKWARD too (delete the config, break
+    //    the bless, stop the sentry) instead of claiming a state that is gone,
+    //    and "cannot measure" is its own state, never "done".
+    if (m === "GET" && p === "/api/setup")
+      return json(res, 200, setupState());
+    // The ONLY one-button step: creating the config from the shipped example.
+    // Pure creation, no governance meaning, never overwrites — same act and same
+    // refusal as `node cli/init.mjs`.
+    if (m === "POST" && p === "/api/setup/init-config") {
+      if (existsSync(CONFIG_FILE))
+        throw store.err(store.ERR.CONFLICT, `${CONFIG_FILE} 已存在 —— 不覆盖(你编辑过的配置就是你的配置)`);
+      copyFileSync(join(CODE_ROOT, "examples", "fleet.config.json"), CONFIG_FILE);
+      console.log(`配置已生成: ${CONFIG_FILE}(从 examples/ 抄来)—— 改动 lines/port/repo 后重启生效;加线可免重启`);
+      return json(res, 201, { config_file: CONFIG_FILE, setup: setupState() });
+    }
     if (m === "GET" && p === "/api/meta") {
       return json(res, 200, {
         counts: store.counts(db),

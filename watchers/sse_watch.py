@@ -43,7 +43,10 @@ def emit(msg):
 
 
 def stream_once():
-    req = urllib.request.Request(BASE + "/api/events",
+    # ?as=sentry: announce what we are, so the board can MEASURE "is the
+    # coordinator seat listening" (the setup guide's step 5 and the shortcut
+    # request alarm both read it). A panel tab is not a sentry.
+    req = urllib.request.Request(BASE + "/api/events?as=sentry",
                                  headers={"Accept": "text/event-stream"})
     with urllib.request.urlopen(req, timeout=None) as r:
         emit(f"sse 已接上 {BASE}/api/events(v5·无事件名单)")

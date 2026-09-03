@@ -228,6 +228,26 @@
   button[data-a="archive"]{min-width:7.5em}
   button[data-final-close]{min-width:9.5em}
   button[data-decide]{min-width:14em}
+  /* Setup guide: the first thing a new operator sees, and it disappears into a
+     single line once the deployment measures complete. */
+  .guide{margin:8px 14px 4px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:12.5px}
+  .guide .gh{display:flex;gap:8px;align-items:center;padding:8px 12px;cursor:pointer}
+  .guide .gh b{font-size:13px}
+  .guide .gp{color:var(--dim);font-variant-numeric:tabular-nums}
+  .guide .gsteps{border-top:1px solid var(--line);padding:4px 0}
+  .guide .gs{display:grid;grid-template-columns:20px 1fr;gap:8px;padding:5px 12px;align-items:start}
+  .guide .gs .mk{text-align:center}
+  .guide .gs.done{color:var(--dim)}
+  .guide .gs.now{background:color-mix(in srgb,var(--ok) 7%,transparent);border-left:2px solid var(--ok);padding-left:10px}
+  .guide .gs.blocked{color:var(--dim)}
+  .guide .gs .ti{font-weight:600}
+  .guide .gs.done .ti{font-weight:400}
+  .guide .gs .de{color:var(--dim)}
+  .guide .gs .hi{margin-top:2px}
+  .guide .gs .act{margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .guide code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:2px 6px;
+              font:12px ui-monospace,Consolas,monospace;user-select:all}
+  .guide .why{color:var(--dim2);font-size:11.5px;margin-top:3px}
   .quick{display:flex;gap:6px;align-items:center;padding:2px 14px 8px;font-size:12px;flex-wrap:wrap}
   .quick .lbl{color:var(--dim)}
   #quick-list{flex-basis:100%;display:flex;flex-direction:column;gap:2px}
@@ -344,6 +364,7 @@
   <span class="note" id="task-find-note" aria-live="polite">输入号码后,该卡会临时置于所属栏最上方</span>
 </form>
 
+<div class="guide" id="guide" hidden></div>
 <div class="rig" id="rig"></div>
 <!-- v0.4: add a line from the panel — static markup on purpose: #rig is
      re-rendered on every refresh and would erase an in-progress entry. -->
@@ -2181,7 +2202,7 @@ async function loadTaskEvents(){
 
 async function refresh(){
   try{
-    const [r, mres, wres, cres, eres, ures, qres] = await Promise.all([
+    const [r, mres, wres, cres, eres, ures, qres, sres] = await Promise.all([
       fetch("/api/tasks?archived=false").then((x) => x.json()),
       fetch("/api/meta").then((x) => x.json()),
       fetch("/api/workers").then((x) => x.json()),
@@ -2189,8 +2210,10 @@ async function refresh(){
       loadTaskEvents(),
       fetch("/api/usage").then((x) => x.json()).catch(() => ({ cards: {} })),
       fetch("/api/requests?open=1").then((x) => x.json()).catch(() => ({ requests: [] })),
+      fetch("/api/setup").then((x) => x.json()).catch(() => null),
     ]);
     renderQuick(qres.requests || []);
+    renderGuide(sres);
     ctxLines = cres.lines;
     claimMisses = wres.claim_misses || [];
     workers = wres.workers; LINES = wres.lines; MODELS = wres.models; EFFORTS = wres.efforts;
@@ -2455,6 +2478,71 @@ async function post(url, body){
   if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
   return r.json();
 }
+
+// v0.6: the setup guide. Every step's state is MEASURED by the server on each
+// refresh, so this walks backward as readily as forward — delete the config or
+// break the bless and the guide reopens at that step. Only the FIRST unfinished
+// step is expanded: "what do I do now" must have exactly one answer.
+let guideOpen = null;   // null = follow completeness; true/false = the operator's choice
+function renderGuide(su){
+  const el = document.getElementById("guide");
+  if (!el || !su || !su.steps) return;
+  el.hidden = false;
+  const open = guideOpen === null ? !su.complete : guideOpen;
+  const MARK = { done: "✓", todo: "▸", blocked: "·", unknown: "?" };
+  const firstOpen = su.steps.find((s) => s.state !== "done");
+  const head = su.complete
+    ? `<b>配置完成 ✓</b><span class="gp">${su.done}/${su.total} —— 板已经可以正常用了</span>`
+    : `<b>上手引导</b><span class="gp">${su.done}/${su.total} 完成 · 下一步:${esc(firstOpen ? firstOpen.title : "")}</span>`;
+  const body = !open ? "" : `<div class="gsteps">` + su.steps.map((s) => {
+    const isNow = firstOpen && s.key === firstOpen.key;
+    const cls = s.state === "done" ? "done" : isNow ? "now" : s.state === "blocked" ? "blocked" : "";
+    let act = "";
+    if (isNow && s.action){
+      const a = s.action;
+      if (a.type === "api")
+        act = `<button class="pri" data-guide-api="${esc(a.path)}">${esc(a.label || "执行")}</button>`;
+      else if (a.type === "quick")
+        act = `<button data-guide-quick="${esc(a.kind)}">${esc(a.label || "交给协调席")}</button>`;
+      else if (a.type === "focus")
+        act = `<button data-guide-focus="${esc(a.target)}">${esc(a.label || "带我去")}</button>`;
+      else if (a.type === "cmd")
+        act = `<code>${esc(a.text)}</code><button data-guide-copy="${esc(a.text)}">复制</button>`;
+    }
+    // ⭐ bless is deliberately NOT a button: a one-click accept would make the
+    //    source gate accept code nobody looked at, which is the one thing it
+    //    exists to prevent. Say so, right where the button would have been.
+    const why = (isNow && s.key === "bless")
+      ? `<div class="why">这一步没有一键按钮:验收=你说「这棵树我看过、我接受」。按钮替你点头,闸就白设了。</div>` : "";
+    return `<div class="gs ${cls}">
+      <span class="mk">${MARK[s.state] || "·"}</span>
+      <div><span class="ti">${esc(s.title)}</span>${s.detail ? ` <span class="de">— ${esc(s.detail)}</span>` : ""}
+        ${isNow && s.hint ? `<div class="hi">${esc(s.hint)}</div>` : ""}
+        ${act ? `<div class="act">${act}</div>` : ""}${why}</div></div>`;
+  }).join("") + `</div>`;
+  el.innerHTML = `<div class="gh" id="guide-head">${head}<span class="gp" style="margin-left:auto">${open ? "收起" : "展开"}</span></div>${body}`;
+}
+document.getElementById("guide").addEventListener("click", async (e) => {
+  const head = e.target.closest("#guide-head");
+  if (head){ guideOpen = !(document.querySelector("#guide .gsteps")); await refresh(); return; }
+  const api = e.target.closest("[data-guide-api]");
+  const quick = e.target.closest("[data-guide-quick]");
+  const focus = e.target.closest("[data-guide-focus]");
+  const copy = e.target.closest("[data-guide-copy]");
+  try {
+    if (api){ api.disabled = true; await post(api.dataset.guideApi, {}); await refresh(); }
+    else if (quick){ quick.disabled = true; await post("/api/requests", { kind: quick.dataset.guideQuick, params: { days: 14, authorized: true } }); await refresh(); }
+    else if (focus){
+      const t = document.getElementById(focus.dataset.guideFocus) || document.getElementById("rig");
+      t?.scrollIntoView({ behavior: "smooth", block: "center" });
+      t?.animate?.([{ outline: "2px solid var(--ok)" }, { outline: "2px solid transparent" }], { duration: 1600 });
+    }
+    else if (copy){
+      try { await navigator.clipboard.writeText(copy.dataset.guideCopy); copy.textContent = "已复制"; }
+      catch { copy.textContent = "复制失败,手动选中"; }
+    }
+  } catch (err) { alert("这一步没能完成:" + err.message); await refresh(); }
+});
 
 // v0.5: shortcut requests. Kinds are the server's closed domain; the seat
 // executes them (coordinator-seat skill) and closes the loop with ack/done.

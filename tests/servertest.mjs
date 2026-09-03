@@ -971,6 +971,97 @@ try {
     B.kill();
   }
 
+  // ══ §S the setup guide — every step MEASURED, never a stored checkmark ══════
+  {
+    console.log(NL + "[§S 上手引导(逐步实测·可倒退·不可测≠已完成)]");
+    const DS = mkdtempSync(join(tmpdir(), "servertest-s-"));
+    const CFGS = join(DS, "fleet.config.json");
+    const B = await mk({ env: { BOARD_CONFIG: CFGS, BOARD_GATED_SUBTREE: "" } });
+    const stepOf = async (key) => {
+      const su = (await B.api("GET", "/api/setup")).body;
+      return { su, s: (su.steps || []).find((x) => x.key === key) };
+    };
+    const s0 = await stepOf("board");
+    ok("S1 全新部署:板=done,配置=todo(带一键动作),线=blocked(等配置),哨=todo,一轮=todo",
+       s0.s.state === "done" &&
+       s0.su.steps.find((x) => x.key === "config").state === "todo" &&
+       s0.su.steps.find((x) => x.key === "config").action?.path === "/api/setup/init-config" &&
+       s0.su.steps.find((x) => x.key === "lines").state === "blocked" &&
+       s0.su.steps.find((x) => x.key === "sentry").state === "todo" &&
+       s0.su.steps.find((x) => x.key === "cycle").state === "todo" && s0.su.complete === false,
+       `done=${s0.su.done}/${s0.su.total}`);
+    ok("S2 未设 gated_subtree → 验收步 blocked 并点名要写哪个键(不是 done)",
+       (() => { const b = s0.su.steps.find((x) => x.key === "bless");
+                return b.state === "blocked" && /gated_subtree/.test(b.hint || ""); })(), "");
+    const init1 = await B.api("POST", "/api/setup/init-config");
+    const init2 = await B.api("POST", "/api/setup/init-config");
+    const afterInit = await stepOf("config");
+    ok("S3 ⭐一键生成配置 201 且当场落盘;重复 409(不覆盖你编辑过的配置)",
+       init1.status === 201 && init2.status === 409 && existsSync(CFGS) &&
+       afterInit.s.state === "done", `${init1.status}/${init2.status}`);
+    // The measured trap: the example config carries gated_subtree, but the
+    // deployment keys are read ONCE at boot — so right after init-config the
+    // bless step must say "restart", not "you never decided" (a browser walk of
+    // the guide got stuck exactly here).
+    const afterBless = (await stepOf("bless")).s;
+    ok("S3b ⭐生成配置后:验收步不再说「没决定」,而是「配置里有了,但 server 是在那之前起的 → 重启」",
+       afterBless.state === "todo" && /server 是在那之前起的/.test(afterBless.detail || "") &&
+       /server\.mjs/.test(afterBless.action?.text || ""), `${afterBless.state} ${(afterBless.detail || "").slice(0, 30)}`);
+    const cfgDrift = (await stepOf("config")).s;
+    ok("S3c 配置步同时报出漂移:磁盘上的部署键与本进程启动时读到的不一致 → 提示重启",
+       cfgDrift.state === "done" && /改过了/.test(cfgDrift.detail || ""), (cfgDrift.detail || "").slice(-30));
+    ok("S4 ⭐引导会倒退:删掉配置文件后,同一个端点又报 todo(状态是测出来的,不是记下来的)",
+       await (async () => { rmSync(CFGS, { force: true }); return (await stepOf("config")).s.state === "todo"; })(), "");
+    B.kill();
+
+    // A board whose gate subtree points at a path git cannot resolve: the step
+    // must read "unknown", never "done" — unmeasurable is not fine.
+    const C = await mk({ env: { BOARD_GATED_SUBTREE: "no-such-subtree-here" } });
+    const cu = (await C.api("GET", "/api/setup")).body.steps.find((x) => x.key === "bless");
+    ok("S5 ⭐子树测不出来 → unknown(而不是 done):不可测不算通过",
+       cu.state === "unknown", `state=${cu.state} detail=${(cu.detail || "").slice(0, 40)}`);
+    C.kill();
+
+    // Sentry presence is measured from the SSE connection that declares itself.
+    const D = await mk({ env: { BOARD_GATED_SUBTREE: "." } });
+    const before = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "sentry");
+    const ctl = new AbortController();
+    const streamed = fetch(`${D.BASE}/api/events?as=sentry`, { signal: ctl.signal })
+      .then((r) => r.body.getReader().read()).catch(() => null);
+    await streamed;
+    const during = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "sentry");
+    ctl.abort();
+    await sleep(400);
+    const after = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "sentry");
+    ok("S6 ⭐哨在听是测出来的:接上 ?as=sentry → done;断开 → 回到 todo",
+       before.state === "todo" && during.state === "done" && after.state === "todo",
+       `${before.state} → ${during.state} → ${after.state}`);
+    // The bless step on a real git tree with no accepted_rev yet: todo + the命令.
+    const bl = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "bless");
+    ok("S7 验收步给的是命令而不是按钮(一键验收 = 闸自己给自己放行)",
+       ["todo", "done"].includes(bl.state) &&
+       (bl.state === "done" || /board\.py bless/.test(bl.action?.text || "")), `state=${bl.state}`);
+    // The cycle step tracks real progress: no cards → cards → one done.
+    const cy0 = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "cycle");
+    const idS = (await D.api("POST", "/api/tasks", { subject: "s-card", line: LINE, humanGate: false })).body.task.id;
+    const cy1 = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "cycle");
+    await D.api("POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
+    await D.api("POST", `/api/tasks/${idS}/report`, { worker: "alpha", outcome: "done", evidence: "证据" });
+    await D.api("POST", `/api/tasks/${idS}/resolve`, { verdict: "approve", note: "", resolved_by: "human", allow_uncommitted: true });
+    const cy2 = (await D.api("GET", "/api/setup")).body;
+    ok("S8 一轮:无卡 → 有卡未走完 → 有 done 卡时该步完成",
+       cy0.state === "todo" && /还没有卡/.test(cy0.detail || "") &&
+       cy1.state === "todo" && /还没有一张走完/.test(cy1.detail || "") &&
+       cy2.steps.find((x) => x.key === "cycle").state === "done",
+       `${cy0.detail} | ${cy1.detail}`);
+    D.kill();
+    // The panel consumes it (source-shape pin) and refuses a one-click bless.
+    const panelSrc2 = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
+    ok("S9 面板消费 /api/setup,且在验收步明写「没有一键按钮」的理由",
+       /\/api\/setup/.test(panelSrc2) && /renderGuide/.test(panelSrc2) && /这一步没有一键按钮/.test(panelSrc2), "");
+    try { rmSync(DS, { recursive: true, force: true }); } catch {}
+  }
+
 } catch (e) {
   console.error("harness itself fell over:", e);
   fail++;
