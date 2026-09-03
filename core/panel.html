@@ -220,6 +220,18 @@
          border:1px solid var(--line);background:transparent;color:var(--fg)}
   button:hover{background:var(--line)}
   button.pri{border-color:color-mix(in srgb,var(--ok) 55%,transparent);color:var(--ok)}
+  /* Two-press buttons RESERVE their armed width at rest (em-sized to the longest
+     armed caption), so arming changes color and words but never geometry — a
+     deployment reported the arm-time growth itself as the defect, not only the
+     second press missing. armSwap() still pins as a backstop for odd fonts. */
+  button[data-a="approve"]{min-width:9.5em}
+  button[data-a="archive"]{min-width:7.5em}
+  button[data-final-close]{min-width:9.5em}
+  button[data-decide]{min-width:14em}
+  .line-add{display:flex;gap:6px;align-items:center;padding:4px 14px 8px;font-size:12px;flex-wrap:wrap}
+  .line-add input{width:11em}
+  .line-add .note.ok{color:var(--ok)} .line-add .note.bad{color:var(--warn)}
+  .tag.offrig{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);border:1px dashed var(--warn)}
   button.danger{border-color:color-mix(in srgb,var(--bad) 55%,transparent);color:var(--bad)}
 
   .rig{display:flex;gap:7px;flex-wrap:wrap;padding:9px 16px;border-bottom:1px solid var(--line);
@@ -329,6 +341,15 @@
 </form>
 
 <div class="rig" id="rig"></div>
+<!-- v0.4: add a line from the panel — static markup on purpose: #rig is
+     re-rendered on every refresh and would erase an in-progress entry. -->
+<form class="line-add" id="line-add" autocomplete="off">
+  <label for="line-add-id">加线</label>
+  <input id="line-add-id" placeholder="线名(小写/数字/-_)" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{0,31}" required>
+  <input id="line-add-hint" placeholder="一句用途(可选)" maxlength="80">
+  <button type="submit">加入</button>
+  <span class="note" id="line-add-note" aria-live="polite">写入配置即生效,不用重启</span>
+</form>
 <div class="pick" id="pick"></div>
 <div class="cfg" id="cfg"></div>
 <!-- The edit popup borrows class="cfg" WHOLESALE (no new visual language = zero new
@@ -687,6 +708,13 @@ function cardParts(t){
   if (t.attempts > 0){
     const hot = t.attempts >= t.max_attempts ? " hot" : "";
     meta2.push(`<span class="att${hot}">尝试 ${t.attempts}/${t.max_attempts}</span>`);
+    // ⭐ In progress, but by a worker that is NOT a running supervised slot —
+    //   a hand-run `--once`, a coordinator claiming with board.py, an outside
+    //   process. Not forbidden; made VISIBLE, because the rig row says
+    //   "stopped" while the card moves, and an operator reading the rig has no
+    //   other way to know (a deployment hit exactly this and called it a bug).
+    if (t.status === "in_progress" && t.worker && !liveWorkerNames().has(t.worker))
+      meta2.push(`<span class="tag offrig" title="持卡的 worker「${esc(t.worker)}」不是任何在跑的自动拉取槽 —— 这张卡在板外被推进(手动 --once / CLI 认领 / 外部进程)。预算·阶梯·账本只在自动拉取里存在">板外在跑</span>`);
   }
   // ⭐ What this card has actually burned, on its face. 输入+输出 is the money side;
   //   缓存读 rides cheap and is shown apart so a big number is readable as "warm
@@ -1753,6 +1781,14 @@ const set = (id, v) => { document.getElementById(id).textContent = v == null ? "
 const fmtUp = (s) => s < 3600 ? Math.floor(s/60)+"m" : Math.floor(s/3600)+"h"+Math.floor((s%3600)/60)+"m";
 
 let workers = [], LINES = [], LINE_HINTS = {}, ROUTES = [], claimMisses = [];
+/** Worker names of every RUNNING supervised slot (slot 1 = the line name,
+ *  slot k = line@k — the server's slotKey, mirrored). */
+function liveWorkerNames(){
+  const s = new Set();
+  for (const w of workers) for (const sl of (w.slots || []))
+    if (sl.running) s.add(sl.slot <= 1 ? w.line : `${w.line}@${sl.slot}`);
+  return s;
+}
 
 function renderRig(){
   if (cfg.classList.contains("show")) return;   // don't redraw while settings are open (sliders vanish mid-drag)
@@ -2399,6 +2435,30 @@ async function post(url, body){
   if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
   return r.json();
 }
+
+// v0.4: add a line from the panel. The server validates, persists to the
+// config file and rebuilds its registry; the rig picks the new line up on the
+// next refresh (it reads /api/workers.lines every time — nothing is cached).
+document.getElementById("line-add").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const idEl = document.getElementById("line-add-id");
+  const hintEl = document.getElementById("line-add-hint");
+  const note = document.getElementById("line-add-note");
+  const id = idEl.value.trim(), hint = hintEl.value.trim();
+  if (!id) return;
+  note.className = "note";
+  note.textContent = "写入中…";
+  try {
+    const r = await post("/api/config/lines", { id, hint });
+    note.className = "note ok";
+    note.textContent = `已加入线「${r.line.id}」—— 配置已写盘,自动拉取行可直接启动`;
+    idEl.value = ""; hintEl.value = "";
+    await refresh();
+  } catch (err) {
+    note.className = "note bad";
+    note.textContent = "加线失败:" + err.message;
+  }
+});
 
 // SSE: pushed on change only; heartbeat/lease countdowns are computed locally
 // (1s redraw, zero server load)

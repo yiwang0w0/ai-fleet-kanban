@@ -232,8 +232,19 @@ def main():
             for ln in names:
                 st, dd = call("POST", f"/api/workers/{ln}/{sub}", {})
                 print(f"  {ln:8s} {sub} -> {st} {json.dumps(dd, ensure_ascii=False)[:90]}")
+        elif sub == "add":
+            # v0.4: add a line WITHOUT a restart — the server persists it to the
+            # config file and rebuilds its registry. The hint travels via --file
+            # (CJK on argv is U+FFFD on Windows — the same rule as every other
+            # text field here); a missing --file = no hint.
+            if tgt == "all": sys.exit("lines add <线名> [--file hint.txt]")
+            hint = readfile(fp).strip() if fp else ""
+            st, dd = call("POST", "/api/config/lines", {"id": tgt, "hint": hint})
+            if st >= 400: die(st, dd)
+            print(f"已加线 {dd['line']['id']}" + (f"({dd['line']['hint']})" if dd['line'].get('hint') else "")
+                  + f" —— 现有线: {'/'.join(dd['lines'])}(已写入配置,无需重启)")
         else:
-            sys.exit("lines status | lines start <线|all> | lines stop <线|all>")
+            sys.exit("lines status | lines start <线|all> | lines stop <线|all> | lines add <线名> [--file hint.txt]")
 
     elif cmd == "edit":
         # The write-path for card faces. Every time a ruling needed to be carried

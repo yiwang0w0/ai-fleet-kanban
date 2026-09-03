@@ -265,12 +265,10 @@ const db = store.open();
 
 // ── Worker supervision: one loop child process per line; the panel's switches
 //    drive these.
-const LINES = CFG.lines.map((l) => String(l.id));
 // Single-seat roles (auto-review, re-orchestration). They join the supervised set
 // but NOT LINES (= the claim routing/context unit): they claim no cards and hold no
 // persistent session. Gated on config AND on their loop scripts existing.
 const ROLES = (CFG.roles || []).filter((r) => ["review"].includes(r));
-const SUPERVISED = [...LINES, ...ROLES];
 
 // ⭐ The line menu is BUILT from config (never copied into prose). A hand-copied
 //   list once dropped one line in two places at once — the decomposition model
@@ -278,7 +276,51 @@ const SUPERVISED = [...LINES, ...ROLES];
 //   line. Add a line in config and the name shows up everywhere by construction.
 //   The menu itself is built in decompose_lib.js (one definition, and the tested
 //   one) — a second copy here is exactly how the two-places-one-fix rot starts.
-const LINE_HINT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.hint || ""]));
+//
+// v0.4: the registry is REBUILDABLE, not frozen at boot. Every consumer reads
+// these bindings at call time (badRoutable, the decompose menu, the reconciler,
+// /api/workers), and per-line runtime state is lazy (settingsOf / slotsOf look
+// up by name) — so adding a line is: persist to the config, rebuild, announce.
+// No restart, no dropped SSE clients, no in-flight worker touched.
+let LINES, SUPERVISED, LINE_HINT;
+function rebuildLines() {
+  LINES = CFG.lines.map((l) => String(l.id));
+  SUPERVISED = [...LINES, ...ROLES];
+  LINE_HINT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.hint || ""]));
+}
+rebuildLines();
+
+// Line ids are machine contracts: the same shape badLine's route regex admits,
+// and renaming is deliberately NOT offered — cards reference the id, a rename
+// would orphan them. Removal is not offered either (running slots, cards on the
+// line); an unused line costs nothing.
+const LINE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+/** Add a line: validate → persist to the config file (atomic) → rebuild → the
+ *  caller announces. Throws store.err on refusal (unknown/duplicate/role/shape). */
+function addLine(idRaw, hintRaw) {
+  const id = String(idRaw ?? "").trim();
+  const hint = String(hintRaw ?? "").trim();
+  if (!LINE_ID_RE.test(id))
+    throw store.err(store.ERR.BAD_INPUT, `线名只允许小写字母/数字/-/_,1-32 位,且以字母或数字开头 —— 收到 ${JSON.stringify(id)}`);
+  if (LINES.includes(id) || ROLES.includes(id) || ["review"].includes(id))
+    throw store.err(store.ERR.CONFLICT, `线 ${id} 已存在(或与角色座席同名)`);
+  if (hint.length > 80)
+    throw store.err(store.ERR.BAD_INPUT, "hint 最多 80 字");
+  // Persist FIRST: a line that exists in memory but not on disk would vanish on
+  // the next restart with every card on it stranded on a name nobody claims.
+  let onDisk = {};
+  if (existsSync(CONFIG_FILE)) onDisk = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));   // broken = throws = refuse
+  const lines = Array.isArray(onDisk.lines) && onDisk.lines.length
+    ? onDisk.lines : BUILTIN_CONFIG.lines.map((l) => ({ ...l }));
+  lines.push(hint ? { id, hint } : { id });
+  const next = { ...onDisk, lines };
+  const tmp = CONFIG_FILE + ".tmp";
+  writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n", "utf8");
+  renameSync(tmp, CONFIG_FILE);
+  CFG = { ...CFG, lines };     // never mutate BUILTIN_CONFIG through the alias
+  rebuildLines();
+  return { id, hint };
+}
 
 const workers = new Map();   // slotKey -> { line, slot, proc, startedAt, route, log: [] }
 // Parallel slots: slot 1's worker name = the line name itself (fully compatible
@@ -1300,6 +1342,15 @@ async function reconcilePools(reason = "timer") {
   if (poolReconciling) return poolReconciling;
   poolReconciling = (async () => {
     const now = Date.now();
+    // ⭐ Snapshot what a pass can change. The pass used to emit pool.changed
+    //   UNCONDITIONALLY at its end — on the timer that is one broadcast every
+    //   reconcile tick with nothing changed, and the SSE sentry prints a line
+    //   per event (a deployment filed it: "pool.changed every 5 seconds drowns
+    //   the sentry"). "changed" now means changed: pools or live slots differ
+    //   from the snapshot, or the pass was explicitly requested (non-timer).
+    const poolSnap = () => JSON.stringify({ pools: poolState,
+      live: [...workers.entries()].filter(([, w]) => w.proc || w.echo).map(([k]) => k).sort() });
+    const before = poolSnap();
     // `until` is not "assume fine after this" — it is the time of the next MINIMAL
     // PROBE. Success unlocks; failure pushes to the next hold window.
     for (const p of POOL_IDS) {
@@ -1355,7 +1406,8 @@ async function reconcilePools(reason = "timer") {
         console.log(`池调度: ${line} → ${plan.map((a) => a.runtime).join("/")}`);
       } catch (e) { console.error(`池调度启动 ${line} 失败:`, e.message); }
     }
-    emit("pool.changed", { reason, pools: poolState, global_stop: bothPoolsDown() });
+    if (reason !== "timer" || poolSnap() !== before)
+      emit("pool.changed", { reason, pools: poolState, global_stop: bothPoolsDown() });
   })().finally(() => { poolReconciling = null; });
   return poolReconciling;
 }
@@ -1753,6 +1805,15 @@ const server = http.createServer(async (req, res) => {
       if (!UUID_RE.test(String(b.session_id || "")))
         return json(res, 400, { error: "session_id 必须是 UUID", got: String(b.session_id || "").slice(0, 40) });
       return json(res, 200, { settings: markForked(mf[1], b.session_id) });
+    }
+    // ── v0.4: add a line without a restart (operator token only — the worker and
+    //    review allowlists do not carry this path, so they 403 by construction).
+    if (m === "POST" && p === "/api/config/lines") {
+      const b = await readBody(req);
+      const added = addLine(b.id, b.hint);
+      emit("config.lines", { line: added.id });
+      console.log(`线已加入: ${added.id}${added.hint ? "(" + added.hint + ")" : ""} —— 已写入 ${CONFIG_FILE},无需重启`);
+      return json(res, 201, { line: added, lines: LINES, line_hints: LINE_HINT });
     }
     if (m === "GET" && p === "/api/workers")
       return json(res, 200, { workers: SUPERVISED.map(workerInfo), lines: LINES,

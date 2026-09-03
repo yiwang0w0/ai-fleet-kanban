@@ -827,6 +827,93 @@ try {
        /document\.title = c\.waiting > 0/.test(panelSrc), "");
   }
 
+  // ══ §Q add a line without a restart (v0.4) + pool.changed means changed ═════
+  {
+    console.log(NL + "[§Q 免重启加线(持久化先于内存)· pool.changed 只在变化时广播]");
+    const DQ = mkdtempSync(join(tmpdir(), "servertest-q-"));
+    const CFGQ = join(DQ, "fleet.config.json");
+    // BOARD_POOL_RECONCILE_MS floors at 50 → ~40 timer passes in 2s; before the
+    // fix every pass broadcast pool.changed.
+    const B = await mk({ env: { BOARD_CONFIG: CFGQ, BOARD_SPAWN_ECHO: "1", BOARD_POOL_RECONCILE_MS: "50" } });
+    const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
+    const WK = tokOf("worker_token");
+    const apiAs = async (t, m, p, b) => {
+      const r = await fetch(B.BASE + p, { method: m,
+        headers: { "Content-Type": "application/json", "X-Board-Token": t },
+        body: JSON.stringify(b ?? {}) });
+      return { status: r.status, body: await r.json().catch(() => ({})) };
+    };
+
+    // Count pool.changed on the SSE stream for `ms`; `during` runs once the
+    // stream is open (so a triggered event cannot slip in before we listen).
+    const sseCount = async (ms, during = null) => {
+      const ctl = new AbortController();
+      const r = await fetch(`${B.BASE}/api/events`, { signal: ctl.signal });
+      const reader = r.body.getReader();
+      let buf = "", n = 0;
+      const t0 = Date.now();
+      const stop = setTimeout(() => ctl.abort(), ms);
+      if (during) await during();
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = Buffer.from(value).toString("utf8");
+          n += (chunk.match(/"type":"pool\.changed"/g) || []).length;
+          buf = (buf + chunk).slice(-2000);
+        }
+      } catch {}
+      clearTimeout(stop);
+      return { n, ms: Date.now() - t0 };
+    };
+    // Quiet test FIRST, on an idle board: ~40 timer passes in 2s, zero broadcasts.
+    const quiet = await sseCount(2000);
+    ok("Q1 ⭐空闲板 2s 内(~40 个定时巡检)pool.changed 广播 = 0(变化才叫变化)",
+       quiet.n === 0, `pool.changed=${quiet.n} in ${quiet.ms}ms`);
+    // Positive control — the instrument must SEE a broadcast when one is due: a
+    // reported exhaustion is an explicit (non-timer) reconcile and must emit.
+    const loud = await sseCount(1500, () => B.api("POST", "/api/pools/exhausted",
+      { runtime: "codex", exhausted_at: new Date().toISOString(),
+        until: new Date(Date.now() + 60000).toISOString() }));
+    ok("Q1b 阳性对照:上报池耗尽 → 至少 1 次 pool.changed(仪器看得见广播,Q1 的 0 才算数)",
+       loud.n >= 1, `pool.changed=${loud.n} in ${loud.ms}ms`);
+
+    const add = await B.api("POST", "/api/config/lines", { id: "docs", hint: "文档/注释" });
+    ok("Q2 加线 201,响应带更新后的线表", add.status === 201 && (add.body?.lines || []).includes("docs"),
+       `HTTP ${add.status} lines=${JSON.stringify(add.body?.lines)}`);
+    const onDisk = JSON.parse(readFileSync(CFGQ, "utf8"));
+    ok("Q3 ⭐配置文件已落盘(持久化先于内存;重启不丢线)",
+       (onDisk.lines || []).some((l) => l.id === "docs" && l.hint === "文档/注释"), JSON.stringify(onDisk.lines));
+    const ws = (await B.api("GET", "/api/workers")).body;
+    ok("Q4 /api/workers 立即列出新线与其 hint(面板 rig 下一次刷新即见)",
+       (ws.lines || []).includes("docs") && ws.line_hints?.docs === "文档/注释" &&
+       (ws.workers || []).some((w) => w.line === "docs"), "");
+    const bad = await B.api("POST", "/api/config/lines", { id: "Docs Team" });
+    const dup = await B.api("POST", "/api/config/lines", { id: "docs" });
+    const role = await B.api("POST", "/api/config/lines", { id: "review" });
+    ok("Q5 非法线名 400 · 重名 409 · 与角色座席同名 409",
+       bad.status === 400 && dup.status === 409 && role.status === 409,
+       `${bad.status}/${dup.status}/${role.status}`);
+    const wk = await apiAs(WK, "POST", "/api/config/lines", { id: "rogue" });
+    ok("Q6 worker 令牌加线 → 403(治理动作只属于 operator)", wk.status === 403, `HTTP ${wk.status}`);
+    // The new line is a first-class destination at once: card creation passes
+    // badRoutable, a claim on it succeeds, and the supervisor can start it.
+    const c = await B.api("POST", "/api/tasks", { subject: "q-docs", line: "docs", humanGate: false });
+    const cl = await B.api("POST", "/api/claim", { worker: "docs", line: "docs", route: "default" });
+    const st = await B.api("POST", "/api/workers/docs/start", {});
+    ok("Q7 ⭐新线当场可建卡(201)、可认领(200)、可起线(200)——无重启",
+       c.status === 201 && cl.status === 200 && st.status === 200,
+       `create ${c.status} claim ${cl.status} start ${st.status}`);
+    B.kill();
+    await sleep(300);
+    // Persistence across restart: a fresh board on the same config sees the line.
+    const B2 = await mk({ dataDir: B.DATA, env: { BOARD_CONFIG: CFGQ } });
+    const ws2 = (await B2.api("GET", "/api/workers")).body;
+    ok("Q8 重启后新线仍在(配置是真相,不是内存)", (ws2.lines || []).includes("docs"), JSON.stringify(ws2.lines));
+    B2.kill();
+    try { rmSync(DQ, { recursive: true, force: true }); } catch {}
+  }
+
 } catch (e) {
   console.error("harness itself fell over:", e);
   fail++;
