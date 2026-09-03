@@ -2030,6 +2030,35 @@ section("㉘ immutable task_events");
 }
 
 
+// ───────────────────────────────────────────────────────────────
+section("㉙ operator requests — closed kind domain, one-way state machine, open list");
+{
+  let bad = "";
+  try { store.addRequest(db, { kind: "format-disk" }); } catch (e) { bad = e.message; }
+  ok("unknown kind refuses and names the domain", /未知的快捷指令/.test(bad) && /propose-lines/.test(bad), bad);
+  const r = store.addRequest(db, { kind: "propose-lines", params: { days: 14, authorized: true } });
+  ok("add → pending with params round-tripped through JSON",
+     r.status === "pending" && r.params.days === 14 && r.params.authorized === true && !!r.created_at, JSON.stringify(r));
+  ok("open list carries it", store.listRequests(db, { open: true }).some((x) => x.id === r.id));
+  const a = store.ackRequest(db, r.id);
+  ok("ack → acked (acked_at stamped)", a.status === "acked" && !!a.acked_at);
+  let twice = ""; try { store.ackRequest(db, r.id); } catch (e) { twice = e.message; }
+  ok("ack twice refuses (pending is the only ack-able state)", /不能再 ack/.test(twice), twice);
+  const d = store.doneRequest(db, r.id, "起草了 3 条线");
+  ok("done → done with note; leaves the open list",
+     d.status === "done" && d.note === "起草了 3 条线" && !!d.done_at &&
+     !store.listRequests(db, { open: true }).some((x) => x.id === r.id));
+  let again = ""; try { store.doneRequest(db, r.id); } catch (e) { again = e.message; }
+  ok("done twice refuses", /已经完成/.test(again), again);
+  // done straight from pending is legal (a seat that acts before acking still
+  // closes the loop) and back-fills acked_at so the timeline reads sanely.
+  const r2 = store.addRequest(db, { kind: "board-briefing" });
+  const d2 = store.doneRequest(db, r2.id, "");
+  ok("pending → done directly is legal and back-fills acked_at", d2.status === "done" && !!d2.acked_at);
+  let missing = ""; try { store.ackRequest(db, 999999); } catch (e) { missing = e.message; }
+  ok("ack on a missing id → not found", /不存在/.test(missing), missing);
+}
+
 console.log(`\n${"─".repeat(56)}\nresult: ${pass} PASS / ${fail} FAIL  (temp db ${process.env.BOARD_DB})`);
 db.close?.();
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}

@@ -414,6 +414,20 @@ function migrate(db) {
     detail TEXT NOT NULL DEFAULT '{}'
   )`);
   db.exec("CREATE INDEX IF NOT EXISTS ix_task_events_task_at ON task_events(task_id, at, id)");
+  // v0.5 operator requests: a panel button pressed by the operator, addressed to
+  // the coordinator seat. The row is the durable half of the loop (the SSE event
+  // is the wake-up; the row is what the panel reads back), so "nobody answered"
+  // is visible instead of silent — a request pending too long is an alarm.
+  db.exec(`CREATE TABLE IF NOT EXISTS operator_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    params TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    note TEXT,
+    created_at TEXT NOT NULL,
+    acked_at TEXT,
+    done_at TEXT
+  )`);
   // Unique (parent, normalized subject): even if a retry emits the same proposal
   // twice, the DATABASE blocks the duplicate (structure, not discipline).
   // Normalization = strip spaces (ASCII and full-width) + lowercase. While existing
@@ -2264,8 +2278,50 @@ function counts(db) {
   return out;
 }
 
+// ── Operator requests (v0.5) ─────────────────────────────────────────────────
+// The kind domain is CLOSED (unknown falls on the refusing side): each kind is a
+// deployment shortcut the coordinator-seat skill knows how to execute.
+const REQUEST_KINDS = ["propose-lines", "mount-sentries", "install-worker-constraints",
+                       "enable-review", "board-briefing"];
+const REQUEST_STATUS = ["pending", "acked", "done"];
+const rowReq = (r) => r ? { ...r, params: (() => { try { return JSON.parse(r.params || "{}"); } catch { return {}; } })() } : null;
+function addRequest(db, { kind, params = {} } = {}) {
+  const k = String(kind ?? "").trim();
+  if (!REQUEST_KINDS.includes(k))
+    throw err(ERR.BAD_INPUT, `未知的快捷指令 ${JSON.stringify(k)}(可用: ${REQUEST_KINDS.join(" / ")})`);
+  const p = params && typeof params === "object" && !Array.isArray(params) ? params : {};
+  const r = db.prepare("INSERT INTO operator_requests (kind, params, status, created_at) VALUES (?, ?, 'pending', ?)")
+              .run(k, JSON.stringify(p), now());
+  return getRequest(db, Number(r.lastInsertRowid));
+}
+function getRequest(db, id) {
+  return rowReq(db.prepare("SELECT * FROM operator_requests WHERE id=?").get(Number(id)));
+}
+function listRequests(db, { open = false, limit = 50 } = {}) {
+  const rows = open
+    ? db.prepare("SELECT * FROM operator_requests WHERE status != 'done' ORDER BY id DESC LIMIT ?").all(limit)
+    : db.prepare("SELECT * FROM operator_requests ORDER BY id DESC LIMIT ?").all(limit);
+  return rows.map(rowReq);
+}
+function ackRequest(db, id) {
+  const r = getRequest(db, id);
+  if (!r) throw err(ERR.NOT_FOUND, `快捷指令 ${id} 不存在`);
+  if (r.status !== "pending") throw err(ERR.CONFLICT, `快捷指令 ${id} 状态是 ${r.status},不能再 ack`);
+  db.prepare("UPDATE operator_requests SET status='acked', acked_at=? WHERE id=?").run(now(), r.id);
+  return getRequest(db, id);
+}
+function doneRequest(db, id, note = "") {
+  const r = getRequest(db, id);
+  if (!r) throw err(ERR.NOT_FOUND, `快捷指令 ${id} 不存在`);
+  if (r.status === "done") throw err(ERR.CONFLICT, `快捷指令 ${id} 已经完成`);
+  db.prepare("UPDATE operator_requests SET status='done', done_at=?, acked_at=COALESCE(acked_at, ?), note=? WHERE id=?")
+    .run(now(), now(), String(note ?? "").slice(0, 2000), r.id);
+  return getRequest(db, id);
+}
+
 module.exports = {
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
+  addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,
   reopen, rearmDone, deferToRearm, completeGoals,
   list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, DEFAULT_LEASE_MIN,

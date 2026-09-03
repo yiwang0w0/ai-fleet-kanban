@@ -64,6 +64,15 @@ def stream_once():
                 else:
                     emit("pool.changed(各池健康)")
                 continue
+            if t.startswith("request."):
+                # v0.5: a panel shortcut button addressed to the coordinator seat —
+                # this line IS the wake-up. The seat acks first, then acts
+                # (coordinator-seat skill), then dones; pending too long alarms
+                # on the panel.
+                emit(f"📣 {t} #{d.get('id')} {d.get('kind')} "
+                     f"{json.dumps(d.get('params') or {}, ensure_ascii=False)[:120]}"
+                     + (" —— 先 board.py requests ack,再按 kind 执行" if t == "request.created" else ""))
+                continue
             body = json.dumps({k: v for k, v in d.items() if k != "type"},
                               ensure_ascii=False)[:130]
             emit(f"{t} {body}")

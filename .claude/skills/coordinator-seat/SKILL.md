@@ -51,6 +51,27 @@ description: 部署看板的那个对话自动担任协调席(主对话):后续�
 - **双席同时做治理动作(停线、改配置、重启 server)是事故源**;
   worker 领卡交付不受此限(那本来就是多方并发的)。
 
+## 面板快捷指令(v0.5):哨打出 `request.created` 就是操作者在叫你
+
+操作者在面板「协调席快捷指令」行按了按钮 → server 落一行请求 → 你的 SSE 哨打出
+`request.created #<id> <kind> …`。处理流程固定三步,**先 ack 再干活**(面板把等了
+5 分钟没人应答的请求标成警告——静默≠健康):
+
+1. `python cli/board.py requests ack <id>`
+2. 按 kind 执行:
+
+   | kind | 做什么 | 授权 |
+   |---|---|---|
+   | `propose-lines` | 走 `propose-lines` skill;`params.days` 是检索范围 | **按钮本身就是授权**(按钮标题写明了「点击=授权只读检索」,`params.authorized=true`),不必再问一遍;仍要在结束时报账读了什么 |
+   | `mount-sentries` | 把两哨挂到你的持续监视下(OPERATE §二) | — |
+   | `install-worker-constraints` | 把 `examples/AGENTS.template.md` 安到 `BOARD_REPO` 根(Codex=AGENTS.md / Claude Code=CLAUDE.md),填好方括号后给操作者过目 | 写工作仓文件前给操作者看一眼 |
+   | `enable-review` | 根配置 `roles:["review"]`,提示需重启 server;重启是治理动作,确认无在飞再做 | 重启前确认 |
+   | `board-briefing` | 读板(`board.py ls` / `/api/workers` / `/api/requests`),在对话里用几句话汇报 | — |
+
+3. `python cli/board.py requests done <id> --file note.md`(一句话写做了什么)。
+
+未知 kind 不会出现(server 闭域拒收);出现了就是版本不匹配,报给操作者。
+
 ## 推进卡的唯一正道:按「启动」
 
 **协调席不自己干卡上的活,也不手动连打 `--once`。**推进卡 = 面板「自动拉取」

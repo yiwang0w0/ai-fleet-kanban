@@ -28,6 +28,7 @@ a change must land in both or the harnesses go red.
 | `disposition` = `close` / `hand_back` / `hold_for_review` | machine | caller-declared destination of a ruling |
 | `resolved_by` = `human` / `auto` / `cascade` | machine | who ruled. **Caller domain is closed** (v0.2): the API accepts only `human` (operator token) / `auto` (review token); `cascade` is store-internal; anything else is 400 — identity on a ruling is never the caller's word |
 | `board_token` / `worker_token` / `review_token` | machine | the three credential classes (v0.2): operator = full; worker = execution face (claim/report/heartbeat/derived create/compact/forked/pool); review = ruling face, `auto` only. Files live in the board data dir — operator territory |
+| operator request `kind` = `propose-lines` / `mount-sentries` / `install-worker-constraints` / `enable-review` / `board-briefing`; `status` = `pending` / `acked` / `done` | machine | v0.5 panel shortcut buttons addressed to the coordinator seat (`/api/requests`, SSE `request.created/ack/done`). Closed kind domain — unknown refuses. Pending ≥ 5 min is shown as an alarm on the panel (silence is not health) |
 | `attempts` / `attempts_base` / `attempts_this_claim` / `max_attempts` | machine | lifetime total / anchor re-stamped at claim / this dispatch / per-dispatch budget |
 | `lock_key` / `oneof_key` (备选组) / `proves_parent` (验证父卡) / `blocked_by` | machine | mutual exclusion / any-one-passes group / child's pass closes parent / dependency ids |
 | `verify_cmd` | machine | a verify-registry **key**, never a command string |

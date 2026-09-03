@@ -246,6 +246,27 @@ def main():
         else:
             sys.exit("lines status | lines start <线|all> | lines stop <线|all> | lines add <线名> [--file hint.txt]")
 
+    elif cmd == "requests":
+        # v0.5: the coordinator seat's side of the panel's shortcut buttons.
+        # `requests` lists the open ones; ack = "I have it"; done = the loop closes
+        # (note via --file, CJK rule as everywhere). The panel shows pending-too-long
+        # as an alarm — ack promptly, do the work, then done.
+        sub = sys.argv[2] if len(sys.argv) > 2 else "list"
+        rid = sys.argv[3] if len(sys.argv) > 3 else ""
+        if sub == "list":
+            s2, d2 = call("GET", "/api/requests?open=1", None)
+            rows = d2.get("requests") or []
+            if not rows: print("没有待处理的快捷指令")
+            for r in rows:
+                print(f"  #{r['id']:<4} {r['kind']:<28} {r['status']:<8} {r['created_at']}  params={json.dumps(r.get('params') or {}, ensure_ascii=False)}")
+        elif sub in ("ack", "done") and rid:
+            body = {"note": readfile(fp)} if (sub == "done" and fp) else {}
+            s2, d2 = call("POST", f"/api/requests/{rid}/{sub}", body)
+            if s2 >= 400: die(s2, d2)
+            print(f"#{rid} → {d2['request']['status']}")
+        else:
+            sys.exit("requests [list] | requests ack <id> | requests done <id> [--file note.md]")
+
     elif cmd == "edit":
         # The write-path for card faces. Every time a ruling needed to be carried
         # onto an implementation card, the CLI had no mouth for it (`wait`

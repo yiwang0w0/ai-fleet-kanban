@@ -228,6 +228,10 @@
   button[data-a="archive"]{min-width:7.5em}
   button[data-final-close]{min-width:9.5em}
   button[data-decide]{min-width:14em}
+  .quick{display:flex;gap:6px;align-items:center;padding:2px 14px 8px;font-size:12px;flex-wrap:wrap}
+  .quick .lbl{color:var(--dim)}
+  #quick-list{flex-basis:100%;display:flex;flex-direction:column;gap:2px}
+  #quick-list .rq{color:var(--dim)} #quick-list .rq.late{color:var(--warn)} #quick-list .rq.acked{color:var(--fg)}
   .line-add{display:flex;gap:6px;align-items:center;padding:4px 14px 8px;font-size:12px;flex-wrap:wrap}
   .line-add input{width:11em}
   .line-add .note.ok{color:var(--ok)} .line-add .note.bad{color:var(--warn)}
@@ -350,6 +354,20 @@
   <button type="submit">加入</button>
   <span class="note" id="line-add-note" aria-live="polite">写入配置即生效,不用重启</span>
 </form>
+<!-- v0.5: shortcut requests to the coordinator seat. A press writes a durable
+     row and wakes the seat through its SSE sentry; the seat acks/dones via
+     board.py and the list below shows the loop closing — or NOT closing. -->
+<div class="quick" id="quick">
+  <span class="lbl">协调席快捷指令</span>
+  <button data-quick="propose-lines" title="点击=授权协调席只读检索你最近的会话(标题与相关片段,不外发),访谈后起草自动拉取线">根据我最近的对话起草线路</button>
+  <select id="quick-days" title="检索范围"><option value="7">近 7 天</option><option value="14" selected>近 14 天</option><option value="30">近 30 天</option></select>
+  <button data-quick="mount-sentries" title="让协调席把两哨挂到它的持续监视下">挂哨</button>
+  <button data-quick="install-worker-constraints" title="把 examples/AGENTS.template.md 安到工作仓根并填空">给工作仓装约束</button>
+  <button data-quick="enable-review" title="配置 roles:[&quot;review&quot;] 并重启,开自动审阅">开自动审阅</button>
+  <button data-quick="board-briefing" title="让协调席在对话里汇报板上现状">给我说说板上现状</button>
+  <span class="note" id="quick-note" aria-live="polite"></span>
+  <div id="quick-list"></div>
+</div>
 <div class="pick" id="pick"></div>
 <div class="cfg" id="cfg"></div>
 <!-- The edit popup borrows class="cfg" WHOLESALE (no new visual language = zero new
@@ -2163,14 +2181,16 @@ async function loadTaskEvents(){
 
 async function refresh(){
   try{
-    const [r, mres, wres, cres, eres, ures] = await Promise.all([
+    const [r, mres, wres, cres, eres, ures, qres] = await Promise.all([
       fetch("/api/tasks?archived=false").then((x) => x.json()),
       fetch("/api/meta").then((x) => x.json()),
       fetch("/api/workers").then((x) => x.json()),
       fetch("/api/context").then((x) => x.json()),
       loadTaskEvents(),
       fetch("/api/usage").then((x) => x.json()).catch(() => ({ cards: {} })),
+      fetch("/api/requests?open=1").then((x) => x.json()).catch(() => ({ requests: [] })),
     ]);
+    renderQuick(qres.requests || []);
     ctxLines = cres.lines;
     claimMisses = wres.claim_misses || [];
     workers = wres.workers; LINES = wres.lines; MODELS = wres.models; EFFORTS = wres.efforts;
@@ -2435,6 +2455,40 @@ async function post(url, body){
   if (!r.ok) throw new Error((await r.json().catch(()=>({}))).error || r.status);
   return r.json();
 }
+
+// v0.5: shortcut requests. Kinds are the server's closed domain; the seat
+// executes them (coordinator-seat skill) and closes the loop with ack/done.
+const QUICK_LABEL = { "propose-lines": "起草线路", "mount-sentries": "挂哨",
+  "install-worker-constraints": "装工作仓约束", "enable-review": "开自动审阅", "board-briefing": "板上现状" };
+function renderQuick(list){
+  const el = document.getElementById("quick-list");
+  if (!el) return;
+  const now = Date.now();
+  el.innerHTML = (list || []).map((r) => {
+    const ageMin = Math.floor((now - Date.parse(r.created_at)) / 60000);
+    // ⭐ Pending too long is the ALARM: silence is not health. Five minutes is
+    //   longer than any sentry wake-up and shorter than "I forgot about it".
+    const late = r.status === "pending" && ageMin >= 5;
+    const st = r.status === "pending" ? (late ? `等了 ${ageMin} 分无人应答 —— 协调席的哨挂着吗?` : "已发出,等协调席响应")
+             : `协调席已接手${r.acked_at ? "(" + ago(Date.parse(r.acked_at)) + ")" : ""}`;   // ago() takes epoch ms (measured: NaNhNaNm 前)
+    return `<div class="rq${late ? " late" : ""}${r.status === "acked" ? " acked" : ""}">#${r.id} ${esc(QUICK_LABEL[r.kind] || r.kind)}${r.params?.days ? "(近 " + esc(String(r.params.days)) + " 天)" : ""} · ${st}</div>`;
+  }).join("");
+}
+document.getElementById("quick").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-quick]");
+  if (!b) return;
+  const kind = b.dataset.quick;
+  const params = kind === "propose-lines" ? { days: Number(document.getElementById("quick-days").value) || 14, authorized: true } : {};
+  const note = document.getElementById("quick-note");
+  b.disabled = true;
+  try {
+    const r = await post("/api/requests", { kind, params });
+    note.textContent = `已发出 #${r.request.id} —— 协调席的哨会收到,接手后这里会变`;
+    await refresh();
+  } catch (err) {
+    note.textContent = "发送失败:" + err.message;
+  } finally { b.disabled = false; }
+});
 
 // v0.4: add a line from the panel. The server validates, persists to the
 // config file and rebuilds its registry; the rig picks the new line up on the

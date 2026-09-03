@@ -914,6 +914,63 @@ try {
     try { rmSync(DQ, { recursive: true, force: true }); } catch {}
   }
 
+  // ══ §R operator requests: a panel button wakes the seat and the loop closes ══
+  {
+    console.log(NL + "[§R 快捷指令(面板→哨→协调席→ack/done)]");
+    const B = await mk({});
+    const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
+    const WK = tokOf("worker_token");
+    const apiAs = async (t, m, p, b) => {
+      const r = await fetch(B.BASE + p, { method: m,
+        headers: { "Content-Type": "application/json", "X-Board-Token": t },
+        body: JSON.stringify(b ?? {}) });
+      return { status: r.status, body: await r.json().catch(() => ({})) };
+    };
+    const unknown = await B.api("POST", "/api/requests", { kind: "format-disk" });
+    ok("R1 未知 kind → 400(闭域,未知落拒绝侧)", unknown.status === 400, `HTTP ${unknown.status}`);
+    const wk = await apiAs(WK, "POST", "/api/requests", { kind: "board-briefing" });
+    ok("R2 worker 令牌发快捷指令 → 403", wk.status === 403, `HTTP ${wk.status}`);
+    // The wake-up: open the SSE stream, press the button, expect request.created.
+    let created = null, seen = 0;
+    {
+      const ctl = new AbortController();
+      const r = await fetch(`${B.BASE}/api/events`, { signal: ctl.signal });
+      const reader = r.body.getReader();
+      const stop = setTimeout(() => ctl.abort(), 1500);
+      created = await B.api("POST", "/api/requests", { kind: "propose-lines", params: { days: 14, authorized: true } });
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          seen += (Buffer.from(value).toString("utf8").match(/"type":"request\.created"/g) || []).length;
+        }
+      } catch {}
+      clearTimeout(stop);
+    }
+    ok("R3 ⭐按钮 → 201 pending 行,且哨的 SSE 流上出现 request.created(唤醒通道实测)",
+       created.status === 201 && created.body?.request?.status === "pending" && seen >= 1,
+       `HTTP ${created.status} sse=${seen}`);
+    const id = created.body?.request?.id;
+    const open1 = (await B.api("GET", "/api/requests?open=1")).body.requests || [];
+    ok("R4 面板读回:open 列表含它,params 原样(days=14, authorized=true)",
+       open1.some((x) => x.id === id && x.params?.days === 14 && x.params?.authorized === true), JSON.stringify(open1[0]?.params));
+    const ack = await B.api("POST", `/api/requests/${id}/ack`, {});
+    const ack2 = await B.api("POST", `/api/requests/${id}/ack`, {});
+    ok("R5 ack → acked;重复 ack → 409(状态机不是可重入的)",
+       ack.body?.request?.status === "acked" && ack2.status === 409, `${ack.status}/${ack2.status}`);
+    const done = await B.api("POST", `/api/requests/${id}/done`, { note: "已起草 3 条线,待操作者确认" });
+    const open2 = (await B.api("GET", "/api/requests?open=1")).body.requests || [];
+    const done2 = await B.api("POST", `/api/requests/${id}/done`, {});
+    ok("R6 done 带 note → 离开 open 列表;再 done → 409",
+       done.body?.request?.status === "done" && /起草 3 条线/.test(done.body?.request?.note || "") &&
+       !open2.some((x) => x.id === id) && done2.status === 409, `${done.status}/${done2.status}`);
+    // The panel consumes the list and alarms on silence (source-shape pin).
+    const panelSrc = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
+    ok("R7 面板消费 /api/requests 并把「等了 N 分无人应答」当警告渲染",
+       /\/api\/requests\?open=1/.test(panelSrc) && /无人应答/.test(panelSrc) && /data-quick="propose-lines"/.test(panelSrc), "");
+    B.kill();
+  }
+
 } catch (e) {
   console.error("harness itself fell over:", e);
   fail++;

@@ -19,6 +19,11 @@ description: 经操作者当轮明示授权后,只读检索其近期会话学习
 
 拿不到明确的「可以」,跳到第 3 步(纯访谈),不碰任何会话数据。
 
+**面板快捷指令例外**:请求来自面板按钮(`request.created` kind=`propose-lines`,
+`params.authorized=true`,`params.days`=范围)时,按钮标题本身写明了「点击=授权只读
+检索」——那一下点击就是操作者当轮的明示授权,不必再问;范围以 `params.days` 为准,
+结束时照常报账读了什么。
+
 ## 步骤
 
 1. **探测工具**:会话管理工具(Claude Code 桌面版的

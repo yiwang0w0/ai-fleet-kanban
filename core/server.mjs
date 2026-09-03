@@ -1806,6 +1806,27 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: "session_id 必须是 UUID", got: String(b.session_id || "").slice(0, 40) });
       return json(res, 200, { settings: markForked(mf[1], b.session_id) });
     }
+    // ── v0.5: operator requests — a panel button addressed to the coordinator
+    //    seat. POST creates the durable row and wakes the seat through the SSE
+    //    sentry (request.created); the seat acks/dones through board.py (operator
+    //    token — it IS the operator's agent). Worker/review tokens 403 by list.
+    if (m === "GET" && p === "/api/requests")
+      return json(res, 200, { requests: store.listRequests(db, { open: url.searchParams.get("open") === "1" }) });
+    if (m === "POST" && p === "/api/requests") {
+      const b = await readBody(req);
+      const r = store.addRequest(db, { kind: b.kind, params: b.params });
+      emit("request.created", { id: r.id, kind: r.kind, params: r.params });
+      console.log(`快捷指令 #${r.id} ${r.kind} —— 已广播给协调席(哨挂着才收得到)`);
+      return json(res, 201, { request: r });
+    }
+    const mrq = p.match(/^\/api\/requests\/(\d+)\/(ack|done)$/);
+    if (mrq && m === "POST") {
+      const b = await readBody(req);
+      const r = mrq[2] === "ack" ? store.ackRequest(db, Number(mrq[1]))
+                                 : store.doneRequest(db, Number(mrq[1]), b.note);
+      emit(`request.${mrq[2]}`, { id: r.id, kind: r.kind });
+      return json(res, 200, { request: r });
+    }
     // ── v0.4: add a line without a restart (operator token only — the worker and
     //    review allowlists do not carry this path, so they 403 by construction).
     if (m === "POST" && p === "/api/config/lines") {
