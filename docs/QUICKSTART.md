@@ -185,6 +185,26 @@ python gates/gates_lib.py && python loops/worker_loop.py --codex-selftest
 Each spins up its own isolated board on a temp port with a temp data dir — they
 never touch a live board.
 
+## Upgrading (after `git pull`)
+
+`git pull` changes files; it does not change what is already running. Three
+things keep executing the old code until each is dealt with, and the panel
+measures all three — a banner appears at the top listing only what is left:
+
+1. **Re-bless** — `python cli/board.py bless`. Until then worker lines refuse to
+   start (exit 3). That is the source gate doing its job: you have new code that
+   you have not accepted yet.
+2. **Restart the board** — Ctrl+C, then the same `node core/server.mjs`. Cards,
+   events and the usage ledger live in SQLite; a restart loses none of it.
+3. **Remount the sentries** — they are separate processes. Restarting the board
+   drops their connection and they reconnect on their own, still running the old
+   file, so stop and rerun them. (They report their own revision, which is how
+   the board can tell.)
+
+None of these is a button, for the same reason blessing has none: accepting code
+is yours to do, and a restart interrupts whatever is in flight. The footer
+always shows the revision the board is actually running.
+
 ## When something refuses
 
 - **The server console is quiet by design** — after the startup lines, claims,

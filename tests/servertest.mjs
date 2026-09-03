@@ -1062,6 +1062,55 @@ try {
     try { rmSync(DS, { recursive: true, force: true }); } catch {}
   }
 
+  // ══ §T upgrade awareness — a pull is not in effect until three things move ══
+  {
+    console.log(NL + "[§T 升级可见性(跑着的代码 vs 磁盘上的代码)]");
+    const A = await mk({ env: { BOARD_GATED_SUBTREE: "." } });
+    const ua = (await A.api("GET", "/api/setup")).body;
+    ok("T1 没 pull 过 → 不打扰(pending=false,零步骤),但版本号照常报出来",
+       ua.upgrade?.measurable === true && ua.upgrade.pending === false &&
+       (ua.upgrade.steps || []).length === 0 && !!ua.version && ua.version === ua.upgrade.running,
+       `version=${ua.version}`);
+
+    // A sentry left over from before the upgrade: the server is current, the
+    // sentry is not — and only the sentry knows, so it has to say.
+    const ctl = new AbortController();
+    await fetch(`${A.BASE}/api/events?as=sentry&rev=0ldrev`, { signal: ctl.signal })
+      .then((r) => r.body.getReader().read()).catch(() => null);
+    const ub = (await A.api("GET", "/api/setup")).body.upgrade;
+    ok("T2 ⭐看板是新的、哨还是旧的 → 只提哨这一件事(哨是独立进程,重启看板不会更新它)",
+       ub.pending === true && ub.steps.length === 1 && ub.steps[0].key === "sentries" &&
+       /0ldrev/.test(ub.steps[0].detail || ""), JSON.stringify(ub.steps.map((s) => s.key)));
+    ctl.abort();
+    await sleep(400);
+    const ctl2 = new AbortController();
+    await fetch(`${A.BASE}/api/events?as=sentry&rev=${ua.version}`, { signal: ctl2.signal })
+      .then((r) => r.body.getReader().read()).catch(() => null);
+    const uc = (await A.api("GET", "/api/setup")).body.upgrade;
+    ok("T3 哨也是当前版本 → 再次安静", uc.pending === false, JSON.stringify(uc.steps.map((s) => s.key)));
+    ctl2.abort();
+    A.kill();
+
+    // Now the real shape: the process booted from an older revision than the
+    // working copy — exactly what `git pull` leaves behind.
+    const B = await mk({ env: { BOARD_GATED_SUBTREE: ".", BOARD_TEST_BOOT_REV: "0ldb00t" } });
+    const ud = (await B.api("GET", "/api/setup")).body.upgrade;
+    const keys = ud.steps.map((s) => s.key);
+    ok("T4 ⭐pull 之后 → 三步齐出:重新验收 · 重启看板 · 重挂两哨,并报出两个版本",
+       ud.pending === true && JSON.stringify(keys) === JSON.stringify(["bless", "restart", "sentries"]) &&
+       ud.running === "0ldb00t" && ud.on_disk && ud.on_disk !== "0ldb00t",
+       `${ud.running} → ${ud.on_disk}`);
+    ok("T5 每一步都给的是命令(升级要经人手:验收是治理动作,重启会断在跑的活)",
+       ud.steps.every((s) => s.state === "done" || s.action?.type === "cmd"),
+       JSON.stringify(ud.steps.map((s) => [s.key, s.state, s.action?.type])));
+    ok("T6 重启这一步说清楚了「数据不会丢」——这是人按下 Ctrl+C 前最想知道的事",
+       /不会丢/.test(ud.steps.find((s) => s.key === "restart").hint || ""), "");
+    B.kill();
+    const panelSrc3 = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
+    ok("T7 面板渲染升级横幅并在底栏显示版本号",
+       /renderUpgrade/.test(panelSrc3) && /id="upg"/.test(panelSrc3) && /f-rev/.test(panelSrc3), "");
+  }
+
 } catch (e) {
   console.error("harness itself fell over:", e);
   fail++;

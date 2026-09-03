@@ -263,6 +263,23 @@ const taskOut = (t) => t ? {
 const HOST = process.env.BOARD_HOST || "127.0.0.1";
 const PORT = Number(process.env.BOARD_PORT || CFG.port || 47824);
 const STARTED = Date.now();
+// Which code this process is actually running. Read once at boot and compared
+// against the disk on every /api/setup: `git pull` changes the files, not the
+// live process, and every "I updated but nothing changed" is that gap. The
+// board can see the gap itself, so it should say so instead of letting the
+// operator find out through a refused line or a missing endpoint.
+const codeRev = () => {
+  try {
+    return execFileSync("git", ["-C", CODE_ROOT, "rev-parse", "--short", "HEAD"],
+                        { encoding: "utf8", windowsHide: true }).trim();
+  } catch { return null; }
+};
+// BOARD_TEST_BOOT_REV pretends this process booted from another revision, so the
+// upgrade path can be exercised without rewriting git history. Test-only, and it
+// says so on startup — an escape hatch that hides is a trap.
+const BOOT_REV = process.env.BOARD_TEST_BOOT_REV || codeRev();
+if (process.env.BOARD_TEST_BOOT_REV)
+  console.error(`⚠ BOARD_TEST_BOOT_REV=${process.env.BOARD_TEST_BOOT_REV} —— 假装本进程跑的是别的版本(仅测试用)`);
 
 const db = store.open();
 
@@ -461,6 +478,50 @@ function blessStep() {
   return { state: "done", detail: `已验收 ${CFG_GATED_SUBTREE} = ${accepted.slice(0, 12)}` };
 }
 
+/** What it takes for a `git pull` to actually be in effect. Three things run
+ *  old code until each is dealt with — the gate's record, this process, and the
+ *  sentries — and none of them announces itself. Measured, so the panel can. */
+function upgradeState() {
+  const onDisk = codeRev();
+  if (!BOOT_REV || !onDisk)
+    return { measurable: false, pending: false, running: BOOT_REV, on_disk: onDisk, steps: [] };
+  if (onDisk === BOOT_REV) {
+    const stale = [...sentries.values()].filter((s) => s.rev && s.rev !== onDisk);
+    // Even with the server current, a sentry left over from before the upgrade
+    // keeps running the old file — v0.7's quieter alarms, for instance, simply
+    // would not happen. Worth one line, not the whole banner.
+    return { measurable: true, pending: stale.length > 0, running: BOOT_REV, on_disk: onDisk,
+             steps: stale.length ? [{ key: "sentries", title: "哨还在跑旧代码", state: "todo",
+               detail: `${stale.length} 个哨的版本是 ${[...new Set(stale.map((s) => s.rev))].join("/")},磁盘上是 ${onDisk}`,
+               hint: "停掉重挂就好(Ctrl+C 后重跑)——哨是独立进程,不会跟着看板一起更新",
+               action: { type: "cmd", text: "python watchers/sse_watch.py" } }] : [] };
+  }
+  const bl = blessStep();
+  const staleSentries = [...sentries.values()].filter((s) => s.rev !== onDisk);
+  return {
+    measurable: true, pending: true, running: BOOT_REV, on_disk: onDisk,
+    steps: [
+      { key: "bless", title: "重新验收新代码", ...(bl.state === "done"
+          ? { state: "done", detail: bl.detail }
+          : { state: "todo", detail: "在这之前,自动拉取会拒启(exit 3)—— 那是闸在挡未验收的代码,不是故障",
+              hint: "看过这次改了什么,再表示接受",
+              action: { type: "cmd", text: "python cli/board.py bless" } }) },
+      { key: "restart", title: "重启看板", state: "todo",
+        detail: `进程跑的是 ${BOOT_REV},磁盘上已经是 ${onDisk}`,
+        hint: "Ctrl+C 停掉再起同一条命令。卡、事件、账本都在库里,重启不会丢",
+        action: { type: "cmd", text: "node core/server.mjs" } },
+      { key: "sentries", title: "重挂两哨", ...(sentries.size === 0
+          ? { state: "todo", detail: "现在没有哨连着", hint: "重启看板之后再挂,挂的就是新代码",
+              action: { type: "cmd", text: "python watchers/sse_watch.py" } }
+          : staleSentries.length
+            ? { state: "todo", detail: `${sentries.size} 个哨连着,其中 ${staleSentries.length} 个跑的是旧代码`,
+                hint: "哨是独立进程:看板重启不会更新它们,要自己停掉重挂",
+                action: { type: "cmd", text: "python watchers/sse_watch.py" } }
+            : { state: "done", detail: `${sentries.size} 个哨已经是 ${onDisk}` }) },
+    ],
+  };
+}
+
 function setupState() {
   const c = store.counts(db);
   const builtinIds = BUILTIN_CONFIG.lines.map((l) => l.id).join(",");
@@ -503,7 +564,8 @@ function setupState() {
               action: { type: "cmd", text: "node examples/seed_demo.mjs" } }) },
   ];
   const doneN = steps.filter((s) => s.state === "done").length;
-  return { steps, done: doneN, total: steps.length, complete: doneN === steps.length };
+  return { steps, done: doneN, total: steps.length, complete: doneN === steps.length,
+           version: BOOT_REV, upgrade: upgradeState() };
 }
 
 const badLine = (res, line, allowed) => allowed.includes(line) ? false
@@ -1574,9 +1636,11 @@ function workerInfo(line) {
 // ── SSE: push on change only. Countdown/heartbeat freshness is computed client-
 //    side; no per-second broadcasting.
 const clients = new Set();
-// SSE clients that declared themselves sentries (watchers/sse_watch.py). A
-// subset of `clients` — emit() still broadcasts to everyone.
-const sentries = new Set();
+// SSE clients that declared themselves sentries (watchers/sse_watch.py), each
+// with the code revision IT is running — a sentry that reconnected after an
+// upgrade is still executing the old file, and that is invisible without asking.
+// A subset of `clients`; emit() still broadcasts to everyone.
+const sentries = new Map();   // res -> { rev, at }
 // ⚠ Receivers must NOT hand-maintain an event-type list — a type added later
 //   silently stops arriving (measured: the server emitted 16 kinds, the panel
 //   subscribed to 8; verdicts, lease reclaims, pins and reopens never arrived, and
@@ -1767,7 +1831,7 @@ const server = http.createServer(async (req, res) => {
       //   sentry without the marker simply does not count as one: unknown falls
       //   on the not-yet side, never on the "you're all set" side.
       const isSentry = url.searchParams.get("as") === "sentry";
-      if (isSentry) sentries.add(res);
+      if (isSentry) sentries.set(res, { rev: url.searchParams.get("rev") || null, at: Date.now() });
       const ka = setInterval(() => { try { res.write(": ka\n\n"); } catch {} }, 25000);
       req.on("close", () => { clearInterval(ka); clients.delete(res); sentries.delete(res); });
       return;

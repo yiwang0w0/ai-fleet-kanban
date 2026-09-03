@@ -228,6 +228,18 @@
   button[data-a="archive"]{min-width:7.5em}
   button[data-final-close]{min-width:9.5em}
   button[data-decide]{min-width:14em}
+  /* Upgrade banner: `git pull` changes files, not the running process. This is
+     the board telling you what is still running old code, and what to do. */
+  .upg{margin:8px 14px 0;border:1px solid var(--warn);border-radius:8px;
+       background:color-mix(in srgb,var(--warn) 8%,var(--panel));font-size:12.5px}
+  .upg .uh{padding:8px 12px;font-weight:600}
+  .upg .us{display:grid;grid-template-columns:20px 1fr;gap:8px;padding:4px 12px;align-items:start}
+  .upg .us.done{color:var(--dim)}
+  .upg .us:last-child{padding-bottom:10px}
+  .upg .de{color:var(--dim)} .upg .hi{margin-top:2px}
+  .upg .act{margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .upg code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:2px 6px;
+            font:12px ui-monospace,Consolas,monospace;user-select:all}
   /* Setup guide: the first thing a new operator sees, and it disappears into a
      single line once the deployment measures complete. */
   .guide{margin:8px 14px 4px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:12.5px}
@@ -364,6 +376,7 @@
   <span class="note" id="task-find-note" aria-live="polite">输入号码后,该卡会临时置于所属栏最上方</span>
 </form>
 
+<div class="upg" id="upg" hidden></div>
 <div class="guide" id="guide" hidden></div>
 <div class="rig" id="rig"></div>
 <!-- v0.4: add a line from the panel — static markup on purpose: #rig is
@@ -420,6 +433,7 @@
 <footer>
   <span>归档 <b id="f-arch">–</b> 件</span>
   <span>uptime <b id="f-up">–</b></span>
+  <span>版本 <b id="f-rev">–</b></span>
   <span>未开始 <b id="f-ns">–</b> · 进行中 <b id="f-ip">–</b> · 等待中 <b id="f-wa">–</b> · 已完成 <b id="f-dn">–</b></span>
   <span style="margin-left:auto" id="f-when">–</span>
 </footer>
@@ -2214,6 +2228,8 @@ async function refresh(){
     ]);
     renderQuick(qres.requests || []);
     renderGuide(sres);
+    renderUpgrade(sres && sres.upgrade);
+    set("f-rev", sres?.version || "–");
     ctxLines = cres.lines;
     claimMisses = wres.claim_misses || [];
     workers = wres.workers; LINES = wres.lines; MODELS = wres.models; EFFORTS = wres.efforts;
@@ -2483,6 +2499,34 @@ async function post(url, body){
 // refresh, so this walks backward as readily as forward — delete the config or
 // break the bless and the guide reopens at that step. Only the FIRST unfinished
 // step is expanded: "what do I do now" must have exactly one answer.
+// v0.8: the upgrade banner. `git pull` changes files; three live things keep
+// running the old ones (the gate's record, this server, the sentries) and none
+// of them says so. The board measures all three and lists only what is left.
+function renderUpgrade(up){
+  const el = document.getElementById("upg");
+  if (!el) return;
+  if (!up || !up.pending || !(up.steps || []).length){ el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  const MARK = { done: "✓", todo: "▸", blocked: "·", unknown: "?" };
+  const head = up.running && up.on_disk && up.running !== up.on_disk
+    ? `⬆ 代码更新了 —— 跑着的是 ${esc(up.running)},磁盘上已经是 ${esc(up.on_disk)}。三步生效:`
+    : `⬆ 有东西还在跑旧代码:`;
+  el.innerHTML = `<div class="uh">${head}</div>` + up.steps.map((s) => `
+    <div class="us ${s.state === "done" ? "done" : ""}">
+      <span>${MARK[s.state] || "·"}</span>
+      <div><b>${esc(s.title)}</b>${s.detail ? ` <span class="de">— ${esc(s.detail)}</span>` : ""}
+        ${s.state !== "done" && s.hint ? `<div class="hi">${esc(s.hint)}</div>` : ""}
+        ${s.state !== "done" && s.action?.type === "cmd"
+          ? `<div class="act"><code>${esc(s.action.text)}</code><button data-guide-copy="${esc(s.action.text)}">复制</button></div>` : ""}
+      </div></div>`).join("");
+}
+document.getElementById("upg").addEventListener("click", async (e) => {
+  const copy = e.target.closest("[data-guide-copy]");
+  if (!copy) return;
+  try { await navigator.clipboard.writeText(copy.dataset.guideCopy); copy.textContent = "已复制"; }
+  catch { copy.textContent = "复制失败,手动选中"; }
+});
+
 let guideOpen = null;   // null = follow completeness; true/false = the operator's choice
 function renderGuide(su){
   const el = document.getElementById("guide");

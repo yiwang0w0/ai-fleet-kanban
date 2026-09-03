@@ -47,11 +47,27 @@ def emit(msg):
 pool_fp = [None]
 
 
+def _code_rev():
+    """This sentry's own code revision (short HEAD), for the upgrade check.
+    Unreadable → empty: the board then counts this sentry as "version unknown",
+    which lands on the not-yet-upgraded side. Unknown is never "current"."""
+    try:
+        import subprocess
+        here = os.path.dirname(os.path.abspath(__file__))
+        return subprocess.run(["git", "-C", os.path.dirname(here), "rev-parse", "--short", "HEAD"],
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+    except Exception:
+        return ""
+
+
 def stream_once():
     # ?as=sentry: announce what we are, so the board can MEASURE "is the
     # coordinator seat listening" (the setup guide's step 5 and the shortcut
     # request alarm both read it). A panel tab is not a sentry.
-    req = urllib.request.Request(BASE + "/api/events?as=sentry",
+    # &rev: which code THIS process is running. A sentry survives the board's
+    # restart by reconnecting, so after an upgrade it keeps executing the old
+    # file — invisible unless it says so (v0.8).
+    req = urllib.request.Request(BASE + "/api/events?as=sentry&rev=" + _code_rev(),
                                  headers={"Accept": "text/event-stream"})
     with urllib.request.urlopen(req, timeout=None) as r:
         emit(f"sse 已接上 {BASE}/api/events(v5·无事件名单)")
