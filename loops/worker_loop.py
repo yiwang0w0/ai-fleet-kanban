@@ -597,15 +597,107 @@ def verdict_block(t):
     return L
 
 
+# ── 提示词的尺寸(v0.9.1;先量后改的产物)────────────────────────────────────
+# 实测(--prompt-preview):典型卡 ~900 字,重卡 ~3100 字。**提示词本身不是成本
+# 大头**,所以这里没有做「分层入口 / 按需展开」—— 把每张卡都必需的纪律段外置成
+# 一个路径,省下几百字,换来的是纪律可能根本没被读。删了它交付物就不成立,那就
+# 不该删(这正是 examples/AGENTS.template.md 里那第四问)。
+#
+# 真正缺的是**上限**:本卡的 description / acceptance 此前一个字都不截。往卡里
+# 贴一份日志,提示词就跟着长,极端情况直接撞 Windows 的 argv 天花板(32767)。
+# 于是给它们预算 + **响亮截断**(截断处指路怎么看全文),再对成品量一次总长。
+CARD_DESC_BUDGET = int(os.environ.get("WORKER_DESC_BUDGET", "6000"))
+CARD_ACC_BUDGET = int(os.environ.get("WORKER_ACC_BUDGET", "2000"))
+PROMPT_WARN_CHARS = int(os.environ.get("WORKER_PROMPT_WARN", "20000"))
+
+
+def cut_to(v, n, card_id):
+    """超预算就截断,并**在截断处说清楚**:还有多少字、去哪看全文。
+    沉默截断是这个仓库反复吃过亏的形状 —— 被截掉的那一半不会喊疼。"""
+    v = str(v or "")
+    if len(v) <= n:
+        return v
+    return v[:n] + (f"…[正文还有 {len(v) - n} 字,这里按 {n} 字预算截断。"
+                    f"全文用 `python cli/board.py show {card_id}`]")
+
+
+def _fake_card(desc, acc, **kw):
+    """给度量与自测用的假卡(不碰板)。字段照 API 的形状。"""
+    d = dict(id=42, subject="给面板加一行版本号", description=desc, acceptance=acc,
+             line="alpha", route="default", attempts=1, max_attempts=3, verify_cmd=None,
+             needs_bash=0, blocked_by=[], parent_id=None, weight="standard",
+             kind="task", human_gate=0, released=1)
+    d.update(kw)
+    return d
+
+
+def prompt_preview():
+    """「提示词到底多长」——以前没人回答得了这个问题,于是也就没人知道它有没有在长。
+    输出按空行分块的尺寸榜,拿数据决定要不要动结构(v0.9.1 就是靠它否掉了一个
+    本来打算做的分层改造:实测省不下什么,却会让必读的纪律段变成可选)。"""
+    cases = [
+        ("典型卡", _fake_card("面板底栏加一行显示当前版本。", "① 底栏出现版本号 ② 现有 harness 全绿"), None, 1),
+        ("重卡(长说明·第3次尝试·带上次输出尾)",
+         _fake_card("背景与要求。" * 260, "① 跑 servertest 并贴出 PASS 计数" + chr(10) + "② 文案与 GLOSSARY 一致", attempts=3),
+         "Traceback (most recent call last):" + chr(10) + "  ...", 3),
+        ("异常卡(有人往说明里贴了一份日志)",
+         _fake_card("x" * 40000, "① 能跑就行"), None, 1),
+    ]
+    for name, t, tail, att in cases:
+        s = build_prompt(t, "alpha", "C:/tmp/ev.md", prev_tail=tail, attempt=att)
+        blocks, cur = [], []
+        for line in s.split(chr(10)):
+            if line.strip() == "":
+                if cur:
+                    blocks.append(chr(10).join(cur)); cur = []
+            else:
+                cur.append(line)
+        if cur:
+            blocks.append(chr(10).join(cur))
+        blocks.sort(key=len, reverse=True)
+        print(f"{chr(10)}=== {name} ===")
+        print(f"  总长 {len(s):,} 字(warn 阈值 {PROMPT_WARN_CHARS:,};argv 天花板 32767)")
+        for b in blocks[:4]:
+            print(f"    {len(b):>7,} 字  {b.splitlines()[0][:56]}")
+    return 0
+
+
+def prompt_selftest():
+    ok_n = fail_n = 0
+
+    def ok(name, cond, detail=""):
+        nonlocal ok_n, fail_n
+        if cond:
+            ok_n += 1; print("PASS " + name)
+        else:
+            fail_n += 1; print("FAIL " + name + (" — " + detail if detail else ""))
+
+    huge = build_prompt(_fake_card("x" * 40000, "y" * 9000), "alpha", "C:/tmp/e.md")
+    ok("⭐超长说明被截断(此前一个字都不截,直奔 argv 天花板)", len(huge) < 32767, f"{len(huge)} 字")
+    ok("截断处说清楚还剩多少字", "正文还有" in huge)
+    ok("截断处指路怎么看全文(沉默截断=被截掉的那半不会喊疼)", "board.py show 42" in huge)
+    ok("验收也有预算", ("y" * (CARD_ACC_BUDGET + 1)) not in huge)
+    normal = build_prompt(_fake_card("短说明。", "① 一条验收"), "alpha", "C:/tmp/e.md")
+    ok("正常卡一个字都不动(预算只挡异常,不改日常)",
+       "短说明。" in normal and "正文还有" not in normal)
+    ok("正常卡远在阈值之下", len(normal) < PROMPT_WARN_CHARS, f"{len(normal)} 字")
+    ok("必读的纪律段仍然内联,没有被外置成路径",
+       "【怎么交付】" in normal and "【发现本卡范围外的工作】" in normal and "【纪律】" in normal)
+    ok("cut_to 不截短内容", cut_to("abc", 10, 1) == "abc")
+    ok("cut_to 截长内容且带指路", cut_to("abcdef", 3, 7).startswith("abc") and "show 7" in cut_to("abcdef", 3, 7))
+    print(f"{chr(10)}结果: {ok_n} PASS / {fail_n} FAIL")
+    return 1 if fail_n else 0
+
+
 def build_prompt(t, worker, evidence_path, prev_tail=None, attempt=1):
     spawn_path = spawn_path_for(t["id"])
     p = [
         f"你是看板 worker(线名 {worker}),任务 #{t['id']} 已经为你认领,这是第 {attempt} 次尝试。",
         f"标题:{t['subject']}",
-        f"说明:\n{t.get('description','')}",
+        "说明:\n" + cut_to(t.get("description", ""), CARD_DESC_BUDGET, t["id"]),
     ]
     if t.get("acceptance"):
-        p.append(f"验收标准:\n{t['acceptance']}")
+        p.append("验收标准:\n" + cut_to(t["acceptance"], CARD_ACC_BUDGET, t["id"]))
     # ⭐运人的裁定。verdict 空的卡返回 [],提示词一点不变。
     p += verdict_block(t)
     # 临时会话每卡都是新的:卡面之外还必须显式带上宿主配置的持久上下文契约。
@@ -687,8 +779,7 @@ def build_prompt(t, worker, evidence_path, prev_tail=None, attempt=1):
             # ⚠**正文为空也一定要出**。曾有目标 description 0 字、全文写在 subject 里
             #   —— 上面的一览把 subject 切到 52 字,作业者看到的只是半截。
             #   ∴ 条件写成「有正文才出」的话,**说明最不足的目标反而会掉**。
-            cut = lambda v, n: (v if len(v) <= n else v[:n] + f"…[正文还有 {len(v)-n} 字。"
-                                f"全文用 `python cli/board.py show {goal['id']}`]")
+            cut = lambda v, n: cut_to(v, n, goal["id"])
             p += ["", f"【这条链的目标 #{goal['id']} —— 本卡是它的一部分,不是独立的活】",
                   "目标(标题是**全文**,不是上面一览的 52 字截断):" + chr(10) + str(goal.get("subject") or "")]
             if gd: p.append("目标的说明:" + chr(10) + cut(gd, 2000))
@@ -720,7 +811,14 @@ def build_prompt(t, worker, evidence_path, prev_tail=None, attempt=1):
             p += ["", "```", stat[:800], "```"]
         p += ["", "怎么办:①先读相关文件的现状 ②如果是你这张卡该做的、且已经做对了,"
               "就在证据里说明「这部分上一轮已完成」并继续剩下的 ③如果不是你的活,别碰。"]
-    return "\n".join(p)
+    out = "\n".join(p)
+    # 量一次成品。提示词经 argv 传给 CLI,Windows 的上限是 32767 —— 撞上去是
+    # 整个进程起不来,而不是「少了一段」。所以逼近时**先出声**;各段自己的预算
+    # 在上面,这里量的是它们加起来还是不是一个合理的东西。
+    if len(out) > PROMPT_WARN_CHARS:
+        log(f"  ⚠提示词 {len(out):,} 字(阈值 {PROMPT_WARN_CHARS:,})—— "
+            f"卡 #{t['id']} 的正文可能塞了不该塞的东西;argv 天花板 32767")
+    return out
 
 
 def transcript_of(session_id):
@@ -1385,6 +1483,10 @@ def main():
     global WORKER_LINE
     if "--codex-selftest" in sys.argv:      # 纯函数的单体试验(板和 CLI 都不需要)
         sys.exit(codex_selftest())
+    if "--prompt-preview" in sys.argv:      # 提示词到底多长(板和 CLI 都不需要)
+        sys.exit(prompt_preview())
+    if "--prompt-selftest" in sys.argv:     # 预算与截断的断言
+        sys.exit(prompt_selftest())
     if "--as" not in sys.argv:
         sys.exit("--as <线名> 必需(线名见 fleet.config.json 的 lines[])")
     line = sys.argv[sys.argv.index("--as") + 1]

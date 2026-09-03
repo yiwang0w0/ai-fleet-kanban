@@ -64,6 +64,8 @@ jobs:
         run: bash hrun.sh python gates/gates_lib.py
       - name: worker_loop codex selftest (pure functions)
         run: bash hrun.sh python loops/worker_loop.py --codex-selftest
+      - name: worker_loop prompt selftest (card-face budgets, loud truncation)
+        run: bash hrun.sh python loops/worker_loop.py --prompt-selftest
       - name: board_health_watch selftest (alarm criteria + throttle)
         run: bash hrun.sh python watchers/board_health_watch.py --selftest
       - name: verify_page selftest (assertion builder + host allowlist, no browser needed)
