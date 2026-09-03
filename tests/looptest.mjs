@@ -201,6 +201,15 @@ try {
            BOARD_ALLOW_UNPINNED: "1",        // isolated harness only
            BOARD_DATA_DIR: TMP,              // ⭐ token AND evidence to the temp side
            ...stubEnv,
+           // ⭐ The line-level circuit breaker is OFF for the resident loop, and the
+           //   reason matters: this harness's job is to manufacture failures back to
+           //   back (rate limits, exhausted attempts, refused gates), so the breaker
+           //   fires — correctly — and takes the rest of the harness with it
+           //   (measured: the resident loop exited 3 mid-run and every later section
+           //   went red for want of a claimer). Turning it off HERE is isolation, not
+           //   concealment: §⑬ runs its own loop with the breaker ON and proves the
+           //   mechanism end to end.
+           WORKER_PARK_STREAK_LIMIT: "0",
            WORKER_HEARTBEAT_SEC: "5",
            WORKER_LEASE_MIN: "5",
            // ⚠ The stub should die instantly, but there are ways for it NOT to
@@ -426,7 +435,7 @@ try {
   /** Run a throwaway loop for exactly one card. ⭐ env is spelled out EVERY time to cut
    *  the caller's shell out — a leftover WORKER_CLAUDE_CLI would silently falsify the
    *  negative controls. */
-  const runLoopOnce = (extraEnv, ms = 90000) => new Promise((resolve) => {
+  const runLoopOnce = (extraEnv, ms = 90000, { once = true } = {}) => new Promise((resolve) => {
     let out = "", done = false, timer = null;
     // ⚠ It MUST always resolve. There are paths where only 'error' arrives (python not
     //   on PATH); waiting on 'exit' alone leaves the promise pending forever ⇒ the try
@@ -434,7 +443,7 @@ try {
     //   failure mode of all. Close it from all three sides.
     const fin = (code) => { if (done) return; done = true; clearTimeout(timer); resolve({ code, out }); };
     const p = spawn(PY, [join(ROOT, "loops", "worker_loop.py"), "--as", LINE,
-                         "--interval", "1", "--once"], {
+                         "--interval", "1", ...(once ? ["--once"] : [])], {
       env: { ...process.env, BOARD_URL: BASE, BOARD_DATA_DIR: TMP,
              BOARD_ALLOW_UNPINNED: "1",
              WORKER_CLAUDE_CLI: "", WORKER_CLI_ARGV: "", WORKER_ALLOW_BATCH_CLI: "",
@@ -730,6 +739,39 @@ process.stdin.on("end", () => {
               + " the gate itself is platform-independent and was measured in ⑥d)");
   }
 
+  // ── ⑬ line-level circuit breaker ───────────────────────────────────────────
+  // A card's budget is per card. ACROSS cards there was none: park one, claim the
+  // next, burn that one too. When the cause is systemic (CLI gone, repo broken,
+  // verifier dead, authorization expired) that spends the entire queue to learn a
+  // single fact. Three in a row with nothing delivered ⇒ stop and fetch a human.
+  // Measured end to end, because the whole value of this mechanism is that the
+  // process ACTUALLY exits — an assertion on a counter would prove nothing.
+  console.log("\n[⑬ 连续交不成 → 线级熔断(真的会退出)]");
+  {
+    for (let i = 0; i < 4; i++)
+      await api("POST", "/api/tasks",
+                { subject: `熔断用卡 ${i}(交不成)`, line: LINE, maxAttempts: 1 });
+    // A stub that exits cleanly and writes NO evidence file: each card uses its one
+    // attempt and parks. That is the systemic-failure shape without a real CLI.
+    const silent = JSON.stringify([PY, "-c", "import sys; sys.exit(0)"]);
+    const t0 = Date.now();
+    const rb = await runLoopOnce({ WORKER_CLI_ARGV: silent, WORKER_PARK_STREAK_LIMIT: "3" },
+                                 120000, { once: false });
+    const secs = Math.round((Date.now() - t0) / 1000);
+    ok("⑬ 连续没交成 → 进程自己退出(不是继续烧下一张)", rb.code !== null,
+       `code=${rb.code} 用时 ${secs}s`);
+    ok("⑬ ⭐退出码 3 = 既有的「被拒绝」族:server 不自动重启,健康哨随即报「想跑却没在跑」",
+       rb.code === 3, `code=${rb.code}`);
+    ok("⑬ 日志把它说成系统性故障的信号,并给出先查哪几件",
+       /连续 \d+ 张卡都没能交付/.test(rb.out) && /doctor/.test(rb.out) && /human_gate/.test(rb.out),
+       (rb.out.match(/连续 \d+ 张卡都没能交付[^\n]*/) || ["(没找到熔断行)"])[0].slice(0, 90));
+    // The counter must be a STREAK, not a total: a delivery in between clears it.
+    // Without this, a busy board would eventually trip the breaker on unrelated parks.
+    ok("⑬ 熔断前确实连着处理了多张卡(不是第一张就退)",
+       (rb.out.match(/领到 #/g) || []).length >= 3,
+       `领到 ${(rb.out.match(/领到 #/g) || []).length} 张`);
+  }
+
 } catch (e) {
   console.error("the harness itself fell over:", e);
   fail++;
@@ -747,5 +789,6 @@ process.stdin.on("end", () => {
   }
   try { rmSync(TMP, { recursive: true, force: true }); } catch {}
   console.log(`\n${"─".repeat(56)}\nresult: ${pass} PASS / ${fail} FAIL  (temp ${BASE} / ${TMP})`);
+  void 0;
   process.exit(fail ? 1 : 0);
 }

@@ -606,6 +606,29 @@ def verdict_block(t):
 # 真正缺的是**上限**:本卡的 description / acceptance 此前一个字都不截。往卡里
 # 贴一份日志,提示词就跟着长,极端情况直接撞 Windows 的 argv 天花板(32767)。
 # 于是给它们预算 + **响亮截断**(截断处指路怎么看全文),再对成品量一次总长。
+# ── 线级熔断(v0.10)──────────────────────────────────────────────────────────
+# 单张卡有预算(max_attempts),**多张卡之间没有**:一张卡烧完 attempts 被 park 之后,
+# 循环立刻去领下一张。失败若是系统性的(CLI 坏了、仓库坏了、验证器坏了、授权没了),
+# 它会一张接一张烧到卡领完或额度耗尽 —— 每一张都「正确地」重试到用尽。
+# 连续 N 张都**以同一个失败指纹**交不了活,继续烧的期望收益接近零,所以停下来叫人。
+#
+# ⭐判据是「连续**同样地**失败」,不是「连续失败」—— 这一条是实测改出来的:
+#   先做成后者时,harness 里几张各因不同原因 park 的卡(限流/耗尽/被拒,那正是它在
+#   测的东西)立刻把线熔断了。真实板上同样会有「几张卡各自失败」的正常日子。
+#   系统性故障的特征是**同一个原因反复出现**(CLI 没了、仓库坏了、验证器死了、
+#   授权过期),那正好就是失败指纹相同。指纹的材料与卡内刹车共用,两个尺度一套判据。
+#
+# ⚠ 极性与闸门相反,这是故意的:闸门是**授权**机制,不确定就别放行;熔断是**可用性**
+#   机制,不确定就别停机。所以指纹拿不到时**不**熔断 —— 误停的代价是人被打扰、
+#   无人值守的夜里活全停;漏停的代价只是多烧几张卡,而那上面还压着 attempts 预算
+#   和日额度帽。
+#   · 交付成功清零;指纹一变也清零(那是另一件事,不是同一个故障在持续)
+#   · 退出码用既有的 EXIT_REFUSED:server 不自动重启它,健康哨随即看到
+#     「想跑却没在跑」并报出来 —— 人被告知,而不是发现额度没了才知道
+#   · 0 = 关闭
+PARK_STREAK_LIMIT = int(os.environ.get("WORKER_PARK_STREAK_LIMIT", "3"))
+LAST_FAIL_FP = None      # 最近一次失败的指纹(handle 写,主循环读)
+
 CARD_DESC_BUDGET = int(os.environ.get("WORKER_DESC_BUDGET", "6000"))
 CARD_ACC_BUDGET = int(os.environ.get("WORKER_ACC_BUDGET", "2000"))
 PROMPT_WARN_CHARS = int(os.environ.get("WORKER_PROMPT_WARN", "20000"))
@@ -1333,6 +1356,10 @@ def handle(t, worker):
             #     既然没挂阶梯,下一次就是字面意义上的同条件重复。
             fp = _failure_fp(vr, tail)
             fps.append(fp)
+            # 让**线级熔断**也看得见这一次失败长什么样(见 PARK_STREAK_LIMIT)。
+            # 卡内的刹车看「本卡同指纹」,线级看「跨卡同指纹」——同一个材料,两个尺度。
+            global LAST_FAIL_FP
+            LAST_FAIL_FP = fp
             no_rung_left = (a_rung is None) or (a_rung >= TOP_RUNG)
             same_fp = len(fps) >= 2 and fps[-1] == fps[-2]
             if same_fp and not no_rung_left:
@@ -1558,6 +1585,7 @@ def main():
         + f" 会话={sess} interval={interval}s base={BASE} dry={dry}"
         + (f" 截止={until:%m-%d %H:%M}" if until else " 截止=无(**无人值守就该加 --until**)"))
 
+    park_streak, streak_fp = 0, None    # 同指纹连续没交成的卡数(见 PARK_STREAK_LIMIT)
     while True:
         # 不只在启动时查:共享 worktree 入库新版本后,旧进程必须在下一次领卡前自停。
         # 同时重验锚点,避免运行中被移走后先领卡、再在组 prompt 时才发现失忆。
@@ -1633,6 +1661,22 @@ def main():
             outcome = "wait"
         # ⭐无论哪种结局都继续下一张。waiting 停的是那条任务链,不是这个 worker。
         if once: return
+        # …除非**连着好几张都没交成**。那多半不是卡的问题(见 PARK_STREAK_LIMIT)。
+        if outcome == "done" or not LAST_FAIL_FP:
+            # 交付成功 = 系统是活的;拿不到指纹 = 判不了,两者都不该累积。
+            park_streak, streak_fp = 0, None
+        else:
+            park_streak = park_streak + 1 if LAST_FAIL_FP == streak_fp else 1
+            streak_fp = LAST_FAIL_FP
+            if PARK_STREAK_LIMIT and park_streak >= PARK_STREAK_LIMIT:
+                log(f"⛔ 连续 {park_streak} 张卡都没能交付,而且**失败得一模一样**"
+                    f"(指纹 {streak_fp})—— 这更像是系统性故障,不是这几张卡各自的问题。"
+                    "停线,等人看一眼。")
+                log("   先看这几件:CLI 还在不在(doctor)· 工作仓的状态 · "
+                    "卡指名的验证键跑不跑得动 · 池有没有耗尽 · 最近一次改动动了什么。")
+                log(f"   确认过没事就重新启动这条线;若板上本来就排着该由人裁定的卡,"
+                    f"给它们挂 human_gate,或调高 WORKER_PARK_STREAK_LIMIT(现={PARK_STREAK_LIMIT})。")
+                sys.exit(gates_lib.EXIT_REFUSED)
         log(f"  ({outcome})继续领下一张")
 
 
