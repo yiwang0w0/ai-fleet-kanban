@@ -8,7 +8,7 @@
 //   never touches a database. A preflight that "helpfully" mutates state turns
 //   diagnosis into a second thing to diagnose.
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, execSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, accessSync, constants } from "node:fs";
 import { createServer } from "node:net";
 import { join, dirname, isAbsolute } from "node:path";
@@ -81,6 +81,8 @@ try {
 // ── ④ the local agent CLI — who actually does the work ──────────────────────
 // Same resolution the worker loop uses: host env wins, then PATH; a .cmd shim on
 // Windows is refused by the BatBadBut gate, so probe for the native sibling.
+// CLI_PATH / CLI_IS_SHIM are read again by ⑤b — resolve the CLI once, here.
+let CLI_PATH = null, CLI_IS_SHIM = false;
 {
   const envCli = process.env.WORKER_CLAUDE_CLI;
   // PATH is walked by hand rather than via `where`: its output arrives in the
@@ -103,6 +105,7 @@ try {
   // An extension-less file on Windows is a bash shim — as unusable as a .cmd.
   const isShim = (p) => process.platform === "win32" && (isBatch(p) || !/\.exe$/i.test(p || ""));
   const target = envCli || which("claude");
+  CLI_PATH = target; CLI_IS_SHIM = !!target && isShim(target);
   if (!target) {
     no("找不到 claude CLI(WORKER_CLAUDE_CLI 未设,PATH 上也没有)",
        "装 Claude Code,或设 WORKER_CLAUDE_CLI 指向原生可执行文件。没有它,卡可以建、不能被干。");
@@ -166,6 +169,49 @@ await new Promise((resolve) => {
     srv.close(() => { ok(`端口 ${port} 可用(来源: ${PORT_SRC})`); resolve(); });
   });
 });
+
+// ── ⑤b CLI contract — the flags this board actually passes ──────────────────
+// The loops drive the CLI through a fixed argv. Every harness runs against a STUB,
+// and a stub accepts anything — so a renamed or dropped flag is invisible to all
+// 600+ assertions and shows up only as a live worker that will not start. Here we
+// ask the real CLI what it takes and compare. Names are quoted from `--help`, not
+// from memory.
+{
+  // "-p, --print" is checked as one help fragment: the loops pass the SHORT form,
+  // so asserting only "--print" would test a spelling we never use.
+  const CLI_FLAGS = ["-p, --print", "--model", "--effort", "--permission-mode",
+                     "--allowedTools", "--add-dir", "--output-format",
+                     "--resume", "--session-id", "--fork-session", "--max-budget-usd"];
+  const CLI_CHOICES = { "--effort": ["low", "medium", "high", "xhigh", "max"],
+                        "--permission-mode": ["acceptEdits"],
+                        "--output-format": ["json"] };
+  if (!CLI_PATH) {
+    wr("跳过 CLI 参数契约检查(没找到 claude)", "装了 CLI 再跑一次 doctor —— 参数对不上时 worker 起不来,而所有 harness 都用桩,看不出这件事");
+  } else {
+    try {
+      // A shim is refused for WORK (argument mangling, swallowed exit codes) but is
+      // fine for reading `--help`: no arguments to mangle, and we want the text, not
+      // the exit code. Windows cannot spawn .cmd/.bat or an extension-less bash shim
+      // directly since Node 20 — those need a shell.
+      const help = CLI_IS_SHIM
+        ? execSync(`"${CLI_PATH}" --help`, { encoding: "utf8", windowsHide: true, timeout: 30000 })
+        : execFileSync(CLI_PATH, ["--help"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
+      const missing = CLI_FLAGS.filter((f) => !help.includes(f));
+      if (missing.length)
+        no(`CLI 不认识这些参数: ${missing.join(" ")}`,
+           "这个 CLI 版本与本板驱动它的方式不匹配 —— worker 会起不来。升级看板,或把 CLI 降回兼容版本");
+      else ok(`CLI 参数契约吻合(${CLI_FLAGS.length} 个)`);
+      for (const [flag, want] of Object.entries(CLI_CHOICES)) {
+        const bad = want.filter((v) => !help.includes(v));
+        if (bad.length)
+          wr(`${flag} 的取值 ${bad.join("/")} 没出现在 --help 里`,
+             "可能是 CLI 改了值域;fleet.config 里配了它的槽会在启动时才报错");
+      }
+    } catch (e) {
+      wr(`CLI --help 跑不起来(${String(e.message).slice(0, 50)})`, "参数契约这一项没测成 —— 不是通过,是没测");
+    }
+  }
+}
 
 // ── ⑥b browser (optional) — only front-end verification needs it ────────────
 // Not a failure when absent: most fleets never verify a page. But when a card

@@ -111,6 +111,53 @@ Test-only escape hatches (never production defaults): `BOARD_ALLOW_UNPINNED`
 Note: 收起 in the panel means **fold/collapse a UI section**, not "hold a card" —
 holding displays as 未放行 / 收进协调待机区. Do not reuse 收起 for holds.
 
+## Alignment with Claude Code's own vocabulary
+
+This project sits **on top of the `claude` command line**, and nowhere else. It is
+not built on the Claude Agent SDK, and it is not Managed Agents: it starts CLI
+processes, reads their JSON, and stores the result. That means Claude's own terms
+apply verbatim to one narrow surface — the argv — and **do not** apply to the
+layer above it, where our own words live. Confusing the two is the mistake this
+section exists to prevent.
+
+### Terms we take verbatim from the CLI
+
+Every flag below is passed by `loops/worker_loop.py` or `loops/reviewer_loop.py`,
+spelled as `claude --help` spells it. Values likewise: `--effort` takes
+`low` / `medium` / `high` / `xhigh` / `max` (exactly the five rungs a seat may declare),
+`--permission-mode` takes `acceptEdits` (the only mode we pass), `--output-format`
+takes `json` for the reviewer. `--model` receives a full model id, not an alias.
+
+```
+-p/--print  --model  --effort  --permission-mode  --allowedTools  --add-dir
+--output-format  --resume  --session-id  --fork-session  --max-budget-usd
+```
+
+The loops pass `-p`, the short form; `--allowedTools` is the camelCase spelling
+the CLI lists first (`--allowed-tools` is its documented alias). Doctor asserts
+the exact spelling the loops send, not the one that reads better.
+
+**This list is measured, not remembered.** `node cli/doctor.mjs` runs the real
+`claude --help` and reports any flag the installed CLI no longer knows — the one
+check no harness can perform, because every harness drives a stub and a stub
+accepts anything, including a flag that was renamed last week.
+
+### Terms that look official but are ours
+
+| our term | what it is here | the official term it is NOT |
+|---|---|---|
+| **worker** | a separate OS process running `claude --print` once per card, with its own session and its own context window | **not** a *subagent* — a subagent is spawned by the Task tool inside one session and shares that session's turn; our workers never see each other and outlive nothing |
+| **座席 seat** | a deployment-level declaration `{runtime, model, effort, window}` describing *what to start*, resolved before any process exists | **not** an *agent definition* (`--agents`, `.claude/agents/*.md`) — that names a role inside a running session; a seat names a way to start one |
+| **线 line** | a resident loop that claims cards on a route, one card at a time, restarted by the supervisor | no official counterpart; the closest CLI idea is "a shell that keeps invoking claude", which is what it is |
+| **协调席 coordinator seat** | the human-attended session that rules on deliveries and operates the board | no official counterpart; it is a *seat* in our sense, occupied interactively |
+| **档位 rung** | a `(model, effort)` pair on the escalation ladder | `--effort` is only one of its two axes; a rung also names the model |
+| **skill** | `.claude/skills/*` read by *your* Claude Code | this one **is** the official mechanism, used as documented — no divergence |
+| **session** | `--session-id` / `--resume` / `--fork-session` as the CLI defines them | also official, used as documented |
+
+The asymmetry is deliberate: where Claude Code already has a word for something,
+we use its word and its spelling. Our own words exist only for things above the
+CLI — process supervision, routing, rulings — which the CLI has no opinion about.
+
 ## Freeze caveats
 
 1. Status and waiting_for labels are **deliberate dual copies** (panel + CLI);

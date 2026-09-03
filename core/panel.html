@@ -842,9 +842,9 @@ function cardParts(t){
     const d = kids.filter((k) => k.status === "done").length;
     body += `<div class="kids">子任务卡 ${d}/${kids.length} 完成</div>`;
   } else {
-    // In-flight cards spawn their own children (subagent splits, discoveries cut
-    // out mid-run). Without hanging them under the parent, the board loses which
-    // stream they came from.
+    // In-flight cards derive their own children (a worker splitting its card,
+    // discoveries cut out mid-run). Without hanging them under the parent, the
+    // board loses which stream they came from.
     const kids = tasks.filter((x) => x.parent_id === t.id);
     if (kids.length){
       const ST = { not_started:"未开始", in_progress:"进行中", waiting:"等待中", done:"已完成" };
