@@ -42,6 +42,11 @@ def emit(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+# Last reported pool state, in a one-slot list so it survives reconnects (the
+# stream restarts; the operator's memory of "codex is down" does not reset).
+pool_fp = [None]
+
+
 def stream_once():
     # ?as=sentry: announce what we are, so the board can MEASURE "is the
     # coordinator seat listening" (the setup guide's step 5 and the shortcut
@@ -61,9 +66,23 @@ def stream_once():
             t = d.get("type") or "(untyped)"
             if t == "pool.changed":
                 pools = d.get("pools") or {}
-                hot = {k: v for k, v in pools.items() if v.get("exhausted_at")}
+                hot = sorted(k for k, v in pools.items() if v.get("exhausted_at"))
+                # ⭐ Fingerprint on WHICH pools are down — never on `until`. A hold
+                #   window expiring re-probes and pushes `until` forward, which is a
+                #   real state change for the board and the SAME fact for a human:
+                #   "codex is still exhausted". Including `until` here is what made
+                #   the sentry repeat one alarm every few minutes until the reader
+                #   asked to mute it (measured on a live deployment).
+                fp = json.dumps([hot, bool(d.get("global_stop"))])
+                if fp == pool_fp[0]:
+                    continue
+                was_hot = pool_fp[0] is not None and pool_fp[0] != json.dumps([[], False])
+                pool_fp[0] = fp
                 if hot or d.get("global_stop"):
-                    emit(f"⚠pool.changed 竭尽={list(hot)} global_stop={d.get('global_stop')}")
+                    emit(f"⚠pool.changed 竭尽={hot} global_stop={d.get('global_stop')}"
+                         "(同一状态不再重复播报,变了或恢复时才会再出声)")
+                elif was_hot:
+                    emit("✅池已恢复(全部解禁)")
                 else:
                     emit("pool.changed(各池健康)")
                 continue
