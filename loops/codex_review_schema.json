@@ -27,9 +27,9 @@
                 "path": { "type": "string" },
                 "label": { "type": "string" },
                 "role": { "type": "string", "enum": ["apply", "rollback", "companion"] },
-                "archive_name": { "type": "string" }
+                "archive_name": { "type": ["string", "null"] }
               },
-              "required": ["path", "label", "role"]
+              "required": ["path", "label", "role", "archive_name"]
             }
           }
         },

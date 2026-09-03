@@ -173,3 +173,32 @@ re-parent anything), the reviewer's (ruling face only, and only as `auto`). And
 the board's data directory is operator territory: granting a worker agent the
 board folder hands it every token at once, so don't — workers get `BOARD_REPO`,
 nothing else.
+
+## INCIDENT-13 — The schema the tests never ran
+
+A deployment attached a `codex` review seat and every card it looked at came
+back with a verdict that was not a verdict: the API had refused the request
+outright — `invalid_json_schema`, one object in the reviewer's output schema
+listed four properties and only three of them as `required`. Strict structured
+outputs demand every key; the missing one was an *optional* field, left out of
+`required` exactly as ordinary JSON Schema would have you do it.
+
+Two things made this worse than a typo. The model never ran, so the card burned
+an auto-review cycle and reached the human as "looked at, no decision" — on the
+board that reads like a rejected delivery, and the delivery was fine. And the
+error surfaced in the WORKER's neighbourhood on screen, so the first suspicion
+fell on the implementer rather than on the reviewer.
+
+The reason it survived to production is the part worth keeping: the reviewer's
+harness drives a **stub CLI**, and the stub stands in for the Claude branch —
+the branch that builds no schema at all. Every assertion was green while the
+codex branch's schema had never been parsed by anything, ever. A substitute that
+takes a different road through the code tests the road it takes, not the one you
+care about.
+
+**Rules born:** an optional field under strict mode is spelled "in `required`,
+type nullable" — never "left out of `required`". And an artifact only a
+non-default branch consumes gets a check that does not need that branch to run:
+`tests/reviewtest.mjs` now validates every object in the schema offline
+(required covers all properties, `additionalProperties: false`) and pins the
+kind enum against the loop's own validator. Milliseconds, no API, no stub.

@@ -173,6 +173,74 @@ try {
   ok("R8 红验证 → 机械打回(not_started)", tD.status === "not_started", tD.status);
   ok("R9 ⭐stub 未被调用(先验后审:红了不烧模型)", !existsSync(MARK), logD.slice(-160));
 
+  console.log(NL + "[§5b codex 审阅的输出 schema 必须过 strict 校验(不跑模型也能判)]");
+  {
+    // ⭐ This whole class of bug is invisible to the harness above: the stub CLI
+    //   exercises the CLAUDE branch, which builds no schema, so the codex branch's
+    //   schema was never executed by anything until a live deployment attached a
+    //   codex review seat — and the API refused the request BEFORE the model ran,
+    //   which on the board looked like the worker had failed (INCIDENTS-13).
+    //   Strict structured outputs require, for every object: required lists EVERY
+    //   property, and additionalProperties is false. That is machine-checkable
+    //   here, offline, in milliseconds.
+    const schemaPath = join(ROOT, "loops", "codex_review_schema.json");
+    const schema = JSON.parse(readFileSync(schemaPath, "utf8"));
+    const faults = [];
+    (function walk(node, path){
+      if (Array.isArray(node)) return node.forEach((v, i) => walk(v, `${path}[${i}]`));
+      if (!node || typeof node !== "object") return;
+      if (node.type === "object" || node.properties){
+        const props = Object.keys(node.properties || {});
+        const req = node.required || [];
+        const missing = props.filter((p) => !req.includes(p));
+        const stray = req.filter((r) => !props.includes(r));
+        if (missing.length) faults.push(`${path}: required 少了 ${missing.join(",")}`);
+        if (stray.length) faults.push(`${path}: required 里有 properties 没有的键 ${stray.join(",")}`);
+        if (node.additionalProperties !== false) faults.push(`${path}: additionalProperties 必须是 false`);
+      }
+      for (const [k, v] of Object.entries(node)) walk(v, `${path}.${k}`);
+    })(schema, "$");
+    ok("R12 ⭐schema 每个对象都合 strict:required 覆盖全部属性 · additionalProperties=false",
+       faults.length === 0, faults.join(" | ") || "(全部合规)");
+    // ⚠ This file is sent to the API verbatim — it is NOT one of our own configs.
+    //   No `_comment` keys, no notes: an unknown keyword risks the same
+    //   "refused before the model runs" failure, invisible without a live call.
+    //   (Caught while fixing INCIDENT-13: the fix's own explanatory key was
+    //   about to ship inside the schema.) Explanations belong in the harness,
+    //   the loop's comments and INCIDENTS.md — never in the wire payload.
+    const ALLOWED = new Set(["$schema", "type", "properties", "required",
+                             "additionalProperties", "items", "enum", "description"]);
+    const strays = [];
+    (function walkKeys(node, path){
+      if (Array.isArray(node)) return node.forEach((v, i) => walkKeys(v, `${path}[${i}]`));
+      if (!node || typeof node !== "object") return;
+      const inProps = /\.properties$/.test(path);   // property NAMES are free-form
+      for (const [k, v] of Object.entries(node)){
+        if (!inProps && !ALLOWED.has(k)) strays.push(`${path}.${k}`);
+        walkKeys(v, `${path}.${k}`);
+      }
+    })(schema, "$");
+    ok("R12b ⭐schema 里没有自造关键字(这份文件原样发给 API,注释请写在别处)",
+       strays.length === 0, strays.join(" | ") || "(只有标准关键字)");
+    // An optional field must be spelled "required + nullable" — the fix that got
+    // us here. Pin the shape so nobody re-optionalises it by dropping it again.
+    const fileItem = schema.properties.options.items.properties.files.items;
+    ok("R13 可选字段的写法是「留在 required + 类型可为 null」,不是「从 required 里拿掉」",
+       fileItem.required.includes("archive_name") &&
+       Array.isArray(fileItem.properties.archive_name.type) &&
+       fileItem.properties.archive_name.type.includes("null"),
+       JSON.stringify(fileItem.properties.archive_name));
+    // Cross-file contract: the kinds the schema lets the model emit must be the
+    // kinds the loop's own validator accepts. Two places, one meaning.
+    const src = readFileSync(join(ROOT, "loops", "reviewer_loop.py"), "utf8");
+    const m = src.match(/kind not in \(([^)]*)\)/);
+    const accepted = m ? [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]).sort() : null;
+    const declared = [...(schema.properties.options.items.properties.kind.enum || [])].sort();
+    ok("R14 schema 允许的 kind 与 reviewer_loop 校验器接受的 kind 是同一组(跨文件契约)",
+       !!accepted && JSON.stringify(accepted) === JSON.stringify(declared),
+       `schema=${JSON.stringify(declared)} loop=${JSON.stringify(accepted)}`);
+  }
+
   console.log(NL + "[§6 令牌分权的外测面]");
   const idE = await toWaiting({ subject: "r-authz", evidence: "test" });
   const rw = await api("POST", `/api/tasks/${idE}/resolve`,
