@@ -992,8 +992,17 @@ function stateFingerprint(db, t, opts = {}) {
     //   header per entry, so it differs on every ruling even when the ruling is
     //   word-for-word the same — a brake reading it would never engage. (Measured:
     //   the first cut of this gate read verdict_note and held nothing.)
-    ruling: fpHash(t.last_note, t.decision_json, t.decision_choice, t.last_verdict,
-                   t.decision_receipt, t.result),
+    // ⚠ The rule for what belongs in this component: **what the worker actually
+    //   receives**. Checked against build_prompt — the prompt carries the ruling's
+    //   tail and nothing else from the ruling side. So `result` is out (a worker
+    //   never sees the previous delivery text) and so is `last_verdict` (it changes
+    //   the prompt only through the note, which is already here). Including them
+    //   made an empty-handed bounce look like new information, costing one wasted
+    //   dispatch before the brake could engage.
+    //   `|| null` folds "" into "never ruled": an empty ruling and no ruling produce
+    //   the identical prompt, so they must produce the identical fingerprint.
+    ruling: fpHash(t.last_note || null, t.decision_json, t.decision_choice,
+                   t.decision_receipt),
     tree: fpHash(opts.treeRev ?? null),
     fail: fpHash(opts.failFp ?? null),
     extra: fpHash(opts.extra ?? null),

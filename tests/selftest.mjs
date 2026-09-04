@@ -456,7 +456,10 @@ section("⑨ children of a pinned goal are claimed first");
   let got = store.claim(db, "engine", 30, { line: "engine" });
   ok("without a pin, id order as before", got.id === a1, `claimed ${got.id} (a1=${a1})`);
   store.report(db, { id: got.id, worker: "engine", outcome: "done", evidence: "x" });
-  store.resolve(db, { id: got.id, verdict: "reject" });     // put it back to level the field
+  // ⚠ With a note: this block tests PIN ORDERING and needs a1 back in the queue, but
+  //   since v0.11 an empty-handed bounce leaves the card's prompt identical and the
+  //   no-progress brake keeps it out — which would silently change what "next" means.
+  store.resolve(db, { id: got.id, verdict: "reject", note: "先放回去,换个角度" });
 
   store.setPinned(db, { id: gB, pinned: true });
   got = store.claim(db, "engine", 30, { line: "engine" });
@@ -764,7 +767,10 @@ console.log(String.fromCharCode(10) + "[⑬ work_spans lifecycle (invariant: in_
   store.report(db, { id: a, worker: "engine", outcome: "done", evidence: "e" });
   ok("② right after report: closed span, invariant holds", inv(a) && !!store.get(db, a).work_spans[0].e);
 
-  store.resolve(db, { id: a, verdict: "reject", note: "", resolvedBy: "human" });
+  // ⚠ The bounce carries a note. Since v0.11 an empty-handed bounce produces the
+  //   identical prompt as last time, so the no-progress brake refuses the re-claim —
+  //   correctly, but this block is testing SPANS and needs the re-claim to happen.
+  store.resolve(db, { id: a, verdict: "reject", note: "换个做法再来一次", resolvedBy: "human" });
   store.claimById(db, { id: a, worker: "engine" });
   ok("  re-claim opens a second span", store.get(db, a).work_spans.length === 2 && inv(a));
   store.releaseHeldBy(db, "engine");
@@ -1298,7 +1304,9 @@ console.log(String.fromCharCode(10) + "[⑱b budget calibers: a bounce keeps the
      b2.attempts === 2 && b2.attempts_this_claim === 2 && b2.max_attempts === 2,
      JSON.stringify(b2));
   store.report(db, { id: B, worker: "mail", outcome: "wait", evidence: "e" });
-  store.resolve(db, { id: B, verdict: "reject", note: "", resolvedBy: "auto" });
+  // ⚠ Same reason as above: this block tests BUDGET calibers, so the bounce has to
+  //   be a real one (an empty bounce is now refused at the next claim by design).
+  store.resolve(db, { id: B, verdict: "reject", note: "证据不足,补一条机器输出", resolvedBy: "auto" });
   const t2 = store.get(db, B);
   ok("⭐ a bounce does not erase the lifetime total", t2.attempts === 2, `lifetime=${t2.attempts}`);
   ok("⭐ a bounce does not inflate the cap (the +1 top-up is gone)",
@@ -1487,7 +1495,9 @@ section("⑳ human-gated: pre-filter burns no attempts + human rulings auto-open
   ok("(positive control) removing the gate returns the same card to the review queue",
      store.pendingReview(db).some((x) => x.id === H2));
   store.update(db, { id: H2, humanGate: 1 });
-  store.resolve(db, { id: H2, verdict: "reject", note: "", resolvedBy: "auto" });
+  // With a note (v0.11): this block tests the human_gate, and an empty-handed bounce
+  // would additionally park the card on the no-progress brake, entangling two gates.
+  store.resolve(db, { id: H2, verdict: "reject", note: "机器审阅:证据不足", resolvedBy: "auto" });
   ok("an auto ruling does not open the gate (human_gate stays)", store.get(db, H2).human_gate === true);
   // A human ruling auto-opens: run another round, ruled by a human
   const rH2 = store.claimById(db, { id: H2, worker: "z20" });
@@ -1982,7 +1992,9 @@ section("㉘ immutable task_events");
 
   one("claim", "claim", () => store.claimById(db, { id, worker: "design" }));
   one("report", "report", () => store.report(db, { id, worker: "design", outcome: "done", evidence: "e" }));
-  one("bounce", "resolve", () => store.resolve(db, { id, verdict: "reject", note: "", resolvedBy: "human" }));
+  // The bounce carries a note so the re-claim below actually happens (v0.11: an
+  // empty-handed bounce leaves the prompt identical and the brake holds the card).
+  one("bounce", "resolve", () => store.resolve(db, { id, verdict: "reject", note: "再来一次,补机器证据", resolvedBy: "human" }));
   one("re-claim", "claim", () => store.claimById(db, { id, worker: "design" }));
   one("report again", "report", () => store.report(db, { id, worker: "design", outcome: "done", evidence: "e2" }));
   one("close", "resolve", () => store.resolve(db, { id, verdict: "approve", note: "", resolvedBy: "human" }));
@@ -2185,6 +2197,22 @@ console.log(String.fromCharCode(10) + "[§NP no-progress brake: identical world 
   }
   ok("⭐⑪ the queue claim honors the brake too (both doors, or it has a bypass)",
      store.claim(db, "npq", 30, { route: "npq", line: "npq" }) === null);
+
+  // ⑬ An EMPTY-handed bounce is held on the very NEXT claim — no baseline round
+  //    needed. The fingerprint's ruling component is defined as "what the worker
+  //    would receive", and build_prompt injects only the ruling's tail: with nothing
+  //    said, the prompt is byte-identical to last time. (An earlier cut also hashed
+  //    `result` and `last_verdict`, which a worker never sees — that made an empty
+  //    bounce look like news and cost one wasted dispatch before the brake engaged.)
+  const I = store.add(db, { subject: "no-progress empty bounce", line: "np", route: "np" });
+  store.claimById(db, { id: I, worker: "np" });
+  store.report(db, { id: I, worker: "np", outcome: "done", evidence: "交付" });
+  bounce(I, "");
+  ok("⭐⑬ 空手打回 → 下一次认领就被拦(worker 收到的提示词一个字都没变)",
+     store.claimById(db, { id: I, worker: "np" }).ok === false);
+  store.update(db, { id: I, description: "补一句具体要求" });
+  ok("⑬ 补了卡面就放行(对照:确认不是这张卡永远出不来)",
+     store.claimById(db, { id: I, worker: "np" }).ok !== false);
 
   // ⑫ Polarity: this gate guards a budget, not a correctness invariant, so an
   //    unreadable record must not strand a card forever.
