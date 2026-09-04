@@ -2224,6 +2224,52 @@ console.log(String.fromCharCode(10) + "[§NP no-progress brake: identical world 
      store.claimById(db, { id: H, worker: "np" }).ok !== false);
 }
 
+// ────────────────────────────────────────────────────────────────
+// §RV Review dedup — the reviewer side of the same question.
+//    The old criterion was `auto_review_at < updated_at` = "has the card moved since
+//    the review", which is not "is there anything new to review". The comment above
+//    pendingReview already recorded the cost: edit one line on a card face and the
+//    whole pile marches back into re-review.
+console.log(String.fromCharCode(10) + "[§RV 复核去重:同一份交付物不会被审第二次]");
+{
+  const inQ = (id) => store.pendingReview(db).some((x) => x.id === id);
+  const mk = (subject) => {
+    const id = store.add(db, { subject, line: "rv", route: "rv" });
+    store.claimById(db, { id, worker: "rv" });
+    store.report(db, { id, worker: "rv", outcome: "done", evidence: "交付内容 A" });
+    return id;
+  };
+
+  const R = mk("rv-dedup");
+  ok("① 交付后进审阅队列", inQ(R));
+  store.markAutoReviewed(db, { id: R, note: "机器审阅:通过" });
+  ok("② 审过之后离开队列", !inQ(R));
+
+  // The exact shape the old criterion got wrong.
+  store.update(db, { id: R, description: "顺手补一句无关的说明" });
+  ok("⭐③ 改一句无关卡面不会把它拽回重审(旧判据在这里会把整堆卡送回去)", !inQ(R));
+
+  // Each component of the review fingerprint, one at a time.
+  store.update(db, { id: R, acceptance: "改了验收口径" });
+  ok("⭐④ 验收口径变了 → 重审(同一份交付物,结论可能不同)", inQ(R));
+  store.markAutoReviewed(db, { id: R, note: "按新口径又审了一次" });
+  ok("④ 再次审过后又安静下来", !inQ(R));
+
+  db.prepare("UPDATE tasks SET result=? , updated_at=? WHERE id=?").run("交付内容 B", new Date().toISOString(), R);
+  ok("⭐⑤ 交付物本身变了 → 重审", inQ(R));
+  store.markAutoReviewed(db, { id: R, note: "审了新交付" });
+
+  db.prepare("UPDATE tasks SET verify_ok=1, updated_at=? WHERE id=?").run(new Date().toISOString(), R);
+  ok("⭐⑥ 机器验证结果变了 → 重审(绿了和没跑不是一回事)", inQ(R));
+
+  // Polarity: this filter narrows an existing queue; it must never be the reason a
+  // card is never looked at.
+  const N = mk("rv-never-reviewed");
+  ok("⑦ 从没审过的卡一定在队列里(去重只收窄,不制造永不被看)", inQ(N));
+  db.prepare("UPDATE tasks SET review_fp=NULL WHERE id=?").run(N);
+  ok("⑦ review_fp 为空 = 放行侧", inQ(N));
+}
+
 console.log(`\n${"─".repeat(56)}\nresult: ${pass} PASS / ${fail} FAIL  (temp db ${process.env.BOARD_DB})`);
 db.close?.();
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}

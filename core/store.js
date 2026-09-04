@@ -327,6 +327,13 @@ const ADDED_COLUMNS = [
   //   An empty ruling stores the empty string: "this time nobody said anything" is
   //   itself a fact, and must not read as "unchanged from last time".
   ["last_note", "TEXT"],
+  // ⭐ Review-side twin of dispatch_fp (v0.11.2): WHICH deliverable the auto-reviewer
+  //   last looked at. `auto_review_at < updated_at` answers "has the card moved since
+  //   the review", which is not the same question — the note right above pendingReview
+  //   records the consequence: fix one line on the card face and the whole pile
+  //   marches back into re-review. Same deliverable + same acceptance + same machine
+  //   result ⇒ the previous verdict stands, and no reviewer is paid to reach it again.
+  ["review_fp", "TEXT"],
 ];
 
 // ── Human-gate literal sniff (the safety net behind explicit humanGate) ──────────
@@ -1009,6 +1016,18 @@ function stateFingerprint(db, t, opts = {}) {
   };
 }
 
+/**
+ * ⭐ REVIEW FINGERPRINT — "is this the same deliverable I already judged?"
+ * Deliberately NOT the state fingerprint: a reviewer judges the delivery against the
+ * acceptance criteria and the machine result, and nothing else on the card matters
+ * to that judgment. `verify_at` is excluded for the same reason timestamps are
+ * excluded from the dispatch fingerprint — it moves on every run and would make
+ * every fingerprint unique.
+ */
+const reviewFingerprint = (t) =>
+  fpHash(t.result, t.acceptance, t.verify_cmd,
+         t.verify_ok == null ? null : Number(t.verify_ok));
+
 /** Which components differ — this is what the panel shows as "why it may run now". */
 function fpDiff(a, b) {
   if (!a || !b) return [];
@@ -1622,6 +1641,10 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
                       --   timestamps minted near the same now() silently skips the
                       --   rounds where they come out equal.
                       auto_review_at=CASE WHEN ?='waiting' THEN NULL ELSE auto_review_at END,
+                      -- Same pairing as rearmDone: a ruling that puts the card back
+                      -- into the review queue must also drop the dedup mark, or the
+                      -- filter silently cancels the send-back.
+                      review_fp=CASE WHEN ?='waiting' THEN NULL ELSE review_fp END,
                       resolved_by=?,
                       decision_choice=?, decision_sql_archive=?,
                       decision_receipt=CASE WHEN ? IS NULL THEN decision_receipt ELSE ? END,
@@ -1637,7 +1660,8 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
                                           ELSE human_gate_src END,
                       lease_until=NULL, heartbeat_at=NULL, updated_at=? WHERE id=?`
   ).run(next, merged, said, closingVerdict, String(verdict),
-        next, next, String(resolvedBy),
+        // three `next` in a row: waiting_for CASE, auto_review_at CASE, review_fp CASE
+        next, next, next, String(resolvedBy),
         selectedOption == null ? null : String(selectedOption),
         sqlArchive == null ? null : JSON.stringify(sqlArchive),
         receiptJson, receiptJson,
@@ -1754,10 +1778,10 @@ function markAutoReviewed(db, { id, note = "", decisionPackage = null }) {
   // What was looked at and passed to a human moves to "confirm" — distinguishable
   // from untouched.
   db.prepare(`UPDATE tasks
-                 SET auto_review_at=?, verdict_note=?, waiting_for='confirm',
+                 SET auto_review_at=?, review_fp=?, verdict_note=?, waiting_for='confirm',
                      decision_json=?, decision_choice=NULL, decision_sql_archive=NULL
                WHERE id=?`)
-    .run(now(), String(note || t.verdict_note || ""),
+    .run(now(), reviewFingerprint(t), String(note || t.verdict_note || ""),
          decisionPackage == null ? null : JSON.stringify(decisionPackage), Number(id));
   // ⭐ Consume here too: the A/B/C PACKAGE is being replaced, so an "executed" receipt
   //   against the old package is not input for the next review (same logic as
@@ -1968,7 +1992,11 @@ function rearmDone(db) {
     const kids = db.prepare(
       "SELECT id FROM tasks WHERE parent_id=? AND archived_at IS NULL").all(r.id).map((x) => Number(x.id));
     db.prepare(
-      `UPDATE tasks SET waiting_for='review', auto_review_at=NULL,
+      // review_fp cleared alongside auto_review_at: the children finishing IS the new
+      // information, even though the parent's own deliverable text did not change.
+      // Every path that deliberately sends a card back for review has to clear both,
+      // or the dedup filter quietly undoes the send-back.
+      `UPDATE tasks SET waiting_for='review', auto_review_at=NULL, review_fp=NULL,
                         verdict_note=COALESCE(verdict_note,'') || ?, updated_at=? WHERE id=?`
     ).run(`${"\n\n"}—— 子任务卡 #${kids.join(" #")} 已全部完成 → 自动送回重审(不再等待人工)——`,
           now(), Number(r.id));
@@ -1995,6 +2023,15 @@ function pendingReview(db) {
         AND (t.auto_review_at IS NULL OR t.auto_review_at < t.updated_at)
       ORDER BY t.id`
   ).all()
+   // ⭐ Second criterion (v0.11.2): the SQL above answers "has the card moved since
+   //   the review", which is not "is there anything new to review". The deliverable
+   //   fingerprint answers the second one. Same delivery, same acceptance, same
+   //   machine result ⇒ the verdict already reached still applies, so no reviewer is
+   //   paid to reach it again. The note above this query records what the loose
+   //   criterion cost: one edited line marched the whole pile back into re-review.
+   //   ⚠ A card never reviewed (review_fp NULL) always passes — this filter narrows
+   //   an existing queue, it must never be the reason a card is never looked at.
+   .filter((t) => !t.review_fp || t.review_fp !== reviewFingerprint(t))
    .map((t) => ({ ...t, pin: pinnedAncestor(db, t.parent_id) }))
    .sort((a, b) => (a.pin == null) - (b.pin == null)
                 || String(b.pin || "").localeCompare(String(a.pin || ""))
