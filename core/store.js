@@ -1636,10 +1636,11 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
                       -- 'review' is an existing value (in the WAITING_FOR allowlist;
                       -- rearmDone uses the same combination) ⇒ no new state invented.
                       waiting_for=CASE WHEN ?='waiting' THEN 'review' ELSE NULL END,
-                      -- ⭐ Set NULL (do not compare timestamps): pendingReview picks up
-                      --   auto_review_at IS NULL unconditionally, whereas comparing two
-                      --   timestamps minted near the same now() silently skips the
-                      --   rounds where they come out equal.
+                      -- ⭐ Set NULL rather than stamping a fresh time. The warning that
+                      --   earned this line — two timestamps minted near the same now()
+                      --   come out equal and the round is silently skipped — is why
+                      --   pendingReview no longer compares timestamps at all (v0.11.2);
+                      --   the same reasoning is what keeps this an explicit NULL.
                       auto_review_at=CASE WHEN ?='waiting' THEN NULL ELSE auto_review_at END,
                       -- Same pairing as rearmDone: a ruling that puts the card back
                       -- into the review queue must also drop the dedup mark, or the
@@ -1961,9 +1962,11 @@ function completeGoals(db) {
  * ⭐ Send parents whose derivations ALL completed back from human-wait to re-review
  * automatically (ruling: "once derivations finish, re-review the parent against
  * their results instead of waiting on me forever").
- * pendingReview only sees auto_review_at < updated_at, and a child completing does
- * NOT move the parent's updated_at — measured: three cards sat in confirm with all
- * children done.
+ * Why it needs its own sweep: a child completing does not touch the parent's own
+ * columns at all, so nothing about the parent changes — not its updated_at (the
+ * criterion until v0.11.2) and not its deliverable fingerprint (the criterion since).
+ * Measured: three cards sat in confirm with every child done. Hence the explicit
+ * clear of BOTH marks below.
  *
  * Sweep condition (all must hold):
  *   · parent waiting (not archived), reviewed at least once (auto_review_at set —

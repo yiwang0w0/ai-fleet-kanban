@@ -2255,12 +2255,11 @@ console.log(String.fromCharCode(10) + "[§RV 复核去重:同一份交付物不�
   store.markAutoReviewed(db, { id: R, note: "按新口径又审了一次" });
   ok("④ 再次审过后又安静下来", !inQ(R));
 
-  // ⚠ updated_at is stamped two seconds ahead ON PURPOSE. pendingReview's SQL
-  //   pre-filter compares it against auto_review_at, and the comment above that
-  //   query already warns that two timestamps minted near the same now() come out
-  //   EQUAL and the round is silently skipped. Measured: this test passed on
-  //   Windows and failed on Linux, which is fast enough to land in the same
-  //   millisecond. The subject here is review_fp, not clock resolution.
+  // ⚠ updated_at is stamped ahead out of habit, not necessity: pendingReview no
+  //   longer compares timestamps (v0.11.2 removed that criterion precisely because
+  //   this assertion passed on Windows and failed on Linux — two timestamps minted
+  //   inside one millisecond compare EQUAL and the round is silently skipped). Kept
+  //   so the row is unambiguous to a reader; the subject here is review_fp.
   const later = () => new Date(Date.now() + 2000).toISOString();
   db.prepare("UPDATE tasks SET result=? , updated_at=? WHERE id=?").run("交付内容 B", later(), R);
   ok("⭐⑤ 交付物本身变了 → 重审", inQ(R));
@@ -2268,6 +2267,22 @@ console.log(String.fromCharCode(10) + "[§RV 复核去重:同一份交付物不�
 
   db.prepare("UPDATE tasks SET verify_ok=1, updated_at=? WHERE id=?").run(later(), R);
   ok("⭐⑥ 机器验证结果变了 → 重审(绿了和没跑不是一回事)", inQ(R));
+
+  // ⑧ A hand-back does NOT clear review_fp — deliberate, and worth an assertion
+  //    because the resulting state looks like a bug from the outside: the card sits
+  //    in 待验收 and no reviewer touches it. Re-judging a byte-identical delivery
+  //    reaches the identical verdict, so the card waits for a human instead, fully
+  //    visible. (The dispatch brake normally prevents the worker from getting here
+  //    at all; this covers the case where it was released and delivered the same.)
+  const HB = mk("rv-handback-identical");
+  store.markAutoReviewed(db, { id: HB, note: "机器审阅:证据不足" });
+  store.resolve(db, { id: HB, verdict: "reject", note: "补一条机器输出再交", resolvedBy: "human" });
+  ok("⑧ 打回后回到未开始", store.get(db, HB).status === "not_started");
+  store.claimById(db, { id: HB, worker: "rv" });
+  store.report(db, { id: HB, worker: "rv", outcome: "done", evidence: "交付内容 A" });  // 一模一样
+  ok("⭐⑧ 交了一模一样的东西 → 自动审阅不再碰它(同一份交付物,结论必然相同)", !inQ(HB));
+  ok("⑧ 但它仍然停在等待中、看得见(不是丢了,是等人)",
+     store.get(db, HB).status === "waiting", store.get(db, HB).status);
 
   // Polarity: this filter narrows an existing queue; it must never be the reason a
   // card is never looked at.
