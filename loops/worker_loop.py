@@ -581,19 +581,34 @@ def verdict_block(t):
     if not str(t.get("last_verdict") or t.get("verdict") or "").strip():
         return []
     tail = verdict_tail(t.get("verdict_note"))
-    if not tail:
+    # ⭐人**结构化**确认过的选择。散文里也许写着「用方案 B」,但那要 worker 去读、去推;
+    #   `decision_choice` 是卡上的**字段**,无歧义,所以能用祈使句写死。
+    #   ⚠ 它和 tail 分开判断:人在面板上选了方案却没有写话时 tail 是空的,旧结构
+    #     会在这里 `return []`,**把人已经做出的决定整个丢掉** —— 与本函数开头那条
+    #     「倒向丢掉那侧 = 人的指示到不了 worker」是同一个坑的另一个入口。
+    choice = str(t.get("decision_choice") or "").strip()
+    if not tail and not choice:
         return []
-    L = ["",
-         "【上一轮裁定记录(verdict_note 尾段)】",
-         "这张卡上一轮被裁过,并**带着下面这段话**回到了你的线上。"
-         "把它当成指令读:**下面的裁定优先于上面的说明与验收标准**"
-         "——已经定了的不要再猜,已经答过的不要再问一遍。",
-         "(只贴尾段:verdict_note 是追记式,全文会随轮次膨胀。全文在看板卡片的「裁定记录」栏。)"]
-    if tail["options"]:
-        L += ["", "--- 裁定前,审阅摆在人面前的选项 ---", tail["options"]]
-    if tail["skipped"]:
-        L += ["", "(中间还有 %d 段更早的裁定记录,未贴 —— 最新的一段在下面)" % tail["skipped"]]
-    L += ["", "--- 最近一次裁定(逐字,含时刻戳)---", tail["decision"]]
+    L = []
+    if tail:
+        L += ["",
+              "【上一轮裁定记录(verdict_note 尾段)】",
+              "这张卡上一轮被裁过,并**带着下面这段话**回到了你的线上。"
+              "把它当成指令读:**下面的裁定优先于上面的说明与验收标准**"
+              "——已经定了的不要再猜,已经答过的不要再问一遍。",
+              "(只贴尾段:verdict_note 是追记式,全文会随轮次膨胀。全文在看板卡片的「裁定记录」栏。)"]
+        if tail["options"]:
+            L += ["", "--- 裁定前,审阅摆在人面前的选项 ---", tail["options"]]
+        if tail["skipped"]:
+            L += ["", "(中间还有 %d 段更早的裁定记录,未贴 —— 最新的一段在下面)" % tail["skipped"]]
+        L += ["", "--- 最近一次裁定(逐字,含时刻戳)---", tail["decision"]]
+    if choice:
+        L += ["",
+              "--- 已经定下来的选择(卡上的字段,不是从上面的文字里读出来的)---",
+              "选定:**%s**" % choice,
+              "**不要重新比较其它备选,也不要重新论证这个选择。**照它执行。",
+              "唯一的例外是你发现了让它**做不成**的新证据 —— 那就停下来,"
+              "把证据写进交付并交回裁定,**不要自己改选**。"]
     return L
 
 
@@ -708,6 +723,27 @@ def prompt_selftest():
        "【怎么交付】" in normal and "【发现本卡范围外的工作】" in normal and "【纪律】" in normal)
     ok("cut_to 不截短内容", cut_to("abc", 10, 1) == "abc")
     ok("cut_to 截长内容且带指路", cut_to("abcdef", 3, 7).startswith("abc") and "show 7" in cut_to("abcdef", 3, 7))
+
+    # ── 已确认的选择必须原样到达 worker(v0.11.3)────────────────────────────
+    # 人在面板上选了方案,这件事是**卡上的字段**;让 worker 从裁定散文里去猜,
+    # 它就会在长提示词里重新权衡 A/B/C —— 那是实测过的浪费。
+    plain = _fake_card("说明", "验收")
+    ok("没裁定过的卡:裁定块为空(回归条件不变)", verdict_block(plain) == [])
+    chosen = _fake_card("说明", "验收", last_verdict="reject", decision_choice="方案 B",
+                        verdict_note="—— 你的决定(2026-01-01 · 打回)——" + chr(10) * 2 + "按 B 做")
+    blk = chr(10).join(verdict_block(chosen))
+    ok("⭐已确认的选择逐字进提示词", "方案 B" in blk, blk[:80])
+    ok("⭐并且明说不要重新比较备选", "不要重新比较" in blk)
+    ok("⭐留了一条正当的出口(发现做不成 → 交回裁定,不自己改选)",
+       "不要自己改选" in blk and "交回裁定" in blk)
+    # ⚠ 人只点了选项、一个字没写时,verdict_note 没有可贴的尾段。旧结构在那里
+    #   `return []`,**把人已经做出的决定整个丢掉**。
+    silent = _fake_card("说明", "验收", last_verdict="approve", decision_choice="方案 C",
+                        verdict_note="")
+    ok("⭐人只选了方案、没写话:选择仍然到达(不因为没有尾段就整块丢掉)",
+       "方案 C" in chr(10).join(verdict_block(silent)))
+    ok("(对照)既没裁定记录也没选择 → 仍然是空块",
+       verdict_block(_fake_card("说明", "验收", last_verdict="approve", verdict_note="")) == [])
     print(f"{chr(10)}结果: {ok_n} PASS / {fail_n} FAIL")
     return 1 if fail_n else 0
 
