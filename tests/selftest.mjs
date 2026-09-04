@@ -2255,11 +2255,18 @@ console.log(String.fromCharCode(10) + "[§RV 复核去重:同一份交付物不�
   store.markAutoReviewed(db, { id: R, note: "按新口径又审了一次" });
   ok("④ 再次审过后又安静下来", !inQ(R));
 
-  db.prepare("UPDATE tasks SET result=? , updated_at=? WHERE id=?").run("交付内容 B", new Date().toISOString(), R);
+  // ⚠ updated_at is stamped two seconds ahead ON PURPOSE. pendingReview's SQL
+  //   pre-filter compares it against auto_review_at, and the comment above that
+  //   query already warns that two timestamps minted near the same now() come out
+  //   EQUAL and the round is silently skipped. Measured: this test passed on
+  //   Windows and failed on Linux, which is fast enough to land in the same
+  //   millisecond. The subject here is review_fp, not clock resolution.
+  const later = () => new Date(Date.now() + 2000).toISOString();
+  db.prepare("UPDATE tasks SET result=? , updated_at=? WHERE id=?").run("交付内容 B", later(), R);
   ok("⭐⑤ 交付物本身变了 → 重审", inQ(R));
   store.markAutoReviewed(db, { id: R, note: "审了新交付" });
 
-  db.prepare("UPDATE tasks SET verify_ok=1, updated_at=? WHERE id=?").run(new Date().toISOString(), R);
+  db.prepare("UPDATE tasks SET verify_ok=1, updated_at=? WHERE id=?").run(later(), R);
   ok("⭐⑥ 机器验证结果变了 → 重审(绿了和没跑不是一回事)", inQ(R));
 
   // Polarity: this filter narrows an existing queue; it must never be the reason a

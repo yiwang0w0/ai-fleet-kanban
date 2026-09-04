@@ -2020,12 +2020,24 @@ function pendingReview(db) {
         --   known to be "wait for the human" is pure quota incineration. Once the
         --   human rules, resolve drops human_gate to 0 and it returns naturally.
         AND COALESCE(t.human_gate,0)=0
-        AND (t.auto_review_at IS NULL OR t.auto_review_at < t.updated_at)
+        -- ⚠ The timestamp comparison that used to live here is GONE (v0.11.2).
+        --   ⚠⚠ No backticks in this comment: it lives inside a JS template literal,
+        --   where one would end the string early (it did — SyntaxError on load).
+        --   The old test "auto_review_at < updated_at" asked "has the card moved",
+        --   which is not the question, and it carried a trap this file documents:
+        --   two timestamps minted near the same now() come out EQUAL and the round
+        --   is silently skipped. Measured on this very change — an assertion passed
+        --   on Windows and failed on Linux, which is fast enough to land inside one
+        --   millisecond. The deliverable fingerprint below answers the real question
+        --   and has no clock in it. Cost: the fingerprint is computed for every
+        --   waiting card rather than for a pre-filtered subset — a four-field hash
+        --   over a queue that is small by construction.
       ORDER BY t.id`
   ).all()
-   // ⭐ Second criterion (v0.11.2): the SQL above answers "has the card moved since
-   //   the review", which is not "is there anything new to review". The deliverable
-   //   fingerprint answers the second one. Same delivery, same acceptance, same
+   // ⭐ THE criterion (v0.11.2). The SQL above narrows to cards that could be
+   //   reviewed at all; this decides whether there is anything new to review. The
+   //   question is not "has the card moved" — it is "is this the same deliverable I
+   //   already judged". Same delivery, same acceptance, same
    //   machine result ⇒ the verdict already reached still applies, so no reviewer is
    //   paid to reach it again. The note above this query records what the loose
    //   criterion cost: one edited line marched the whole pile back into re-review.

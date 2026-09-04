@@ -1176,6 +1176,21 @@ function renderLineage(wrap){
   /** One recorded event → what the timeline draws. `release` carries two different
    *  meanings and is told apart by its detail (an in-flight card coming back is the
    *  end of a work span; a hold/release of the flag is not). */
+  // ⭐ Why this dispatch was allowed to happen — the no-progress brake's other half.
+  //   A brake that silently lets a card through is as hard to trust as one that
+  //   silently holds it, so the claim event records which fingerprint components
+  //   moved and the timeline says so. Empty on a first dispatch: "nothing to compare"
+  //   is not "nothing changed", and only one of the two can ever reach a claim.
+  const FP_LABEL = { card: "卡面", deps: "依赖", ruling: "裁定意见", tree: "工作树",
+                     fail: "上次失败的方式", extra: "部署方声明的状态" };
+  const whyRan = (e) => {
+    const d = e && e.ev && e.ev.detail;
+    if (!d || !Array.isArray(d.fp_changed)) return "";
+    const nl = String.fromCharCode(10);   // not NLC: that const lives in another scope below
+    if (d.forced) return `${nl}重新派发原因:人工强制(状态并没有变化)`;
+    if (!d.fp_changed.length) return "";
+    return `${nl}重新派发原因:${d.fp_changed.map((k) => FP_LABEL[k] || k).join(" · ")}有变化`;
+  };
   const visualKind = (e) => {
     if (e.kind === "snapshot" || e.kind === "add") return "birth";
     if (e.kind === "claim") return "open";
@@ -1394,7 +1409,7 @@ function renderLineage(wrap){
         else if (e.k === "birth")
           gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="${c}"><title>#${t.id} 启动 ${tt}${NLC}${esc2(t.subject)}</title></circle>`;
         else if (e.k === "open")
-          gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="${c}"><title>#${t.id} 开工 ${tt} · ${esc2(lineLabel(e.w))}</title></rect>`;
+          gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="${c}"><title>#${t.id} 开工 ${tt} · ${esc2(lineLabel(e.w))}${whyRan(e)}</title></rect>`;
         else if (e.k === "close"){
           if (last && t.status === "waiting")
             gg += `<circle cx="${x}" cy="${yy}" r="4" fill="var(--panel)" stroke="${c}" stroke-width="1.8"><title>#${t.id} 交付→等待${t.waiting_for ? "/" + esc2(WF_LABEL[t.waiting_for] || t.waiting_for) : ""} ${tt}</title></circle>`;
