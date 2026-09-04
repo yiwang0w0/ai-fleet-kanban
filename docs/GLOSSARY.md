@@ -146,7 +146,7 @@ accepts anything, including a flag that was renamed last week.
 
 | our term | what it is here | the official term it is NOT |
 |---|---|---|
-| **worker** | a separate OS process running `claude --print` once per card, with its own session, reporting only through the board's HTTP API | **not** a *subagent* — a subagent is started by the Task tool from inside a session and reports back into it. Our workers are started by a supervisor, never by another agent; they cannot see or address each other, and a card is their entire scope |
+| **worker** | a separate OS process running `claude -p` once per card, with its own session, reporting only through the board's HTTP API | **not** a *subagent* — a subagent is started by the Task tool from inside a session and reports back into it. Our workers are started by a supervisor, never by another agent; they cannot see or address each other, and a card is their entire scope |
 | **座席 seat** | a deployment-level declaration `{runtime, model, effort, window}` describing *what to start*, resolved before any process exists | **not** an *agent definition* (`--agents`, `.claude/agents/*.md`) — that names a role inside a running session; a seat names a way to start one |
 | **线 line** | a resident loop that claims cards on a route, one card at a time, restarted by the supervisor | no official counterpart; the closest CLI idea is "a shell that keeps invoking claude", which is what it is |
 | **协调席 coordinator seat** | the human-attended session that rules on deliveries and operates the board | no official counterpart; it is a *seat* in our sense, occupied interactively |
