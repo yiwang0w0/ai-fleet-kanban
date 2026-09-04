@@ -35,6 +35,7 @@
 const { DatabaseSync } = require("node:sqlite");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 
 const DATA_DIR = process.env.BOARD_DATA_DIR || path.join(__dirname, ".data");
 const DB_PATH = process.env.BOARD_DB || path.join(DATA_DIR, "board.db");
@@ -302,6 +303,30 @@ const ADDED_COLUMNS = [
   // markAutoReviewed, result by the next report. Harmless while cards always left
   // waiting; hold_for_review removes that protection, hence a dedicated column.
   ["decision_receipt", "TEXT"],
+  // ⭐ No-progress brake (v0.11). `dispatch_fp` is the STATE FINGERPRINT recorded at
+  //   the LAST claim. The next claim compares it against the fingerprint now: equal
+  //   ⇒ nothing has changed since that dispatch, so the card is not handed out at
+  //   all — no attempt burned, no lease taken, and above all NO MODEL CALL. The cost
+  //   of a repeat used to be paid before anything could refuse it (`attempts` is
+  //   incremented inside claim itself).
+  //   ⭐ Recorded at CLAIM, not at report, and that is the load-bearing choice: it
+  //   covers the bounce loop as well as the park loop. A worker that delivers, gets
+  //   bounced with a note, re-runs and delivers the SAME thing, and is bounced with
+  //   the SAME note, produces an identical fingerprint on the third claim — which is
+  //   exactly the "reviewer asks, worker re-explains, forever" cycle. Recording at
+  //   report would only ever have caught cards that failed.
+  //   Stored as JSON of the components, not a bare hash, so the panel can say WHICH
+  //   component changed when the card runs again ("why this may run now").
+  ["dispatch_fp", "TEXT"],
+  ["dispatch_fp_at", "TEXT"],
+  // ⭐ What the LAST ruling actually said, verbatim and on its own. `verdict_note` is
+  //   an append-only record carrying a timestamped header per entry, so its full text
+  //   differs on every ruling even when the ruling says the identical thing — reading
+  //   it as "did anyone say anything new?" always answers yes, and a brake built on
+  //   that answer never engages. This column is the answer to that question.
+  //   An empty ruling stores the empty string: "this time nobody said anything" is
+  //   itself a fact, and must not read as "unchanged from last time".
+  ["last_note", "TEXT"],
 ];
 
 // ── Human-gate literal sniff (the safety net behind explicit humanGate) ──────────
@@ -917,6 +942,114 @@ function addInner(db, {
  * Without route/line filtering, one line's worker grabs another line's cards —
  * adding columns without touching claim is not enough.
  */
+/**
+ * ⭐ STATE FINGERPRINT — the answer to "would this dispatch see anything new?"
+ *
+ * The board's existing brakes all act AFTER a model has been paid for: the lifetime
+ * ceiling counts dispatches, the loop's failure-fingerprint breaker needs failures to
+ * compare. Neither asks the cheaper question first. A bounced card returns to
+ * not_started with a full budget (claim re-stamps the anchor), so an empty-handed
+ * bounce buys another full run at the same card, in the same world, for the same
+ * conclusion.
+ *
+ * Components are hashed SEPARATELY and assembled through JSON.stringify — never
+ * joined with a separator, since any separator that can occur inside a description
+ * is not a separator. Each is 16 hex chars: enough to make collision irrelevant here
+ * (a collision costs one skipped dispatch, not a wrong answer) and small enough to
+ * store per card.
+ *
+ *   card    the face a worker is asked to act on
+ *   deps    the state of what it waits on — a dependency finishing IS new information
+ *   ruling  everything a human or reviewer said back; an annotated bounce releases
+ *           the brake, an empty-handed one does not. This is the component that
+ *           makes the whole mechanism fair.
+ *   tree    the repository the work lands in (caller-supplied: store stays pure)
+ *   fail    how the last attempt failed, as reported by the loop
+ *   extra   deployment-supplied (fleet.config `fingerprint_extra_cmd`) — the hook a
+ *           private deployment uses for facts this repo has no business knowing
+ *
+ * ⚠ `attempts`, heartbeat, lease and timestamps are deliberately ABSENT. They change
+ *   on every dispatch, which would make every fingerprint unique and the brake a
+ *   no-op that still looks installed.
+ */
+const fpHash = (...parts) =>
+  crypto.createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 16);
+
+function stateFingerprint(db, t, opts = {}) {
+  const deps = (() => {
+    let ids = [];
+    try { ids = JSON.parse(t.blocked_by || "[]"); } catch { ids = []; }
+    if (!Array.isArray(ids) || !ids.length) return fpHash(null);
+    const rows = ids.map((id) =>
+      db.prepare("SELECT id, status, verdict FROM tasks WHERE id=?").get(Number(id)) || { id, status: "?", verdict: null });
+    return fpHash(rows.map((r) => [r.id, r.status, r.verdict]));
+  })();
+  return {
+    card: fpHash(t.subject, t.description, t.acceptance, t.verify_cmd, t.max_attempts,
+                 t.human_gate, t.blocked_by, t.oneof_key, t.proves_parent),
+    deps,
+    // ⚠ `last_note`, NOT `verdict_note`: the latter is append-only with a timestamped
+    //   header per entry, so it differs on every ruling even when the ruling is
+    //   word-for-word the same — a brake reading it would never engage. (Measured:
+    //   the first cut of this gate read verdict_note and held nothing.)
+    ruling: fpHash(t.last_note, t.decision_json, t.decision_choice, t.last_verdict,
+                   t.decision_receipt, t.result),
+    tree: fpHash(opts.treeRev ?? null),
+    fail: fpHash(opts.failFp ?? null),
+    extra: fpHash(opts.extra ?? null),
+  };
+}
+
+/** Which components differ — this is what the panel shows as "why it may run now". */
+function fpDiff(a, b) {
+  if (!a || !b) return [];
+  return ["card", "deps", "ruling", "tree", "fail", "extra"].filter((k) => a[k] !== b[k]);
+}
+
+/**
+ * The brake itself. Returns null to let the card through, or the reason to hold it.
+ * ⚠ Polarity: a card with NO recorded dispatch always passes, and an unparseable
+ *   record passes too. This gate protects a budget, not a correctness invariant —
+ *   an unreadable record must not strand a card forever. (The gates that protect
+ *   correctness — source, deliverable, human — fail CLOSED; this one deliberately
+ *   does not, for the same reason the v0.10 circuit breaker does not.)
+ */
+function noProgressHold(db, t, opts = {}) {
+  if (!t.dispatch_fp) return null;
+  let prev = null;
+  try { prev = JSON.parse(t.dispatch_fp); } catch { return null; }
+  if (!prev || typeof prev !== "object") return null;
+  // ⭐ Re-read the RAW row. Callers hand this function two different shapes — claim
+  //   passes a `SELECT *` row, the server passes a row() projection where blocked_by
+  //   has already become a deps array and flags have changed type. Fingerprinting a
+  //   projection produces a different hash for the identical card, so the panel said
+  //   "not held" about a card the queue was refusing (measured). The fingerprint is
+  //   defined over the stored row, so read the stored row.
+  const raw = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(t.id)) || t;
+  const cur = stateFingerprint(db, raw, opts);
+  const changed = fpDiff(prev, cur);
+  return changed.length ? null : { since: t.dispatch_fp_at || null, fp: cur };
+}
+
+/**
+ * Which cards on this route/line the brake is currently holding. Used to answer an
+ * empty claim with a REASON.
+ * ⚠ House rule, already settled for the pool gate: "503 must not wear the same face
+ *   as 204 — a starving fleet whose log says 'nothing to claim' gets no one asking
+ *   why". A brake that silently empties the queue is the same failure: the line
+ *   looks idle, the board looks quiet, and nothing says the queue is full of cards
+ *   nobody will be paid to look at again.
+ * Only rows that have been dispatched before are examined; on a board where the
+ * brake has never fired this walks nothing.
+ */
+function heldByNoProgress(db, { route, line }, opts = {}) {
+  const rows = db.prepare(
+    `SELECT * FROM tasks WHERE status='not_started' AND released=1 AND archived_at IS NULL
+       AND kind='task' AND dispatch_fp IS NOT NULL AND route=? AND (line IS NULL OR line=?)`
+  ).all(String(route ?? DEFAULT_ROUTE), String(line ?? ""));
+  return rows.filter((t) => noProgressHold(db, t, opts)).map((t) => Number(t.id));
+}
+
 function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
   const route = opts.route || DEFAULT_ROUTE;
@@ -995,6 +1128,10 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
       if (unfinishedKids.has(Number(t.id))) return false;         // parent gate: children unfinished
       if (unreleasedAncestor(db, t.parent_id) != null) return false;  // ⭐ ancestor-release invariant
       if ((wipByRoot.get(rootOf(db, t.id)) || 0) >= WIP_PER_ROOT) return false;  // ⭐ WIP cap
+      // ⭐ No-progress brake: nothing about this card has changed since the dispatch
+      //   that produced nothing. Skipping here is what makes it free — one line
+      //   further down, `attempts` has already been spent.
+      if (noProgressHold(db, t, opts)) return false;
       return depsSatisfied(db, t).ok;   // broken blocked_by falls on the REFUSAL side
     });
     if (!pick) { db.exec("COMMIT"); return null; }
@@ -1006,11 +1143,25 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
     //     claim, this dispatch has used 1 (claim counts as round one). Reordering
     //     the two assignments would not change meaning; `attempts+1` is written
     //     first to show the reader the before/after.
+    // ⭐ Fingerprint of the world THIS dispatch is going out into, computed from the
+    //   pre-update row. The next claim compares against it; identical means this
+    //   dispatch would see exactly what the last one saw.
+    const curFp = stateFingerprint(db, pick, opts);
+    const dfp = JSON.stringify(curFp);
+    // ⭐ WHY this dispatch was allowed, recorded at the moment it is allowed. A brake
+    //   that silently lets things through is as hard to trust as one that silently
+    //   holds them: the operator needs to see "this ran because the ruling changed",
+    //   not just that it ran. Empty list = first dispatch, nothing to compare.
+    const fpChanged = (() => {
+      if (!pick.dispatch_fp) return [];
+      try { return fpDiff(JSON.parse(pick.dispatch_fp), curFp); } catch { return []; }
+    })();
     db.prepare(
       `UPDATE tasks SET status='in_progress', worker=?, lease_until=?, heartbeat_at=?,
                         attempts=attempts+1, attempts_base=attempts, waiting_for=NULL,
+                        dispatch_fp=?, dispatch_fp_at=?,
                         last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
-    ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(),
+    ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
           opts.runtime ? String(opts.runtime) : null, now(), pick.id);
     spanOpen(db, pick.id, worker);
     {
@@ -1023,6 +1174,11 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
           // or the history shows a card that belonged to nobody being worked on.
           line: claimed.line == null ? String(line) : String(claimed.line),
           runtime: opts.runtime ? String(opts.runtime) : null,
+          // Which fingerprint components differ from the previous dispatch. Absent on
+          // a first dispatch — "nothing to compare" and "nothing changed" must not
+          // read alike, and one of them can never happen (a claim with nothing
+          // changed is exactly what the brake refuses).
+          ...(pick.dispatch_fp ? { fp_changed: fpChanged } : {}),
         }),
       });
     }
@@ -1064,8 +1220,14 @@ function reapExpiredInner(db) {
   const doomed = db.prepare(
     `SELECT id, line, parent_id, status, kind, released, worker FROM tasks
       WHERE status='in_progress' AND lease_until IS NOT NULL AND lease_until < ?`).all(Date.now());
+  // ⭐ The dispatch fingerprint is CLEARED here. A reaped card never reported back,
+  //   so "the last dispatch saw this same world and concluded nothing new" is not a
+  //   claim we can make about it — the last dispatch may have died before reading
+  //   anything. A crash is grounds for another go; a considered no-progress return
+  //   is not.
   const r = db.prepare(
-    `UPDATE tasks SET status='not_started', worker=NULL, lease_until=NULL, heartbeat_at=NULL, updated_at=?
+    `UPDATE tasks SET status='not_started', worker=NULL, lease_until=NULL, heartbeat_at=NULL,
+                      dispatch_fp=NULL, dispatch_fp_at=NULL, updated_at=?
       WHERE status='in_progress' AND lease_until IS NOT NULL AND lease_until < ?`
   ).run(now(), Date.now());
   for (const t of doomed) {
@@ -1087,7 +1249,8 @@ function reapExpiredInner(db) {
  * Passes ALL the same gates as claim. On refusal, it names WHAT blocked it —
  * a bare "couldn't take it" hides whether it was release, deps, or a lock.
  */
-function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null }) {
+function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null,
+                         force = false, treeRev = null, extra = null }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -1140,14 +1303,31 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
       .map((r) => Number(r.id)).filter((rid) => rootOf(db, rid) === rt);
     if (wip.length >= WIP_PER_ROOT)
       return no(`根 #${rt} 的在途卡已达 WIP 上限 ${WIP_PER_ROOT}(在途: #${wip.join(" #")})—— 等在途结清再领`);
+    // ⭐ No-progress brake, by name and with the way out. `force` is the deliberate
+    //   override — a human saying "run it anyway", which IS a reason, unlike a timer
+    //   firing. It is a parameter and not a silent exception because a door that
+    //   quietly skips the gate is the gate's failure mode.
+    const npOpts = { treeRev, extra };
+    const hold = force ? null : noProgressHold(db, t, npOpts);
+    if (hold)
+      return no(`#${id} 自上次派发(${hold.since || "?"})以来状态没有变化 —— 拒绝重复调用模型。` +
+                `要让它再跑,给它新的输入(补充卡面/写裁定意见/推进依赖/更新工作树),` +
+                `或显式强制(force)`);
     // Anchor re-stamp in the SAME shape as claim (so the calibers cannot split
     // between the two doors; SQLite right-hand sides are evaluated on the
     // pre-update row — details at claim's identical UPDATE).
+    const curFp = stateFingerprint(db, t, npOpts);
+    const dfp = JSON.stringify(curFp);
+    const fpChanged = (() => {
+      if (!t.dispatch_fp) return [];
+      try { return fpDiff(JSON.parse(t.dispatch_fp), curFp); } catch { return []; }
+    })();
     db.prepare(
       `UPDATE tasks SET status='in_progress', worker=?, lease_until=?, heartbeat_at=?,
                         attempts=attempts+1, attempts_base=attempts, waiting_for=NULL,
+                        dispatch_fp=?, dispatch_fp_at=?,
                         last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
-    ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(),
+    ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
           runtime ? String(runtime) : null, now(), Number(id));
     spanOpen(db, Number(id), worker);
     {
@@ -1158,6 +1338,10 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
         detail: eventState(claimed, {
           line: claimed.line == null ? String(worker) : String(claimed.line),
           runtime: runtime ? String(runtime) : null,
+          // Same record as the queue door, plus the one thing only this door can
+          // say: that a person overrode the brake. "Ran anyway, on purpose" has to
+          // be distinguishable in the history from "ran because something changed".
+          ...(t.dispatch_fp ? { fp_changed: fpChanged, ...(force ? { forced: true } : {}) } : {}),
         }),
       });
     }
@@ -1181,7 +1365,10 @@ function releaseHeldBy(db, worker) {
   try {
     for (const r of rows) spanClose(db, r.id);
     db.prepare(
-      `UPDATE tasks SET status='not_started', worker=NULL, lease_until=NULL, heartbeat_at=NULL, updated_at=?
+      // dispatch_fp cleared for the same reason as the reaper: a card handed back
+      // without a report never produced the judgment the brake would be honoring.
+      `UPDATE tasks SET status='not_started', worker=NULL, lease_until=NULL, heartbeat_at=NULL,
+                        dispatch_fp=NULL, dispatch_fp_at=NULL, updated_at=?
         WHERE status='in_progress' AND worker=?`
     ).run(now(), String(worker));
     // ⚠ Same `release` kind as a hold/release of the RELEASED flag; the two are told
@@ -1416,7 +1603,7 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
   //   no hand-rolled aliases.
   const receiptJson = sqlReceipt == null ? null : JSON.stringify(sqlReceipt);
   db.prepare(
-    `UPDATE tasks SET status=?, verdict_note=?, verdict=?, last_verdict=?,
+    `UPDATE tasks SET status=?, verdict_note=?, last_note=?, verdict=?, last_verdict=?,
                       -- hold_for_review = "enter the review queue carrying the human ruling".
                       -- 'review' is an existing value (in the WAITING_FOR allowlist;
                       -- rearmDone uses the same combination) ⇒ no new state invented.
@@ -1440,7 +1627,7 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
                                           WHEN ?='auto' AND human_gate_src='detect' THEN NULL
                                           ELSE human_gate_src END,
                       lease_until=NULL, heartbeat_at=NULL, updated_at=? WHERE id=?`
-  ).run(next, merged, closingVerdict, String(verdict),
+  ).run(next, merged, said, closingVerdict, String(verdict),
         next, next, String(resolvedBy),
         selectedOption == null ? null : String(selectedOption),
         sqlArchive == null ? null : JSON.stringify(sqlArchive),
@@ -2067,8 +2254,11 @@ function reopenInner(db, { id, line }) {
     //   Without this, "reopen a done card → not_started with verdict='approve'"
     //   leaks the same invariant through a different door.
     //   ⚠ last_verdict STAYS — who pressed what to get here is history we keep.
+    // ⭐ Reopen clears dispatch_fp: a human explicitly putting a card back into the
+    //   flow IS the changed input. The no-progress brake must never make "reopen"
+    //   silently do nothing — that would be the gate defeating the operator.
     `UPDATE tasks SET status='not_started', waiting_for=NULL, worker=NULL, verdict=NULL,
-                      lease_until=NULL, heartbeat_at=NULL,
+                      lease_until=NULL, heartbeat_at=NULL, dispatch_fp=NULL, dispatch_fp_at=NULL,
                       line=CASE WHEN ? IS NULL THEN line ELSE ? END,
                       ${stamp ? stamp.set + ", " : ""}updated_at=? WHERE id=?`
   ).run(line || null, line || null, ...(stamp ? [stamp.arg] : []), now(), Number(id));
@@ -2142,6 +2332,12 @@ function row(r) {
     id: Number(r.id), subject: r.subject, description: r.description,
     status: r.status, waiting_for: r.waiting_for,
     worker: r.worker, line: r.line, prev_line: r.prev_line || null, route: r.route,
+    // ⚠ row() is an explicit projection, not a spread — a new column does NOT ride
+    //   along on its own. The server needs these two to answer "is the no-progress
+    //   brake holding this card?" without a second query; leaving them out made that
+    //   answer silently null while the queue was in fact refusing the card.
+    dispatch_fp: r.dispatch_fp || null, dispatch_fp_at: r.dispatch_fp_at || null,
+    last_note: r.last_note ?? null,
     attempts: Number(r.attempts), max_attempts: Number(r.max_attempts),
     // ⭐ Calibers not mixed: attempts = lifetime total (history, never decreases) /
     //   attempts_this_claim = used in THE CURRENT dispatch (budget judgments read
@@ -2323,6 +2519,7 @@ module.exports = {
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,
+  noProgressHold, stateFingerprint, fpDiff, heldByNoProgress,
   reopen, rearmDone, deferToRearm, completeGoals,
   list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, DEFAULT_LEASE_MIN,
   DEFAULT_ROUTE,

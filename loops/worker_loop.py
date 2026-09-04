@@ -1643,7 +1643,19 @@ def main():
             if once: return
             time.sleep(min(interval, 60)); continue
         if s == 204 or not r.get("task"):
-            log("无可领任务" + ("(once 退出)" if once else f",睡 {interval}s"))
+            # ⭐同一条家规的第三次应用(503 vs 204 之后):**队列被无进展闸清空**
+            #   和**队列真的空**长得一模一样。板上明明堆着卡,线却说"无可领任务",
+            #   操作者读日志只会以为没活干,不会去想「那些卡为什么没人碰」。
+            held = int((r or {}).get("held") or 0)
+            if held:
+                ids = ",".join("#" + str(i) for i in ((r or {}).get("held_ids") or [])[:6])
+                log(f"⏸ 队列里有 {held} 张卡,但它们自上次派发以来状态都没变 —— 不重复调用模型"
+                    + (f"({ids})" if ids else "")
+                    + chr(10) + "   给其中一张新的输入(补充卡面 / 写裁定意见 / 推进依赖 / 更新工作树)"
+                      "它就会自己恢复;确实要照跑,面板上点名认领并强制"
+                    + ("(once 退出)" if once else f",睡 {interval}s"))
+            else:
+                log("无可领任务" + ("(once 退出)" if once else f",睡 {interval}s"))
             if once: return
             time.sleep(interval); continue
 

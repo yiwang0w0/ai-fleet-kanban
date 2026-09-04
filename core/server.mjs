@@ -13,7 +13,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -258,6 +258,13 @@ const taskOut = (t) => t ? {
   //   "hold" on screen while actually handing back. Meaningless outside waiting, so
   //   not computed there (list loops hundreds of rows).
   confirm_destination: t.status === "waiting" ? store.confirmDestination(db, t) : null,
+  // ⭐ Whether the no-progress brake is currently holding this card, computed by the
+  //   SAME function claim uses — a panel that decided this for itself would be a
+  //   second copy of the criterion, free to show "waiting its turn" for a card the
+  //   queue will never hand out. Only for cards that could otherwise be claimed and
+  //   have been dispatched before; every other row skips it (list loops hundreds).
+  no_progress: (t.status === "not_started" && t.dispatch_fp)
+    ? store.noProgressHold(db, t, fpContext()) : null,
 } : t;
 
 const HOST = process.env.BOARD_HOST || "127.0.0.1";
@@ -280,6 +287,49 @@ const codeRev = () => {
 const BOOT_REV = process.env.BOARD_TEST_BOOT_REV || codeRev();
 if (process.env.BOARD_TEST_BOOT_REV)
   console.error(`⚠ BOARD_TEST_BOOT_REV=${process.env.BOARD_TEST_BOOT_REV} —— 假装本进程跑的是别的版本(仅测试用)`);
+
+// ── No-progress brake context (v0.11) ───────────────────────────────────────
+// The two fingerprint components the store cannot compute for itself, because they
+// describe the world OUTSIDE the database.
+//
+//   treeRev  the repository the work lands in. `HEAD:` (the tree) rather than HEAD
+//            (the commit) — the same content re-committed is not new information for
+//            a worker, and this is the caliber the source gate already uses.
+//   extra    whatever THIS deployment considers part of the state, produced by a
+//            command it configures. The public board deliberately has no idea what
+//            the string means: a private deployment that must not dispatch again
+//            until, say, a script's checksum or a target environment changes puts
+//            that here, and this repo never learns the concept.
+//
+// ⚠ Cached briefly. Without it a busy board runs git once per claim per line; with
+//   it, a change made in the last few seconds can cost ONE skipped dispatch, which
+//   the next round undoes. That trade only works because the brake is an
+//   availability mechanism — a wrong hold is a delay, never a wrong answer.
+const FP_TTL_MS = 5000;
+let fpCache = { at: 0, treeRev: null, extra: null };
+const fpContext = () => {
+  if (Date.now() - fpCache.at < FP_TTL_MS) return { treeRev: fpCache.treeRev, extra: fpCache.extra };
+  let treeRev = null, extra = null;
+  try {
+    treeRev = execFileSync("git", ["-C", REPO_ROOT, "rev-parse", "HEAD:"],
+                           { encoding: "utf8", windowsHide: true }).trim() || null;
+  } catch { treeRev = null; }
+  const cmd = CFG.fingerprint_extra_cmd;
+  if (cmd) {
+    try {
+      extra = execSync(String(cmd), { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true,
+                                      timeout: 5000 }).split(/\r?\n/)[0].trim() || null;
+    } catch (e) {
+      // ⭐ A broken hook must not silently become "state never changes" — that would
+      //   turn a misconfigured command into a board-wide dispatch freeze. Report it
+      //   and fall back to null, which reads as "this component tells us nothing".
+      console.error(`⚠ fingerprint_extra_cmd 跑失败,本轮指纹不含它: ${String(e.message).slice(0, 90)}`);
+      extra = null;
+    }
+  }
+  fpCache = { at: Date.now(), treeRev, extra };
+  return { treeRev, extra };
+};
 
 const db = store.open();
 
@@ -2135,9 +2185,20 @@ const server = http.createServer(async (req, res) => {
       //   = no stamp; never 400, never a claim criterion).
       const rt = RUNTIME_IDS.includes(b.runtime) ? b.runtime : null;
       const got = store.claim(db, b.worker, b.lease_minutes || store.DEFAULT_LEASE_MIN,
-                              { route: b.route, line: b.line, runtime: rt });
+                              { route: b.route, line: b.line, runtime: rt, ...fpContext() });
       noteClaim(b.worker, { route: b.route, line: b.line }, !!got);
-      if (!got) { res.writeHead(204); return res.end(); }
+      if (!got) {
+        // ⭐ Empty-handed, but WHY. Same rule the pool gate follows (503 must not wear
+        //   204's face): a queue emptied by the no-progress brake looks exactly like
+        //   an empty queue from the line's log, and nobody asks about a quiet board.
+        //   204 keeps meaning "there is genuinely nothing"; a 200 with no task and a
+        //   `held` list means "there are cards, and none of them has anything new".
+        //   Clients already branch on `!body.task`, so this adds a reason without
+        //   changing what anyone must handle.
+        const held = store.heldByNoProgress(db, { route: b.route, line: b.line }, fpContext());
+        if (held.length) return json(res, 200, { task: null, held: held.length, held_ids: held.slice(0, 20) });
+        res.writeHead(204); return res.end();
+      }
       emit("task.claimed", { id: got.id, worker: b.worker });
       return json(res, 200, { task: got });
     }
@@ -2185,7 +2246,12 @@ const server = http.createServer(async (req, res) => {
         const r = store.claimById(db, { id, worker: b.worker,
                                         leaseMin: b.lease_minutes || store.DEFAULT_LEASE_MIN,
                                         // badge purification: same allowlist and same never-400 policy as /api/claim
-                                        runtime: RUNTIME_IDS.includes(b.runtime) ? b.runtime : null });
+                                        runtime: RUNTIME_IDS.includes(b.runtime) ? b.runtime : null,
+                                        // ⭐ force = a person saying "run it anyway". Operator-only:
+                                        //   guardWrite already restricts this endpoint, and a worker
+                                        //   able to force its own re-dispatch would own the brake.
+                                        force: boardRole === "operator" && b.force === true,
+                                        ...fpContext() });
         // Refusal codes come from the store's typing. This is the one code-deciding
         // site that does NOT pass the catch (claimById returns instead of throwing)
         // — hence it goes through statusFor, so unclassified refusals still raise

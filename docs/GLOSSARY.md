@@ -35,6 +35,11 @@ a change must land in both or the harnesses go red.
 | `lock_key` / `oneof_key` (备选组) / `proves_parent` (验证父卡) / `blocked_by` | machine | mutual exclusion / any-one-passes group / child's pass closes parent / dependency ids |
 | `verify_cmd` | machine | a verify-registry **key**, never a command string |
 | `prev_line` | machine | provenance: the immediately previous line; never a claim criterion |
+| `dispatch_fp` / `dispatch_fp_at` | machine | v0.11 no-progress brake: the state fingerprint recorded at the LAST claim, as JSON of six components (`card` `deps` `ruling` `tree` `fail` `extra`), and when. The next claim recomputes and compares — identical means this dispatch would see the world the last one already saw, so the card is not handed out. Recorded at claim (not at report), which is what makes it cover the bounce loop as well as the park loop. Cleared by reap / release / reopen — a dispatch that never reported back made no judgment worth honoring |
+| `last_note` | machine | what the last ruling said, verbatim and alone. `verdict_note` is append-only with a timestamped header per entry, so its full text differs on every ruling even when the ruling repeats itself word for word — a brake reading it never engages |
+| `no_progress` (API field) | machine | non-null when the brake is currently holding a card: `{since, fp}`. Computed by the same function claim uses; the panel never decides this for itself |
+| `force` (claim-by-id parameter) | machine | the operator override — "run it anyway" is a reason, unlike a timer firing. Honored only for the operator token, and recorded in the history as `forced:true` so it is distinguishable from "ran because something changed" |
+| `fp_changed` (claim event detail) | machine | which fingerprint components differ from the previous dispatch = **why this run was allowed**. Absent on a first dispatch: "nothing to compare" and "nothing changed" must not read alike |
 
 ## Immutable history (`task_events`)
 
@@ -69,6 +74,10 @@ a change must land in both or the harnesses go red.
 
 ## Fleet config (`fleet.config.json`)
 
+`fingerprint_extra_cmd` (optional; a command whose first stdout line joins the
+no-progress fingerprint — the hook a deployment uses for state this repo has no
+concept of, e.g. a script checksum or a target environment. Failure is reported and
+the component reads as absent, never as "nothing ever changes") ·
 `lines[]{id,hint}` · `roles[]` (`review` only — reorg retired by ruling 2026-09-02, before the freeze bound it; joins only when its loop script
 exists) · `routes[]` · `max_parallel` · `default_agent{runtime,model,effort,window}` ·
 `runtimes[]` (seat declarations `{id,label,models,efforts,release_env,cmd_env}` —

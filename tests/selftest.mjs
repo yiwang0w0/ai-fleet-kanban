@@ -790,7 +790,11 @@ console.log(String.fromCharCode(10) + "[⑬ work_spans lifecycle (invariant: in_
   //   card.
   const c = store.add(db, { subject: "crash card", line: "engine" });
   store.claimById(db, { id: c, worker: "engine" });
-  db.prepare("UPDATE tasks SET status='not_started', worker=NULL, lease_until=NULL WHERE id=?").run(c);
+  // Mirror what the real reaper writes — including dispatch_fp=NULL. A hand-rolled
+  // crash that leaves the fingerprint behind is not a crash, it is a state the code
+  // never produces, and the v0.11 brake would (correctly) hold the re-claim.
+  db.prepare(`UPDATE tasks SET status='not_started', worker=NULL, lease_until=NULL,
+                               dispatch_fp=NULL, dispatch_fp_at=NULL WHERE id=?`).run(c);
   store.claimById(db, { id: c, worker: "engine" });
   const spc = store.get(db, c).work_spans;
   ok("⑥ a stale open span self-heals on re-claim (close, then open)",
@@ -1120,10 +1124,15 @@ console.log(String.fromCharCode(10) + "[⑯b duplicate children blocked by the D
 console.log(String.fromCharCode(10) + "[⑰b continuation is explicit-only: at the lifetime ceiling nothing moves until a human does]");
 {
   const L = store.add(db, { subject: "budget card", line: "mail", maxAttempts: 1 });
+  // ⚠ Each round carries DIFFERENT evidence and a DIFFERENT note on purpose. With
+  //   identical ones (what this loop used to do) the v0.11 no-progress brake stops
+  //   the second claim — correctly: that is an empty-handed bounce loop, and it is
+  //   worth noticing that the old loop could run to the lifetime ceiling unopposed.
+  //   Here we are testing the CEILING, so every round must be legitimately new.
   for (let i = 0; i < store.LIFETIME_DISPATCH_CAP; i++) {       // burn 1 shot x cap rounds
     store.claimById(db, { id: L, worker: "mail" });
-    store.report(db, { id: L, worker: "mail", outcome: "wait", evidence: "e" });
-    store.resolve(db, { id: L, verdict: "reject", note: "", resolvedBy: "auto" });
+    store.report(db, { id: L, worker: "mail", outcome: "wait", evidence: `e${i}` });
+    store.resolve(db, { id: L, verdict: "reject", note: `第 ${i + 1} 轮的意见`, resolvedBy: "auto" });
   }
   const r1 = store.claimById(db, { id: L, worker: "mail" });
   ok("⭐ at the lifetime ceiling even a by-name claim is refused with the reason",
@@ -1308,13 +1317,18 @@ console.log(String.fromCharCode(10) + "[⑱b budget calibers: a bounce keeps the
   // max=1, so one round = one shot.
   const C = store.add(db, { subject: "lifetime-ceiling card", line: "mail", maxAttempts: 1 });
   let roundsOk = 0;
+  // ⚠ Every round carries new evidence and a new note. Until v0.11 this loop passed
+  //   with an EMPTY note and identical evidence — the board's own test asserted that
+  //   an empty-handed bounce buys another full-budget round. The no-progress brake
+  //   now refuses that; what stays true, and is what this block tests, is that even
+  //   legitimately-new rounds run out at the lifetime ceiling.
   for (let i = 0; i < store.LIFETIME_DISPATCH_CAP; i++) {
     const r = store.claimById(db, { id: C, worker: "mail" });
     if (r.ok !== false) roundsOk++;
-    store.report(db, { id: C, worker: "mail", outcome: "wait", evidence: "e" });
-    store.resolve(db, { id: C, verdict: "reject", note: "", resolvedBy: "auto" });
+    store.report(db, { id: C, worker: "mail", outcome: "wait", evidence: `e${i}` });
+    store.resolve(db, { id: C, verdict: "reject", note: `第 ${i + 1} 轮`, resolvedBy: "auto" });
   }
-  ok(`bounce -> re-claim passes for ${store.LIFETIME_DISPATCH_CAP} rounds (full budget each)`,
+  ok(`bounce with new input -> re-claim passes for ${store.LIFETIME_DISPATCH_CAP} rounds (full budget each)`,
      roundsOk === store.LIFETIME_DISPATCH_CAP, `rounds passed=${roundsOk}`);
   const rX = store.claimById(db, { id: C, worker: "mail" });
   ok("⭐ at the lifetime ceiling the claim is refused by name (no infinite dispatching)",
@@ -2057,6 +2071,129 @@ section("㉙ operator requests — closed kind domain, one-way state machine, op
   ok("pending → done directly is legal and back-fills acked_at", d2.status === "done" && !!d2.acked_at);
   let missing = ""; try { store.ackRequest(db, 999999); } catch (e) { missing = e.message; }
   ok("ack on a missing id → not found", /不存在/.test(missing), missing);
+}
+
+// ────────────────────────────────────────────────────────────────
+// §NP No-progress brake (v0.11) — the gate that runs BEFORE a model is paid for.
+//    Every other brake on this board acts after the spend: the lifetime ceiling
+//    counts rounds, the loop's circuit breaker needs failures to compare. This one
+//    asks "would this dispatch see anything new?" and, if not, never hands the card
+//    out — which is the only point at which the money is still unspent.
+console.log(String.fromCharCode(10) + "[§NP no-progress brake: identical world ⇒ no dispatch, no model call]");
+{
+  const bounce = (id, note) => store.resolve(db, { id, verdict: "reject", note, resolvedBy: "auto" });
+  // ⚠ The brake compares THIS dispatch's input against the LAST one's, so it needs
+  //   one round as a baseline. Round 2 legitimately has new input — the worker now
+  //   sees its own previous output — and the earliest a repeat can be recognised is
+  //   round 3. Saying so plainly matters: an assertion written as "the first empty
+  //   bounce is refused" would demand something the mechanism cannot know yet.
+  const spin = (id, w, o = {}) => {                 // one identical round, start to finish
+    store.claimById(db, { id, worker: w, ...o });
+    store.report(db, { id, worker: w, outcome: "done", evidence: "同一份交付" });
+    bounce(id, "同一句意见");
+  };
+
+  // ① The cycle from the report: worker changes nothing, reviewer repeats itself.
+  const A = store.add(db, { subject: "no-progress A", line: "np", route: "np" });
+  const c1 = store.claimById(db, { id: A, worker: "np" });
+  ok("① round 1 always passes (there is nothing to compare against yet)", c1.ok !== false);
+  store.report(db, { id: A, worker: "np", outcome: "done", evidence: "同一份交付" });
+  bounce(A, "同一句意见");
+  const a2 = store.claimById(db, { id: A, worker: "np" });
+  ok("② round 2 passes — the worker had not yet seen its own output", a2.ok !== false, a2.why);
+  store.report(db, { id: A, worker: "np", outcome: "done", evidence: "同一份交付" });
+  bounce(A, "同一句意见");
+  const a3 = store.claimById(db, { id: A, worker: "np" });
+  ok("⭐③ round 3 is HELD: two dispatches in a row would see the identical world",
+     a3.ok === false && /状态没有变化/.test(a3.why || ""), a3.why || "(it passed!)");
+  ok("③ the refusal names the ways out", /裁定意见|依赖|工作树|force/.test(a3.why || ""), a3.why);
+
+  // ④ …and holding costs nothing. This is the entire point: the old shape spent an
+  //    attempt inside claim itself, before any refusal could be reached.
+  const spent = store.get(db, A).attempts;
+  store.claimById(db, { id: A, worker: "np" });
+  store.claimById(db, { id: A, worker: "np" });
+  ok("⭐④ a held claim burns NO attempt (refused before the counter moves)",
+     store.get(db, A).attempts === spent, `attempts ${store.get(db, A).attempts} vs ${spent}`);
+
+  // ⑤ Giving the card new input releases it. ⚠ A held card sits in not_started, so
+  //    the hand available to a human here is EDITING THE CARD (or force) — not
+  //    writing a ruling, which needs a delivered card. The brake being on the claim
+  //    door shapes what the way out looks like, and this assertion is where that
+  //    shows up.
+  store.update(db, { id: A, description: "补充: 第 3 节按月口径" });
+  const a5 = store.claimById(db, { id: A, worker: "np" });
+  ok("⭐⑤ editing the card face releases the brake (the card component changed)",
+     a5.ok !== false, a5.why);
+  store.report(db, { id: A, worker: "np", outcome: "done", evidence: "改好了" });
+  bounce(A, "同一句意见");
+
+  // ⑥ force = a human saying "run it anyway", which IS a reason — and a parameter,
+  //    never a silent exception.
+  const B = store.add(db, { subject: "no-progress force", line: "np", route: "np" });
+  spin(B, "np"); spin(B, "np");
+  ok("⑥ held before force", store.claimById(db, { id: B, worker: "np" }).ok === false);
+  ok("⭐⑥ force overrides it", store.claimById(db, { id: B, worker: "np", force: true }).ok !== false);
+
+  // ⑦ reopen is an explicit human act ⇒ the brake must never make it a no-op.
+  const C2 = store.add(db, { subject: "no-progress reopen", line: "np", route: "np" });
+  spin(C2, "np"); spin(C2, "np");
+  ok("⑦ held before reopen", store.claimById(db, { id: C2, worker: "np" }).ok === false);
+  store.claimById(db, { id: C2, worker: "np", force: true });
+  store.report(db, { id: C2, worker: "np", outcome: "done", evidence: "同一份交付" });
+  store.resolve(db, { id: C2, verdict: "approve", note: "", resolvedBy: "human" });
+  store.reopen(db, { id: C2 });
+  ok("⑦ reopen actually cleared the column (not merely produced a different fingerprint)",
+     store.get(db, C2).dispatch_fp == null);
+  ok("⭐⑦ reopen clears the fingerprint (a gate that silently eats reopen is broken)",
+     store.claimById(db, { id: C2, worker: "np" }).ok !== false);
+
+  // ⑧ A crash is grounds for another go: the dead dispatch may have read nothing.
+  const D = store.add(db, { subject: "no-progress crash", line: "np", route: "np" });
+  spin(D, "np"); spin(D, "np");
+  ok("⑧ held before the crash", store.claimById(db, { id: D, worker: "np" }).ok === false);
+  store.claimById(db, { id: D, worker: "np", force: true });
+  db.prepare("UPDATE tasks SET lease_until=1 WHERE id=?").run(D);
+  store.reapExpired(db);
+  ok("⭐⑧ a reaped card is claimable again — no report, no judgment to honor",
+     store.claimById(db, { id: D, worker: "np" }).ok !== false);
+
+  // ⑨ The world outside the card counts: the repo the work lands in.
+  const E = store.add(db, { subject: "no-progress tree", line: "np", route: "np" });
+  spin(E, "np", { treeRev: "tree-aaa" }); spin(E, "np", { treeRev: "tree-aaa" });
+  ok("⑨ same tree ⇒ held",
+     store.claimById(db, { id: E, worker: "np", treeRev: "tree-aaa" }).ok === false);
+  ok("⭐⑨ the tree moving is new information ⇒ released",
+     store.claimById(db, { id: E, worker: "np", treeRev: "tree-bbb" }).ok !== false);
+
+  // ⑩ The deployment hook — the component this repo knows nothing about. A private
+  //    deployment supplies its own facts here; the public board never learns what
+  //    they mean.
+  const F = store.add(db, { subject: "no-progress extra", line: "np", route: "np" });
+  spin(F, "np", { extra: "env=stg#h1" }); spin(F, "np", { extra: "env=stg#h1" });
+  ok("⑩ same deployment-supplied fact ⇒ held",
+     store.claimById(db, { id: F, worker: "np", extra: "env=stg#h1" }).ok === false);
+  ok("⭐⑩ the deployment's own fact changing ⇒ released (no board-side concept needed)",
+     store.claimById(db, { id: F, worker: "np", extra: "env=stg#h2" }).ok !== false);
+
+  // ⑪ The queue door, not just the by-name door. A gate one door ignores has a bypass.
+  const G = store.add(db, { subject: "no-progress queue", line: "npq", route: "npq" });
+  for (let i = 0; i < 2; i++) {
+    store.claim(db, "npq", 30, { route: "npq", line: "npq" });
+    store.report(db, { id: G, worker: "npq", outcome: "done", evidence: "同一份交付" });
+    bounce(G, "同一句意见");
+  }
+  ok("⭐⑪ the queue claim honors the brake too (both doors, or it has a bypass)",
+     store.claim(db, "npq", 30, { route: "npq", line: "npq" }) === null);
+
+  // ⑫ Polarity: this gate guards a budget, not a correctness invariant, so an
+  //    unreadable record must not strand a card forever.
+  const H = store.add(db, { subject: "no-progress corrupt", line: "np", route: "np" });
+  spin(H, "np"); spin(H, "np");
+  ok("⑫ held before corruption", store.claimById(db, { id: H, worker: "np" }).ok === false);
+  db.prepare("UPDATE tasks SET dispatch_fp='{ not json' WHERE id=?").run(H);
+  ok("⭐⑫ an unparseable fingerprint FAILS OPEN (budget gate — unlike source/deliverable)",
+     store.claimById(db, { id: H, worker: "np" }).ok !== false);
 }
 
 console.log(`\n${"─".repeat(56)}\nresult: ${pass} PASS / ${fail} FAIL  (temp db ${process.env.BOARD_DB})`);

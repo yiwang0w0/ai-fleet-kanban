@@ -268,6 +268,13 @@
   .line-add input{width:11em}
   .line-add .note.ok{color:var(--ok)} .line-add .note.bad{color:var(--warn)}
   .tag.offrig{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);border:1px dashed var(--warn)}
+  /* Held by the no-progress brake: dimmed rather than alarming — nothing is wrong,
+     the board is declining to spend. Solid border (a stated decision), not dashed
+     (which reads on this panel as "something is off").
+     ⚠ --dim, not a --muted: this palette has no --muted, and an undefined var
+     voids the whole declaration silently — measured, the badge rendered with no
+     background or border at all while the rule sat in the stylesheet looking fine. */
+  .tag.nopro{background:color-mix(in srgb,var(--dim) 14%,transparent);color:var(--dim);border:1px solid color-mix(in srgb,var(--dim) 45%,transparent)}
   button.danger{border-color:color-mix(in srgb,var(--bad) 55%,transparent);color:var(--bad)}
 
   .rig{display:flex;gap:7px;flex-wrap:wrap;padding:9px 16px;border-bottom:1px solid var(--line);
@@ -768,6 +775,14 @@ function cardParts(t){
     //   other way to know (a deployment hit exactly this and called it a bug).
     if (t.status === "in_progress" && t.worker && !liveWorkerNames().has(t.worker))
       meta2.push(`<span class="tag offrig" title="持卡的 worker「${esc(t.worker)}」不是任何在跑的自动拉取槽 —— 这张卡在板外被推进(手动 --once / CLI 认领 / 外部进程)。预算·阶梯·账本只在自动拉取里存在">板外在跑</span>`);
+  }
+  // ⭐ The no-progress brake is holding this card. Without saying so, the card reads
+  //   as "queued, waiting its turn" while the queue will in fact never hand it out —
+  //   a stop that cannot state its reason is the failure mode this board keeps
+  //   naming. The criterion comes from the server (same function claim uses).
+  if (t.no_progress) {
+    const since = String(t.no_progress.since || "").replace("T", " ").slice(0, 16);
+    meta2.push(`<span class="tag nopro" title="自上次派发(${esc(since)})以来,这张卡的卡面、依赖、裁定意见、工作树都没有变化 —— 再派一次模型会看到一模一样的世界,得出一模一样的结论。给它新输入(补充卡面 / 写裁定意见 / 推进依赖 / 更新工作树)它就会自己恢复;确实要照跑,用点名认领的强制选项">⏸ 无进展</span>`);
   }
   // ⭐ What this card has actually burned, on its face. 输入+输出 is the money side;
   //   缓存读 rides cheap and is shown apart so a big number is readable as "warm

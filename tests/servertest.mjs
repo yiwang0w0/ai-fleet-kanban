@@ -1119,6 +1119,73 @@ try {
     try { b.kill(); } catch {}
   }
   await sleep(500);
+  // ══ §U no-progress brake over HTTP — the refusal must survive the API, and the
+  //    override must belong to the operator alone ══
+  {
+    console.log(NL + "[§U 无进展闸(调用模型之前拦下·force 只属于 operator)]");
+    const U = await mk({});
+    const tokOf = (f) => { try { return readFileSync(join(U.DATA, f), "utf8").trim(); } catch { return ""; } };
+    const WK = tokOf("worker_token");
+    const asWorker = async (m, p, b) => {
+      const r = await fetch(U.BASE + p, { method: m,
+        headers: { "Content-Type": "application/json", "X-Board-Token": WK },
+        body: JSON.stringify(b ?? {}) });
+      return { status: r.status, body: await r.json().catch(() => ({})) };
+    };
+    const id = (await U.api("POST", "/api/tasks", { subject: "u-brake", line: LINE, humanGate: false })).body.task.id;
+    const round = async () => {
+      await U.api("POST", `/api/tasks/${id}/claim`, { worker: LINE });
+      await U.api("POST", `/api/tasks/${id}/report`, { worker: LINE, outcome: "done", evidence: "同一份交付" });
+      await U.api("POST", `/api/tasks/${id}/resolve`, { verdict: "reject", note: "同一句意见", resolved_by: "human" });
+    };
+    await round(); await round();          // two identical dispatches = the baseline
+
+    const held = await U.api("POST", `/api/tasks/${id}/claim`, { worker: LINE });
+    ok("U1 ⭐重复派发在 API 层被拒(409),理由逐字说明状态没变",
+       held.status === 409 && /状态没有变化/.test(held.body?.error || ""),
+       `HTTP ${held.status} ${(held.body?.error || "").slice(0, 50)}`);
+
+    const before = (await U.api("GET", `/api/tasks/${id}`)).body?.task?.attempts;
+    await U.api("POST", `/api/tasks/${id}/claim`, { worker: LINE });
+    const after = (await U.api("GET", `/api/tasks/${id}`)).body?.task?.attempts;
+    ok("U2 ⭐被拦的一次不烧 attempts(闸在计数器之前)", before === after, `${before} → ${after}`);
+
+    const row = ((await U.api("GET", "/api/tasks")).body?.tasks || []).find((t) => t.id === id);
+    ok("U3 面板能看到这张卡正被拦着(判据来自服务端,不是面板自算)",
+       !!row?.no_progress && !!row.no_progress.since,
+       `no_progress=${JSON.stringify(row?.no_progress ?? null)} status=${row?.status} fp=${String(row?.dispatch_fp).slice(0, 30)}`);
+
+    // The override is an operator act. A worker able to force its own re-dispatch
+    // would hold the brake it is subject to — and here the structure already says
+    // so twice: by-name claiming is not on the worker allowlist at all (403 before
+    // `force` is even read), and the server only honors force for an operator token.
+    const wf = await asWorker("POST", `/api/tasks/${id}/claim`, { worker: LINE, force: true });
+    ok("U4 ⭐worker 令牌连点名领取都没有(403)—— force 参数根本到不了判断处",
+       wf.status === 403, `HTTP ${wf.status} ${(wf.body?.error || "").slice(0, 40)}`);
+    const wq = await asWorker("POST", "/api/claim", { worker: LINE, line: LINE, force: true });
+    ok("U4b ⭐worker 走队列口带 force 也没用(队列口不认这个字段,照样空手而归)",
+       wq.status === 204 || !wq.body?.task, `HTTP ${wq.status}`);
+    // A queue emptied by the brake must not read like an empty queue — the same rule
+    // that keeps 503 from wearing 204's face.
+    ok("U4c ⭐空手而归时说得出理由(队列非空,只是没有一张有新东西)",
+       wq.status === 200 && wq.body?.held >= 1 && Array.isArray(wq.body?.held_ids),
+       `HTTP ${wq.status} held=${wq.body?.held} ids=${JSON.stringify(wq.body?.held_ids)}`);
+    const of = await U.api("POST", `/api/tasks/${id}/claim`, { worker: LINE, force: true });
+    ok("U5 operator 令牌带 force 放行(人说'照跑'本身就是理由)", of.status === 200, `HTTP ${of.status}`);
+
+    // The history has to say WHY a dispatch was allowed — a brake that silently lets
+    // things through is as opaque as one that silently holds them.
+    // ⚠ /api/events is the SSE stream — fetching it never resolves. The immutable
+    //   history is /api/task-events. (Measured: the first draft hung the harness.)
+    const evs = (await U.api("GET", `/api/task-events?task_id=${id}`)).body?.events || [];
+    const asObj = (d) => (d && typeof d === "object") ? d
+                       : (() => { try { return JSON.parse(d || "{}"); } catch { return {}; } })();
+    const forced = evs.filter((e) => e.kind === "claim").map((e) => asObj(e.detail))
+                      .some((d) => d.forced === true);
+    ok("U6 正史记下了这一次是被人强制放行的(和'因为有变化才跑'区分得开)", forced,
+       `claim 事件数=${evs.filter((e) => e.kind === "claim").length}`);
+  }
+
   if (fail) for (const b of boards) console.log(`\n──── board :${b.PORT} output ────\n` + b.out().slice(-1200));
   for (const b of boards) { try { rmSync(b.DATA, { recursive: true, force: true }); } catch {} }
   try { rmSync(STUBS, { recursive: true, force: true }); } catch {}
