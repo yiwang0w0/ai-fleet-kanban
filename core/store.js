@@ -1431,8 +1431,13 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
   //   return, so the returned heartbeat_at differed from the DB by a few ms — an API
   //   returning something other than what it wrote.
   const ts = Date.now();
-  db.prepare("UPDATE tasks SET heartbeat_at=?, lease_until=?, updated_at=? WHERE id=?")
-    .run(ts, ts + mins * 60000, now(), Number(id));
+  // ⭐ Gate folded into the UPDATE (same reasoning as report()): a second writer reaping
+  //   this card between the SELECT and here must not get a not_started row stamped with
+  //   a fresh heartbeat and a live lease.
+  const r = db.prepare(
+    "UPDATE tasks SET heartbeat_at=?, lease_until=?, updated_at=? WHERE id=? AND status='in_progress' AND worker=?")
+    .run(ts, ts + mins * 60000, now(), Number(id), String(worker));
+  if (!r.changes) throw err(ERR.CONFLICT, `任务 ${id} 在续租期间被收回或改手,未续租`);
   // ⭐ Return the card itself. Of the five write endpoints this was the only
   //   projection, with neither `status` nor `lease_until` ⇒ callers had to re-GET
   //   to learn "did it extend, until when".
@@ -1461,9 +1466,20 @@ function report(db, { id, worker, outcome, evidence = "" }) {
   db.exec("BEGIN IMMEDIATE");
   try {
     spanClose(db, Number(id));
-    db.prepare(
-      `UPDATE tasks SET status='waiting', waiting_for=?, result=?, lease_until=NULL, updated_at=? WHERE id=?`
-    ).run(waitingFor, String(evidence), now(), Number(id));
+    // ⭐ The UPDATE carries its own gate (archive() pattern): the SELECT above provides
+    //   readable 404/409 wording, not safety. changes=0 here means the row moved between
+    //   that SELECT and this write — impossible inside one process (node:sqlite is
+    //   synchronous; this function has no yield point), but this file's own red line
+    //   says claim must be atomic ACROSS processes, and a second writer would otherwise
+    //   revive a reaped card into waiting/review with evidence attached. Trigger path
+    //   refuted for the single-process topology (external review 2026-09-07); the gate is
+    //   here so the invariant stops depending on that topology.
+    const r = db.prepare(
+      `UPDATE tasks SET status='waiting', waiting_for=?, result=?, lease_until=NULL, updated_at=?
+        WHERE id=? AND status='in_progress' AND worker=?`
+    ).run(waitingFor, String(evidence), now(), Number(id), String(worker));
+    if (!r.changes)
+      throw err(ERR.CONFLICT, `任务 ${id} 在交付期间被收回或改手,本次交付未落盘`);
     appendEvent(db, {
       taskId: Number(id), kind: "report", actor: worker,
       detail: eventState({ ...t, status: "waiting" }, {

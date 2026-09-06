@@ -2292,6 +2292,39 @@ console.log(String.fromCharCode(10) + "[§RV 复核去重:同一份交付物不�
   ok("⑦ review_fp 为空 = 放行侧", inQ(N));
 }
 
+// ────────────────────────────────────────────────────────────────
+// §RG report/heartbeat: the UPDATE carries its own gate (P1-1, external review 2026-09-07).
+//    Single-threaded we cannot interleave a reaper between the SELECT and the UPDATE, so
+//    the pre-check fires first and these assertions pin the CONTRACT — refuse with
+//    CONFLICT, leave the row alone. The fold's cross-process value is guaranteed by SQL
+//    semantics (status/worker in the WHERE), not exercised here; the commit says so.
+console.log(String.fromCharCode(10) + "[§RG 交付/续租的 UPDATE 自带闸:已被收回的卡不能被复活]");
+{
+  const catchErr = (fn) => { try { fn(); return null; } catch (e) { return e; } };
+  const g = store.add(db, { subject: "rg-gate", line: "rg", route: "rg" });
+  store.claimById(db, { id: g, worker: "rg" });
+  // What a reaper in ANOTHER process would have done to the row — including dispatch_fp=NULL,
+  // exactly as reapExpiredInner does. (First cut left it set, and the v0.11 no-progress brake
+  // correctly refused the re-claim below: the brake caught an incomplete simulation.)
+  db.prepare("UPDATE tasks SET status='not_started', worker=NULL, lease_until=NULL, dispatch_fp=NULL WHERE id=?").run(g);
+  const hb0 = store.get(db, g).heartbeat_at;
+  const e1 = catchErr(() => store.report(db, { id: g, worker: "rg", outcome: "done", evidence: "x" }));
+  ok("① 已被收回的卡 → report 拒收(CONFLICT)", e1 && e1.code === "CONFLICT", e1 && e1.message);
+  ok("① 且没有被复活成 waiting", store.get(db, g).status === "not_started");
+  const e2 = catchErr(() => store.heartbeat(db, { id: g, worker: "rg" }));
+  ok("② 已被收回的卡 → heartbeat 拒绝(CONFLICT)", e2 && e2.code === "CONFLICT");
+  ok("② 且 heartbeat_at / lease_until 一个都没动", store.get(db, g).heartbeat_at === hb0 && store.get(db, g).lease_until == null);
+  const rc = store.claimById(db, { id: g, worker: "rg" });
+  ok("(前提)重新认领成功", store.get(db, g).status === "in_progress", JSON.stringify(rc).slice(0, 120));
+  const e3 = catchErr(() => store.report(db, { id: g, worker: "someone-else", outcome: "done", evidence: "x" }));
+  ok("③ 非持有者 report → CONFLICT", e3 && e3.code === "CONFLICT");
+  const t3 = store.get(db, g);
+  ok("③ 卡仍在 in_progress、持有者不变", t3.status === "in_progress" && t3.worker === "rg");
+  // 阳性对照:同一张卡、正确持有者 → 落盘
+  const r4 = store.report(db, { id: g, worker: "rg", outcome: "done", evidence: "ok" });
+  ok("④(对照)持有者本人交付 → waiting/review", r4.status === "waiting" && store.get(db, g).status === "waiting");
+}
+
 console.log(`\n${"─".repeat(56)}\nresult: ${pass} PASS / ${fail} FAIL  (temp db ${process.env.BOARD_DB})`);
 db.close?.();
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}

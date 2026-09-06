@@ -6,14 +6,22 @@
 import json, os, re, subprocess, sys, io, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.environ.get("BOARD_REPO", os.path.abspath(os.path.join(HERE, "..")))
+# ⭐两个「仓」要分开(与 worker_loop.py / reviewer_loop.py 同一约定):
+#   CODE_ROOT = 看板自己的代码在哪(本文件的上一级)。登记簿是运营者的档,住这里 ——
+#               core/store.js 也从这里读(path.join(__dirname, "verify_registry.json"))。
+#   REPO      = 舰队作业的目标仓,在本文件里只做验证命令的 cwd。
+CODE_ROOT = os.path.dirname(HERE)
+REPO = os.environ.get("BOARD_REPO", CODE_ROOT)
 
 def log(m): print(f"[{datetime.datetime.now():%H:%M:%S}] {m}", flush=True)
 
 VERIFY_TIMEOUT = int(os.environ.get("WORKER_VERIFY_SEC", "900"))
-# ⭐与 core/store.js 的约定一致(BOARD_VERIFY_REGISTRY || <repo>/core/verify_registry.json)。
+# ⭐与 core/store.js 的约定一致:BOARD_VERIFY_REGISTRY || <看板代码根>/core/verify_registry.json。
 #   路径约定分叉的后果:store 按 A 校验键、loop 按 B 找命令,卡面绿而执行 404。
-REGISTRY = os.environ.get("BOARD_VERIFY_REGISTRY") or os.path.join(REPO, "core", "verify_registry.json")
+#   ⚠ 这一行曾锚在 REPO 上。默认部署里 REPO == CODE_ROOT,所以没人发现;BOARD_REPO 指向
+#     工作仓的 split 部署下,store 读看板仓的登记簿、loop 读工作仓的 —— 正是上一行警告的
+#     那个分叉。警告写在这里,踩也踩在这里(外部审阅 2026-09-07 指出)。
+REGISTRY = os.environ.get("BOARD_VERIFY_REGISTRY") or os.path.join(CODE_ROOT, "core", "verify_registry.json")
 
 def verify_registry():
     """卡可以指名的验证集合。"""
