@@ -2325,6 +2325,62 @@ console.log(String.fromCharCode(10) + "[§RG 交付/续租的 UPDATE 自带闸:�
   ok("④(对照)持有者本人交付 → waiting/review", r4.status === "waiting" && store.get(db, g).status === "waiting");
 }
 
+// ────────────────────────────────────────────────────────────────
+// §P2 值域闸与单语句落盘(外部审阅 2026-09-07 的 P2)
+console.log(String.fromCharCode(10) + "[§P2 max_attempts 值域闸 · 租约夹紧 · markAutoReviewed 单语句]");
+{
+  const catchErr = (fn) => { try { fn(); return null; } catch (e) { return e; } };
+  // P2-4a — a card nobody can ever claim, created with 201 and no event, is worse than a 400.
+  const bad = (v) => catchErr(() => store.add(db, { subject: "ma-" + String(v), line: "p2", route: "p2", maxAttempts: v }));
+  ok("① maxAttempts=0 → BAD_INPUT(否则 claim 的生涯条件恒假,卡永远没人能领)", bad(0)?.code === "BAD_INPUT", bad(0)?.message);
+  ok("① maxAttempts=-5 → BAD_INPUT", bad(-5)?.code === "BAD_INPUT");
+  ok("① maxAttempts=0.4 → BAD_INPUT(分数上限)", bad(0.4)?.code === "BAD_INPUT");
+  ok("① maxAttempts='abc' → BAD_INPUT", bad("abc")?.code === "BAD_INPUT");
+  ok("① maxAttempts=1e999(Infinity)→ BAD_INPUT", bad(1e999)?.code === "BAD_INPUT");
+  const nul = store.add(db, { subject: "ma-null", line: "p2", route: "p2", maxAttempts: null });
+  ok("⭐① maxAttempts=null 算「没说」→ 默认 3(旧代码 Number(null)=0,造出幽灵卡)", store.get(db, nul).max_attempts === 3);
+  const five = store.add(db, { subject: "ma-5", line: "p2", route: "p2", maxAttempts: 5 });
+  ok("①(对照)5 → 存 5", store.get(db, five).max_attempts === 5);
+  const eu = catchErr(() => store.update(db, { id: five, maxAttempts: 0 }));
+  ok("① update 同一道门:改成 0 → BAD_INPUT", eu?.code === "BAD_INPUT", eu?.message);
+  ok("① 拒绝后仍是 5", store.get(db, five).max_attempts === 5);
+  store.update(db, { id: five, maxAttempts: 7 });
+  ok("① update 改成 7 → 存 7(门只挡非法值)", store.get(db, five).max_attempts === 7);
+  ok("①(对照)合法上限的卡能被领", store.claimById(db, { id: five, worker: "p2" }).ok === true);
+  db.prepare("UPDATE tasks SET max_attempts=0 WHERE id=?").run(five);       // a ghost already lying in an old DB
+  const db2 = store.open();
+  ok("⭐① 存量幽灵卡在下次 open 时修回 3(修复,不是迁移;幂等)", store.get(db2, five).max_attempts === 3);
+  db2.close();
+
+  // P2-4b — a negative lease used to be written as ALREADY expired; the 30 s reaper took the card back from a live worker.
+  const before = Date.now();
+  const lc = store.add(db, { subject: "lease-neg", line: "p2", route: "p2" });
+  store.claimById(db, { id: lc, worker: "p2", leaseMin: -5 });
+  const t1 = store.get(db, lc);
+  ok("⭐② claimById leaseMin=-5 → 租约在未来(回落默认),不是已过期", t1.status === "in_progress" && t1.lease_until > before + 60000, String(t1.lease_until - before));
+  const lq = store.add(db, { subject: "lease-queue", line: "p2q", route: "p2q" });
+  const r2 = store.claim(db, "p2q", 0, { route: "p2q", line: "p2q" });
+  ok("② claim leaseMin=0 → 回落默认 30,且返回值 = 实际写下去的值", r2 && r2.id === lq && r2.lease_minutes === 30 && r2.lease_until > before + 60000,
+     JSON.stringify(r2 && { lm: r2.lease_minutes }));
+  const r3 = store.claimById(db, { id: store.add(db, { subject: "lease-nan", line: "p2", route: "p2" }), worker: "p2", leaseMin: "abc" });
+  ok("② leaseMin='abc' 同样回落(三个入口一套策略)", r3.ok === true && r3.task.lease_until > before + 60000);
+
+  // P2-5 — package swap and receipt consumption used to be two UPDATEs; a crash between them left
+  // "new package + live receipt for the OLD package" = confirm_pending lying.
+  const mr = store.add(db, { subject: "mar-receipt", line: "p2", route: "p2" });
+  store.claimById(db, { id: mr, worker: "p2" });
+  store.report(db, { id: mr, worker: "p2", outcome: "done", evidence: "v1" });
+  db.prepare("UPDATE tasks SET decision_receipt=? WHERE id=?").run(JSON.stringify({ receipt: "已执行", consumed_at: null }), mr);
+  ok("(前提)回执未消费 → confirm_pending", store.get(db, mr).confirm_pending === true);
+  const rr = store.markAutoReviewed(db, { id: mr, note: "新的 A/B/C", decisionPackage: { options: ["A", "B"] } });
+  const a3 = store.get(db, mr);
+  ok("⭐③ 一条语句同时落下:新决策包 + 待确认 + 旧回执已消费(没有「新包 + 活回执」的半态)",
+     a3.waiting_for === "confirm" && a3.decision_package?.options?.length === 2 && !!a3.decision_receipt?.consumed_at && a3.confirm_pending === false,
+     JSON.stringify([a3.waiting_for, a3.confirm_pending, !!a3.decision_receipt?.consumed_at]));
+  ok("③ 返回的 auto_review_at 就是写下去的那一个(不是第二次 now())", rr.auto_review_at === a3.auto_review_at);
+  ok("③ 回执本身仍在(生产执行不能被抹掉)", a3.decision_receipt?.receipt === "已执行");
+}
+
 console.log(`\n${"─".repeat(56)}\nresult: ${pass} PASS / ${fail} FAIL  (temp db ${process.env.BOARD_DB})`);
 db.close?.();
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}

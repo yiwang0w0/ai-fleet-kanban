@@ -884,7 +884,9 @@ try {
     if (!k.startsWith("_") && v && v.session) LINEAGE[k] = v;
 } catch { /* fine to be absent; the startup log says so */ }
 const CLAUDE_CLI = process.env.WORKER_CLAUDE_CLI || "claude";
-const PROJECTS = join(homedir(), ".claude", "projects");
+// BOARD_CLAUDE_PROJECTS: test-only escape hatch. A harness must never plant a transcript
+// under the operator's real ~/.claude/projects, so it points this at a temp dir instead.
+const PROJECTS = process.env.BOARD_CLAUDE_PROJECTS || join(homedir(), ".claude", "projects");
 let settings = {};
 try { settings = JSON.parse(readFileSync(SETTINGS_FILE, "utf8")); } catch {}
 // One-time migration: legacy {model,effort,window,parallel,runtime} → agents[]
@@ -946,6 +948,9 @@ function transcriptOf(sid) {
   return null;
 }
 
+// transcript path → incremental fold state; see contextOf.
+const ctxFold = new Map();
+
 /**
  * The line's real context size.
  * ⭐ The gauge is the LAST assistant turn's usage (input + cache_creation +
@@ -962,28 +967,65 @@ function contextOf(line) {
   const out = { line, session_id: sid, transcript: path, exists: !!path,
                 bytes: 0, messages: 0, tokens: null, last_compact: null, compactions: 0 };
   if (!path) return out;
-  out.bytes = statSync(path).size;
-  let lastUsage = null;
-  for (const ln of readFileSync(path, "utf8").split(String.fromCharCode(10))) {
-    if (!ln.trim()) continue;
-    let d; try { d = JSON.parse(ln); } catch { continue; }
-    out.messages++;
+  // ⭐ Incremental fold (v0.12.1), the shape refreshUsage uses above: the transcript is
+  //   append-only, so remember the byte offset of the last COMPLETE line per file and
+  //   fold only what is new. The full read this replaced was synchronous and ran for
+  //   EVERY supervised line on EVERY panel refresh (15 s timer + each SSE change) and
+  //   on every worker claim cycle; a long session's transcript reaches tens of MB and
+  //   that parse blocked the event loop the workers' claims were queued behind
+  //   (external review 2026-09-07). The scan is a strict left-to-right reduction with
+  //   no look-back, so folding it incrementally is exact, not approximate.
+  const size = statSync(path).size;
+  out.bytes = size;
+  let st = ctxFold.get(path);
+  if (!st || size < st.offset)            // first sight, or truncated (shorter than our offset) → refold
+    st = { offset: 0, messages: 0, lastUsage: null, compactions: 0, last_compact: null };
+  const fold = (ln) => {
+    if (!ln.trim()) return;
+    let d; try { d = JSON.parse(ln); } catch { return; }
+    st.messages++;
     const u = d.message?.usage;
-    if (u) lastUsage = u;
+    if (u) st.lastUsage = u;
     // ⭐ Crossing a compaction boundary RESETS the gauge. Usage before the boundary
     //   is the PRE-compaction context, not the current one (reading it once
     //   produced the lie "compacted yet grew").
-    if (d.subtype === "compact_boundary" || d.compactMetadata) lastUsage = null;
+    if (d.subtype === "compact_boundary" || d.compactMetadata) st.lastUsage = null;
     if (d.compactMetadata) {
-      out.compactions++;
-      out.last_compact = {
+      st.compactions++;
+      st.last_compact = {
         trigger: d.compactMetadata.trigger,
         pre: d.compactMetadata.preTokens, post: d.compactMetadata.postTokens,
         dropped: d.compactMetadata.cumulativeDroppedTokens,
         at: d.timestamp || null,
       };
     }
+  };
+  if (size > st.offset) {
+    let text = null;
+    try {
+      const fd = openSync(path, "r");
+      const buf = Buffer.alloc(size - st.offset);
+      readSync(fd, buf, 0, buf.length, st.offset);
+      closeSync(fd);
+      text = buf.toString("utf8");
+    } catch { text = null; }                // unreadable this tick: report what we had
+    if (text != null) {
+      const NL10 = String.fromCharCode(10);
+      // ⚠ The writer may be mid-line. Fold up to the last newline; a non-empty tail is
+      //   folded only if it already parses as a whole JSON line (a file whose last line
+      //   lacks its newline), otherwise it waits, complete, for the next pass.
+      const cut = text.lastIndexOf(NL10);
+      const head = cut >= 0 ? text.slice(0, cut + 1) : "";
+      const tail = cut >= 0 ? text.slice(cut + 1) : text;
+      for (const ln of head.split(NL10)) fold(ln);
+      let consumed = head;
+      if (tail.trim()) { try { JSON.parse(tail); fold(tail); consumed = text; } catch {} }
+      st.offset += Buffer.byteLength(consumed, "utf8");
+    }
   }
+  ctxFold.set(path, st);
+  out.messages = st.messages; out.compactions = st.compactions; out.last_compact = st.last_compact;
+  const lastUsage = st.lastUsage;
   if (lastUsage) out.tokens = (lastUsage.input_tokens || 0)
     + (lastUsage.cache_creation_input_tokens || 0) + (lastUsage.cache_read_input_tokens || 0);
   else if (out.last_compact) out.tokens = out.last_compact.post;   // right after compaction = no next turn yet

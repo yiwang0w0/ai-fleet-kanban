@@ -20,7 +20,7 @@
 
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -539,6 +539,49 @@ try {
        cp.status >= 400 && !/session_id.*coord|coord.*session_id/.test(
          (() => { try { return readFileSync(join(B.DATA, "worker_settings.json"), "utf8").replace(/\s+/g, ""); } catch { return ""; } })()),
        `HTTP ${cp.status}`);
+  }
+
+  // ══ §J2 /api/context folds incrementally (P2-6, external review 2026-09-07) ═══
+  //   The old contextOf read and parsed the whole transcript on every call, for every
+  //   line, on every panel refresh and every worker claim cycle — synchronous, on the
+  //   event loop the workers' claims queue behind. Now it folds only the new bytes.
+  //   The fixture lives under a temp BOARD_CLAUDE_PROJECTS: a harness must never touch
+  //   the operator's real ~/.claude/projects.
+  console.log(NL + "[§J2 /api/context 增量读:只折新增的字节,半行不计,截短重折]");
+  {
+    const PROJ = mkdtempSync(join(tmpdir(), "ctxproj-"));
+    mkdirSync(join(PROJ, "proj-a"), { recursive: true });
+    const B = await mk({ env: { BOARD_SPAWN_ECHO: "1", BOARD_CLAUDE_PROJECTS: PROJ } });
+    await B.api("POST", `/api/workers/${LINE}/start`, {});
+    let sid = null;
+    try { sid = JSON.parse(readFileSync(join(B.DATA, "worker_settings.json"), "utf8"))[LINE]?.session_id || null; } catch {}
+    ok("J2-0(前提)起线后有 session_id", !!sid, String(sid).slice(0, 12));
+    const T = join(PROJ, "proj-a", sid + ".jsonl");
+    const turn = (n) => JSON.stringify({ type: "assistant", message: { usage: { input_tokens: n, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } });
+    const g = async () => ((await B.api("GET", "/api/context")).body?.lines || []).find((x) => x.line === LINE) || {};
+    writeFileSync(T, turn(100) + NL + turn(200) + NL);
+    let c = await g();
+    ok("J2-1 首读:2 条消息,量尺 = 最后一轮 200", c.messages === 2 && c.tokens === 200, JSON.stringify([c.messages, c.tokens]));
+    appendFileSync(T, turn(300) + NL);
+    c = await g();
+    ok("⭐J2-2 追加一行 → 只折新增:3 条,量尺 300", c.messages === 3 && c.tokens === 300, JSON.stringify([c.messages, c.tokens]));
+    appendFileSync(T, turn(400));                       // last line without its newline, but a complete JSON line
+    c = await g();
+    ok("J2-3 末行无换行也算数(完整 JSON):4 条 / 400", c.messages === 4 && c.tokens === 400, JSON.stringify([c.messages, c.tokens]));
+    appendFileSync(T, NL + '{"type":"assistant","message":{"usage":{"input_tok');   // a line genuinely mid-write
+    c = await g();
+    ok("⭐J2-4 写到一半的行不计、不崩:仍是 4 条 / 400", c.messages === 4 && c.tokens === 400, JSON.stringify([c.messages, c.tokens]));
+    appendFileSync(T, 'ens":500}}}' + NL);              // the writer finishes it
+    c = await g();
+    ok("J2-5 半行补完后被计上:5 条 / 500", c.messages === 5 && c.tokens === 500, JSON.stringify([c.messages, c.tokens]));
+    writeFileSync(T, turn(7) + NL);                     // file truncated
+    c = await g();
+    ok("⭐J2-6 文件截短 → 从头重折:1 条 / 7(不是沿用旧偏移读出垃圾)", c.messages === 1 && c.tokens === 7, JSON.stringify([c.messages, c.tokens]));
+    appendFileSync(T, JSON.stringify({ type: "system", subtype: "compact_boundary",
+      compactMetadata: { trigger: "auto", preTokens: 7, postTokens: 3, cumulativeDroppedTokens: 4 },
+      timestamp: "2026-09-07T00:00:00Z" }) + NL);
+    c = await g();
+    ok("J2-7 压缩边界:compactions=1,量尺回到 post=3", c.compactions === 1 && c.tokens === 3 && c.last_compact?.post === 3, JSON.stringify([c.compactions, c.tokens]));
   }
 
   // ══ §K stopping a line reclaims leases across ALL slot names ═════════════

@@ -106,7 +106,9 @@ Operator-facing: `BOARD_DATA_DIR` `BOARD_DB` `BOARD_HOST` `BOARD_PORT` `BOARD_UR
 
 Test-only escape hatches (never production defaults): `BOARD_ALLOW_UNPINNED`
 `WORKER_ALLOW_BATCH_CLI` `WORKER_CLI_ARGV` `BOARD_POOL_TEST_MODE`
-`BOARD_POOL_TEST_PROBE` `BOARD_SPAWN_ECHO` `BOARD_TEST_SHUTDOWN_MS`.
+`BOARD_POOL_TEST_PROBE` `BOARD_SPAWN_ECHO` `BOARD_TEST_SHUTDOWN_MS`
+`BOARD_CLAUDE_PROJECTS` (points the transcript lookup away from the operator's real
+`~/.claude/projects`; a harness must never plant files there).
 
 ## Operations vocabulary (display; the concepts behind the Chinese UI)
 

@@ -375,6 +375,19 @@ function assertVerify(key) {
   return String(key);
 }
 
+/** max_attempts 的值域闸。默认参数只挡 undefined:一个显式的 null / 0 / -5 / NaN / 1e999 / 0.4
+ *  会原样落库(Number(null) === 0),而 claim 的生涯上限条件 `attempts < max_attempts * 4`
+ *  从此恒假 —— 卡建得成、看得见、永远没人领,零报错零事件。badRoutable 为 route/line/weight
+ *  挡的正是这种「不是坏,是永远不开始」;这一格漏了(外部审阅 2026-09-07 在临时库上实跑出三张)。
+ *  null 与 undefined 一样算「没说」→ 默认;其余必须是 ≥1 的整数(Infinity / 小数一并拒)。 */
+function assertMaxAttempts(v) {
+  if (v == null) return 3;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1)
+    throw err(ERR.BAD_INPUT, `max_attempts=${JSON.stringify(v)} 不合法:要 ≥1 的整数。≤0 会让这张卡永远没人能领`);
+  return n;
+}
+
 function open(readOnly = false) {
   if (!readOnly && !fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH, { readOnly });
@@ -415,6 +428,14 @@ function migrate(db) {
     if (name === "attempts_base") backfillAttemptsBase(db);
     if (name === "last_verdict") backfillVerdictCaliber(db);
   }
+
+  // ⭐ Repair, not migration: a card that got max_attempts ≤ 0 / fractional / NULL before
+  //   assertMaxAttempts existed is a ghost — claimable by nobody, alarmed by nothing.
+  //   Restore the default; nobody ever meant "zero attempts". Idempotent, so it runs
+  //   on every open rather than gating on a column being added.
+  db.prepare(`UPDATE tasks SET max_attempts=3
+               WHERE max_attempts IS NULL OR max_attempts < 1
+                  OR max_attempts <> CAST(max_attempts AS INTEGER)`).run();
 
   // Status remap. Order matters: backlog -> released=0 must be set BEFORE status is
   // overwritten.
@@ -927,7 +948,7 @@ function addInner(db, {
         //   cannot diverge. The value-set gate itself is the server's badRoutable
         //   (the store does not know LINES/ROUTES).
         String(route || DEFAULT_ROUTE), line ? String(line) : null, lockKey ? String(lockKey) : null,
-        needsBash ? 1 : 0, released ? 1 : 0, Number(maxAttempts),
+        needsBash ? 1 : 0, released ? 1 : 0, assertMaxAttempts(maxAttempts),
         evidencePath ? String(evidencePath) : null,
         String(kind), parentId == null ? null : Number(parentId), vk,
         // Same expression as route (`String(weight)` would let weight:null enter as
@@ -1080,6 +1101,11 @@ function heldByNoProgress(db, { route, line }, opts = {}) {
 
 function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
+  // ⭐ Same clamp heartbeat applies, for the same reason: the default parameter only
+  //   catches undefined, so a raw -5 / 0 / NaN would be written as an ALREADY-EXPIRED
+  //   lease and the next reaper sweep (30 s) takes the card back from a live worker.
+  //   Three entry points, one policy — the server's `||` only ever caught falsy.
+  leaseMin = Number(leaseMin) > 0 ? Number(leaseMin) : DEFAULT_LEASE_MIN;
   const route = opts.route || DEFAULT_ROUTE;
   const line = opts.line || String(worker);
   db.exec("BEGIN IMMEDIATE");
@@ -1280,6 +1306,7 @@ function reapExpiredInner(db) {
 function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null,
                          force = false, treeRev = null, extra = null }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
+  leaseMin = Number(leaseMin) > 0 ? Number(leaseMin) : DEFAULT_LEASE_MIN;   // see claim()
   db.exec("BEGIN IMMEDIATE");
   try {
     const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
@@ -1792,25 +1819,32 @@ function bumpAttempt(db, { id, worker }) {
 function markAutoReviewed(db, { id, note = "", decisionPackage = null }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+  // ⭐ ONE statement (v0.12.1). This used to be two UPDATEs: the package swap, then a
+  //   read-modify-write that stamped consumed_at on an unconsumed receipt. A crash
+  //   between them left "new A/B/C package + live receipt for the OLD package", which
+  //   confirm_pending reads as "the human already executed this" (external review
+  //   2026-09-07). The receipt is now consumed in the same UPDATE, with the CASE
+  //   idiom resolve() already uses — no second write, so no torn state to guard.
+  //   The record itself stays: a production execution cannot be unhappened.
+  const ts = now();
+  let receipt = null;                         // null = leave decision_receipt untouched
+  try {
+    const dr0 = t.decision_receipt ? JSON.parse(t.decision_receipt) : null;
+    if (dr0 && !dr0.consumed_at) { dr0.consumed_at = ts; receipt = JSON.stringify(dr0); }
+  } catch { receipt = null; }
   // What was looked at and passed to a human moves to "confirm" — distinguishable
-  // from untouched.
+  // from untouched. The A/B/C PACKAGE is being replaced, so choice/archive/receipt
+  // against the old package are not input for the next review.
   db.prepare(`UPDATE tasks
                  SET auto_review_at=?, review_fp=?, verdict_note=?, waiting_for='confirm',
-                     decision_json=?, decision_choice=NULL, decision_sql_archive=NULL
+                     decision_json=?, decision_choice=NULL, decision_sql_archive=NULL,
+                     decision_receipt=CASE WHEN ? IS NULL THEN decision_receipt ELSE ? END
                WHERE id=?`)
-    .run(now(), reviewFingerprint(t), String(note || t.verdict_note || ""),
-         decisionPackage == null ? null : JSON.stringify(decisionPackage), Number(id));
-  // ⭐ Consume here too: the A/B/C PACKAGE is being replaced, so an "executed" receipt
-  //   against the old package is not input for the next review (same logic as
-  //   NULLing decision_choice / decision_sql_archive). ⚠ The record itself stays —
-  //   a production execution cannot be unhappened.
-  let dr0 = null;
-  try { dr0 = t.decision_receipt ? JSON.parse(t.decision_receipt) : null; } catch { dr0 = null; }
-  if (dr0 && !dr0.consumed_at) {
-    dr0.consumed_at = now();
-    db.prepare("UPDATE tasks SET decision_receipt=? WHERE id=?").run(JSON.stringify(dr0), Number(id));
-  }
-  return { id: Number(id), auto_review_at: now() };
+    .run(ts, reviewFingerprint(t), String(note || t.verdict_note || ""),
+         decisionPackage == null ? null : JSON.stringify(decisionPackage),
+         receipt, receipt, Number(id));
+  // Return what was written — not a second now() (the file's own rule).
+  return { id: Number(id), auto_review_at: ts };
 }
 
 /**
@@ -2185,7 +2219,7 @@ function updateInner(db, fields) {
   if (acceptance !== undefined){  sets.push("acceptance=?");  args.push(String(acceptance)); }
   if (line !== undefined)        { sets.push("line=?");         args.push(line ? String(line) : null); }
   if (route !== undefined)       { sets.push("route=?");        args.push(String(route || DEFAULT_ROUTE)); }
-  if (maxAttempts !== undefined) { sets.push("max_attempts=?"); args.push(Number(maxAttempts)); }
+  if (maxAttempts != null) { sets.push("max_attempts=?"); args.push(assertMaxAttempts(maxAttempts)); }
   if (lockKey !== undefined)     { sets.push("lock_key=?");     args.push(lockKey ? String(lockKey) : null); }
   if (needsBash !== undefined)   { sets.push("needs_bash=?");   args.push(needsBash ? 1 : 0); }
   if (verifyCmd !== undefined)   { sets.push("verify_cmd=?");   args.push(assertVerify(verifyCmd)); }
