@@ -302,14 +302,44 @@ def main():
         if not sub:
             sys.exit("BOARD_GATED_SUBTREE 未设 —— 先决定闸住哪棵子树(独立部署常用 \".\"=整树),再 bless")
         spec = "" if sub == "." else sub
-        r = subprocess.run(["git", "rev-parse", f"HEAD:{spec}"], capture_output=True,
-                           text=True, encoding="utf-8", errors="replace",
-                           cwd=os.path.dirname(HERE))
+        repo = os.path.dirname(HERE)
+        def git(*a):
+            return subprocess.run(["git", *a], capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", cwd=repo)
+        r = git("rev-parse", f"HEAD:{spec}")
         if r.returncode != 0:
             sys.exit("git rev-parse 失败:" + (r.stderr or r.stdout).strip())
         tree = r.stdout.strip()
+        # ⭐ Say what is being accepted BEFORE writing it (v0.15.1). The act stays one manual
+        #   command — a one-click accept would defeat the gate — but "what am I accepting"
+        #   used to be a bare hash. accepted_rev is a TREE object, so the previous one and
+        #   this one can be diffed directly (`git diff --stat <tree> <tree>`), and a dirty
+        #   working tree is worth a warning: bless anchors HEAD, and the gate refuses to
+        #   start a line from a dirty tree, so the next thing the person sees would be a
+        #   refusal they did not expect.
+        rev_file = os.path.join(DATA, "accepted_rev")
+        prev = None
+        try: prev = io.open(rev_file, encoding="utf-8").read().strip() or None
+        except Exception: prev = None
+        print(f"子树 {sub}:HEAD 的树 = {tree}")
+        if prev and prev == tree:
+            print(f"  与上次接受的一致({prev[:12]}…)—— 重新 bless 不改变任何东西")
+        elif prev:
+            d = git("diff", "--stat", prev, tree)
+            stat = [ln for ln in (d.stdout or "").rstrip().splitlines() if ln.strip()]
+            print(f"  上次接受的树 = {prev}")
+            print("  你正在接受的变化(上次接受的树 → 这次):")
+            for ln in (stat or [f"(git diff --stat 无输出:{(d.stderr or '').strip()})"]):
+                print("    " + ln)
+        else:
+            print("  首次接受(之前没有 accepted_rev)")
+        dirty = git("status", "--short", "--", "." if sub == "." else sub)
+        n_dirty = len([ln for ln in (dirty.stdout or "").splitlines() if ln.strip()])
+        if n_dirty:
+            print(f"  ⚠ 工作树里有 {n_dirty} 处未提交改动 —— bless 锚的是 HEAD 的树,不是工作树;"
+                  f"线启动时闸会因脏树拒绝。先 commit,再起线")
         os.makedirs(DATA, exist_ok=True)
-        io.open(os.path.join(DATA, "accepted_rev"), "w", encoding="utf-8").write(tree + chr(10))
+        io.open(rev_file, "w", encoding="utf-8").write(tree + chr(10))
         print(f"已 bless:{sub} = {tree}")
         print(f"  写入 {os.path.join(DATA, 'accepted_rev')} —— 在跑的旧进程不会热换代码,重启后生效")
 

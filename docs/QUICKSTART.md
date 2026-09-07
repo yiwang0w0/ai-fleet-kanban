@@ -88,6 +88,12 @@ in place it is one command:
 python cli/board.py bless
 ```
 
+It tells you what you are accepting before it writes anything: the tree hash,
+the previously accepted one, and `git diff --stat` between the two (they are
+tree objects, so they diff directly) — and it warns when the working tree has
+uncommitted changes, because bless anchors HEAD and the gate will refuse to
+start a line from a dirty tree. The act itself is unchanged: one command, yours.
+
 (No config? Same act, spelled by hand — and the gate subtree must then be
 exported in EVERY shell that runs a loop:)
 

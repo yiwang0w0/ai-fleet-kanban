@@ -141,6 +141,31 @@ console.log(NL + "[⑤ demo]");
   ok("(前提)确实是 mock 跑的:输出里有 worker 的一轮日志", /--once|第 1\/3 次尝试|等待中\/待验收/.test(out));
 }
 
+// ── ⑥ bless says what it accepts ────────────────────────────────────────────
+//    The ritual is unchanged (one manual command, no button); what changed is that the
+//    person now sees the previous tree, the new tree and the diff between them before
+//    the hash is written. accepted_rev is a tree object, so two of them diff directly.
+console.log(NL + "[⑥ bless 说清它接受的是什么]");
+{
+  const PY = process.env.PYTHON || process.env.BOARD_PYTHON || "python";
+  const data = join(TMP, "bless-data"); mkdirSync(data, { recursive: true });
+  const env = { ...process.env, BOARD_DATA_DIR: data, BOARD_GATED_SUBTREE: ".", PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" };
+  const bless = () => { const r = spawnSync(PY, [join(ROOT, "cli", "board.py"), "bless"], { encoding: "utf8", env, windowsHide: true, cwd: ROOT, timeout: 60000 }); return { code: r.status, out: (r.stdout || "") + (r.stderr || "") }; };
+  const head = spawnSync("git", ["rev-parse", "HEAD:"], { encoding: "utf8", cwd: ROOT }).stdout.trim();
+  const b1 = bless();
+  ok("首次 bless:写下 HEAD 的树,并说明是首次", b1.code === 0 && existsSync(join(data, "accepted_rev")) &&
+     readFileSync(join(data, "accepted_rev"), "utf8").trim() === head && /首次接受/.test(b1.out) && b1.out.includes(head), b1.out.slice(0, 200));
+  const b2 = bless();
+  ok("再 bless 同一棵树:说明与上次一致", b2.code === 0 && /一致/.test(b2.out));
+  // A different tree object that exists even in a shallow CI checkout: a subdirectory's tree.
+  const older = spawnSync("git", ["rev-parse", "HEAD:docs"], { encoding: "utf8", cwd: ROOT }).stdout.trim();
+  writeFileSync(join(data, "accepted_rev"), older + NL);
+  const b3 = bless();
+  ok("⭐上次接受的树不同:打出两棵树之间的 diff --stat(你在接受什么,不再是一个裸哈希)",
+     b3.code === 0 && /你正在接受的变化/.test(b3.out) && /files? changed|insertion|deletion/.test(b3.out) && b3.out.includes(older), b3.out.slice(0, 300));
+  ok("并且写下了新的树", readFileSync(join(data, "accepted_rev"), "utf8").trim() === head);
+}
+
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}
 console.log(`${NL}${"─".repeat(56)}${NL}result: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);
