@@ -92,6 +92,8 @@ restart endpoints refuse (409, `needs_force`) while cards are in flight unless `
 passed, and the panel passes it only after its confirm text named the count. Under `npm start`
 (`cli/start.mjs`), pm2 or systemd the process exits 75 and its supervisor relaunches
 it (`exit`); a bare process starts a detached successor from its own
-`execArgv`/`argv`/`cwd`/`env`, logging to `<data>/board.log` (`respawn`). A holder of the operator token could already write `accepted_rev` directly —
-it is a file in the data dir — so these endpoints add no capability beyond that token; what
-keeps a worker away from it is the Claude seat's deny rules on the data dir (above).
+`execArgv`/`argv`/`cwd`/`env`, logging to `<data>/board.log` (`respawn`). Accepting adds no capability beyond the operator token (that holder could already write
+`accepted_rev`, a file in the data dir). Restarting is a new, bounded one: it stops the lines
+and re-runs the board from the code on disk — the source gate covers lines, not the board
+process, exactly as a manual restart does. What keeps a worker away from all of this is the
+Claude seat's deny rules on the data dir (above).

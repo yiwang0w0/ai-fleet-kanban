@@ -84,6 +84,10 @@ jobs:
         run: bash hrun.sh node tests/reviewtest.mjs
         env:
           PYTHON: python
+      - name: "sentrytest (SSE sentry re-runs itself once, old connection closed first)"
+        run: bash hrun.sh node tests/sentrytest.mjs
+        env:
+          PYTHON: python
 
   gitleaks:
     runs-on: ubuntu-latest

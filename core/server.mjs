@@ -672,7 +672,11 @@ function upgradeState() {
   const pv = g.tree ? acceptPreview(g.tree, readAccepted()) : null;
   const c = store.counts(db);
   const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
-  const keep = "卡、事件、账本都在库里,不会丢" + (live.length ? `;在跑的线(${live.join(" ")})先停下,新进程起来后照原样恢复` : "");
+  // ⭐ v0.19 (self-audit P2-2): what comes back is what the boot restore starts — the lines
+  //   with desired_running — not "the lines that have a process right now". Say both sets.
+  const want = SUPERVISED.filter((l) => settingsOf(l).desired_running);
+  const keep = "卡、事件、账本都在库里,不会丢" + (live.length ? `;在跑的线(${live.join(" ")})先停下` : "")
+    + (want.length ? `;新进程起来后会起这些线:${want.join(" ")}` : ";没有线设为自动拉取,起来后不会起线");
   const interrupt = c.in_progress
     ? `⚠ 有 ${c.in_progress} 张卡正在跑:更新会打断它们,卡回到「未开始」由线重领。想等它们交付再更新,就先取消。` : "";
   const needAccept = bl.state !== "done" && !!pv;
@@ -688,7 +692,7 @@ function upgradeState() {
   ];
   const apply = {
     path: needAccept ? "/api/upgrade/apply" : "/api/setup/restart", label: "更新到新代码",
-    body: needAccept ? { confirm_tree: pv.tree } : {}, in_progress: c.in_progress, lines: live,
+    body: needAccept ? { confirm_tree: pv.tree } : {}, in_progress: c.in_progress, lines: { stop: live, resume: want },
     confirm: [`把看板从 ${BOOT_REV} 更新到 ${onDisk}。`, "",
               ...(needAccept ? [pv.confirm] : bl.state === "done" ? ["新代码已经接受过了。"] : [`(${bl.detail})`]),
               "", `接着看板会自己重启:${keep}。`, ...(interrupt ? ["", interrupt] : [])].join("\n"),
@@ -1776,7 +1780,8 @@ async function reconcilePools(reason = "timer") {
     }
     if (reason !== "timer" || poolSnap() !== before)
       emit("pool.changed", { reason, pools: poolState, global_stop: bothPoolsDown() });
-  })().finally(() => { poolReconciling = null; });
+  })().catch((e) => { console.error("池巡检失败:", e.message); })   // ⭐ v0.19: a throw here used to be an unhandled rejection = the board dies of its own timer
+    .finally(() => { poolReconciling = null; });
   return poolReconciling;
 }
 
@@ -2112,15 +2117,17 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const c = store.counts(db);
       if (c.in_progress > 0 && !b.force)
-        return json(res, 409, { error: `有 ${c.in_progress} 张卡在跑 —— 现在重启会打断它们(卡回到未开始,由线重领)。确认要打断就带 force 再来`,
-                                in_progress: c.in_progress, needs_force: true });
+        return json(res, 409, { error: `有 ${c.in_progress} 张卡正在跑 —— 现在重启会打断它们(卡回到「未开始」由线重领)`,
+                                in_progress: c.in_progress, needs_force: true, hint: "脚本调用请带 force:true;面板会先问你一次" });
       let accepted = null;
       if (p === "/api/upgrade/apply") {
         const g = gatedTree();
         if (g.tree && readAccepted() !== g.tree) accepted = acceptTree(b.confirm_tree, "panel-upgrade").accepted;
       }
       const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
-      json(res, 202, { restarting: true, mode: RESTART_MODE, from: BOOT_REV, to: codeRev(), lines: live, accepted });
+      const want = SUPERVISED.filter((l) => settingsOf(l).desired_running);
+      json(res, 202, { restarting: true, mode: RESTART_MODE, from: BOOT_REV, to: codeRev(), lines: { stop: live, resume: want },
+                       log_path: RESTART_MODE === "respawn" ? join(store.DATA_DIR, "board.log") : null, accepted });
       setTimeout(() => { void restartBoard(p === "/api/upgrade/apply" ? "panel-upgrade" : "panel-restart"); }, 80);
       return;
     }
@@ -2909,11 +2916,11 @@ async function restartBoard(trigger) {
       try { await workerStop(l, { keepIntent: true, reason: STOP_REASON.WITH_BOARD }); } catch {}
     }
   }
-  emit("board.restarting", { trigger, mode: RESTART_MODE, from: BOOT_REV, to: codeRev() });
+  emit("board.restarting", { trigger, mode: RESTART_MODE, from: BOOT_REV, to: codeRev(),
+                             log_path: RESTART_MODE === "respawn" ? join(store.DATA_DIR, "board.log") : null });
   await new Promise((r) => setTimeout(r, 150));   // let that event and the 202 leave the socket
   for (const c of clients) { try { c.end(); } catch {} }   // open SSE streams would hold close() forever
   await new Promise((r) => { server.close(() => r()); server.closeAllConnections?.(); });
-  try { db.close(); } catch {}
   if (RESTART_MODE === "exit") {
     console.log(`重启(${trigger}): 以 exit 75 退出,交给外层(npm start 守护 / pm2 / systemd)在原地重起`);
     process.exit(75);
@@ -2923,7 +2930,7 @@ async function restartBoard(trigger) {
   // file, and this line says which one.
   const logPath = join(store.DATA_DIR, "board.log");
   let logFd = "ignore";
-  try { logFd = openSync(logPath, "a"); } catch (e) { console.error(`打不开 ${logPath}(${e.message})—— 新进程的日志将丢弃`); }
+  try { logFd = openSync(logPath, "a", 0o600); /* same mode as the tokens next to it */ } catch (e) { console.error(`打不开 ${logPath}(${e.message})—— 新进程的日志将丢弃`); }
   const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
     cwd: process.cwd(), detached: true, stdio: ["ignore", logFd, logFd], windowsHide: true,
     env: { ...process.env, BOARD_RESTARTED_FROM: BOOT_REV || "?", BOARD_RESTART_TRIGGER: trigger },

@@ -38,6 +38,9 @@ BASE = os.environ.get("BOARD_URL") or (
     else "http://127.0.0.1:47824")
 
 
+REEXEC = [None]   # set by stream_once() when the board says we are stale; acted on OUTSIDE the stream
+
+
 def emit(msg):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
@@ -107,15 +110,17 @@ def stream_once():
                 # ourselves on the new code — as a CHILD we wait for, so whoever monitors this
                 # pid (a Claude's Monitor) keeps the same pid and the same stdout. Once: a second
                 # mismatch means this checkout is not the board's, and re-running cannot fix that.
-                import subprocess, sys
+                # ⭐ v0.19: the re-run happens OUTSIDE this `with` (self-audit P1-1): while the
+                #   child ran, this process's old-rev connection stayed open and the board kept
+                #   reporting 「有通知进程还在跑旧代码」. Return first so the stream closes and the
+                #   board drops us; the main loop then spawns the child.
                 board_rev = str(d.get("board_rev") or "")
                 if os.environ.get("SSE_WATCH_REEXECED") == board_rev:
                     emit(f"⚠ 本哨已按 {board_rev} 重跑过一次,看板仍说版本不一致 —— 本哨和看板可能不在同一个检出;请停掉,从看板目录重跑")
                     continue
-                emit(f"↻ 看板已是 {board_rev},本哨跑的是 {d.get('your_rev')} —— 以新代码重跑本哨(本进程留守转发输出)")
-                sys.stdout.flush()
-                rc = subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, SSE_WATCH_REEXECED=board_rev))
-                sys.exit(rc)
+                emit(f"↻ 看板已是 {board_rev},本哨跑的是 {d.get('your_rev')} —— 断开旧连接,以新代码重跑本哨(本进程留守转发输出)")
+                REEXEC[0] = board_rev
+                return
             if t.startswith("request."):
                 # v0.5: a panel shortcut button addressed to the coordinator seat —
                 # this line IS the wake-up. The seat acks first, then acts
@@ -133,6 +138,11 @@ def stream_once():
 while True:
     try:
         stream_once()
+        if REEXEC[0]:
+            import subprocess
+            sys.stdout.flush()
+            rc = subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, SSE_WATCH_REEXECED=REEXEC[0]))
+            sys.exit(rc)
         emit("⚠ SSE 流正常结束(服务端关闭?)—— 10s 后重连")
     except Exception as e:
         emit(f"⛔ SSE 断开: {e!r} —— 10s 后重连")

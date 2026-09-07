@@ -63,6 +63,25 @@ def tok():
         return ""
 
 
+def _code_rev():
+    """Which code THIS process runs (git short HEAD of the board checkout); "" when unmeasurable."""
+    try:
+        return subprocess.run(["git", "-C", CODE_ROOT, "rev-parse", "--short", "HEAD"],
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+    except Exception:
+        return ""
+
+
+def stale_decision(own_rev, board_rev, reexeced):
+    """v0.19 (self-audit P2-5): this sentry is not an SSE client, so the board cannot tell it
+    it is stale — it asks. "ok" when either side is unmeasurable or they agree (unmeasurable
+    never triggers a re-run); "reexec" once; "warn" when we already re-ran for this very
+    board revision and still differ (a different checkout — re-running cannot fix that)."""
+    if not own_rev or not board_rev or own_rev == board_rev:
+        return "ok"
+    return "warn" if reexeced == board_rev else "reexec"
+
+
 def get(path):
     req = urllib.request.Request(BASE + path, headers={"X-Board-Token": tok()})
     with urllib.request.urlopen(req, timeout=15) as r:
@@ -155,6 +174,10 @@ if "--selftest" in sys.argv:
         ("判决新鲜 → 不报(审阅活着)", review_stalled(NOW, NOW - 60, NOW - 3600) is False),
         ("从无判决文件 = 审阅未部署 → 永不报", review_stalled(NOW, 0, NOW - 3600) is False),
         ("卡时刻不可读 → 不报(垃圾不触警)", review_stalled(NOW, NOW - 3600, 0) is False),
+        ("版本自检: 一致 → ok", stale_decision("abc", "abc", None) == "ok"),
+        ("版本自检: 不一致且没重跑过 → reexec(一次)", stale_decision("abc", "def", None) == "reexec"),
+        ("版本自检: 已按该版本重跑过仍不一致 → warn(不再重跑)", stale_decision("abc", "def", "def") == "warn"),
+        ("版本自检: 哨或板测不出版本 → ok(测不出不触发)", stale_decision("", "def", None) == "ok" and stale_decision("abc", "", None) == "ok"),
     ]
     ROWS_IDLE = [{"line": "alpha", "running": False, "desired_running": False},
                  {"line": "coord", "running": False, "desired_running": False}]
@@ -194,6 +217,19 @@ notice = AlarmThrottle()     # notes: same treatment, gentler wording
 last_problems = []
 while True:
     n += 1
+    # ⭐ v0.19: after 「更新」 the board runs new code; so should this process. Ask once a round.
+    try:
+        _bv = str((get("/api/setup") or {}).get("version") or "")
+        _own = _code_rev()
+        _dec = stale_decision(_own, _bv, os.environ.get("BOARD_HEALTH_REEXECED"))
+        if _dec == "reexec":
+            print(f"{stamp()} ↻ 看板已是 {_bv},本哨跑的是 {_own} —— 以新代码重跑本哨(本进程留守转发输出)", flush=True)
+            rc = subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, BOARD_HEALTH_REEXECED=_bv))
+            sys.exit(rc)
+        if _dec == "warn" and n == 1:
+            print(f"{stamp()} ⚠ 本哨已按 {_bv} 重跑过一次,看板仍说版本不一致 —— 本哨和看板可能不在同一个检出", flush=True)
+    except Exception:
+        pass   # the health checks below say what is wrong with the board; this is not that
     problems = []
     notes = []
     lines_up = claimable = inprog = waiting = -1

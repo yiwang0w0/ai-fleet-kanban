@@ -246,9 +246,11 @@ confirm dialog tells you, before anything happens:
   them deliver).
 
 Then the board accepts, restarts itself and comes back on the same port; the
-page reloads when the new revision answers. Sentries reconnect on their own
-and, told by the board that they run an old file (`sentry.stale`), re-run
-themselves once on the new code. Nothing to type.
+page reloads when the new revision answers. Both sentries re-run themselves
+once on the new code — the SSE sentry as soon as the board tells it
+(`sentry.stale`, after closing its old connection), the health sentry on its
+next round. If cards are in flight the button asks you once — interrupt them,
+or cancel and wait. Nothing to type.
 
 The CLI path still exists — `python cli/board.py bless`, Ctrl+C, start again —
 and is what you use when the board is not running at all.

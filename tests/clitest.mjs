@@ -189,6 +189,15 @@ console.log(NL + "[⑦ start.mjs 守护:exit 75 原地重起,其他码透传]");
   const r3 = run(stub3);
   ok("其他退出码(闸门拒启的 3)透传,不重起", r3.status === 3 && !/看板请求重启/.test(r3.stdout) &&
      (r3.stdout.match(/boot once/g) || []).length === 1, `status=${r3.status}`);
+  // ⭐ v0.19: a board that asks to be restarted every time it comes up must not loop forever.
+  const stub75 = join(TMP, "stub-always75.mjs");
+  writeFileSync(stub75, 'console.log("boot"); process.exit(75);');
+  const r75 = run(stub75);
+  ok("⭐子进程每次都 exit 75 → 60 秒内超过 5 次就放弃(exit 1,说明原因),不无限重起",
+     r75.status === 1 && /不再重起/.test(r75.stdout + r75.stderr) && (r75.stdout.match(/boot/g) || []).length <= 7,
+     `status=${r75.status} boots=${(r75.stdout.match(/boot/g) || []).length}`);
+  ok("守护把 BOARD_RESTART_MODE 钉成 exit(用户 env 里的 respawn 不会和守护打架)",
+     /BOARD_RESTART_MODE: "exit"/.test(readFileSync(join(ROOT, "cli", "start.mjs"), "utf8")), "");
 }
 
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}
