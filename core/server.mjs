@@ -11,7 +11,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync, renameSync, unlinkSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync, renameSync, unlinkSync, mkdirSync, chmodSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { execFile, execFileSync, execSync } from "node:child_process";
 import { homedir } from "node:os";
@@ -1825,7 +1825,11 @@ const TOKEN_FILE = join(store.DATA_DIR, "board_token");
 const mintToken = (file) => {
   let t = "";
   try { t = readFileSync(file, "utf8").trim(); } catch {}
-  if (!t) { t = randomUUID().replace(/-/g, ""); writeFileSync(file, t, "utf8"); }
+  // ⭐ 0600 (v0.16.0). Default mode left the operator token world-readable on a multi-user
+  //   host — the very neighbour the threat model names (external audit 2026-09-07). Existing
+  //   files are tightened too; Windows ignores POSIX bits (its ACLs come from the folder).
+  if (!t) { t = randomUUID().replace(/-/g, ""); writeFileSync(file, t, { encoding: "utf8", mode: 0o600 }); }
+  if (process.platform !== "win32") { try { chmodSync(file, 0o600); } catch {} }
   return t;
 };
 const BOARD_TOKEN = mintToken(TOKEN_FILE);
@@ -2518,8 +2522,11 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, r);
       }
       if (action === "autoreview") {
+        // expect_updated_at: the row the reviewer judged. Absent = old reviewer, status
+        // gate only; present = CAS as well (store.markAutoReviewed).
         const r = store.markAutoReviewed(db, { id, note: b.note,
-                                               decisionPackage: b.decision_package });
+                                               decisionPackage: b.decision_package,
+                                               expectUpdatedAt: b.expect_updated_at ?? null });
         emit("task.autoreviewed", r);
         return json(res, 200, r);
       }

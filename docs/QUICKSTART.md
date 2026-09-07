@@ -217,7 +217,7 @@ The README's "500+ machine assertions" are not a brochure number — run them
 
 ```
 node tests/selftest.mjs && node tests/servertest.mjs && node tests/looptest.mjs && node tests/reviewtest.mjs
-node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs
+node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs && node tests/clitest.mjs
 python gates/gates_lib.py && python loops/worker_loop.py --codex-selftest
 ```
 

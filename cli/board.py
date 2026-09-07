@@ -102,7 +102,10 @@ def die(s, d):
     sys.exit(f"{s} {json.dumps(d, ensure_ascii=False)}")
 
 def arg(flag, default=None):
-    return sys.argv[sys.argv.index(flag) + 1] if flag in sys.argv else default
+    if flag not in sys.argv: return default
+    i = sys.argv.index(flag)
+    if i + 1 >= len(sys.argv): sys.exit(f"{flag} 后面要跟一个值")
+    return sys.argv[i + 1]
 
 def readfile(p):
     return io.open(p, encoding="utf-8").read() if p else ""

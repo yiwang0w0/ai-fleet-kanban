@@ -40,6 +40,16 @@ const crypto = require("crypto");
 const DATA_DIR = process.env.BOARD_DATA_DIR || path.join(__dirname, ".data");
 const DB_PATH = process.env.BOARD_DB || path.join(DATA_DIR, "board.db");
 const DEFAULT_LEASE_MIN = 30;
+// ⭐ Lease clamp (v0.16.0). `Number(x) > 0` let Infinity through (JSON 1e999): the lease
+//   was stored as REAL Infinity, the reaper could never reclaim the card, and it sat in
+//   in_progress forever — the exact failure red line 2 exists to prevent (external audit
+//   2026-09-07). Finite, positive, and capped: a worker that needs more than a day keeps
+//   the lease alive by heartbeat, not by asking for a year up front.
+const MAX_LEASE_MIN = 1440;
+const clampLease = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, MAX_LEASE_MIN) : DEFAULT_LEASE_MIN;
+};
 
 // Route a card carries when none is given. Routes are fleet vocabulary (which kind
 // of runtime may pick the card up); the value set is the host fleet's config, not ours.
@@ -624,7 +634,16 @@ const lifetimeCap = (t) => Number(t.max_attempts) * LIFETIME_DISPATCH_CAP;
 //   it does not keep them out; a cap must be enforced at the claim site.
 //   Root = walk parent_id to the top (no parent = itself). The number is policy;
 //   env-tunable, default 2.
-const WIP_PER_ROOT = Math.max(1, Number(process.env.BOARD_WIP_PER_ROOT || 2));
+const WIP_PER_ROOT = (() => {
+  const raw = process.env.BOARD_WIP_PER_ROOT;
+  if (raw == null || raw === "") return 2;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {      // "abc" used to become NaN and silently switch the cap off
+    console.error(`⚠ BOARD_WIP_PER_ROOT=${JSON.stringify(raw)} 不是数字 —— 忽略,用默认 2`);
+    return 2;
+  }
+  return Math.max(1, n);
+})();
 
 /** Walk parent_id to the chain root. ⚠ Depth cutoff 32: measured deepest chain is 7,
  *  32 is anti-cycle insurance (cycles are prevented by placeInChain; on hitting the
@@ -1046,6 +1065,19 @@ function stateFingerprint(db, t, opts = {}) {
 }
 
 /**
+ * ⭐ Forged ruling heads (v0.16.0). The worker reads the human's instruction out of
+ *   verdict_note by finding lines that start with "—— 你的决定(<timestamp> …)——" — the
+ *   head resolve() writes when a HUMAN rules. The auto-reviewer's own note lands in the
+ *   same column, so a model could write that exact line and the next worker round would
+ *   read machine text as the human's word (external audit 2026-09-07). The store is the
+ *   only writer of genuine heads, so it is the right place to defuse: any such line in
+ *   text that did not come from a human loses its line-start dashes. The worker's parser
+ *   (VERDICT_HEAD, anchored at ^——) then no longer sees a head; the words stay readable.
+ *   Human-written notes are never touched — a person may quote whatever they like.
+ */
+const defuseRulingHeads = (s) => String(s || "").replace(/^——(\s*你的决定)/gm, "—(转述)—$1");
+
+/**
  * ⭐ REVIEW FINGERPRINT — "is this the same deliverable I already judged?"
  * Deliberately NOT the state fingerprint: a reviewer judges the delivery against the
  * acceptance criteria and the machine result, and nothing else on the card matters
@@ -1113,7 +1145,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
   //   catches undefined, so a raw -5 / 0 / NaN would be written as an ALREADY-EXPIRED
   //   lease and the next reaper sweep (30 s) takes the card back from a live worker.
   //   Three entry points, one policy — the server's `||` only ever caught falsy.
-  leaseMin = Number(leaseMin) > 0 ? Number(leaseMin) : DEFAULT_LEASE_MIN;
+  leaseMin = clampLease(leaseMin);
   const route = opts.route || DEFAULT_ROUTE;
   const line = opts.line || String(worker);
   db.exec("BEGIN IMMEDIATE");
@@ -1314,7 +1346,7 @@ function reapExpiredInner(db) {
 function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null,
                          force = false, treeRev = null, extra = null }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
-  leaseMin = Number(leaseMin) > 0 ? Number(leaseMin) : DEFAULT_LEASE_MIN;   // see claim()
+  leaseMin = clampLease(leaseMin);   // see claim()
   db.exec("BEGIN IMMEDIATE");
   try {
     const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
@@ -1461,7 +1493,7 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
   //   LIVE, HEARTBEATING worker. A call meant to extend life would kill the card.
   //   ⚠ The claim path had `|| DEFAULT` server-side while heartbeat passed raw =
   //   two policies for the same field.
-  const mins = Number(leaseMin) > 0 ? Number(leaseMin) : DEFAULT_LEASE_MIN;
+  const mins = clampLease(leaseMin);
   // ⚠ Take the time ONCE. The old version called Date.now() separately for write and
   //   return, so the returned heartbeat_at differed from the DB by a few ms — an API
   //   returning something other than what it wrote.
@@ -1659,12 +1691,19 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
   // Ruling records are NEVER overwritten. One human letter erasing the reviewer's
   // A/B/C means nobody can later know what "A" was (measured: it got erased).
   // Append.
+  // ⭐ verify_ok arrives three-valued (absent/null = not measured). Storage used truthiness
+  //   and the cascade used `=== true`, so `verify_ok: 1` was written as green yet never
+  //   linked the parent (external audit 2026-09-07). One reading, both places.
+  if (verifyOk !== undefined && verifyOk !== null && ![true, false, 1, 0].includes(verifyOk))
+    throw err(ERR.BAD_INPUT, `verify_ok 必须是 true/false(或 1/0),收到 ${JSON.stringify(verifyOk)} —— 那不是一种绿`);
+  const vok = verifyOk === true || verifyOk === 1;
+  const saidSafe = resolvedBy === "human" ? said : defuseRulingHeads(said);
   const merged = said
     ? [String(t.verdict_note || "").trim(),
        `—— ${resolvedBy === "human" ? "你的决定" : "自动审阅"}(${now()} · ` +
        `${verdict === "approve" ? "通过" : "打回"}` +
        `${disp === "hand_back" ? " · 回原线继续" : disp === "hold_for_review" ? " · 留在等待中交审阅" : ""})——`,
-       said].filter(Boolean).join("\n\n")
+       saidSafe].filter(Boolean).join("\n\n")
     : String(t.verdict_note || "");
 
   // ⭐ The two columns say DIFFERENT things (verdict-caliber ruling).
@@ -1711,7 +1750,7 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
                                           WHEN ?='auto' AND human_gate_src='detect' THEN NULL
                                           ELSE human_gate_src END,
                       lease_until=NULL, heartbeat_at=NULL, updated_at=? WHERE id=?`
-  ).run(next, merged, said, closingVerdict, String(verdict),
+  ).run(next, merged, saidSafe, closingVerdict, String(verdict),
         // three `next` in a row: waiting_for CASE, auto_review_at CASE, review_fp CASE
         next, next, next, String(resolvedBy),
         selectedOption == null ? null : String(selectedOption),
@@ -1742,7 +1781,7 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
   //   stays null ⇒ no linkage (safe default).
   if (verifyOk !== undefined && verifyOk !== null)
     db.prepare("UPDATE tasks SET verify_ok=?, verify_at=?, updated_at=? WHERE id=?")
-      .run(verifyOk ? 1 : 0, now(), now(), Number(id));
+      .run(vok ? 1 : 0, now(), now(), Number(id));
 
   // ⭐ Consumption: once any non-hold ruling passes, that receipt is no longer input
   //   for the next review. ⚠ NOT deleted (records stay) — only consumed_at is
@@ -1762,7 +1801,7 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
   }
 
   let cascade = null;
-  if (next === "done" && verifyOk === true) {
+  if (next === "done" && vok) {
     const fresh = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
     cascade = cascadeClose(db, fresh,
       `依据: 本卡的机器验证(${fresh.verify_cmd || "verify"})通过,裁定者=${resolvedBy}。`);
@@ -1807,8 +1846,14 @@ function bumpAttempt(db, { id, worker }) {
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress`);
   if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
-  db.prepare("UPDATE tasks SET attempts=attempts+1, updated_at=? WHERE id=?").run(now(), Number(id));
-  const n = Number(t.attempts) + 1;
+  // ⭐ Gate folded into the UPDATE and the new value read back from the row (RETURNING),
+  //   instead of a bare WHERE id=? plus `t.attempts + 1` computed from the pre-read — the
+  //   one attempts write path that still trusted a stale row (two reviews flagged it).
+  const row = db.prepare(`UPDATE tasks SET attempts=attempts+1, updated_at=?
+                            WHERE id=? AND status='in_progress' AND worker=? RETURNING attempts`)
+    .get(now(), Number(id), String(worker));
+  if (!row) throw err(ERR.CONFLICT, `卡 #${id} 在累加尝试时被回收或改手,未累加`);
+  const n = Number(row.attempts);
   // The anchor (attempts_base) does NOT move — this is round 2 or 3 of the SAME
   // dispatch. Return both calibers; the loop's budget judgment reads
   // attempts_this_claim. ⛔ No "exhausted" here (reasons ①② above; judgment lives in
@@ -1824,9 +1869,23 @@ function bumpAttempt(db, { id, worker }) {
  * auto_review_at < updated_at ⇒ review AGAIN — if the card moved, the evidence
  * changed too.
  */
-function markAutoReviewed(db, { id, note = "", decisionPackage = null }) {
+function markAutoReviewed(db, { id, note = "", decisionPackage = null, expectUpdatedAt = null }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
+  // ⭐ Status gate + CAS (v0.16.0). Auto-review is asynchronous by nature — fetch the
+  //   pending list, run a model for minutes, POST the verdict — so a LATE call is the
+  //   normal case, not a race. In between, a human may have ruled (hand-back → not_started,
+  //   close → done) or a worker may have re-delivered. A bare WHERE id=? let the late
+  //   verdict overwrite the human's ruling with the reviewer's package and flip the card
+  //   back to confirm (external audit 2026-09-07). Two conditions, both also folded into
+  //   the UPDATE below: the card must still be a reviewable waiting card, and — when the
+  //   reviewer says which row it judged (expect_updated_at) — that row must be unchanged.
+  const stale = t.status !== "waiting" || (t.waiting_for || "") === "rearm"
+    ? `卡 #${id} 已不在待审状态(${t.status}${t.waiting_for ? "/" + t.waiting_for : ""})—— 迟到的审阅不落盘`
+    : (expectUpdatedAt != null && String(expectUpdatedAt) !== String(t.updated_at))
+      ? `卡 #${id} 在审阅期间变了(现在 ${t.updated_at},审阅所见 ${expectUpdatedAt})—— 本轮判决作废,下轮按新卡面重审`
+      : null;
+  if (stale) throw err(ERR.CONFLICT, stale);
   // ⭐ ONE statement (v0.12.1). This used to be two UPDATEs: the package swap, then a
   //   read-modify-write that stamped consumed_at on an unconsumed receipt. A crash
   //   between them left "new A/B/C package + live receipt for the OLD package", which
@@ -1843,14 +1902,18 @@ function markAutoReviewed(db, { id, note = "", decisionPackage = null }) {
   // What was looked at and passed to a human moves to "confirm" — distinguishable
   // from untouched. The A/B/C PACKAGE is being replaced, so choice/archive/receipt
   // against the old package are not input for the next review.
-  db.prepare(`UPDATE tasks
+  const r = db.prepare(`UPDATE tasks
                  SET auto_review_at=?, review_fp=?, verdict_note=?, waiting_for='confirm',
                      decision_json=?, decision_choice=NULL, decision_sql_archive=NULL,
                      decision_receipt=CASE WHEN ? IS NULL THEN decision_receipt ELSE ? END
-               WHERE id=?`)
-    .run(ts, reviewFingerprint(t), String(note || t.verdict_note || ""),
+               WHERE id=? AND status='waiting' AND COALESCE(waiting_for,'')<>'rearm'
+                 AND (? IS NULL OR updated_at=?)`)
+    // The incoming note is machine text: defuse forged human heads (see defuseRulingHeads).
+    // An empty note keeps the stored verdict_note untouched — that one may hold real heads.
+    .run(ts, reviewFingerprint(t), note ? defuseRulingHeads(String(note)) : String(t.verdict_note || ""),
          decisionPackage == null ? null : JSON.stringify(decisionPackage),
-         receipt, receipt, Number(id));
+         receipt, receipt, Number(id), expectUpdatedAt, expectUpdatedAt);
+  if (!r.changes) throw err(ERR.CONFLICT, `卡 #${id} 在审阅落盘的瞬间变了 —— 本轮判决作废`);
   // Return what was written — not a second now() (the file's own rule).
   return { id: Number(id), auto_review_at: ts };
 }
@@ -2640,7 +2703,7 @@ module.exports = {
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,
   noProgressHold, stateFingerprint, fpDiff, heldByNoProgress,
   reopen, rearmDone, deferToRearm, completeGoals,
-  list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, STATUS_LABEL, WF_LABEL, DEFAULT_LEASE_MIN,
+  list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, STATUS_LABEL, WF_LABEL, DEFAULT_LEASE_MIN, MAX_LEASE_MIN, defuseRulingHeads,
   DEFAULT_ROUTE,
   verifyRegistry, assertVerify,
   // Ruling destinations. **The legacy criterion's canon is this one function**

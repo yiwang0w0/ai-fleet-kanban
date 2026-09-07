@@ -245,7 +245,9 @@ while True:
             # the same throttle so it says this once, not every ten minutes.
             notes.append(f"板闲着: 有 {claimable} 张可领的卡,但没有一条线开着(要跑就在面板按启动)")
     except Exception as e:
-        problems.append(f"server 不可达: {type(e).__name__} {str(e)[:60]}")
+        code = getattr(e, "code", None)          # HTTPError carries one; a dead socket does not
+        problems.append(f"server 返回 HTTP {code}(不是不可达 —— 查令牌 / 权限)" if code
+                        else f"server 不可达: {type(e).__name__} {str(e)[:60]}")
 
     # Review playing dead: cards sit in review while the newest verdict file has
     # not moved for 45 minutes (measured: one card sat silent for 7 hours). The

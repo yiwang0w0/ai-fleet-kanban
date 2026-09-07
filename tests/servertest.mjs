@@ -20,7 +20,7 @@
 
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, mkdirSync, appendFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -604,6 +604,19 @@ try {
     const cli = readFileSync(join(ROOT, "cli", "board.py"), "utf8");
     ok("⭐J3-4 面板不再有自己的标签表(读 meta)", !/WF_LABEL\s*=\s*\{/.test(panel) && !/"not_started",\s*"未开始"/.test(panel) && /wfLabel\(/.test(panel));
     ok("⭐J3-5 CLI 不再有自己的标签表(读 /api/meta)", !/^WF\s*=\s*\{/m.test(cli) && !/^LABEL\s*=\s*\{/m.test(cli) && /api\/meta/.test(cli));
+  }
+
+  // ══ §J4 token files are 0600 (POSIX) ═══════════════════════════════════════
+  //   Default mode left the operator token world-readable on a multi-user host — the
+  //   neighbour the threat model names. Windows has no POSIX bits; the section says so.
+  console.log(NL + "[§J4 令牌文件权限 0600(POSIX)]");
+  if (process.platform === "win32") {
+    console.log("  (skip on Windows: POSIX mode bits do not apply; folder ACLs govern)");
+  } else {
+    const B = await mk({});
+    const bits = (f) => statSync(join(B.DATA, f)).mode & 0o777;
+    ok("board_token 0600", bits("board_token") === 0o600, bits("board_token").toString(8));
+    ok("worker_token / review_token 0600", bits("worker_token") === 0o600 && bits("review_token") === 0o600);
   }
 
   // ══ §K stopping a line reclaims leases across ALL slot names ═════════════

@@ -11,7 +11,7 @@
 // something answers on the board's port — the running server owns those files, stop
 // it first; and it refuses a data dir that resolves to a filesystem root or a home
 // directory, because BOARD_DATA_DIR is an env var and env vars get typo'd.
-import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync, realpathSync } from "node:fs";
 import { join, resolve, parse } from "node:path";
 import { homedir } from "node:os";
 import { connect } from "node:net";
@@ -20,12 +20,16 @@ import { CODE_ROOT, applyConfigDefaults } from "../core/env.mjs";
 applyConfigDefaults();
 const yes = process.argv.includes("--yes");
 // Same default store.js uses: BOARD_DATA_DIR || core/.data
-const DATA = resolve(process.env.BOARD_DATA_DIR || join(CODE_ROOT, "core", ".data"));
+// realpath, not resolve: a junction or symlink named "data" can point at your home
+// directory without privileges (Windows junctions included), and a lexical check on the
+// link's own path would wave it through (external audit 2026-09-07).
+const real = (p) => { try { return realpathSync.native(p); } catch { return resolve(p); } };
+const DATA = real(resolve(process.env.BOARD_DATA_DIR || join(CODE_ROOT, "core", ".data")));
 const PORT = Number(process.env.BOARD_PORT || 47824);
 const DB = process.env.BOARD_DB ? resolve(process.env.BOARD_DB) : null;
 
 const segs = DATA.split(/[\\/]+/).filter(Boolean);
-if (parse(DATA).root === DATA || DATA === resolve(homedir()) || segs.length < 2) {
+if (parse(DATA).root === DATA || DATA.toLowerCase() === real(homedir()).toLowerCase() || segs.length < 2) {
   console.error(`拒绝:数据目录解析到 ${DATA} —— 这不像一个看板的数据目录(BOARD_DATA_DIR 设错了?)`);
   process.exit(1);
 }

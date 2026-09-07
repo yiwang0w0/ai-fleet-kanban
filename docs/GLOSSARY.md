@@ -40,6 +40,8 @@ a change must land in both or the harnesses go red.
 | `last_note` | machine | what the last ruling said, verbatim and alone. `verdict_note` is append-only with a timestamped header per entry, so its full text differs on every ruling even when the ruling repeats itself word for word — a brake reading it never engages |
 | `no_progress` (API field) | machine | non-null when the brake is currently holding a card: `{since, fp}`. Computed by the same function claim uses; the panel never decides this for itself |
 | `force` (claim-by-id parameter) | machine | the operator override — "run it anyway" is a reason, unlike a timer firing. Honored only for the operator token, and recorded in the history as `forced:true` so it is distinguishable from "ran because something changed" |
+| `expect_updated_at` (autoreview body) | machine | v0.16.0: the `updated_at` the reviewer saw when it fetched the card. `markAutoReviewed` refuses (409) when the card is no longer a reviewable waiting card, or when this value is given and no longer matches — a late verdict never overwrites a human ruling or lands on a re-delivery. Absent = status gate only (old reviewers keep working) |
+| `MAX_LEASE_MIN` = 1440 | machine | v0.16.0 lease cap; `lease_minutes` is clamped to a finite positive number ≤ this (Infinity used to make a card unreclaimable) |
 | `fp_changed` (claim event detail) | machine | which fingerprint components differ from the previous dispatch = **why this run was allowed**. Absent on a first dispatch: "nothing to compare" and "nothing changed" must not read alike |
 
 ## Immutable history (`task_events`)

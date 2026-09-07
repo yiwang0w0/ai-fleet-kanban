@@ -100,6 +100,10 @@ def call(method, path, body=None):
         return e.code, (json.loads(raw) if raw.strip() else {})
     except urllib.error.URLError as e:
         raise RuntimeError(f"看板不可达({BASE}):{e.reason}") from None
+    except (TimeoutError, OSError) as e:
+        # ⚠ socket 读超时不是 URLError,而是裸的 TimeoutError。worker_loop 早就修过同一实测事故
+        #   (静默停了 5.5 小时),审阅这边没移植过来 —— 一次超时直接杀死整个审阅进程。
+        raise RuntimeError(f"看板无应答({type(e).__name__}: {e})—— {method} {path}") from None
 
 # ══ 机器产出闸 ═══════════════════════════════════════════════════════════════
 # origin 部署的一次全量体检(68 张已完成卡逐张查)找到的根因: 审阅**如实写下**
@@ -728,7 +732,12 @@ def apply_verdict(t, d, vr=None):
                "checked": d.get("checked") or [], "reason": d.get("reason") or "",
                "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
                "model": MODEL}
-    call("POST", f"/api/tasks/{tid}/autoreview", {"note": human, "decision_package": package})
+    # ⭐回执要带「我审的是哪一行」(expect_updated_at)并读返回码:审阅是异步的,迟到是常态 ——
+    #   期间人可能已裁定、worker 可能已重交;409 = 本轮判决作废,不是故障,但必须出声。
+    s, r = call("POST", f"/api/tasks/{tid}/autoreview",
+                {"note": human, "decision_package": package, "expect_updated_at": t.get("updated_at")})
+    if s != 200:
+        log(f"  #{tid} 审阅回执被看板拒收 {s} {(r or {}).get('error', '')} —— 409 = 卡在审阅期间已被裁定或改变,本轮判决作废")
     n_opt = len(d.get("options") or [])
     rec = d.get('recommend') or '无'
     head = (d.get('summary') or d.get('reason') or '')[:60]
@@ -857,8 +866,11 @@ def main():
             if err:
                 # 审阅自己崩掉的卡也盖上「看过」的印 —— 下个周期不再捡起
                 # (不在坏卡上一直烧钱)。卡一动就自动回到重审对象里。
-                call("POST", f"/api/tasks/{t['id']}/autoreview",
-                     {"note": f"【自动审阅】本次未能出判决:{err[:400]}"})
+                s2, r2 = call("POST", f"/api/tasks/{t['id']}/autoreview",
+                              {"note": f"【自动审阅】本次未能出判决:{err[:400]}",
+                               "expect_updated_at": t.get("updated_at")})
+                if s2 != 200:
+                    log(f"  #{t['id']} 「看过」印被拒 {s2} {(r2 or {}).get('error', '')} —— 卡已变,下轮重审")
                 log(f"  #{t['id']} 审阅失败:{err.splitlines()[0][:80]}")
                 continue
             apply_verdict(t, d, vr=vr)

@@ -575,7 +575,7 @@ document.addEventListener("dblclick", (e) => {
 const byId = new Map();
 let focusId = null, relSet = new Set(), DECOMP = [];
 let locatedId = null, locateScrollPending = false;
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const now = () => Date.now() + skew;
 
 const taskColumn = (t) => t.status === "done" ? "done" : (t.kind === "goal" ? "goal" : t.status);
