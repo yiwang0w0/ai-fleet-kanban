@@ -61,6 +61,11 @@ console.log("[§3 uncommittedDeliverables]");
      !X.uncommittedDeliverables(text, { inHead, onDisk }).includes("docs/spec.md"));
   ok("neither-on-disk-nor-in-HEAD is a phantom, not a deliverable",
      !X.uncommittedDeliverables(text, { inHead, onDisk }).includes("src/gone.ts"));
+  // §3b absentDeliverables (v0.16.1): named and existing NOWHERE. The caller refuses only
+  //     when every named path is absent — a typo next to a real deliverable must not block.
+  ok("absent: not on disk and not in HEAD is reported", X.absentDeliverables(text, { inHead, onDisk }).includes("src/gone.ts"));
+  ok("absent: a file in HEAD is not absent", !X.absentDeliverables(text, { inHead, onDisk }).includes("docs/spec.md"));
+  ok("absent: on disk but uncommitted belongs to the OTHER check", !X.absentDeliverables(text, { inHead, onDisk }).includes("src/feature.ts"));
 }
 
 // ── § touched-but-unnamed (INCIDENT-4) ─────────────────────────────────────

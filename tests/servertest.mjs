@@ -619,6 +619,59 @@ try {
     ok("worker_token / review_token 0600", bits("worker_token") === 0o600 && bits("review_token") === 0o600);
   }
 
+  // ══ §N2 a fictional delivery is refused; a typo beside a real deliverable is not ═══
+  //   (v0.16.1, external audit.) The board repo itself is the work repo here, so the
+  //   gate measures against this repository's HEAD: core/store.js exists in HEAD,
+  //   core/ghost_*.js exists nowhere.
+  console.log(NL + "[§N2 交付物闸:点名的文件一个都不存在 → 拒;真交付旁的笔误 → 放]");
+  {
+    const B = await mk({});
+    const deliver = async (evidence) => {
+      const id = (await B.api("POST", "/api/tasks", { subject: "n2", line: LINE, humanGate: false })).body.task.id;
+      await B.api("POST", `/api/tasks/${id}/claim`, { worker: LINE });
+      await B.api("POST", `/api/tasks/${id}/report`, { worker: LINE, outcome: "done", evidence });
+      return id;
+    };
+    const g = await deliver("新增 core/ghost_one.js 与 core/ghost_two.js,全部实装完毕。");
+    const rg = await B.api("POST", `/api/tasks/${g}/resolve`, { verdict: "approve", note: "", resolved_by: "human" });
+    ok("⭐N2-1 证据点名的文件全都不存在 → 结案 409,文案说「一个都不存在」", rg.status === 409 && /一个都不存在/.test(rg.body?.error || ""), `${rg.status} ${(rg.body?.error || "").slice(0, 80)}`);
+    ok("N2-1 卡仍在等待中(没有被结案)", (await B.api("GET", `/api/tasks/${g}`)).body.task.status === "waiting");
+    const rg2 = await B.api("POST", `/api/tasks/${g}/resolve`, { verdict: "approve", note: "", resolved_by: "human", allow_uncommitted: true });
+    ok("N2-2 人工担责通道(allow_uncommitted)对这一类同样打开", rg2.status === 200, String(rg2.status));
+    const m = await deliver("改了 core/store.js;顺手提到 core/ghost_typo.js(其实没有这个文件)。");
+    const rm = await B.api("POST", `/api/tasks/${m}/resolve`, { verdict: "approve", note: "", resolved_by: "human" });
+    ok("⭐N2-3 真交付(在 HEAD)旁边夹一个不存在的路径 → 照常结案(笔误不拦人)", rm.status === 200, `${rm.status} ${(rm.body?.error || "").slice(0, 80)}`);
+  }
+
+  // ══ §V2 fingerprint_extra_cmd: array = argv without a shell; string still works ═══
+  console.log(NL + "[§V2 fingerprint_extra_cmd 两种写法:数组不经 shell,字符串仍可用]");
+  {
+    // Components are HASHED into dispatch_fp, so the command's output never appears
+    // verbatim; the proof is that `extra` differs between a board without the hook,
+    // one with the array form and one with the string form.
+    const extraOf = (fp) => { try { return JSON.parse(fp || "{}").extra ?? null; } catch { return null; } };
+    const Z = await mk({});
+    const iz = (await Z.api("POST", "/api/tasks", { subject: "v2z", line: LINE, humanGate: false })).body.task.id;
+    await Z.api("POST", `/api/tasks/${iz}/claim`, { worker: LINE });
+    const ez = extraOf((await Z.api("GET", `/api/tasks/${iz}`)).body.task.dispatch_fp);
+    const dirA = mkdtempSync(join(tmpdir(), "servertest-xa-"));
+    writeFileSync(join(dirA, "cfg.json"), JSON.stringify({ fingerprint_extra_cmd: [process.execPath, "-e", "process.stdout.write('EXTRA-ARRAY-OK')"] }), "utf8");
+    const A = await mk({ dataDir: dirA, env: { BOARD_CONFIG: join(dirA, "cfg.json") } });
+    const ia = (await A.api("POST", "/api/tasks", { subject: "v2a", line: LINE, humanGate: false })).body.task.id;
+    await A.api("POST", `/api/tasks/${ia}/claim`, { worker: LINE });
+    const fa = (await A.api("GET", `/api/tasks/${ia}`)).body.task.dispatch_fp || "";
+    ok("⭐V2-1 数组形:输出进了状态指纹(extra 分量 ≠ 无钩子的板)", extraOf(fa) && extraOf(fa) !== ez, `${extraOf(fa)} vs ${ez}`);
+    ok("V2-1 数组形不触发 shell 警告", !/经 shell 执行/.test(A.out()));
+    const dirS = mkdtempSync(join(tmpdir(), "servertest-xs-"));
+    writeFileSync(join(dirS, "cfg.json"), JSON.stringify({ fingerprint_extra_cmd: `"${process.execPath}" -e "process.stdout.write('EXTRA-SHELL-OK')"` }), "utf8");
+    const S = await mk({ dataDir: dirS, env: { BOARD_CONFIG: join(dirS, "cfg.json") } });
+    const is_ = (await S.api("POST", "/api/tasks", { subject: "v2s", line: LINE, humanGate: false })).body.task.id;
+    await S.api("POST", `/api/tasks/${is_}/claim`, { worker: LINE });
+    const fs_ = (await S.api("GET", `/api/tasks/${is_}`)).body.task.dispatch_fp || "";
+    ok("V2-2 字符串形仍然工作(既有配置不破):extra ≠ 无钩子的板,且 ≠ 数组形的输出", extraOf(fs_) && extraOf(fs_) !== ez && extraOf(fs_) !== extraOf(fa), `${extraOf(fs_)}`);
+    ok("V2-2 字符串形在启动时说了一次「经 shell 执行」", /经 shell 执行/.test(S.out()), S.out().slice(-160));
+  }
+
   // ══ §K stopping a line reclaims leases across ALL slot names ═════════════
   //   Shrinking parallel leaves orphan slot names holding leases; a stop that
   //   reclaims only the current slots strands those cards for 30 minutes. And

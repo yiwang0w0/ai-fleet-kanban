@@ -77,7 +77,7 @@ a change must land in both or the harnesses go red.
 
 ## Fleet config (`fleet.config.json`)
 
-`fingerprint_extra_cmd` (optional; a command whose first stdout line joins the
+`fingerprint_extra_cmd` (optional; an **argv array** (no shell, v0.16.1) or a command string (shell; warns once at startup) whose first stdout line joins the
 no-progress fingerprint — the hook a deployment uses for state this repo has no
 concept of, e.g. a script checksum or a target environment. Failure is reported and
 the component reads as absent, never as "nothing ever changes") ·

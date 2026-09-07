@@ -244,6 +244,30 @@ def _gate_core(t, d, vr=None):
         return d
     if (d or {}).get("verdict") != "approve":
         return d
+    # ⭐ 空验收(v0.16.1)。acceptance_items("") 是 [] ⇒ demand 也是 [] ⇒ 旧代码直通 approve。
+    #   「验收不要求机器验证」和「根本没写验收」不是一回事:后者没有任何判据可对,只能人看。
+    #   审计把这一格点成招牌主张(机器产出闸)的空白通道(外部审计 2026-09-07)。
+    if not str(t.get("acceptance") or "").strip():
+        orig = (d.get("reason") or "").strip()
+        d = dict(d)
+        d["verdict"] = "escalate"
+        d["gated_by"] = "empty-acceptance"
+        d["model_verdict"] = "approve"
+        d["reason"] = ("【机械闸·空验收】卡上没有验收标准,机器没有判据可对 ⇒ 不能自动通过。"
+                       + ("  模型原判 approve:" + orig if orig else ""))
+        d["summary"] = ("这张卡没有写验收标准。自动审阅只能对着「说明」判断,而说明不是判据。\n"
+                        "自动审阅本来判的是「通过」,理由是:%s" % (orig[:200] or "(没写理由)"))
+        d["options"] = [
+            {"key": "A", "title": "补写验收标准后复审",
+             "detail": "在卡面补上可核对的验收条目(哪些要机器验证就写明),下一轮审阅按条目判。",
+             "cost": "多一轮审阅。", "kind": "none", "files": []},
+            {"key": "B", "title": "认下静态核对,由你手动通过",
+             "detail": "你看过之后直接点通过 —— 卡会记成 resolved_by=human,与自动通过分得开。",
+             "cost": "没有验收条目,以后无从回查这张卡「按什么标准算完成」。", "kind": "none", "files": []},
+        ]
+        d["recommend"] = "A"
+        log(f"  #{t.get('id')} ⛔机械闸(空验收): 模型判 approve,但卡上没有验收标准 → 转 escalate")
+        return d
     items = acceptance_items(t.get("acceptance"))
     demand = [(i, it, demand_tags(it)) for i, it in enumerate(items, 1) if demand_tags(it)]
     if not demand:

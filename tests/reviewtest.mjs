@@ -157,6 +157,14 @@ try {
      (tB.decision_package?.options || []).length === 3,
      JSON.stringify({ src: tB.decision_package?.source, rec: tB.decision_package?.recommend }));
 
+  console.log(NL + "[§3b 空验收 + 模型 approve → 机械转人工(v0.16.1)]");
+  const idB2 = await toWaiting({ subject: "r-empty-acc", evidence: "做完了,一切正常。" });
+  runReviewer({ verdict: "approve", reason: "看起来没问题", checked: [], summary: "", options: [], recommend: "" });
+  const tB2 = (await api("GET", `/api/tasks/${idB2}`)).body.task;
+  ok("R6b ⭐没有验收标准的卡不能被自动通过 —— 停在 waiting/confirm", tB2.status === "waiting" && tB2.waiting_for === "confirm", `${tB2.status}/${tB2.waiting_for}`);
+  ok("R6c 裁定包说明是空验收,两个方案,推荐补写验收", /空验收/.test(tB2.decision_package?.reason || "") && (tB2.decision_package?.options || []).length === 2 && tB2.decision_package?.recommend === "A",
+     JSON.stringify({ rec: tB2.decision_package?.recommend, n: (tB2.decision_package?.options || []).length }));
+
   console.log(NL + "[§4 reject → 打回原线]");
   const idC = await toWaiting({ subject: "r-reject", evidence: "试了但没做完。" });
   runReviewer({ verdict: "reject", reason: "缺 X,重做时先补 Y", checked: [],

@@ -136,7 +136,17 @@ function makeExtractor({ prefixes, exts = DEFAULT_EXTS, excluded = DEFAULT_EXCLU
       .sort();
   }
 
-  return { extractPaths, uncommittedDeliverables, unnamedTouched, pathSrc };
+  /**
+   * The other half of INCIDENT-1 (v0.16.1): named, and existing NOWHERE — not on disk,
+   * not in HEAD. Pure, same injected judgments. The caller decides when this refuses;
+   * this repo's ruling is "only when EVERY named path is absent" (a typo next to a real
+   * deliverable must not block closure — false positives get gates switched off).
+   */
+  function absentDeliverables(text, { inHead, onDisk }) {
+    return extractPaths(text).filter((p) => !onDisk(p) && !inHead(p));
+  }
+
+  return { extractPaths, uncommittedDeliverables, absentDeliverables, unnamedTouched, pathSrc };
 }
 
 /**

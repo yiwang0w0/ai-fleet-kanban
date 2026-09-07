@@ -171,6 +171,12 @@ try {
   console.error(`⚠ 交付物闸不可测:读不到宿主仓 HEAD(${e.message})` +
     (GATE_OFF ? "—— 已显式关闭,结案不做入库核对" : "—— 结案将被拒绝(fail-closed);确属无 git 部署请显式 BOARD_DELIVERABLE_GATE=off"));
 }
+let _warnedShellCmd = false;
+const warnShellCmdOnce = () => {
+  if (_warnedShellCmd) return; _warnedShellCmd = true;
+  console.error("⚠ fingerprint_extra_cmd 是字符串 —— 经 shell 执行。配置属于 operator 的信任域;" +
+    "若这份配置会由对话 / agent 代改,请改成数组形(如 [\"python\", \"tools/x.py\"]),数组不经 shell。");
+};
 let _headCache = { at: 0, set: null };
 const headFiles = () => {
   if (_headCache.set && Date.now() - _headCache.at < 10000) return _headCache.set;
@@ -210,6 +216,17 @@ const uncommittedOf = (t) => {
     inHead: (p) => head.has(p),
     onDisk: (p) => { try { return existsSync(join(REPO_ROOT, p)); } catch { return false; } },
   });
+};
+// Named-and-nonexistent (v0.16.1). Same measurability contract; returns {named, absent}
+// so the caller can apply this repo's ruling: refuse only when NOTHING named exists.
+const absentOf = (t) => {
+  if (!extractor) return null;
+  const head = headFiles();
+  if (!head || head.size === 0) return null;
+  const text = String(t?.result || "");
+  const judg = { inHead: (p) => head.has(p),
+                 onDisk: (p) => { try { return existsSync(join(REPO_ROOT, p)); } catch { return false; } } };
+  return { named: extractor.extractPaths(text).length, absent: extractor.absentDeliverables(text, judg) };
 };
 // ── The describe-don't-name blind spot (INCIDENT-4's second half) ─────────────
 // Measured: an attempt's evidence described behavior in detail, named not one file,
@@ -328,8 +345,16 @@ const fpContext = () => {
   const cmd = CFG.fingerprint_extra_cmd;
   if (cmd) {
     try {
-      extra = execSync(String(cmd), { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true,
-                                      timeout: 5000 }).split(/\r?\n/)[0].trim() || null;
+      // ⭐ Two spellings (v0.16.1). An ARRAY is argv and runs without a shell —
+      //   ["python", "tools/x.py"]. A STRING runs through the shell, which is fine for a
+      //   file the operator typed, and not fine the day "let your Claude edit fleet.config"
+      //   puts an agent's hand on it (external audit 2026-09-07). The string form stays
+      //   (existing configs keep working) and says so once at startup.
+      const opts = { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true, timeout: 5000 };
+      const out = Array.isArray(cmd)
+        ? execFileSync(String(cmd[0]), cmd.slice(1).map(String), opts)
+        : (warnShellCmdOnce(), execSync(String(cmd), opts));
+      extra = String(out).split(/\r?\n/)[0].trim() || null;
     } catch (e) {
       // ⭐ A broken hook must not silently become "state never changes" — that would
       //   turn a misconfigured command into a board-wide dispatch freeze. Report it
@@ -2452,6 +2477,19 @@ const server = http.createServer(async (req, res) => {
               ` —— 先 commit 再结案,否则这张卡对别人是空的。` +
               `\n  ${left.join("\n  ")}` +
               `\n  ⚠若这些路径确实不该入库(例如实数据文件),在 resolve 时带 allow_uncommitted:true 并在裁定里写明理由。`);
+          // ⭐ The other half of INCIDENT-1 (v0.16.1, external audit): a delivery whose
+          //   named files exist NOWHERE — not on disk, not in HEAD. The comment above
+          //   rules out reporting every absent path (typos, command fragments: false
+          //   positives get the gate switched off), and that ruling stands. So this fires
+          //   only when the evidence names files and NONE of them exists anywhere: that is
+          //   not a typo, that is a fictional delivery. One real deliverable next to a typo
+          //   still closes. Unmeasurable here is already refused above (uncommittedOf).
+          const ab = absentOf(t);
+          if (ab && ab.named > 0 && ab.absent.length === ab.named)
+            throw store.err(store.ERR.CONFLICT,
+              `结案被拦: 证据点名了 ${ab.named} 个交付物,但**一个都不存在**(工作树里没有,HEAD 里也没有)—— 声称的交付没有实物。` +
+              `\n  ${ab.absent.join("\n  ")}` +
+              `\n  ⚠若这些只是引用别处的路径而不是本卡的交付,在 resolve 时带 allow_uncommitted:true 并写明。`);
           // The reverse blind spot: "touched but never named". Attribution is by
           // TIME (work_spans) — on a shared work tree, "is the tree dirty" cannot
           // attribute.
@@ -2667,6 +2705,20 @@ server.listen(PORT, HOST, () => {
     const gc = store.completeGoals(db);
     if (gc.length) console.log(`  目标状态收敛: ${gc.map((x) => x > 0 ? "#" + x + " 完成" : "#" + (-x) + " 重开").join(" ")}`);
   } catch (e) { console.error("启动盘点失败:", e.message); }
+
+  // ⭐ Deliverable-gate coverage (v0.16.1). assertCoverage has existed since the gate was
+  //   written and nothing ever called it — the loud "green while blind" warning was dead
+  //   code (external audit). Sample the most recent closed cards' evidence: if the
+  //   extractor pulls zero paths out of ALL of them, this repo's layout is not covered and
+  //   the gate would pass everything. Say so here, where the operator is looking.
+  try {
+    if (extractor) {
+      const samples = store.list(db, { status: "done" }).tasks.slice(-20).map((t) => t.result).filter(Boolean);
+      const cov = dgate.assertCoverage(extractor, samples);
+      if (cov.warning) console.error(`⚠ ${cov.warning}`);
+      else if (cov.sampled) console.log(`交付物闸覆盖检查:最近 ${cov.sampled} 张已完成卡的证据里都能提出仓内路径`);
+    }
+  } catch (e) { console.error("交付物闸覆盖检查失败:", e.message); }
 
   // ── Intent restoration. Returning cards without returning lines silently halts
   //    the processing chain on every dev restart (measured; hours unnoticed).

@@ -55,6 +55,14 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   into cards on a shared machine; keep a board that holds sensitive evidence on
   a single-user machine or behind OS-user isolation. The panel and the API are
   a work queue, not a data room. (This used to live only in a code comment.)
+- **The machine-evidence gate is a heuristic over text — unless `verify_cmd` is set.**
+  When a card names no verification key, the auto-reviewer's gate looks for signs
+  of machine output in the evidence *text* (`rc=0`, `PASS 12`, tracebacks…). Text
+  can be written to look like output. The only machine truth is the verification
+  the **loop** runs itself (`verify_cmd`, a registry key); everything else the
+  gate does is a downgrade-to-human heuristic, and it is documented as one. A
+  card with an empty acceptance is escalated rather than approved (v0.16.1) —
+  "no machine demanded" and "no acceptance written" are not the same thing.
 
 If your report shows any of these claims to be false in practice, that is
 exactly the kind of report we want.
