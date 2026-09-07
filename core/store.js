@@ -1880,6 +1880,10 @@ function markAutoReviewed(db, { id, note = "", decisionPackage = null, expectUpd
   //   back to confirm (external audit 2026-09-07). Two conditions, both also folded into
   //   the UPDATE below: the card must still be a reviewable waiting card, and — when the
   //   reviewer says which row it judged (expect_updated_at) — that row must be unchanged.
+  //   ⚠ updated_at has millisecond resolution: an edit landing in the SAME millisecond as
+  //   the reviewer's fetch is invisible to this comparison. The status gate above still
+  //   holds for state changes, and a real review spans minutes, so this is documented,
+  //   not fixed — a monotonic row version would be the fix if it ever matters.
   const stale = t.status !== "waiting" || (t.waiting_for || "") === "rearm"
     ? `卡 #${id} 已不在待审状态(${t.status}${t.waiting_for ? "/" + t.waiting_for : ""})—— 迟到的审阅不落盘`
     : (expectUpdatedAt != null && String(expectUpdatedAt) !== String(t.updated_at))

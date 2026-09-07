@@ -2400,6 +2400,12 @@ console.log(String.fromCharCode(10) + "[§S1 审阅回执状态门+CAS · 租约
   const b = store.add(db, { subject: "s1-cas", line: "s1", route: "s1" }); deliver(b);
   const seenB = store.get(db, b).updated_at;
   store.update(db, { id: b, description: "审阅期间人改了卡面" });
+  // ⚠ updated_at is stamped EXPLICITLY ahead. update() does stamp now(), but on a fast
+  //   Linux runner that now() equals the one report() wrote a moment earlier — same
+  //   millisecond, same string, no change for the CAS to see. v0.16.0's ubuntu lane went
+  //   red on exactly this line while Windows stayed green (second time today the same
+  //   trap fired; the first was §RV). A test asserting "changed" sets the changed value.
+  db.prepare("UPDATE tasks SET updated_at=? WHERE id=?").run(new Date(Date.now() + 2000).toISOString(), b);
   const e2 = catchErr(() => store.markAutoReviewed(db, { id: b, note: "按旧卡面审的", expectUpdatedAt: seenB }));
   ok("⭐② 审阅期间卡变了(updated_at 不同)→ CONFLICT,判决作废", e2?.code === "CONFLICT", e2?.message);
   const okB = store.markAutoReviewed(db, { id: b, note: "按新卡面审的", expectUpdatedAt: store.get(db, b).updated_at });
