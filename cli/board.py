@@ -107,13 +107,20 @@ def arg(flag, default=None):
 def readfile(p):
     return io.open(p, encoding="utf-8").read() if p else ""
 
-LABEL = {"not_started": "未开始", "in_progress": "进行中",
-         "waiting": "等待中", "done": "已完成"}
-WF = {"review": "待验收", "confirm": "待确认", "decision": "待裁定",
-      "dep": "待依赖", "rearm": "等待重审"}
-# This table is deliberately the same thing written in two places: the panel
-# (core/panel.html, WF_LABEL) carries its own copy. Grow only one side and the
-# other displays the raw code unstyled (measured: `confirm` was the one missing).
+_META = None
+def meta():
+    """GET /api/meta, once per process. The display labels for status / waiting_for have
+    ONE copy — core/store.js — and the panel reads the same endpoint. This file used to
+    carry its own table (and so did the panel); "grow one side and the other shows the
+    raw code" was measured. A board that cannot answer /api/meta cannot answer anything
+    else this CLI does either, so there is no offline fallback table to rot."""
+    global _META
+    if _META is None:
+        s, d = call("GET", "/api/meta")
+        _META = d if s == 200 and isinstance(d, dict) else {}
+    return _META
+def LABEL_of(status): return meta().get("status_labels", {}).get(status, status)
+def WF_of(wf): return meta().get("wf_labels", {}).get(wf, wf)
 
 def main():
     if len(sys.argv) < 2: sys.exit(__doc__)
@@ -131,9 +138,9 @@ def main():
         if s >= 400: die(s, d)
         print(f"{'ID':<5} {'状态':<10} {'线':<8} {'尝试':<6} 标题")
         for t in d["tasks"]:
-            st = LABEL.get(t["status"], t["status"])
+            st = LABEL_of(t["status"])
             if t["status"] == "waiting" and t.get("waiting_for"):
-                st += "/" + WF.get(t["waiting_for"], t["waiting_for"])
+                st += "/" + WF_of(t["waiting_for"])
             hold = "" if t.get("released") else " [未放行]"
             att = f"{t['attempts']}/{t['max_attempts']}" if t["attempts"] else "-"
             ln = (t.get('line') or '-') + (f"(<-{t['prev_line']})" if t.get('prev_line') else "")
@@ -199,7 +206,7 @@ def main():
                     {"worker": who, "outcome": cmd, "evidence": ev})
         if s >= 400: die(s, d)
         t = d["task"]
-        print(f"#{tid} → {LABEL[t['status']]}/{WF.get(t['waiting_for'], t['waiting_for'])}")
+        print(f"#{tid} → {LABEL_of(t['status'])}/{WF_of(t['waiting_for'])}")
 
     elif cmd in ("approve", "reject"):
         if not tid: sys.exit(f"{cmd} <id> [--file note.md]")
@@ -213,7 +220,7 @@ def main():
         if "--verify-ok" in sys.argv: body["verify_ok"] = True
         s, d = call("POST", f"/api/tasks/{tid}/resolve", body)
         if s >= 400: die(s, d)
-        print(f"#{tid} → {LABEL[d['task']['status']]}")
+        print(f"#{tid} → {LABEL_of(d['task']['status'])}")
 
     elif cmd == "lines":
         # Worker-loop supervisor (POST /api/workers/<line>/<start|stop>).
@@ -317,7 +324,7 @@ def main():
         s, d = call("POST", f"/api/tasks/{tid}/reopen", {"line": arg("--line")})
         if s >= 400: die(s, d)
         t = d["task"]
-        print(f"#{tid} → {LABEL[t['status']]}(线={t.get('line') or '-'})"
+        print(f"#{tid} → {LABEL_of(t['status'])}(线={t.get('line') or '-'})"
               + ("" if d.get("changed") else " ※本来就在未开始,没动"))
 
     elif cmd == "archive":

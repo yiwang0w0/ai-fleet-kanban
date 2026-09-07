@@ -15,9 +15,9 @@ a change must land in both or the harnesses go red.
 | term | layer | meaning |
 |---|---|---|
 | `not_started` / `in_progress` / `waiting` / `done` | machine | the four task statuses — there is no fifth; "blocked" is not a status |
-| 未开始 / 进行中 / 等待中 / 已完成 | display | their Chinese labels (panel columns + CLI; **dual copy**: `core/panel.html` and `cli/board.py`) |
+| 未开始 / 进行中 / 等待中 / 已完成 | display | their Chinese labels — **one copy**, `STATUS_LABEL` in `core/store.js`, served on `GET /api/meta`; the panel columns and `cli/board.py` read it from there and keep none (v0.14.1; before that, two hand-written copies) |
 | `waiting_for` = `review` / `confirm` / `decision` / `dep` / `rearm` | machine | why a card waits: delivered–unreviewed / options need a human / worker exhausted attempts / dependency / parked until children finish |
-| 待验收 / 待确认 / 待裁定 / 待依赖 / 等待重审 | display | their labels (**dual copy**: `WF_LABEL` in panel, `WF` in board.py) |
+| 待验收 / 待确认 / 待裁定 / 待依赖 / 等待重审 | display | their labels — **one copy**, `WF_LABEL` in `core/store.js`, served on `GET /api/meta` (v0.14.1) |
 | `kind` = `goal` / `task` | machine | card kind; a goal is a human-written chain root that gets decomposed — it is a kind, not a status |
 | `weight` = `light` / `standard` / `heavy` | machine | starting-rung prediction only; a card never carries a model name |
 | `released` (1/0) | machine | 0 = coordinator staging, invisible to workers (未放行) |
@@ -235,8 +235,9 @@ CLI — process supervision, routing, rulings — which the CLI has no opinion a
 
 ## Freeze caveats
 
-1. Status and waiting_for labels are **deliberate dual copies** (panel + CLI);
-   change both or the wording drifts between surfaces.
+1. Status and waiting_for labels were **deliberate dual copies** (panel + CLI) until
+   v0.14.1; they now have one copy in `core/store.js`, served on `GET /api/meta`.
+   A surface that wants them reads the endpoint — do not write a table again.
 2. The `release` event kind is one kind with `detail.action` as the load-bearing
    discriminator — the action values are part of the freeze.
 3. The `decision_sql_*` column names are historic; they stay frozen as-is even

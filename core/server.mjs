@@ -11,7 +11,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync, renameSync, unlinkSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { execFile, execFileSync, execSync } from "node:child_process";
 import { homedir } from "node:os";
@@ -789,7 +789,6 @@ const POOL_HOLD_MS = Math.max(100, Number(process.env.BOARD_POOL_HOLD_MS) || 5 *
 const POOL_RECONCILE_MS = Math.max(50, Number(process.env.BOARD_POOL_RECONCILE_MS) || 5000);
 const POOL_FILE = join(store.DATA_DIR, "pool_state.json");
 const POOL_STOP_FILE = join(store.DATA_DIR, "pool_global_stop.json");
-const { writeFileSync: wfs, renameSync, unlinkSync } = require_("node:fs");
 const emptyPools = () => Object.fromEntries(POOL_IDS.map((p) => [p, { exhausted_at: null, until: null }]));
 const validPoolEntry = (v) => {
   const a = Date.parse(v?.exhausted_at || ""), u = Date.parse(v?.until || "");
@@ -806,7 +805,7 @@ const poolDown = (p) => !!poolState[p]?.exhausted_at; // even past `until`, down
 const bothPoolsDown = () => POOL_IDS.every(poolDown);
 function savePools() {
   const tmp = POOL_FILE + ".tmp";
-  wfs(tmp, JSON.stringify(poolState, null, 1), "utf8");
+  writeFileSync(tmp, JSON.stringify(poolState, null, 1), "utf8");
   renameSync(tmp, POOL_FILE);
 }
 function markPoolDown(runtime, observedAt = Date.now()) {
@@ -830,7 +829,7 @@ function updateGlobalStopMarker(reason = "pool-state-change") {
                    observed_at: new Date().toISOString(), next_recheck_at: new Date(next).toISOString(),
                    trigger: reason };
     const tmp = POOL_STOP_FILE + ".tmp";
-    wfs(tmp, JSON.stringify(body, null, 1), "utf8"); renameSync(tmp, POOL_STOP_FILE);
+    writeFileSync(tmp, JSON.stringify(body, null, 1), "utf8"); renameSync(tmp, POOL_STOP_FILE);
   } else {
     try { unlinkSync(POOL_STOP_FILE); } catch (e) { if (e?.code !== "ENOENT") throw e; }
   }
@@ -1062,8 +1061,8 @@ async function decomposeGoal(goalId, model) {
   if (g.kind !== "goal") throw store.err(store.ERR.BAD_INPUT, `#${goalId} 不是目标`);
   const outDir = join(store.DATA_DIR, "decompose");
   const out = join(outDir, `goal-${goalId}.json`);
-  try { require_("node:fs").mkdirSync(outDir, { recursive: true }); } catch {}
-  try { require_("node:fs").unlinkSync(out); } catch {}
+  try { mkdirSync(outDir, { recursive: true }); } catch {}
+  try { unlinkSync(out); } catch {}
 
   // ⭐ The prompt is assembled in decompose_lib.js so it can be MEASURED. Built here
   //   it was unreachable by any harness: this module listens on import, and neither a
@@ -1989,6 +1988,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (m === "GET" && p === "/api/meta") {
       return json(res, 200, {
+        // Display labels: the one copy lives in store.js; panel and CLI keep none.
+        status_labels: store.STATUS_LABEL, wf_labels: store.WF_LABEL,
         counts: store.counts(db),
         archived_count: store.list(db, { archived: "all" }).tasks.filter((t) => t.archived_at).length,
         uptime_sec: Math.floor((Date.now() - STARTED) / 1000),

@@ -44,6 +44,18 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   fleet config are gitignored; CI runs a full-history gitleaks scan on every
   push.
 
+## What it deliberately does not defend against
+
+- **Reads are unauthenticated.** Every `GET` answers without a token, by design:
+  loopback means "this machine", and this machine is the operator's trust
+  domain. The consequence is worth stating plainly — **any process running as
+  any user on the machine can read card faces, evidence text and rulings**,
+  including whatever an operator archives into evidence (the probe runner's
+  output, for instance, can carry production rows). Do not paste production data
+  into cards on a shared machine; keep a board that holds sensitive evidence on
+  a single-user machine or behind OS-user isolation. The panel and the API are
+  a work queue, not a data room. (This used to live only in a code comment.)
+
 If your report shows any of these claims to be false in practice, that is
 exactly the kind of report we want.
 

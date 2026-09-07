@@ -14,7 +14,7 @@ Run under your Claude's persistent monitor:
   python watchers/board_health_watch.py
 Env:
   BOARD_URL             board base URL         (default http://127.0.0.1:47824)
-  BOARD_DATA_DIR        data dir (board_token, review verdicts)  (default <repo>/.data)
+  BOARD_DATA_DIR        data dir (board_token, review verdicts)  (default <board code root>/core/.data, as core/store.js)
   (the tree check and data-dir default anchor the board's OWN tree — v0.3
    dropped the BOARD_REPO knob here: it aimed the check at the WORK repo on
    split deployments, which is the wrong repo for a claims-refuse gate)

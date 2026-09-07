@@ -118,6 +118,14 @@ const STATUS = ["not_started", "in_progress", "waiting", "done"];
 //   the same face.
 const WAITING_FOR = ["review", "confirm", "decision", "dep", "rearm"];
 const VALID_STATUS = new Set(STATUS);
+// ⭐ Display labels for the two machine domains — the ONE copy (v0.14.1). Served on
+//   GET /api/meta; the panel and cli/board.py read them from there and keep no copy of
+//   their own. They used to be written twice (panel WF_LABEL + CLI WF), and GLOSSARY
+//   recorded that as deliberate; the rot it warned about ("grow one side and the other
+//   shows the raw code — measured: confirm was the one missing") is what this removes.
+//   These are display words: they may evolve, but each keeps its referent (GLOSSARY).
+const STATUS_LABEL = { not_started: "未开始", in_progress: "进行中", waiting: "等待中", done: "已完成" };
+const WF_LABEL = { review: "待验收", confirm: "待确认", decision: "待裁定", dep: "待依赖", rearm: "等待重审" };
 
 // ⭐ The DESTINATION of a ruling is declared by the caller (disposition ruling).
 //   The old criterion was a proxy on content — "did the human write a note?" — which
@@ -2632,7 +2640,7 @@ module.exports = {
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,
   noProgressHold, stateFingerprint, fpDiff, heldByNoProgress,
   reopen, rearmDone, deferToRearm, completeGoals,
-  list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, DEFAULT_LEASE_MIN,
+  list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, STATUS_LABEL, WF_LABEL, DEFAULT_LEASE_MIN,
   DEFAULT_ROUTE,
   verifyRegistry, assertVerify,
   // Ruling destinations. **The legacy criterion's canon is this one function**

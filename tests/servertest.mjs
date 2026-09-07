@@ -589,6 +589,23 @@ try {
     ok("J2-7 压缩边界:compactions=1,量尺回到 post=3", c.compactions === 1 && c.tokens === 3 && c.last_compact?.post === 3, JSON.stringify([c.compactions, c.tokens]));
   }
 
+  // ══ §J3 display labels have ONE copy (v0.14.1) ════════════════════════════
+  //   /api/meta serves status_labels / wf_labels from core/store.js; the panel and the
+  //   CLI read them and keep no table of their own. The lexical half pins that neither
+  //   surface has grown a copy back (the rot this replaced was measured).
+  console.log(NL + "[§J3 显示标签只有一份:/api/meta 下发,面板与 CLI 不留副本]");
+  {
+    const B = await mk({});
+    const m = (await B.api("GET", "/api/meta")).body || {};
+    ok("J3-1 /api/meta 带 wf_labels 五键", m.wf_labels && ["review", "confirm", "decision", "dep", "rearm"].every((k) => typeof m.wf_labels[k] === "string"), JSON.stringify(m.wf_labels));
+    ok("J3-2 /api/meta 带 status_labels 四键", m.status_labels && ["not_started", "in_progress", "waiting", "done"].every((k) => typeof m.status_labels[k] === "string"));
+    ok("J3-3 词面是 GLOSSARY 冻结的那几个", m.wf_labels?.confirm === "待确认" && m.wf_labels?.rearm === "等待重审" && m.status_labels?.waiting === "等待中");
+    const panel = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
+    const cli = readFileSync(join(ROOT, "cli", "board.py"), "utf8");
+    ok("⭐J3-4 面板不再有自己的标签表(读 meta)", !/WF_LABEL\s*=\s*\{/.test(panel) && !/"not_started",\s*"未开始"/.test(panel) && /wfLabel\(/.test(panel));
+    ok("⭐J3-5 CLI 不再有自己的标签表(读 /api/meta)", !/^WF\s*=\s*\{/m.test(cli) && !/^LABEL\s*=\s*\{/m.test(cli) && /api\/meta/.test(cli));
+  }
+
   // ══ §K stopping a line reclaims leases across ALL slot names ═════════════
   //   Shrinking parallel leaves orphan slot names holding leases; a stop that
   //   reclaims only the current slots strands those cards for 30 minutes. And

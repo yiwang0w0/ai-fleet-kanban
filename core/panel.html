@@ -449,17 +449,15 @@
 // Writes carry the token; the server injects it into the page (readable same-origin only).
 const WH = { "Content-Type":"application/json", "X-Board-Token": window.__BOARD_TOKEN || "" };
 // Five columns. Goal is a KIND, not a status — the state machine still has four values.
-const COLS = [
-  ["goal",        "目标"],
-  ["not_started", "未开始"],
-  ["in_progress", "进行中"],
-  ["waiting",     "等待中"],
-  ["done",        "已完成"],
-];
-// ⚠ This label table is deliberately the same thing written in two places — the CLI
-//   (cli/board.py, WF) carries its own copy. Grow only one side and the other shows
-//   the raw code (measured: `confirm` was the one missing).
-const WF_LABEL = { review:"待验收", confirm:"待确认", decision:"待裁定", dep:"待依赖", rearm:"等待重审" };
+const COLS = ["goal", "not_started", "in_progress", "waiting", "done"];
+// ⭐ Labels come from the server (GET /api/meta → status_labels / wf_labels): the ONE
+//   copy is core/store.js, and the CLI reads the same endpoint. This file used to carry
+//   its own table and so did cli/board.py — "grow one side and the other shows the raw
+//   code" was measured (confirm went missing once). refresh() fetches meta in the same
+//   Promise.all as the tasks, before render(), so the first paint already has them.
+//   "目标" is a KIND, not a status — the panel's own word, not a domain label.
+const colLabel = (k) => k === "goal" ? "目标" : (meta.status_labels?.[k] || k);
+const wfLabel = (w) => meta.wf_labels?.[w] || w;
 // Line colors are assigned from a palette by the line's index in the server-sent
 // LINES (lines are fleet config, not this file's business). Roles keep the accent.
 const PALETTE = ["#5b9dff","#f0883e","#3ecf8e","#f2555a","#c084fc","#e8b93a","#6fd3c7","#d38fd3"];
@@ -601,7 +599,7 @@ function locateByInput(){
   if (!task){ setFindNote(`#${id} 不在当前看板中(可能已归档)`, "bad"); input.select(); return; }
   locatedId = id; locateScrollPending = true;
   document.getElementById("task-find-clear").disabled = false;
-  setFindNote(`#${id} 已定位到「${COLS.find(([k]) => k === taskColumn(task))?.[1] || task.status}」栏顶`, "ok");
+  setFindNote(`#${id} 已定位到「${colLabel(taskColumn(task))}」栏顶`, "ok");
   render();
 }
 document.getElementById("task-find").addEventListener("submit", (e) => { e.preventDefault(); locateByInput(); });
@@ -758,7 +756,7 @@ function cardParts(t){
   if (t.proves_parent) top += `<span class="tag oneof" title="本卡的验证通过即回答了父卡的问题 —— 父卡会联动结案">验证父卡</span>`;
   if (t.resolved_by === "cascade") top += `<span class="tag casc" title="非人工裁定:同链另一张卡通过机器验证,本卡因此不再需要。理由见卡面裁定记录">联动关闭</span>`;
   if (t.status === "waiting" && t.waiting_for)
-    top += `<span class="tag wf ${t.waiting_for}">${WF_LABEL[t.waiting_for] || t.waiting_for}</span>`;
+    top += `<span class="tag wf ${t.waiting_for}">${wfLabel(t.waiting_for)}</span>`;
 
   let meta2 = [];
   if (t.status === "in_progress"){
@@ -862,10 +860,9 @@ function cardParts(t){
     // board loses which stream they came from.
     const kids = tasks.filter((x) => x.parent_id === t.id);
     if (kids.length){
-      const ST = { not_started:"未开始", in_progress:"进行中", waiting:"等待中", done:"已完成" };
       body += `<div class="subs"><div class="h">子任务卡 ${kids.filter((k) => k.status === "done").length}/${kids.length}</div>` +
         kids.map((k) => `<div class="sub"><span class="sid">#${k.id}</span>` +
-          `<span class="stt ${k.status}">${ST[k.status] || k.status}</span>` +
+          `<span class="stt ${k.status}">${colLabel(k.status)}</span>` +
           `<span class="sj">${esc(k.subject)}</span></div>`).join("") + `</div>`;
     }
   }
@@ -926,7 +923,7 @@ function ensureShell(){
   const root = document.getElementById("cols");
   root.innerHTML = "";
   shell = new Map();
-  for (const [key, label] of COLS){
+  for (const key of COLS){ const label = colLabel(key);
     const col = document.createElement("section");
     col.className = "col"; col.dataset.s = key;
     const h2 = document.createElement("h2");
@@ -1412,7 +1409,7 @@ function renderLineage(wrap){
           gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="${c}"><title>#${t.id} 开工 ${tt} · ${esc2(lineLabel(e.w))}${whyRan(e)}</title></rect>`;
         else if (e.k === "close"){
           if (last && t.status === "waiting")
-            gg += `<circle cx="${x}" cy="${yy}" r="4" fill="var(--panel)" stroke="${c}" stroke-width="1.8"><title>#${t.id} 交付→等待${t.waiting_for ? "/" + esc2(WF_LABEL[t.waiting_for] || t.waiting_for) : ""} ${tt}</title></circle>`;
+            gg += `<circle cx="${x}" cy="${yy}" r="4" fill="var(--panel)" stroke="${c}" stroke-width="1.8"><title>#${t.id} 交付→等待${t.waiting_for ? "/" + esc2(wfLabel(t.waiting_for)) : ""} ${tt}</title></circle>`;
           else
             gg += `<circle cx="${x}" cy="${yy}" r="2.6" fill="${c}"><title>#${t.id} 收段 ${tt}</title></circle>`;
         } else if (e.k === "done")
@@ -1694,7 +1691,7 @@ function renderNow(){
 
   const wanted = new Set();
 
-  for (const [key, label] of COLS){
+  for (const key of COLS){ const label = colLabel(key);
     const { list, n, empty, divider } = sh.get(key);
     const items = [];
     const locatedHere = locatedTask && taskColumn(locatedTask) === key ? locatedTask : null;
