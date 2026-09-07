@@ -280,6 +280,6 @@ console.log(`result: ${pass} PASS / ${warn} WARN / ${fail} FAIL` +
             (fail ? "\n⛔ 有 FAIL —— 修完再起板(每条 FAIL 下面都写了修法)"
                   : (warn ? "\n可以起板(WARN 不拦路,但建议看一眼): "
                           : "\n一切就绪: ") +
-                    `${envPrefix}node core/server.mjs` +
+                    `${envPrefix}npm start(= node cli/start.mjs;面板按「更新」时原地重起)` +
                     (envPrefix ? "(PowerShell 用 $env: 形式设同名变量)" : "")));
 process.exit(fail ? 1 : 0);

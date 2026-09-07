@@ -26,4 +26,4 @@ console.log("接下来:");
 console.log("  1. 改 lines[](你的活分几条线)和 handoff_targets[](要收文件的本地目录)");
 console.log("     —— 或者直接让你的 Claude 改:告诉它你的工作长什么样。");
 console.log("  2. node cli/doctor.mjs   # 体检(会检查 handoff 目录是否真的存在)");
-console.log("  3. node core/server.mjs  # 起板");
+console.log("  3. npm start               # 起板(= node cli/start.mjs,面板按「更新」时原地重起)");

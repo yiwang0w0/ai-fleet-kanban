@@ -29,8 +29,11 @@ a change must land in both or the harnesses go red.
 | `resolved_by` = `human` / `auto` / `cascade` | machine | who ruled. **Caller domain is closed** (v0.2): the API accepts only `human` (operator token) / `auto` (review token); `cascade` is store-internal; anything else is 400 — identity on a ruling is never the caller's word |
 | `board_token` / `worker_token` / `review_token` | machine | the three credential classes (v0.2): operator = full; worker = execution face (claim/report/heartbeat/derived create/compact/forked/pool); review = ruling face, `auto` only. Files live in the board data dir — operator territory |
 | operator request `kind` = `propose-lines` / `mount-sentries` / `install-worker-constraints` / `enable-review` / `board-briefing`; `status` = `pending` / `acked` / `done` | machine | v0.5 panel shortcut buttons addressed to the coordinator seat (`/api/requests`, SSE `request.created/ack/done`). Closed kind domain — unknown refuses. Pending ≥ 5 min is shown as an alarm on the panel (silence is not health) |
-| setup step `key` = `board` / `config` / `lines` / `bless` / `sentry` / `cycle`; `state` = `done` / `todo` / `blocked` / `unknown` | machine | v0.6 setup guide (`GET /api/setup`). Every state is MEASURED per request, never stored — the guide walks backward as readily as forward. `unknown` (could not measure) is never folded into `done` |
+| setup step `key` = `board` / `config` / `lines` / `bless` (v0.18 dropped `sentry` / `cycle`; the payload carries `sentries` as a count); `state` = `done` / `todo` / `blocked` / `unknown` | machine | v0.6 setup guide (`GET /api/setup`). Every state is MEASURED per request, never stored — the guide walks backward as readily as forward. `unknown` (could not measure) is never folded into `done` |
 | `?as=sentry` on `/api/events` | machine | an SSE client declaring itself a sentry, so "is the coordinator seat listening" is measurable. A panel tab is not a sentry; an unmarked client does not count as one |
+| `POST /api/setup/bless` `{confirm_tree}` · `POST /api/setup/restart` `{force?}` · `POST /api/upgrade/apply` `{confirm_tree, force?}` | machine | v0.18 panel buttons (operator token). `confirm_tree` = the tree hash the human was shown; a mismatch with `HEAD:<gated_subtree>` is 409 — what you saw is what you accept. restart/apply refuse with 409 `needs_force` while cards are in flight unless `force` |
+| `board.restarting` · `code.accepted` · `sentry.stale` | machine | v0.18 SSE events: the board is about to restart (the panel holds and reloads when the new revision answers) · the gate's record moved (`tree`, `prev`, `by`) · sent on connect to a sentry whose `rev` differs from the board's (a v0.18+ `sse_watch.py` re-runs itself once on it) |
+| `BOARD_RESTART_MODE` = `exit` / `respawn`; `BOARD_SUPERVISED`; `BOARD_RESTARTED_FROM` | machine | how the board comes back after a panel restart: `exit` = code 75 for whoever started it — `npm start` (`cli/start.mjs`, which sets `BOARD_SUPERVISED=1` and relaunches in the same terminal), pm2 (`pm_id`), systemd (`INVOCATION_ID`); `respawn` (bare `node core/server.mjs`) = the running process starts a DETACHED successor (a non-detached child dies with its parent on Windows) logging to `<data>/board.log`. The successor sees `BOARD_RESTARTED_FROM` and retries the port briefly |
 | `attempts` / `attempts_base` / `attempts_this_claim` / `max_attempts` | machine | lifetime total / anchor re-stamped at claim / this dispatch / per-dispatch budget |
 | `lock_key` / `oneof_key` (备选组) / `proves_parent` (验证父卡) / `blocked_by` | machine | mutual exclusion / any-one-passes group / child's pass closes parent / dependency ids |
 | `verify_cmd` | machine | a verify-registry **key**, never a command string |
@@ -92,7 +95,7 @@ code branches on the declaration, never the seat id) · `decompose_models[]` ·
 
 Operator-facing: `BOARD_DATA_DIR` `BOARD_DB` `BOARD_HOST` `BOARD_PORT` `BOARD_URL`
 `BOARD_REPO` `BOARD_CONFIG` `BOARD_DEFAULT_ROUTE` `BOARD_HANDOFF_DIR` `BOARD_UNTIL`
-`BOARD_NO_RESTORE` `BOARD_PYTHON` `BOARD_CRASH_BACKOFF_MS` `BOARD_REAP_MS`
+`BOARD_NO_RESTORE` `BOARD_RESTART_MODE` `BOARD_SUPERVISED` `BOARD_PYTHON` `BOARD_CRASH_BACKOFF_MS` `BOARD_REAP_MS`
 `BOARD_POOL_HOLD_MS` `BOARD_POOL_RECONCILE_MS` `BOARD_EXTRA_ORIGINS`
 `BOARD_HUMAN_GATE_PATTERN` `BOARD_VERIFY_REGISTRY` `BOARD_WIP_PER_ROOT`
 `BOARD_CLI_RUNTIME` `BOARD_CODEX_RELEASED` `BOARD_CODEX_CMD`
@@ -119,7 +122,7 @@ Test-only escape hatches (never production defaults): `BOARD_ALLOW_UNPINNED`
 打回 bounce · 结案 close (无需后续 · 结案 = final close) · 派生 spawn/derive ·
 上浮 uplift (over-deep card re-hung under the chain root, unreleased) ·
 联动结案/联动关闭 linked closure · 心跳 heartbeat · 租约 lease · 座席 seat ·
-阶梯/档位 ladder/rung · 手交区 handoff target · 两哨 the two sentries
+阶梯/档位 ladder/rung · 手交区 handoff target · 两哨 the two sentries(UI 对操作者说「通知进程」;机器名 sentry 不变)
 (sse_watch + board_health_watch) · 正史 the immutable record (task_events).
 
 Note: 收起 in the panel means **fold/collapse a UI section**, not "hold a card" —

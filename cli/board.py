@@ -313,9 +313,11 @@ def main():
         if r.returncode != 0:
             sys.exit("git rev-parse 失败:" + (r.stderr or r.stdout).strip())
         tree = r.stdout.strip()
-        # ⭐ Say what is being accepted BEFORE writing it (v0.15.1). The act stays one manual
-        #   command — a one-click accept would defeat the gate — but "what am I accepting"
-        #   used to be a bare hash. accepted_rev is a TREE object, so the previous one and
+        # ⭐ Say what is being accepted BEFORE writing it (v0.15.1). The act is a human
+        #   confirmation either way — this command, or the panel's 「接受当前代码」 button (v0.18),
+        #   which shows the same preview and carries the tree the human SAW (confirm_tree), so
+        #   the server refuses if the disk moved in between. "What am I accepting" used to be
+        #   a bare hash. accepted_rev is a TREE object, so the previous one and
         #   this one can be diffed directly (`git diff --stat <tree> <tree>`), and a dirty
         #   working tree is worth a warning: bless anchors HEAD, and the gate refuses to
         #   start a line from a dirty tree, so the next thing the person sees would be a

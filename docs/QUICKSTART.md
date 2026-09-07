@@ -92,7 +92,10 @@ It tells you what you are accepting before it writes anything: the tree hash,
 the previously accepted one, and `git diff --stat` between the two (they are
 tree objects, so they diff directly) — and it warns when the working tree has
 uncommitted changes, because bless anchors HEAD and the gate will refuse to
-start a line from a dirty tree. The act itself is unchanged: one command, yours.
+start a line from a dirty tree. Or press **「接受当前代码」** in the panel's guide
+(v0.18): the confirm dialog shows the same preview, and the button carries the tree
+you were shown (`confirm_tree`) — the server refuses if the disk moved in between.
+Either way it is you looking, then you accepting.
 
 (No config? Same act, spelled by hand — and the gate subtree must then be
 exported in EVERY shell that runs a loop:)
@@ -122,7 +125,8 @@ crash), and after you commit a change you re-bless the same way.
 ## 3 · Board up
 
 ```
-node core/server.mjs     # or: npm start
+npm start                # = node cli/start.mjs — restarts the board in place when you press 「更新」
+                         # bare `node core/server.mjs` works too; an update then respawns detached and logs to <data>/board.log
 ```
 
 On a Node older than 22.5 this now stops with one readable sentence (the store
@@ -227,22 +231,40 @@ never touch a live board.
 ## Upgrading (after `git pull`)
 
 `git pull` changes files; it does not change what is already running. Three
-things keep executing the old code until each is dealt with, and the panel
-measures all three — a banner appears at the top listing only what is left:
+things keep executing the old code — the gate's record, the board process and
+the sentries — and the panel measures all three: a banner appears at the top
+("跑着的是 A,磁盘上已经是 B") with **one button, 「更新到新代码」** (v0.18). Its
+confirm dialog tells you, before anything happens:
 
-1. **Re-bless** — `python cli/board.py bless`. Until then worker lines refuse to
-   start (exit 3). That is the source gate doing its job: you have new code that
-   you have not accepted yet.
-2. **Restart the board** — Ctrl+C, then the same `node core/server.mjs`. Cards,
-   events and the usage ledger live in SQLite; a restart loses none of it.
-3. **Remount the sentries** — they are separate processes. Restarting the board
-   drops their connection and they reconnect on their own, still running the old
-   file, so stop and rerun them. (They report their own revision, which is how
-   the board can tell.)
+- what you are accepting — `git diff --stat` between the previously accepted
+  tree and this one (the button carries the tree you were shown; if the disk
+  moved in between, the server refuses and asks you to look again);
+- that cards, events and the usage ledger live in SQLite and survive;
+- which lines are running (stopped with their intent kept, back on the new
+  process) and how many cards are in flight (a restart interrupts them — they
+  return to 未开始 and are re-claimed; cancel and wait if you would rather let
+  them deliver).
 
-None of these is a button, for the same reason blessing has none: accepting code
-is yours to do, and a restart interrupts whatever is in flight. The footer
-always shows the revision the board is actually running.
+Then the board accepts, restarts itself and comes back on the same port; the
+page reloads when the new revision answers. Sentries reconnect on their own
+and, told by the board that they run an old file (`sentry.stale`), re-run
+themselves once on the new code. Nothing to type.
+
+The CLI path still exists — `python cli/board.py bless`, Ctrl+C, start again —
+and is what you use when the board is not running at all.
+
+How the board comes back is `BOARD_RESTART_MODE`. `npm start` runs `cli/start.mjs`,
+a tiny supervisor: the board exits with code 75 and is started again in the same
+terminal, log and Ctrl+C intact (`exit` mode, selected by `BOARD_SUPERVISED=1`;
+also auto-selected under pm2 `pm_id` or systemd `INVOCATION_ID`). A bare
+`node core/server.mjs` has nobody to restart it, so it starts its successor
+itself (`respawn`): detached — on Windows a non-detached child is killed with
+its parent — with the same node flags, argv, cwd and env, and from then on the
+board's output goes to `<data>/board.log` (the exiting process prints the path).
+Prefer `npm start`. The restart endpoints refuse
+while cards are in flight unless the caller passes `force` — the panel does,
+after showing you the count. The footer always shows the revision the board is
+actually running.
 
 ## Start over
 

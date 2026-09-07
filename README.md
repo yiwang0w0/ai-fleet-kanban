@@ -29,7 +29,9 @@ OS process, **not** a subagent. `docs/GLOSSARY.md` maps the two vocabularies, an
 
 ## Status
 
-**v0.17.2.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (620+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+**v0.18.0.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (620+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+
+v0.18.0 removes the last "now open a terminal" from the operator's path. The upgrade banner is one button, 「更新到新代码」: its confirm dialog shows the `git diff --stat` you are accepting, says that cards, events and the ledger survive, and names the running lines (stopped with their intent kept, restored on the new process) and the in-flight cards (interrupted — or cancel and wait); then the board accepts exactly the tree you were shown (`confirm_tree` — a disk that moved in between is refused), restarts itself on the same port, and the page reloads when the new revision answers; sentries are told they are stale and re-run themselves. The guide's accept and restart steps are buttons with the same preview, the guide is four steps (mounting sentries and the demo cycle are no longer asked of the operator), and the coordinator shortcut buttons say what they do in plain words.
 
 v0.17.2 rewrites the six-step setup guide in plain, action-first language: every visible line now says what to do next (generate a config, accept the code, mount notifications, run one cycle) instead of naming the internal mechanism (gated subtree, sentry, coordinator seat); the mechanism names moved into the expanded hints with a one-line gloss. Display strings only — step keys, states and actions are unchanged.
 
@@ -57,7 +59,7 @@ examples/  fleet config · verify registry · mock runtime adapter · demo seeds
 ```
 git clone https://github.com/yiwang0w0/ai-fleet-kanban && cd ai-fleet-kanban
 npm run setup              # doctor → config → verify registry → prints the two steps that are yours
-python cli/board.py bless  # accept this tree — the one act that stays yours
+python cli/board.py bless  # accept this tree — or press 「接受当前代码」 in the panel; both show you the diff first
 npm run demo               # board up → demo chain → one mock worker round, zero tokens → a card awaits your ruling
 ```
 

@@ -1113,14 +1113,14 @@ try {
       return { su, s: (su.steps || []).find((x) => x.key === key) };
     };
     const s0 = await stepOf("board");
-    ok("S1 全新部署:板=done,配置=todo(带一键动作),线=blocked(等配置),哨=todo,一轮=todo",
-       s0.s.state === "done" &&
+    ok("S1 全新部署:四步 —— 板=done,配置=todo(带一键动作),线=blocked(等配置),接受代码=blocked;「挂通知」「跑一轮」两步已删(v0.18:操作者不跑命令)",
+       s0.s.state === "done" && s0.su.total === 4 &&
        s0.su.steps.find((x) => x.key === "config").state === "todo" &&
        s0.su.steps.find((x) => x.key === "config").action?.path === "/api/setup/init-config" &&
        s0.su.steps.find((x) => x.key === "lines").state === "blocked" &&
-       s0.su.steps.find((x) => x.key === "sentry").state === "todo" &&
-       s0.su.steps.find((x) => x.key === "cycle").state === "todo" && s0.su.complete === false,
-       `done=${s0.su.done}/${s0.su.total}`);
+       !s0.su.steps.some((x) => x.key === "sentry" || x.key === "cycle") &&
+       typeof s0.su.sentries === "number" && s0.su.complete === false,
+       `done=${s0.su.done}/${s0.su.total} keys=${s0.su.steps.map((x) => x.key).join(",")}`);
     ok("S2 未设 gated_subtree → 验收步 blocked 并点名要写哪个键(不是 done)",
        (() => { const b = s0.su.steps.find((x) => x.key === "bless");
                 return b.state === "blocked" && /gated_subtree/.test(b.hint || ""); })(), "");
@@ -1135,12 +1135,14 @@ try {
     // bless step must say "restart", not "you never decided" (a browser walk of
     // the guide got stuck exactly here).
     const afterBless = (await stepOf("bless")).s;
-    ok("S3b ⭐生成配置后:验收步不再说「先生成配置」,而是「配置已经写好了,但看板是在那之前起的 → 重启」",
+    ok("S3b ⭐生成配置后:验收步不再说「先生成配置」,而是「配置已经写好了,但看板是在那之前起的 → 一键重启」(api,不是命令)",
        afterBless.state === "todo" && /在那之前起的/.test(afterBless.detail || "") &&
-       /server\.mjs/.test(afterBless.action?.text || ""), `${afterBless.state} ${(afterBless.detail || "").slice(0, 30)}`);
+       afterBless.action?.type === "api" && afterBless.action.path === "/api/setup/restart" && /不会丢/.test(afterBless.action.confirm || ""),
+       `${afterBless.state} ${(afterBless.detail || "").slice(0, 30)} action=${afterBless.action?.path}`);
     const cfgDrift = (await stepOf("config")).s;
-    ok("S3c 配置步同时报出漂移:磁盘上的部署键与本进程启动时读到的不一致 → 提示重启",
-       cfgDrift.state === "done" && /改过了/.test(cfgDrift.detail || ""), (cfgDrift.detail || "").slice(-30));
+    ok("S3c 配置步同时报出漂移:磁盘上的部署键与本进程启动时读到的不一致 → 带「重启看板」按钮(done 步唯一带动作的情形)",
+       cfgDrift.state === "done" && /改过了/.test(cfgDrift.detail || "") && cfgDrift.drift === true &&
+       cfgDrift.action?.path === "/api/setup/restart", (cfgDrift.detail || "").slice(-30));
     ok("S4 ⭐引导会倒退:删掉配置文件后,同一个端点又报 todo(状态是测出来的,不是记下来的)",
        await (async () => { rmSync(CFGS, { force: true }); return (await stepOf("config")).s.state === "todo"; })(), "");
     B.kill();
@@ -1154,42 +1156,56 @@ try {
     C.kill();
 
     // Sentry presence is measured from the SSE connection that declares itself.
-    const D = await mk({ env: { BOARD_GATED_SUBTREE: "." } });
-    const before = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "sentry");
+    const D = await mk({ env: { BOARD_GATED_SUBTREE: ".", BOARD_RESTART_MODE: "exit" } });
+    const before = (await D.api("GET", "/api/setup")).body.sentries;
     const ctl = new AbortController();
     const streamed = fetch(`${D.BASE}/api/events?as=sentry`, { signal: ctl.signal })
       .then((r) => r.body.getReader().read()).catch(() => null);
     await streamed;
-    const during = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "sentry");
+    const during = (await D.api("GET", "/api/setup")).body.sentries;
     ctl.abort();
     await sleep(400);
-    const after = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "sentry");
-    ok("S6 ⭐哨在听是测出来的:接上 ?as=sentry → done;断开 → 回到 todo",
-       before.state === "todo" && during.state === "done" && after.state === "todo",
-       `${before.state} → ${during.state} → ${after.state}`);
-    // The bless step on a real git tree with no accepted_rev yet: todo + the命令.
+    const after = (await D.api("GET", "/api/setup")).body.sentries;
+    ok("S6 ⭐通知进程在听是测出来的(不再是引导的一步,/api/setup.sentries 照常计数):接上 ?as=sentry → 1;断开 → 0",
+       before === 0 && during === 1 && after === 0, `${before} → ${during} → ${after}`);
+    // The bless step on a real git tree with no accepted_rev yet: a BUTTON that carries the
+    // tree the human is shown (v0.18) — not a command, and not "accept whatever is there".
+    const tree = execFileSync("git", ["-C", ROOT, "rev-parse", "HEAD:"], { encoding: "utf8" }).trim();
     const bl = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "bless");
-    ok("S7 验收步给的是命令而不是按钮(一键验收 = 闸自己给自己放行)",
-       ["todo", "done"].includes(bl.state) &&
-       (bl.state === "done" || /board\.py bless/.test(bl.action?.text || "")), `state=${bl.state}`);
-    // The cycle step tracks real progress: no cards → cards → one done.
-    const cy0 = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "cycle");
+    ok("S7 ⭐接受代码是带「你看到的树」的按钮:api /api/setup/bless,confirm_tree=磁盘上的树,确认文案先说接受的是什么",
+       bl.state === "todo" && bl.action?.type === "api" && bl.action.path === "/api/setup/bless" &&
+       bl.action.body?.confirm_tree === tree && /首次接受|上次接受/.test(bl.action.confirm || ""),
+       `state=${bl.state} action=${JSON.stringify(bl.action || null).slice(0, 90)}`);
+    const badTree = await D.api("POST", "/api/setup/bless", { confirm_tree: "0".repeat(40) });
+    const noTree = await D.api("POST", "/api/setup/bless", {});
+    const notYet = !existsSync(join(D.DATA, "accepted_rev"));
+    const goodTree = await D.api("POST", "/api/setup/bless", { confirm_tree: tree });
+    const blAfter = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "bless");
+    ok("S7b ⭐看到什么接受什么:树不一致/缺 → 409 且不落盘;一致 → 200,accepted_rev = 那棵树,步变 done",
+       badTree.status === 409 && noTree.status === 409 && notYet && goodTree.status === 200 &&
+       readFileSync(join(D.DATA, "accepted_rev"), "utf8").trim() === tree && blAfter.state === "done",
+       `${badTree.status}/${noTree.status}/${goodTree.status} state=${blAfter.state}`);
+    // Restart from the panel: refuses while a card is in flight unless the caller saw that.
     const idS = (await D.api("POST", "/api/tasks", { subject: "s-card", line: LINE, humanGate: false })).body.task.id;
-    const cy1 = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "cycle");
     await D.api("POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
-    await D.api("POST", `/api/tasks/${idS}/report`, { worker: "alpha", outcome: "done", evidence: "证据" });
-    await D.api("POST", `/api/tasks/${idS}/resolve`, { verdict: "approve", note: "", resolved_by: "human", allow_uncommitted: true });
-    const cy2 = (await D.api("GET", "/api/setup")).body;
-    ok("S8 一轮:无卡 → 有卡未走完 → 有 done 卡时该步完成",
-       cy0.state === "todo" && /还没有卡/.test(cy0.detail || "") &&
-       cy1.state === "todo" && /板上有卡了/.test(cy1.detail || "") &&
-       cy2.steps.find((x) => x.key === "cycle").state === "done",
-       `${cy0.detail} | ${cy1.detail}`);
+    const r1 = await D.api("POST", "/api/setup/restart", {});
+    const stillUp = (await D.api("GET", "/api/setup")).status === 200;
+    ok("S8 ⭐有卡在跑时重启要人点头:不带 force → 409 报出张数,看板照常在(什么都没停)",
+       r1.status === 409 && r1.body?.in_progress === 1 && r1.body?.needs_force === true && stillUp,
+       `${r1.status} ${JSON.stringify(r1.body || {}).slice(0, 80)} card=#${idS}`);
+    const r2 = await D.api("POST", "/api/setup/restart", { force: true });
+    const code = await Promise.race([D.dead(), sleep(8000).then(() => "timeout")]);
+    ok("S8b ⭐带 force → 202 {restarting, mode:exit},进程以 75 退出(BOARD_RESTART_MODE=exit 留给外层守护进程重起)",
+       r2.status === 202 && r2.body?.restarting === true && r2.body?.mode === "exit" && code === 75,
+       `${r2.status} mode=${r2.body?.mode} exit=${code}`);
+    ok("S8c 重启日志说了退出方式,而不是无声消失",
+       /重启\(panel-restart\)/.test(D.out()), D.out().split("\n").filter((l) => /重启/.test(l)).join(" | ").slice(0, 120));
     D.kill();
-    // The panel consumes it (source-shape pin) and refuses a one-click bless.
+    // The panel consumes it; accepting code is confirm-then-button, not a copied command.
     const panelSrc2 = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
-    ok("S9 面板消费 /api/setup,且在验收步明写「没有一键按钮」的理由",
-       /\/api\/setup/.test(panelSrc2) && /renderGuide/.test(panelSrc2) && /故意没有一键按钮/.test(panelSrc2), "");
+    ok("S9 面板消费 /api/setup;接受代码的按钮先弹确认(data-guide-confirm);「故意没有一键按钮」的说辞已删",
+       /\/api\/setup/.test(panelSrc2) && /renderGuide/.test(panelSrc2) && /data-guide-confirm/.test(panelSrc2) &&
+       !/故意没有一键按钮/.test(panelSrc2), "");
     try { rmSync(DS, { recursive: true, force: true }); } catch {}
   }
 
@@ -1206,12 +1222,22 @@ try {
     // A sentry left over from before the upgrade: the server is current, the
     // sentry is not — and only the sentry knows, so it has to say.
     const ctl = new AbortController();
-    await fetch(`${A.BASE}/api/events?as=sentry&rev=0ldrev`, { signal: ctl.signal })
-      .then((r) => r.body.getReader().read()).catch(() => null);
+    let staleBuf = "";
+    try {
+      const rd = (await fetch(`${A.BASE}/api/events?as=sentry&rev=0ldrev`, { signal: ctl.signal })).body.getReader();
+      const t0 = Date.now();
+      while (!/sentry\.stale/.test(staleBuf) && Date.now() - t0 < 3000) {
+        const { value, done } = await rd.read(); if (done) break;
+        staleBuf += new TextDecoder().decode(value);
+      }
+    } catch {}
     const ub = (await A.api("GET", "/api/setup")).body.upgrade;
-    ok("T2 ⭐看板是新的、哨还是旧的 → 只提哨这一件事(哨是独立进程,重启看板不会更新它)",
+    ok("T2 ⭐看板是新的、哨还是旧的 → 只提这一件事,且没有要人按的按钮(apply=null)",
        ub.pending === true && ub.steps.length === 1 && ub.steps[0].key === "sentries" &&
-       /0ldrev/.test(ub.steps[0].detail || ""), JSON.stringify(ub.steps.map((s) => s.key)));
+       /0ldrev/.test(ub.steps[0].detail || "") && ub.apply == null, JSON.stringify(ub.steps.map((s) => s.key)));
+    ok("T2b ⭐旧版哨一接上,看板当场告诉它(sentry.stale 带它的版本和板的版本)—— 新版哨据此自己重跑",
+       /sentry\.stale/.test(staleBuf) && /0ldrev/.test(staleBuf) && staleBuf.includes(ua.version),
+       staleBuf.replace(/\s+/g, " ").slice(0, 120));
     ctl.abort();
     await sleep(400);
     const ctl2 = new AbortController();
@@ -1224,22 +1250,35 @@ try {
 
     // Now the real shape: the process booted from an older revision than the
     // working copy — exactly what `git pull` leaves behind.
-    const B = await mk({ env: { BOARD_GATED_SUBTREE: ".", BOARD_TEST_BOOT_REV: "0ldb00t" } });
+    const B = await mk({ env: { BOARD_GATED_SUBTREE: ".", BOARD_TEST_BOOT_REV: "0ldb00t", BOARD_RESTART_MODE: "exit" } });
     const ud = (await B.api("GET", "/api/setup")).body.upgrade;
     const keys = ud.steps.map((s) => s.key);
-    ok("T4 ⭐pull 之后 → 三步齐出:重新验收 · 重启看板 · 重挂两哨,并报出两个版本",
-       ud.pending === true && JSON.stringify(keys) === JSON.stringify(["bless", "restart", "sentries"]) &&
-       ud.running === "0ldb00t" && ud.on_disk && ud.on_disk !== "0ldb00t",
-       `${ud.running} → ${ud.on_disk}`);
-    ok("T5 每一步都给的是命令(升级要经人手:验收是治理动作,重启会断在跑的活)",
-       ud.steps.every((s) => s.state === "done" || s.action?.type === "cmd"),
+    ok("T4 ⭐pull 之后 → 横幅报出两个版本,列「接受新代码 · 重启看板」两件事(没有哨连着就不提哨),并给一个「更新」按钮",
+       ud.pending === true && JSON.stringify(keys) === JSON.stringify(["bless", "restart"]) &&
+       ud.running === "0ldb00t" && ud.on_disk && ud.on_disk !== "0ldb00t" &&
+       ud.apply?.path === "/api/upgrade/apply" && /更新/.test(ud.apply.label || ""),
+       `${ud.running} → ${ud.on_disk} apply=${ud.apply?.path}`);
+    ok("T5 ⭐没有一步是命令(v0.18:更新是一个按钮);按钮带的是磁盘上的树,确认文案先列改动、再说数据不丢",
+       ud.steps.every((s) => !s.action || s.action.type !== "cmd") &&
+       /^[0-9a-f]{40}$/.test(ud.apply?.body?.confirm_tree || "") &&
+       /接受/.test(ud.apply.confirm) && /不会丢/.test(ud.apply.confirm),
        JSON.stringify(ud.steps.map((s) => [s.key, s.state, s.action?.type])));
-    ok("T6 重启这一步说清楚了「数据不会丢」——这是人按下 Ctrl+C 前最想知道的事",
+    ok("T6 重启这一步说清楚了「数据不会丢」——这是人按「更新」前最想知道的事",
        /不会丢/.test(ud.steps.find((s) => s.key === "restart").hint || ""), "");
+    const wrong = await B.api("POST", "/api/upgrade/apply", { confirm_tree: "f".repeat(40) });
+    const upStill = (await B.api("GET", "/api/setup")).status === 200 && !existsSync(join(B.DATA, "accepted_rev"));
+    ok("T6b ⭐apply 带的树和磁盘不一致 → 409,什么都没接受、什么都没重启", wrong.status === 409 && upStill, `${wrong.status}`);
+    const applied = await B.api("POST", "/api/upgrade/apply", { confirm_tree: ud.apply.body.confirm_tree });
+    const exitCode = await Promise.race([B.dead(), sleep(8000).then(() => "timeout")]);
+    ok("T6c ⭐apply 一致 → 先落 accepted_rev(=那棵树),再 202 {restarting},进程以 75 退出让守护进程重起",
+       applied.status === 202 && applied.body?.restarting === true && applied.body?.accepted === ud.apply.body.confirm_tree &&
+       readFileSync(join(B.DATA, "accepted_rev"), "utf8").trim() === ud.apply.body.confirm_tree && exitCode === 75,
+       `${applied.status} exit=${exitCode}`);
     B.kill();
     const panelSrc3 = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
-    ok("T7 面板渲染升级横幅并在底栏显示版本号",
-       /renderUpgrade/.test(panelSrc3) && /id="upg"/.test(panelSrc3) && /f-rev/.test(panelSrc3), "");
+    ok("T7 面板渲染升级横幅(带更新按钮;收到 board.restarting 后等新版本回来自己刷新)并在底栏显示版本号",
+       /renderUpgrade/.test(panelSrc3) && /id="upg"/.test(panelSrc3) && /f-rev/.test(panelSrc3) &&
+       /data-upg-apply/.test(panelSrc3) && /board\.restarting/.test(panelSrc3), "");
   }
 
 } catch (e) {

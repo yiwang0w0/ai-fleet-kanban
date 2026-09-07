@@ -102,6 +102,20 @@ def stream_once():
                 else:
                     emit("pool.changed(各池健康)")
                 continue
+            if t == "sentry.stale":
+                # v0.18: the board says this process runs an older file than it does. Re-run
+                # ourselves on the new code — as a CHILD we wait for, so whoever monitors this
+                # pid (a Claude's Monitor) keeps the same pid and the same stdout. Once: a second
+                # mismatch means this checkout is not the board's, and re-running cannot fix that.
+                import subprocess, sys
+                board_rev = str(d.get("board_rev") or "")
+                if os.environ.get("SSE_WATCH_REEXECED") == board_rev:
+                    emit(f"⚠ 本哨已按 {board_rev} 重跑过一次,看板仍说版本不一致 —— 本哨和看板可能不在同一个检出;请停掉,从看板目录重跑")
+                    continue
+                emit(f"↻ 看板已是 {board_rev},本哨跑的是 {d.get('your_rev')} —— 以新代码重跑本哨(本进程留守转发输出)")
+                sys.stdout.flush()
+                rc = subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, SSE_WATCH_REEXECED=board_rev))
+                sys.exit(rc)
             if t.startswith("request."):
                 # v0.5: a panel shortcut button addressed to the coordinator seat —
                 # this line IS the wake-up. The seat acks first, then acts

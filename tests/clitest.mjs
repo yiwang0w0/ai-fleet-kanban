@@ -166,6 +166,31 @@ console.log(NL + "[⑥ bless 说清它接受的是什么]");
   ok("并且写下了新的树", readFileSync(join(data, "accepted_rev"), "utf8").trim() === head);
 }
 
+// ⑦ `npm start` = cli/start.mjs (v0.18): the board exits 75 when the panel asks for a
+//    restart and the wrapper relaunches it in place — same terminal, same stdio. Measured
+//    against a stub that exits 75 on its first boot only; any other code passes through.
+console.log(NL + "[⑦ start.mjs 守护:exit 75 原地重起,其他码透传]");
+{
+  const stub = join(TMP, "stub-server.mjs");
+  writeFileSync(stub, [
+    'console.log(`boot supervised=${process.env.BOARD_SUPERVISED} from=${process.env.BOARD_RESTARTED_FROM || "-"}`);',
+    'if (!process.env.BOARD_RESTARTED_FROM) process.exit(75);',
+    'console.log("second boot ok"); process.exit(0);',
+  ].join(NL));
+  const run = (script) => spawnSync(process.execPath, [join(ROOT, "cli", "start.mjs")],
+    { encoding: "utf8", env: { ...process.env, BOARD_SERVER_SCRIPT: script }, windowsHide: true, timeout: 30000 });
+  const r = run(stub);
+  ok("⭐子进程 exit 75 → 守护在原地重起它一次(带 BOARD_SUPERVISED=1 / BOARD_RESTARTED_FROM),最终码 0",
+     r.status === 0 && /boot supervised=1 from=-/.test(r.stdout) && /看板请求重启/.test(r.stdout) &&
+     /boot supervised=1 from=supervised/.test(r.stdout) && /second boot ok/.test(r.stdout),
+     `status=${r.status} out=${(r.stdout || "").replace(/\s+/g, " ").slice(0, 160)}`);
+  const stub3 = join(TMP, "stub-exit3.mjs");
+  writeFileSync(stub3, 'console.log("boot once"); process.exit(3);');
+  const r3 = run(stub3);
+  ok("其他退出码(闸门拒启的 3)透传,不重起", r3.status === 3 && !/看板请求重启/.test(r3.stdout) &&
+     (r3.stdout.match(/boot once/g) || []).length === 1, `status=${r3.status}`);
+}
+
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}
 console.log(`${NL}${"─".repeat(56)}${NL}result: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

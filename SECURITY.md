@@ -80,3 +80,18 @@ exactly the kind of report we want.
 ## Supported versions
 
 Pre-1.0: only the latest release line receives fixes.
+
+## Panel accept / restart endpoints (v0.18)
+
+`POST /api/setup/bless`, `POST /api/setup/restart` and `POST /api/upgrade/apply` are
+operator-token writes (`guardWrite`; worker and review tokens are refused like any path
+not on their lists). Accepting requires `confirm_tree` equal to the current
+`HEAD:<gated_subtree>` tree — the panel sends the hash it displayed, so a tree that changed
+between look and click is refused (409); there is no "accept whatever is on disk". The
+restart endpoints refuse (409, `needs_force`) while cards are in flight unless `force` is
+passed, and the panel passes it only after its confirm text named the count. Under `npm start`
+(`cli/start.mjs`), pm2 or systemd the process exits 75 and its supervisor relaunches
+it (`exit`); a bare process starts a detached successor from its own
+`execArgv`/`argv`/`cwd`/`env`, logging to `<data>/board.log` (`respawn`). A holder of the operator token could already write `accepted_rev` directly —
+it is a file in the data dir — so these endpoints add no capability beyond that token; what
+keeps a worker away from it is the Claude seat's deny rules on the data dir (above).

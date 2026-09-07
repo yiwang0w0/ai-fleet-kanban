@@ -316,6 +316,20 @@ const codeRev = () => {
 const BOOT_REV = process.env.BOARD_TEST_BOOT_REV || codeRev();
 if (process.env.BOARD_TEST_BOOT_REV)
   console.error(`⚠ BOARD_TEST_BOOT_REV=${process.env.BOARD_TEST_BOOT_REV} —— 假装本进程跑的是别的版本(仅测试用)`);
+// ⭐ How the board comes back after the panel's 「更新」/「重启看板」 (v0.18).
+//   `exit`: leave with code 75 and let whoever started us start us again — `npm start`
+//   (cli/start.mjs, which sets BOARD_SUPERVISED=1 and relaunches in the same terminal), pm2
+//   (`pm_id`) or systemd (`INVOCATION_ID`). Preferred: the log stays where it was and Ctrl+C
+//   keeps working. `respawn` (bare `node core/server.mjs`): this process starts its successor
+//   itself — DETACHED, because on Windows a non-detached child is killed with its parent
+//   (libuv's kill-on-close job; measured: the successor died before its first log line, twice)
+//   — with the same node flags, argv, cwd and env, its output appended to <data>/board.log
+//   (a detached process has left the console). BOARD_RESTART_MODE overrides the guess.
+const RESTART_MODE = ["respawn", "exit"].includes(process.env.BOARD_RESTART_MODE || "")
+  ? process.env.BOARD_RESTART_MODE
+  : ((process.env.BOARD_SUPERVISED || process.env.pm_id !== undefined || process.env.INVOCATION_ID) ? "exit" : "respawn");
+if (process.env.BOARD_RESTART_MODE && process.env.BOARD_RESTART_MODE !== RESTART_MODE)
+  console.error(`⚠ BOARD_RESTART_MODE=${process.env.BOARD_RESTART_MODE} 不认识(只认 respawn / exit)—— 按 ${RESTART_MODE} 处理`);
 
 // ── No-progress brake context (v0.11) ───────────────────────────────────────
 // The two fingerprint components the store cannot compute for itself, because they
@@ -538,7 +552,8 @@ function blessStep() {
       return { state: "todo",
                detail: "配置已经写好了,但看板是在那之前起的 —— 重启一次让它读到",
                hint: "端口、工作仓路径、要盯住的代码范围这三项只在启动时读一次;加线不用重启",
-               action: { type: "cmd", text: "node core/server.mjs" } };
+               action: { type: "api", method: "POST", path: "/api/setup/restart", label: "重启看板",
+                         confirm: "重启看板,让它读到新配置。\n\n卡、事件、账本都在库里,不会丢;在跑的线会先停下,起来后照原样恢复。" } };
     return { state: "blocked",
              detail: "先做第二步生成配置,再重启看板",
              hint: '生成的示例配置已经带了 "gated_subtree": "."(意思是:盯住整棵代码树)。看板重启读到它之后,这一步才能做' };
@@ -556,58 +571,129 @@ function blessStep() {
   let accepted = null;
   try { accepted = readFileSync(revFile, "utf8").trim(); } catch {}
   if (!accepted)
-    return { state: "todo", detail: "在看板目录跑一行命令,表示「当前这份代码我看过、我接受」",
-             hint: "起线之前必须先接受一次;以后每次改了代码都要再接受一次 —— 这道门(源码闸)就是用来挡没人确认过的代码的。命令会先打出上次接受的版本、这次的版本和两者之间改了哪些文件",
-             action: { type: "cmd", text: "python cli/board.py bless" } };
+    return { state: "todo", detail: "按一下,表示「当前这份代码我看过、我接受」—— 按之前会先列出你要接受的版本",
+             hint: "起线之前必须先接受一次;以后每次改了代码都要再接受一次 —— 这道门(源码闸)就是用来挡没人确认过的代码的。命令行也行:python cli/board.py bless",
+             action: acceptAction(acceptPreview(head, accepted)) };
   if (accepted !== head)
-    return { state: "todo", detail: "代码改过了,接受记录还停在旧版本 —— 再接受一次",
-             hint: "看过这次改了什么,再跑同一行命令。在这之前自动拉取会拒绝起线(exit 3)—— 那是门在挡没确认过的代码,不是故障",
-             action: { type: "cmd", text: "python cli/board.py bless" } };
+    return { state: "todo", detail: "代码改过了,接受记录还停在旧版本 —— 看一眼改动,再接受一次",
+             hint: "在这之前自动拉取会拒绝起线(exit 3)—— 那是门在挡没确认过的代码,不是故障",
+             action: acceptAction(acceptPreview(head, accepted)) };
   return { state: "done", detail: `已接受 ${CFG_GATED_SUBTREE} = ${accepted.slice(0, 12)}` };
 }
 
-/** What it takes for a `git pull` to actually be in effect. Three things run
- *  old code until each is dealt with — the gate's record, this process, and the
- *  sentries — and none of them announces itself. Measured, so the panel can. */
+// ── Accepting code from the panel (v0.18) ────────────────────────────────────
+// The source gate's record is a human act either way — `board.py bless` or the panel's
+// 「接受当前代码」 button. Both show the same thing first (this tree, the previously accepted
+// one, `git diff --stat` between them), and the button carries the tree the human SAW
+// (`confirm_tree`): if the disk moved in between, the server refuses. What you looked at is
+// what you accept — a button that accepts "whatever is there now" would be the one-click the
+// gate exists to prevent.
+const gatedTree = () => {
+  if (!CFG_GATED_SUBTREE) return { err: "还没配置要盯住的代码范围(gated_subtree)" };
+  try {
+    const spec = CFG_GATED_SUBTREE === "." ? "" : CFG_GATED_SUBTREE;
+    return { tree: execFileSync("git", ["-C", CODE_ROOT, "rev-parse", `HEAD:${spec}`],
+                                { encoding: "utf8", windowsHide: true }).trim() };
+  } catch (e) { return { err: String(e.message).slice(0, 60) }; }
+};
+const acceptedFile = () => join(store.DATA_DIR, "accepted_rev");
+const readAccepted = () => { try { return readFileSync(acceptedFile(), "utf8").trim() || null; } catch { return null; } };
+const statCache = new Map();   // "prev→tree" -> stat lines; trees are immutable, so is their diff
+function treeStat(prev, tree) {
+  if (!prev || !tree || prev === tree) return [];
+  const k = `${prev}→${tree}`;
+  if (!statCache.has(k)) {
+    let lines;
+    try {
+      lines = execFileSync("git", ["-C", CODE_ROOT, "diff", "--stat=90", prev, tree], { encoding: "utf8", windowsHide: true })
+        .split("\n").map((l) => l.trimEnd()).filter(Boolean);
+    } catch (e) { lines = [`(git diff --stat 失败:${String(e.message).slice(0, 60)})`]; }
+    if (statCache.size > 32) statCache.clear();
+    statCache.set(k, lines);
+  }
+  return statCache.get(k);
+}
+/** What the panel shows BEFORE it asks — one copy, written here, never in the panel. */
+function acceptPreview(tree, prev) {
+  const stat = treeStat(prev, tree);
+  const files = prev && prev !== tree ? Math.max(0, stat.length - 1) : (prev ? 0 : null);   // last stat line = summary
+  const shown = stat.slice(0, 14).map((l) => "  " + l);
+  const confirm = [
+    `你正在接受 ${CFG_GATED_SUBTREE} = ${tree.slice(0, 12)}` + (prev ? `(上次接受的是 ${prev.slice(0, 12)})` : "(首次接受)"),
+    ...(prev && prev !== tree ? ["", "上次接受 → 这次,改了什么:", ...shown, ...(stat.length > 14 ? [`  …还有 ${stat.length - 14} 行`] : [])] : []),
+    "", "接受 = 你说「这份代码我看过、我认」。自动拉取的线只用你接受过的代码起跑。",
+  ].join("\n");
+  return { tree, prev, files, stat, confirm };
+}
+const acceptAction = (pv) => pv ? { type: "api", method: "POST", path: "/api/setup/bless", label: "接受当前代码",
+                                    body: { confirm_tree: pv.tree }, confirm: pv.confirm } : null;
+function acceptTree(confirmTree, who) {
+  const { tree, err } = gatedTree();
+  if (err) throw store.err(store.ERR.CONFLICT, `读不到代码的版本(${err})`);
+  if (!confirmTree || confirmTree !== tree)
+    throw store.err(store.ERR.CONFLICT,
+      `你看到的版本(${String(confirmTree || "").slice(0, 12) || "空"})和磁盘上现在的(${tree.slice(0, 12)})不一致 —— 刷新页面,看过之后再按一次`);
+  const prev = readAccepted();
+  mkdirSync(store.DATA_DIR, { recursive: true });
+  writeFileSync(acceptedFile(), tree + "\n", "utf8");
+  let dirty = 0;
+  try {
+    dirty = execFileSync("git", ["-C", CODE_ROOT, "status", "--short", "--", CFG_GATED_SUBTREE === "." ? "." : CFG_GATED_SUBTREE],
+                         { encoding: "utf8", windowsHide: true }).split("\n").filter((l) => l.trim()).length;
+  } catch {}
+  console.log(`已接受 ${CFG_GATED_SUBTREE} = ${tree}(${who})` + (prev ? `,上次 ${prev.slice(0, 12)}` : ",首次")
+    + (dirty ? ` ⚠ 工作树有 ${dirty} 处未提交改动 —— 闸锚的是 HEAD,起线前先 commit` : ""));
+  emit("code.accepted", { tree, prev, by: who, dirty });
+  return { accepted: tree, prev, dirty, files: acceptPreview(tree, prev).files };
+}
+
+/** What it takes for a `git pull` to actually be in effect: the gate's record, this process
+ *  and the sentries all keep running old code, and none announces itself. Measured, so the
+ *  panel can — and since v0.18 the panel offers ONE button for it: accept the tree you were
+ *  shown, stop the lines with their intent kept, restart, and the lines come back; sentries
+ *  reconnect on their own and re-exec themselves when the board tells them they are stale.
+ *  The human still decides — the confirm text says what changed and what a restart
+ *  interrupts — but decides once, on one button. */
 function upgradeState() {
   const onDisk = codeRev();
   if (!BOOT_REV || !onDisk)
-    return { measurable: false, pending: false, running: BOOT_REV, on_disk: onDisk, steps: [] };
+    return { measurable: false, pending: false, running: BOOT_REV, on_disk: onDisk, steps: [], apply: null };
   if (onDisk === BOOT_REV) {
     const stale = [...sentries.values()].filter((s) => s.rev && s.rev !== onDisk);
-    // Even with the server current, a sentry left over from before the upgrade
-    // keeps running the old file — v0.7's quieter alarms, for instance, simply
-    // would not happen. Worth one line, not the whole banner.
-    return { measurable: true, pending: stale.length > 0, running: BOOT_REV, on_disk: onDisk,
-             steps: stale.length ? [{ key: "sentries", title: "哨还在跑旧代码", state: "todo",
-               detail: `${stale.length} 个哨的版本是 ${[...new Set(stale.map((s) => s.rev))].join("/")},磁盘上是 ${onDisk}`,
-               hint: "停掉重挂就好(Ctrl+C 后重跑)——哨是独立进程,不会跟着看板一起更新",
-               action: { type: "cmd", text: "python watchers/sse_watch.py" } }] : [] };
+    // Server current, a sentry not: the board already told it (sentry.stale on connect) —
+    // a v0.18+ sentry re-runs itself, an older one prints the event for its coordinator.
+    return { measurable: true, pending: stale.length > 0, running: BOOT_REV, on_disk: onDisk, apply: null,
+             steps: stale.length ? [{ key: "sentries", title: "有通知进程还在跑旧代码", state: "todo",
+               detail: `${stale.length} 个的版本是 ${[...new Set(stale.map((s) => s.rev))].join("/")},磁盘上是 ${onDisk}`,
+               hint: "看板已经告诉它们了:新版的通知进程会自己换成新代码;老版的会把这件事打给挂它的 Claude,由它停掉重跑" }] : [] };
   }
   const bl = blessStep();
-  const staleSentries = [...sentries.values()].filter((s) => s.rev !== onDisk);
-  return {
-    measurable: true, pending: true, running: BOOT_REV, on_disk: onDisk,
-    steps: [
-      { key: "bless", title: "重新验收新代码", ...(bl.state === "done"
-          ? { state: "done", detail: bl.detail }
-          : { state: "todo", detail: "在这之前,自动拉取会拒启(exit 3)—— 那是闸在挡未验收的代码,不是故障",
-              hint: "看过这次改了什么,再表示接受",
-              action: { type: "cmd", text: "python cli/board.py bless" } }) },
-      { key: "restart", title: "重启看板", state: "todo",
-        detail: `进程跑的是 ${BOOT_REV},磁盘上已经是 ${onDisk}`,
-        hint: "Ctrl+C 停掉再起同一条命令。卡、事件、账本都在库里,重启不会丢",
-        action: { type: "cmd", text: "node core/server.mjs" } },
-      { key: "sentries", title: "重挂两哨", ...(sentries.size === 0
-          ? { state: "todo", detail: "现在没有哨连着", hint: "重启看板之后再挂,挂的就是新代码",
-              action: { type: "cmd", text: "python watchers/sse_watch.py" } }
-          : staleSentries.length
-            ? { state: "todo", detail: `${sentries.size} 个哨连着,其中 ${staleSentries.length} 个跑的是旧代码`,
-                hint: "哨是独立进程:看板重启不会更新它们,要自己停掉重挂",
-                action: { type: "cmd", text: "python watchers/sse_watch.py" } }
-            : { state: "done", detail: `${sentries.size} 个哨已经是 ${onDisk}` }) },
-    ],
+  const g = gatedTree();
+  const pv = g.tree ? acceptPreview(g.tree, readAccepted()) : null;
+  const c = store.counts(db);
+  const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
+  const keep = "卡、事件、账本都在库里,不会丢" + (live.length ? `;在跑的线(${live.join(" ")})先停下,新进程起来后照原样恢复` : "");
+  const interrupt = c.in_progress
+    ? `⚠ 有 ${c.in_progress} 张卡正在跑:更新会打断它们,卡回到「未开始」由线重领。想等它们交付再更新,就先取消。` : "";
+  const needAccept = bl.state !== "done" && !!pv;
+  const steps = [
+    { key: "bless", title: "接受新代码", state: bl.state === "done" ? "done" : bl.state === "blocked" ? "blocked" : "todo",
+      detail: bl.state === "done" ? bl.detail
+            : pv && pv.files != null ? `上次接受 → 这次改了 ${pv.files} 个文件,按「更新」时会先列给你看`
+            : pv ? "首次接受,按「更新」时会先列出版本" : bl.detail },
+    { key: "restart", title: "重启看板", state: "todo",
+      detail: `进程跑的是 ${BOOT_REV},磁盘上已经是 ${onDisk}`, hint: keep + (interrupt ? "。" + interrupt : "") },
+    ...(sentries.size ? [{ key: "sentries", title: "通知进程", state: "done",
+      detail: `${sentries.size} 个连着 —— 重启后会自动重连并换成新代码` }] : []),
+  ];
+  const apply = {
+    path: needAccept ? "/api/upgrade/apply" : "/api/setup/restart", label: "更新到新代码",
+    body: needAccept ? { confirm_tree: pv.tree } : {}, in_progress: c.in_progress, lines: live,
+    confirm: [`把看板从 ${BOOT_REV} 更新到 ${onDisk}。`, "",
+              ...(needAccept ? [pv.confirm] : bl.state === "done" ? ["新代码已经接受过了。"] : [`(${bl.detail})`]),
+              "", `接着看板会自己重启:${keep}。`, ...(interrupt ? ["", interrupt] : [])].join("\n"),
   };
+  return { measurable: true, pending: true, running: BOOT_REV, on_disk: onDisk, steps, apply };
 }
 
 function setupState() {
@@ -623,7 +709,8 @@ function setupState() {
                    return drift
                      ? { state: "done", detail: `${CONFIG_FILE} —— ⚠ ${drift.join("/")} 改过了,看板还在用启动时读到的旧值`,
                          hint: "重启看板让新值生效 —— 这几项只在启动时读一次;加线不用重启",
-                         action: { type: "cmd", text: "node core/server.mjs" } }
+                         drift: true, action: { type: "api", method: "POST", path: "/api/setup/restart", label: "重启看板",
+                                                confirm: "重启看板,让它读到改过的配置。\n\n卡、事件、账本都在库里,不会丢;在跑的线会先停下,起来后照原样恢复。" } }
                      : { state: "done", detail: CONFIG_FILE }; })()
         : { state: "todo", detail: "点下面的按钮,生成一份属于你的配置文件",
             hint: "你的线、端口、工作仓路径都会写在这份文件里;它被 gitignore,只留在这台机器。现在用的是内置缺省,线只有 alpha 和 coord 两条占位",
@@ -633,27 +720,13 @@ function setupState() {
         : !hasConfig
           ? { state: "blocked", detail: "先做上一步 —— 你的线就写在那份配置里" }
           : { state: "todo", detail: `内置的 ${builtinIds} 只是占位,换成你自己的活分几条`,
-              hint: "「线」= 一条自动领卡、一张接一张干下去的流水线,按你的工作切:比如 后端 / 前端 / 文档。用上面的「加线」框直接加(写进配置即生效,不用重启),或按下面的按钮让你的 Claude 看看你最近在忙什么、替你起草几条",
+              hint: "「线」= 一条自动领卡、一张接一张干下去的流水线,按你的工作切:比如 后端 / 前端 / 文档。用上面的「加线」框直接加,或按下面的按钮让你的 Claude 看看你最近在忙什么、替你起草几条",
               action: { type: "quick", kind: "propose-lines", label: "让我的 Claude 替我起草线路" } }) },
     { key: "bless", title: "接受当前代码(起线的前提)", ...blessStep() },
-    { key: "sentry", title: "挂上通知:卡交付了、指令按了,你能知道", ...(sentries.size > 0
-        ? { state: "done", detail: `${sentries.size} 个通知进程连着 —— 板上的事会自动出现在那个对话里` }
-        : { state: "todo", detail: "现在没挂通知,板上发生什么都不会有人知道",
-            hint: "在看板目录开一个终端跑这行。挂上之后,worker 交完卡、你按了快捷指令,消息就推到你的对话里;不挂就全部静默发生。最好让你的 Claude 把它挂在持续监视下 —— 那个对话就成了「协调席」",
-            action: { type: "cmd", text: "python watchers/sse_watch.py" } }) },
-    { key: "cycle", title: "跑通一整轮", ...(c.done > 0
-        ? { state: "done", detail: `已经有 ${c.done} 张卡走完了全程` }
-        : (c.not_started + c.in_progress + c.waiting) > 0
-          ? { state: "todo", detail: "板上有卡了 —— 去「自动拉取」行按启动,让线跑一圈",
-              hint: "线会自己领卡干活;卡交付后落到「等待中」,由你验收 —— 通过还是打回,永远是你来点",
-              action: { type: "focus", target: "rig", label: "带我去「自动拉取」行" } }
-          : { state: "todo", detail: "板上还没有卡 —— 先种三张演示卡跑一遍(不花 token)",
-              hint: "跑下面这行就有三张演示卡;或者直接在左边「目标」栏写下一个真目标,让板把它拆成卡",
-              action: { type: "cmd", text: "node examples/seed_demo.mjs" } }) },
   ];
   const doneN = steps.filter((s) => s.state === "done").length;
   return { steps, done: doneN, total: steps.length, complete: doneN === steps.length,
-           version: BOOT_REV, upgrade: upgradeState() };
+           version: BOOT_REV, sentries: sentries.size, upgrade: upgradeState() };
 }
 
 const badLine = (res, line, allowed) => allowed.includes(line) ? false
@@ -1964,7 +2037,16 @@ const server = http.createServer(async (req, res) => {
       //   sentry without the marker simply does not count as one: unknown falls
       //   on the not-yet side, never on the "you're all set" side.
       const isSentry = url.searchParams.get("as") === "sentry";
-      if (isSentry) sentries.set(res, { rev: url.searchParams.get("rev") || null, at: Date.now() });
+      if (isSentry) {
+        const rev = url.searchParams.get("rev") || null;
+        sentries.set(res, { rev, at: Date.now() });
+        // ⭐ v0.18: a sentry that reconnects after an upgrade is still running the old file. Tell
+        //   it here, first thing: a v0.18+ sentry re-runs itself on this; an older one prints it
+        //   for its coordinator. Nobody has to remember to remount.
+        const now = codeRev();
+        if (rev && now && rev !== now)
+          try { res.write(`event: change\ndata: ${JSON.stringify({ type: "sentry.stale", your_rev: rev, board_rev: now })}\n\n`); } catch {}
+      }
       const ka = setInterval(() => { try { res.write(": ka\n\n"); } catch {} }, 25000);
       req.on("close", () => { clearInterval(ka); clients.delete(res); sentries.delete(res); });
       return;
@@ -2016,6 +2098,31 @@ const server = http.createServer(async (req, res) => {
       copyFileSync(join(CODE_ROOT, "examples", "fleet.config.json"), CONFIG_FILE);
       console.log(`配置已生成: ${CONFIG_FILE}(从 examples/ 抄来)—— 改动 lines/port/repo 后重启生效;加线可免重启`);
       return json(res, 201, { config_file: CONFIG_FILE, setup: setupState() });
+    }
+    // ⭐ v0.18: the guide's 「接受当前代码」. Operator token (guardWrite ran above) AND the tree the
+    //   human was shown — see acceptTree. Not a one-click "accept whatever is there".
+    if (m === "POST" && p === "/api/setup/bless") {
+      const b = await readBody(req);
+      return json(res, 200, { ...acceptTree(b.confirm_tree, "panel"), setup: setupState() });
+    }
+    // ⭐ Restart from the panel (v0.18); /api/upgrade/apply = accept the shown tree, then restart.
+    //   Refuses while cards are in flight unless the caller says it saw that (`force`) — the
+    //   panel's confirm text names the count; a script calling blind does not get to interrupt.
+    if (m === "POST" && (p === "/api/setup/restart" || p === "/api/upgrade/apply")) {
+      const b = await readBody(req);
+      const c = store.counts(db);
+      if (c.in_progress > 0 && !b.force)
+        return json(res, 409, { error: `有 ${c.in_progress} 张卡在跑 —— 现在重启会打断它们(卡回到未开始,由线重领)。确认要打断就带 force 再来`,
+                                in_progress: c.in_progress, needs_force: true });
+      let accepted = null;
+      if (p === "/api/upgrade/apply") {
+        const g = gatedTree();
+        if (g.tree && readAccepted() !== g.tree) accepted = acceptTree(b.confirm_tree, "panel-upgrade").accepted;
+      }
+      const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
+      json(res, 202, { restarting: true, mode: RESTART_MODE, from: BOOT_REV, to: codeRev(), lines: live, accepted });
+      setTimeout(() => { void restartBoard(p === "/api/upgrade/apply" ? "panel-upgrade" : "panel-restart"); }, 80);
+      return;
     }
     if (m === "GET" && p === "/api/meta") {
       return json(res, 200, {
@@ -2662,8 +2769,20 @@ try { savePools(); updateGlobalStopMarker("server-start"); }
 catch (e) { console.error("池全局停止标记初始化失败:", e.message); }
 setInterval(() => { void reconcilePools("timer"); }, POOL_RECONCILE_MS).unref?.();
 
+// ⭐ EADDRINUSE used to be an uncaught stack trace. One line — and when this process is the
+//   successor of a panel restart, give the predecessor a few seconds to let go of the port
+//   instead of dying on the race.
+let bindTries = 0;
+server.on("error", (e) => {
+  if (e.code === "EADDRINUSE" && process.env.BOARD_RESTARTED_FROM && bindTries++ < 20)
+    return void setTimeout(() => server.listen(PORT, HOST), 250);
+  console.error(e.code === "EADDRINUSE" ? `端口 ${PORT} 已被占用 —— 是不是已经有一个看板在跑?` : `监听失败: ${e.message}`);
+  process.exit(1);
+});
 server.listen(PORT, HOST, () => {
   console.log(`看板 http://${HOST}:${PORT}  DB=${store.DB_PATH}`);
+  if (process.env.BOARD_RESTARTED_FROM)
+    console.log(`↻ 由「更新」重启接手: ${process.env.BOARD_RESTARTED_FROM} → ${BOOT_REV}(${process.env.BOARD_RESTART_TRIGGER || "panel"})`);
   console.log(`状态四值: ${store.STATUS.join(" / ")}`);
   console.log(`配置: ${existsSync(CONFIG_FILE) ? CONFIG_FILE : "(内置缺省)"}  线=${LINES.join(",")}  路由=${ROUTES.join(",")}`
     // A knob that silently does nothing is worse than no knob: say it out loud when set.
@@ -2776,6 +2895,49 @@ async function stopWithBoard(trigger) {
     }
   }
   process.exit(0);
+}
+/** The panel's 「更新」/「重启看板」 (v0.18). Same shutdown as stopWithBoard — lines stopped with
+ *  their intent kept, so the successor restores them — then either exit 75 for an outer
+ *  supervisor or start the successor ourselves (RESTART_MODE). */
+async function restartBoard(trigger) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
+  if (live.length) {
+    console.log(`重启(${trigger}): 先停 worker ${live.join(" ")}(意图保留,新进程起来后照原样恢复)…`);
+    for (const l of live) {
+      try { await workerStop(l, { keepIntent: true, reason: STOP_REASON.WITH_BOARD }); } catch {}
+    }
+  }
+  emit("board.restarting", { trigger, mode: RESTART_MODE, from: BOOT_REV, to: codeRev() });
+  await new Promise((r) => setTimeout(r, 150));   // let that event and the 202 leave the socket
+  for (const c of clients) { try { c.end(); } catch {} }   // open SSE streams would hold close() forever
+  await new Promise((r) => { server.close(() => r()); server.closeAllConnections?.(); });
+  try { db.close(); } catch {}
+  if (RESTART_MODE === "exit") {
+    console.log(`重启(${trigger}): 以 exit 75 退出,交给外层(npm start 守护 / pm2 / systemd)在原地重起`);
+    process.exit(75);
+  }
+  // Bare `node core/server.mjs`: nobody outside will restart us, so start the successor here.
+  // Detached (see RESTART_MODE) — which means it has left this console: its output goes to a
+  // file, and this line says which one.
+  const logPath = join(store.DATA_DIR, "board.log");
+  let logFd = "ignore";
+  try { logFd = openSync(logPath, "a"); } catch (e) { console.error(`打不开 ${logPath}(${e.message})—— 新进程的日志将丢弃`); }
+  const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
+    cwd: process.cwd(), detached: true, stdio: ["ignore", logFd, logFd], windowsHide: true,
+    env: { ...process.env, BOARD_RESTARTED_FROM: BOOT_REV || "?", BOARD_RESTART_TRIGGER: trigger },
+  });
+  child.once("spawn", () => {
+    child.unref();
+    console.log(`重启(${trigger}): 新进程 pid ${child.pid} 接手 ${HOST}:${PORT},本进程退出。`
+      + `它已脱离本终端:日志在 ${logPath};要停它用面板或 kill ${child.pid}(想让日志留在终端、Ctrl+C 照旧,用 npm start 起板)`);
+    process.exit(0);
+  });
+  child.once("error", (e) => {
+    console.error(`重启(${trigger}): 起不了新进程(${e.message})—— 本进程已停止服务,请手动重新执行原来的启动命令`);
+    process.exit(1);
+  });
 }
 // ⭐ A named function, not a body inlined in the handler, because an external SIGTERM
 //   on Windows is TerminateProcess: the handler below never runs, so this path could
