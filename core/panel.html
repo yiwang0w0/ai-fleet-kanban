@@ -1347,7 +1347,7 @@ function renderLineage(wrap){
     svg += `<g class="tl-ghead" data-tlgroup="${g.key}">` +
       `<rect x="2" y="${g.headY}" width="${W - 4}" height="${HEADH - 4}" fill="${gc}" opacity=".07" rx="4"/>` +
       `<text x="8" y="${g.headY + 13}" fill="${gc}">${g.open ? "▾" : "▸"} ${glab} · ${g.members.length} 张 · ${g.nev} 事件</text>` +
-      `<title>${g.open ? "点击折叠" : "点击展开"}</title></g>`;
+      `<title>${g.open ? "点击收起" : "点击展开"}</title></g>`;
     if (!g.open) continue;
     const X = (ev) => g.colX.get(ev);
     const Y = (m) => g.y0 + g.laneOf.get(m) * LROW + 10;
@@ -1433,7 +1433,7 @@ function renderLineage(wrap){
     `${gArr.length} 组 · ${inc.size} 张 · ${evTotal} 事件${rangeLab ? " · " + rangeLab : ""}`;
   document.getElementById("tl-note").textContent = focusing
     ? `聚焦中: 只画 #${focusId} 家族(再点该卡节点=恢复全图)`
-    : `横=事件顺序(时刻见悬浮/时变小字) 纵=活跃分支(完成即回收轨道) ╮派生 ╯合流(仅完成) ●启动 ■开工 ○等待 ◌来自此前 · 点组行折叠/展开 · 点节点=只留该家族`;
+    : `横=事件顺序(时刻见悬浮/时变小字) 纵=活跃分支(完成即回收轨道) ╮派生 ╯合流(仅完成) ●启动 ■开工 ○等待 ◌来自此前 · 点组行收起/展开 · 点节点=只留该家族`;
 }
 document.addEventListener("click", (e) => {
   const gh = e.target.closest("[data-tlgroup]");
@@ -2217,13 +2217,13 @@ function renderCtx(){
     const pct = Math.min(100, Math.round((c.tokens || 0) / lim * 100));
     const cls = pct >= 80 ? "bad" : pct >= 55 ? "warn" : "";
     const lc = c.last_compact
-      ? `上次整理 ${kfmt(c.last_compact.pre)}→${kfmt(c.last_compact.post)}`
-      : (c.compactions ? "" : "未整理过");
+      ? `上次压缩 ${kfmt(c.last_compact.pre)}→${kfmt(c.last_compact.post)}`
+      : (c.compactions ? "" : "未压缩过");
     return `<div class="cl">
       <span class="nm" style="color:${lineColor(c.line)}">${esc(lineLabel(c.line))}</span>
       <span class="bar ${cls}"><i style="width:${pct}%"></i></span>
       <span class="num">${kfmt(c.tokens)} / ${kfmt(lim)} tok · ${c.messages} 条 · ${esc(lc)}</span>
-      <button data-ctx="${c.line}">整理上下文</button>
+      <button data-ctx="${c.line}">压缩上下文</button>
     </div>`;
   }).join("");
 }
@@ -2361,15 +2361,15 @@ document.addEventListener("click", async (e) => {
   const cx = e.target.closest("button[data-ctx]");
   if (cx){
     const line = cx.dataset.ctx;
-    cx.disabled = true; const old = cx.textContent; cx.textContent = "整理中…";
+    cx.disabled = true; const old = cx.textContent; cx.textContent = "压缩中…";
     try{
       const r = await post(`/api/context/${line}/compact`, {});
-      alert(`${line} 整理完成
+      alert(`${line} 压缩完成
 ${kfmt(r.before)} → ${kfmt(r.after)} tok
 
 它给自己写的保留指示:
 ${r.memo}`);
-    }catch(err){ alert("整理失败:" + err.message); }
+    }catch(err){ alert("压缩失败:" + err.message); }
     finally{ cx.disabled = false; cx.textContent = old; await refresh(); }
     return;
   }
@@ -2468,7 +2468,7 @@ ${r.memo}`);
       // like nothing happened — say WHAT happened (this path once threw 409 lies).
       if (r && r.already_idle)
         alert(`${wk.dataset.wk}: ${r.note}` + (r.released && r.released.length ? `
-在途 ${r.released.join(",")} 已收回未开始。` : ""));
+在途 ${r.released.join(",")} 已回收至未开始。` : ""));
     }
     catch(err){ alert("worker 操作失败:" + err.message); }
     setTimeout(refresh, 400); return;

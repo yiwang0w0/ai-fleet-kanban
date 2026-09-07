@@ -167,7 +167,7 @@ def main():
                      # worker's runtime badge (measured).
                      "runtime": os.environ.get("BOARD_CLI_RUNTIME", "cli")})
         if s == 204 or not d.get("task"):
-            print("没有可认领的任务(路由/放行/依赖/锁 都会挡住,不是错误)"); return
+            print("没有可认领的卡(路由/放行/依赖/锁 都会挡住,不是错误)"); return
         if s >= 400: die(s, d)
         t = d["task"]
         print(f"已认领 #{t['id']}(第 {t['attempts']}/{t['max_attempts']} 次): {t['subject']}")

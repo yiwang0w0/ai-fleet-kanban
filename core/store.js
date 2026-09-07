@@ -1315,7 +1315,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
     //   claiming a missing id was the one 409 while GET gave 404 and other write
     //   endpoints 400).
     const no = (why, code = ERR.CONFLICT) => { db.exec("COMMIT"); return { ok: false, why, code }; };
-    if (!t) return no(`任务 ${id} 不存在`, ERR.NOT_FOUND);
+    if (!t) return no(`卡 #${id} 不存在`, ERR.NOT_FOUND);
     if (t.kind === "goal") return no(`#${id} 是目标,目标不能被认领`);
     if (t.archived_at) return no(`#${id} 已归档`);
     if (t.status !== "not_started") return no(`#${id} 现在是 ${t.status}(持有者 ${t.worker || "-"}),不是未开始`);
@@ -1444,9 +1444,9 @@ function releaseHeldBy(db, worker) {
  *  "working" from "dead but lease not yet expired". */
 function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
-  if (t.status !== "in_progress") throw err(ERR.CONFLICT, `任务 ${id} 状态是 ${t.status},不是 in_progress`);
-  if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `任务 ${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
+  if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress`);
+  if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
   // ⭐ Leases only move FORWARD. Default parameters only kick in on `undefined`, so a
   //   raw `lease_minutes: 0` (or negative, or NaN) passing through would set
   //   `lease_until = now` — and the next reaper sweep takes the card away from a
@@ -1464,7 +1464,7 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
   const r = db.prepare(
     "UPDATE tasks SET heartbeat_at=?, lease_until=?, updated_at=? WHERE id=? AND status='in_progress' AND worker=?")
     .run(ts, ts + mins * 60000, now(), Number(id), String(worker));
-  if (!r.changes) throw err(ERR.CONFLICT, `任务 ${id} 在续租期间被收回或改手,未续租`);
+  if (!r.changes) throw err(ERR.CONFLICT, `卡 #${id} 在续租期间被回收或改手,未续租`);
   // ⭐ Return the card itself. Of the five write endpoints this was the only
   //   projection, with neither `status` nor `lease_until` ⇒ callers had to re-GET
   //   to learn "did it extend, until when".
@@ -1484,9 +1484,9 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
 function report(db, { id, worker, outcome, evidence = "" }) {
   if (!["done", "wait"].includes(outcome)) throw err(ERR.BAD_INPUT, "outcome 必须是 done 或 wait");
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
-  if (t.status !== "in_progress") throw err(ERR.CONFLICT, `任务 ${id} 状态是 ${t.status},不是 in_progress,不能交付`);
-  if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `任务 ${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
+  if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress,不能交付`);
+  if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
   // ⭐ Span close and state transition share ONE transaction (measured concern: split
   //   in two, a crash in between leaves "in_progress but span closed" — a torn state).
   const waitingFor = outcome === "done" ? "review" : "decision";
@@ -1506,7 +1506,7 @@ function report(db, { id, worker, outcome, evidence = "" }) {
         WHERE id=? AND status='in_progress' AND worker=?`
     ).run(waitingFor, String(evidence), now(), Number(id), String(worker));
     if (!r.changes)
-      throw err(ERR.CONFLICT, `任务 ${id} 在交付期间被收回或改手,本次交付未落盘`);
+      throw err(ERR.CONFLICT, `卡 #${id} 在交付期间被回收或改手,本次交付未落盘`);
     appendEvent(db, {
       taskId: Number(id), kind: "report", actor: worker,
       detail: eventState({ ...t, status: "waiting" }, {
@@ -1633,8 +1633,8 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
                        disposition = null, sqlReceipt = null }) {
   if (!["approve", "reject"].includes(verdict)) throw err(ERR.BAD_INPUT, "verdict 必须是 approve 或 reject");
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
-  if (t.status !== "waiting") throw err(ERR.CONFLICT, `任务 ${id} 状态是 ${t.status},没有待裁定的产出`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
+  if (t.status !== "waiting") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},没有待裁定的产出`);
   const said = String(note || "").trim();
 
   // ⭐ If the caller declares a disposition, that wins; undeclared falls back to the
@@ -1796,9 +1796,9 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
  */
 function bumpAttempt(db, { id, worker }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
-  if (t.status !== "in_progress") throw err(ERR.CONFLICT, `任务 ${id} 状态是 ${t.status},不是 in_progress`);
-  if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `任务 ${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
+  if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress`);
+  if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
   db.prepare("UPDATE tasks SET attempts=attempts+1, updated_at=? WHERE id=?").run(now(), Number(id));
   const n = Number(t.attempts) + 1;
   // The anchor (attempts_base) does NOT move — this is round 2 or 3 of the SAME
@@ -1818,7 +1818,7 @@ function bumpAttempt(db, { id, worker }) {
  */
 function markAutoReviewed(db, { id, note = "", decisionPackage = null }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   // ⭐ ONE statement (v0.12.1). This used to be two UPDATEs: the package swap, then a
   //   read-modify-write that stamped consumed_at on an unconsumed receipt. A crash
   //   between them left "new A/B/C package + live receipt for the OLD package", which
@@ -2171,7 +2171,7 @@ function updateInner(db, fields) {
           subject, description, acceptance, parentId, weight, humanGate,
           oneofKey, provesParent, blockedBy } = fields;
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   // An in-progress card refuses edits to EVERY field, with exactly one exception: a
   // pure tail-append to `description`.
   //   · The old refusal text named only "moving the line", so callers who were not
@@ -2199,7 +2199,7 @@ function updateInner(db, fields) {
     description.length > oldDescription.length &&
     description.startsWith(oldDescription);
   if (t.status === "in_progress" && !liveDescriptionAppend)
-    throw err(ERR.CONFLICT, `任务 ${id} 是 in_progress(持有者 ${t.worker}),不可 edit 任何字段;` +
+    throw err(ERR.CONFLICT, `卡 #${id} 是 in_progress(持有者 ${t.worker}),不可 edit 任何字段;` +
       `唯一例外是保留 description 原文并在末尾追记。worker prompt 在认领时已快照,本轮 worker 看不到追记`);
   const sets = [], args = [];
   // Dependency edges are writable. Invalid input throws ⇒ the whole update fails and
@@ -2297,7 +2297,7 @@ function updateInner(db, fields) {
 /** Pin a goal. Its child tasks come out of claim first. Unpin with pinned=false. */
 function setPinned(db, { id, pinned }) {
   const t = db.prepare("SELECT kind FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.kind !== "goal") throw err(ERR.BAD_INPUT, `#${id} 不是目标,只有目标能置顶`);
   db.prepare("UPDATE tasks SET pinned_at=?, updated_at=? WHERE id=?")
     .run(pinned ? now() : null, now(), Number(id));
@@ -2311,7 +2311,7 @@ function setReleased(db, { id, released, actor = "human" }) {
   try {
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(id));
-    if (!before) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+    if (!before) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
     const value = released ? 1 : 0;
     db.prepare("UPDATE tasks SET released=?, updated_at=? WHERE id=?").run(value, now(), Number(id));
     // ⚠ Shares the `release` kind with returning an in-flight card; told apart by
@@ -2352,9 +2352,9 @@ function reopen(db, args) {
 
 function reopenInner(db, { id, line }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
-  if (!t) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+  if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status === "in_progress")
-    throw err(ERR.CONFLICT, `任务 ${id} 正在被 ${t.worker} 处理 —— 先停掉那条线,或等它交回来`);
+    throw err(ERR.CONFLICT, `卡 #${id} 正在被 ${t.worker} 处理 —— 先停掉那条线,或等它交回来`);
   if (t.status === "not_started") return { id: Number(id), status: "not_started", changed: false };
   // ⭐ Same as update(): the provenance stamp is mixed into THIS one statement.
   //   ⚠ Argument order follows fragment position: the two CASE params → stamp (if
@@ -2397,7 +2397,7 @@ function archive(db, { id, restore = false, force = false }) {
 
   if (!restore) {
     const t0 = db.prepare("SELECT kind, status FROM tasks WHERE id=?").get(taskId);
-    if (!t0) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+    if (!t0) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
     checkArchiveGuard(t0);
   }
 
@@ -2415,7 +2415,7 @@ function archive(db, { id, restore = false, force = false }) {
     // Stopped by the UPDATE-side gate after a post-SELECT race: never misreport an
     // existing card as 404.
     const current = db.prepare("SELECT kind, status FROM tasks WHERE id=?").get(taskId);
-    if (!current) throw err(ERR.NOT_FOUND, `任务 ${id} 不存在`);
+    if (!current) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
     checkArchiveGuard(current);
     throw err(ERR.CONFLICT, `#${id} 的状态在归档期间发生变化,请刷新后重试`);
   }

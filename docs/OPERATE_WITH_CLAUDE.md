@@ -150,7 +150,7 @@ worker 家规(范围闸门四问=防过度工程化、pathspec 提交、密钥�
 | `coordinator-seat` | 部署对话就任主对话(协调席) | 声明就任+挂两哨;继任=新对话说「接管看板」;双席治理=事故源 |
 | `add-line` | 添加/调整自动拉取线 | 唯一入口是 `fleet.config.json` 的 `lines[]`;改完必须重启 server |
 | `propose-lines` | 从你近期的会话起草线路 | **当轮明示授权才动**,只读检索+访谈确认,读了什么报账 |
-| `context-window` | 查各线上下文窗口占用 | `GET /api/context`;整理(compact)有缓存变冷的代价,默认不做 |
+| `context-window` | 查各线上下文窗口占用 | `GET /api/context`;压缩(compact)有缓存变冷的代价,默认不做 |
 | `pool-quota` | 查池状态与各卡 token 消耗 | `GET /api/pools` + `GET /api/usage`;池耗尽=状态不是故障,等恢复 |
 
 它们的共同立场:**只走既有入口,不新增代码**。你的 Claude 想做的事这三条路给不了时,

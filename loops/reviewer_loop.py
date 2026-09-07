@@ -115,24 +115,24 @@ def call(method, path, body=None):
 #      worker 散文里的 PASS/rc 数字,若同一份证据里自陈「一条都没跑」,则**不采信**
 #      —— 那是预期值或抄来的,不是这一轮产出的。
 
-# 验收を「条」へ割る印。①〜⑳ / 1) 1） 1. 1、 —— 行头でも文中でも拾う。
-# ⛔字類は**半角と全角を両方**入れてある(卡面は両方混在する)。⚠見た目が同じ字なので
-#   grep でも差が見えない —— 片方を落とすと「なぜか或る卡だけ 1 条に見える」という
-#   **静かな**壊れ方をする。此処を触る時は文字数(class の要素数)を数えて確かめる事。
+# 把验收切成「条」的记号。①〜⑳ / 1) 1） 1. 1、 —— 行头与文中都认。
+# ⛔字符类里**半角和全角都放了**(卡面两种混着出现)。⚠两者看上去是同一个字,
+#   grep 也看不出差别 —— 漏掉一种,就会出现「不知为何某张卡只算 1 条」这种
+#   **静默的**坏法。改这里时要数一下字符类的元素个数来确认。
 _ITEM_MARK = re.compile(
     r"[①-⑳]"
     r"|(?:^|(?<=[\s;；。,，、]))"
     r"[(（]?\d{1,2}[)）.．、]", re.M)
 
-# 「この条は機械が要る」の印。動詞(走らせる)と名詞(その出力)と道具名の三系統。
-#   ⛔「测试」「断言」単体は入れない —— 拾い過ぎると門が広過ぎて escalate の山になる。
+# 「这一条需要机器」的记号。动词(跑)、名词(它的输出)、工具名,三个系统。
+#   ⛔「测试」「断言」单独出现不算 —— 认得太宽,门就太宽,转人工(escalate)会堆成山。
 _DEMAND = [
     ("要跑",   r"跑|実行|执行|运行|実測|实测|实跑|复现|重启|启动|联调"),
     ("要输出", r"输出|stdout|机器产出|日志|贴出|贴上|贴机器|rc=|PASS|FAIL|全绿|绿|截图"),
     ("点名工具", r"curl|node |npm|tsc|vite|build|git |sqlite|selftest|servertest|looptest"
                  r"|decisiontest|gatetest|decomposetest|pytest|unittest"),
 ]
-# 機械産出の形。**loop 由来**(先頭)と**散文由来**(残り)を分けて持つ。
+# 机器产出的形状。**loop 产出**(前段)与**散文产出**(其余)分开持有。
 _EV_LOOP  = r"——\s*验证\(由循环执行"
 _EV_PROSE = [
     ("PASS/FAIL 计数", r"\d+\s*(?:项|個|个|件)?\s*(?:PASS|FAIL|合格|不合格)|(?:PASS|FAIL)\s*\d+|\[OK\]|\[FAIL\]"),
@@ -140,15 +140,15 @@ _EV_PROSE = [
     ("报错原文",       r"Traceback \(most recent call last\)|at Object\.<anonymous>|SyntaxError:|AssertionError"),
     ("HTTP 实测码",    r"HTTP/1\.[01]\s+\d{3}|←\s*\d{3}\b"),
 ]
-# 「今回は一つも走らせていない」の自陈。之が在る時、散文由来の数字は採らない。
+# 「这次一个都没跑」的自陈。有它在,散文里的数字一律不采。
 _NO_RUN = (r"一条(命令)?都?没(跑|执行)|一条也没跑|零执行|零命令|没有跑过任何|什么都没跑"
            r"|跑了什么[::]\s*(零|无|没有|一条|什么都没)|未跑过任何|没跑过任何|一次都没(跑|执行)")
 
 
 def acceptance_items(text):
-    """验收を機械的に「条」へ割る。散文を読んで数える代わりに**数を出す**。
-    ⭐印が一つも無い時は全文を 1 条として返す —— 「割れなかったから 0 条」にはしない。
-      0 条にすると門が素通しになる。割れない验收こそ人が見るべき形。"""
+    """把验收机械地切成「条」。不靠读散文去数,而是**直接给出数目**。
+    ⭐一个记号都没有时,把全文当 1 条返回 —— 不因为「切不开」就算 0 条。
+      算 0 条,门就成了直通。切不开的验收正是该由人看的形状。"""
     s = (text or "").strip()
     if not s:
         return []
@@ -156,7 +156,7 @@ def acceptance_items(text):
     if not marks:
         return [s]
     head = s[:marks[0]].strip()
-    # 「验收标准:」の様な見出しは条ではない。「:」は半角(U+003A)と全角(U+FF1A)の両方。
+    # 「验收标准:」这类标题不是条。「:」认半角(U+003A)与全角(U+FF1A)两种。
     if head and not (len(head) <= 12 and head.endswith((":", "："))):
         marks.insert(0, 0)
     out = []
@@ -168,12 +168,12 @@ def acceptance_items(text):
 
 
 def demand_tags(item):
-    """この一条が機械を要求しているか。要求している理由(系統名)を返す。空 = 要求無し。"""
+    """这一条是否要求机器。返回要求的理由(系统名)。空 = 不要求。"""
     return [name for name, pat in _DEMAND if re.search(pat, item or "", re.I)]
 
 
 def machine_evidence(t, vr=None):
-    """機械産出の有無。**来源で信頼度を分ける**(設計約束③)。"""
+    """有没有机器产出。**按来源区分可信度**(设计约束③)。"""
     r = str(t.get("result") or "")
     hits, muted = [], []
     if vr and vr.get("ok"):
@@ -190,8 +190,8 @@ def machine_evidence(t, vr=None):
 
 
 def suggest_verify_key(t):
-    """验收/说明が登録簿の鍵を名指していれば其れを返す。**新しい鍵は作らない**
-    —— 登録簿へ書くのは協調(operator)の権限動作。"""
+    """验收/说明若点名了登记簿里的键,返回它。**不造新键**
+    —— 往登记簿里写是协调(operator)的权限动作。"""
     hay = " ".join(str(t.get(k) or "") for k in ("acceptance", "description", "subject"))
     for k in verify_registry():
         if re.search(r"\b" + re.escape(k) + r"\b", hay, re.I):
@@ -200,8 +200,8 @@ def suggest_verify_key(t):
 
 
 def coverage_block(t, vr=None):
-    """提示词へ挿す**機械の勘定**。審阅が散文を読んで数えるのを止めさせる。
-    ⚠之は判定ではなく材料 —— 判定は gate_verdict が別に撃つ。両方が同じ関数を使う。"""
+    """插进提示词的**机器清点**。让审阅别再读散文去数。
+    ⚠这是材料不是判定 —— 判定由 gate_verdict 另行执行。两边用同一个函数。"""
     items = acceptance_items(t.get("acceptance"))
     ev = machine_evidence(t, vr)
     L = ["—— 验收逐条(机械拆分。这不是我的意见,是从卡面数出来的)——"]
@@ -224,15 +224,15 @@ def coverage_block(t, vr=None):
 
 
 def _gate_core(t, d, vr=None):
-    """模型の判読の後ろに置く機械の門(機器産出閘の本体)。approve だけを見て、
-    判据が足りなければ escalate へ落とす。
-    ⭐模型の原判は消さずに残す(reason に併記)—— 後から「門が何を覆したか」を追える様に。
-    ⚠外側に confirm 壁(_confirm_wall)が被さる —— 壁が**末尾**なのは、此処が後半で
-    approve→escalate へ書換える為(先頭に置くと壁は恒緑になる)。"""
+    """放在模型判读之后的机器门(机器产出闸的本体)。只看 approve,
+    判据不够就降为转人工(escalate)。
+    ⭐模型的原判不删,留着(并记进 reason)—— 事后能追「门推翻了什么」。
+    ⚠外面还套着 confirm 壁(_confirm_wall)—— 壁放在**最后**,是因为这里的后半段会
+    把 approve 改写成 escalate(壁放前面就恒绿了)。"""
     if (d or {}).get("verdict") == "escalate":
         bad = validate_escalation(d)
         if bad:
-            # 人に「文件を用意して」と頼む半成品は待确认へ出さず、原 Agent へ loud に返す。
+            # 让人「去准备文件」的半成品不送待确认,显式退回原 Agent。
             return {"verdict": "reject", "reason": "【裁定包机械闸】" + bad +
                     "。原 Agent 请先把可下载的完整文件备好再送审;探测类只读脚本写进仓库并在证据里"
                     "注明相对路径,由协调代跑(worker 的沙箱通常隔断外向通信,实测)。",
@@ -243,17 +243,17 @@ def _gate_core(t, d, vr=None):
     items = acceptance_items(t.get("acceptance"))
     demand = [(i, it, demand_tags(it)) for i, it in enumerate(items, 1) if demand_tags(it)]
     if not demand:
-        return d                      # 机器验证を要求していない卡は素通し(過度に締めない)
+        return d                      # 不要求机器验证的卡直通(不过度收紧)
     ev = machine_evidence(t, vr)
     if ev["ok"]:
-        return d                      # 産出が在る = 本来の approve。門は何もしない
+        return d                      # 有产出 = 本来的 approve。门什么都不做
     tid = t.get("id")
     nos = "、".join("第%d条" % i for i, _, _ in demand[:6]) + ("…" if len(demand) > 6 else "")
     orig = (d.get("reason") or "").strip()
     key = suggest_verify_key(t)
     d = dict(d)
     d["verdict"] = "escalate"
-    d["gated_by"] = "machine-evidence"     # 機械が覆した印(人にも後の集計にも見える)
+    d["gated_by"] = "machine-evidence"     # 机器推翻的记号(人和事后统计都看得见)
     d["model_verdict"] = "approve"
     d["reason"] = ("【机械闸·机器产出】验收有 %d 条要机器验证(%s),而卡上零机器产出 ⇒ 不能自动通过。"
                    % (len(demand), nos)) + ("  模型原判 approve:" + orig if orig else "")
@@ -301,10 +301,10 @@ def _to_reject(d, why):
 
 
 def _confirm_wall(t, d, vr):
-    """confirm 壁 —— 「人が実行を確認した直後の一輪」は構造上二終局のみ。
-    結案できる出口は **approve × 本輪 verify 緑** ただ一つ。escalate は一律 reject へ
-    降格(人へ回問しない —— 人は今裁定したばかり)。
-    ⚠confirm_pending が読めない時は壁不発火 = 従来挙動(不結案側)へ退回。"""
+    """confirm 壁 —— 「人刚确认执行之后的那一轮」结构上只有两种终局。
+    能结案的出口只有 **approve × 本轮 verify 绿** 这一个。转人工(escalate)一律降为 reject
+    (不再回问人 —— 人刚刚才裁定过)。
+    ⚠confirm_pending 读不出来时壁不触发 = 回到旧行为(不结案那一侧)。"""
     if t.get("confirm_pending"):
         green = bool(vr and vr.get("ok"))
         v = (d or {}).get("verdict")
@@ -322,13 +322,13 @@ def _confirm_wall(t, d, vr):
 
 
 def gate_verdict(t, d, vr=None):
-    """機械門の合成: 機器産出閘の**後**に confirm 壁。順序が承重(逆にすると壁は恒緑)。"""
+    """机器门的合成:机器产出闸之**后**接 confirm 壁。顺序承重(反过来壁就恒绿)。"""
     return _confirm_wall(t, _gate_core(t, d, vr), vr)
 
 
 def human_decision_block(t):
-    """confirm 輪の**材料**(判定は gate 側·此処は提示詞に事実を並べるだけ)。
-    confirm_pending が偽なら "" —— 普通卡の提示詞は一字も変わらない。"""
+    """confirm 轮的**材料**(判定在 gate 侧,这里只把事实列进提示词)。
+    confirm_pending 为假就返回 "" —— 普通卡的提示词一个字都不变。"""
     if not t.get("confirm_pending"):
         return ""
     r = t.get("decision_receipt") or {}
@@ -358,9 +358,9 @@ def human_decision_block(t):
 
 
 def line_anchor_block(t):
-    """卡の line に対応する**線圧縮アンカー**の冒頭を提示詞へ(lineage.json —— 形は
-    examples/lineage.example.json)。材料であって門ではない —— 読めない/線に anchor
-    無しは ""(fail-open が正極性: 之は判定材料の追加であって安全判定ではない)。"""
+    """把卡所在线对应的**线压缩锚**的开头放进提示词(lineage.json —— 形状见
+    examples/lineage.example.json)。是材料不是门 —— 读不出来/该线没有 anchor
+    时返回 ""(fail-open 是正确极性:这是追加判定材料,不是安全判定)。"""
     line = t.get("line") or ""
     try:
         with open(os.path.join(DATA, "lineage.json"), encoding="utf-8") as f:
@@ -505,8 +505,8 @@ PROMPT = """你是任务看板的**自动审阅**。判断这张「等待中」�
 """
 
 def family_block(t):
-    """派生関係を判断材料に載せる。⭐親卡の再審は「子卡の結果」が新証拠 —— 之を見せずに
-    再審させると、前回と同じ材料で同じ判決が出るだけで、再審の意味が無い。"""
+    """把派生关系放进判断材料。⭐父卡重审的新证据就是「子卡的结果」—— 不给它看这个
+    就重审,只会用上次的材料得出上次的判决,重审就没有意义。"""
     try:
         s, r = call("GET", f"/api/tasks/{t['id']}/related")
         rows = r.get("tasks") or []
@@ -554,7 +554,7 @@ def review_one(t, vr=None):
     os.makedirs(OUTDIR, exist_ok=True)
     out = os.path.join(OUTDIR, f"verdict-{t['id']}.json")
     try:
-        if os.path.isfile(out): os.remove(out)     # 前回の判決を今回の物と誤認しない
+        if os.path.isfile(out): os.remove(out)     # 别把上一次的判决误认成这一次的
     except Exception: pass
     if RUNTIME == "codex":
         delivery = ("只在最终回复返回一个 JSON 对象,不要写文件、不要包代码块、不要附解释。"
@@ -574,9 +574,9 @@ def review_one(t, vr=None):
         acceptance=("验收标准:\n" + t["acceptance"] + "\n") if t.get("acceptance") else "",
         result=result_for_prompt(t), delivery=delivery, tool_discipline=tool_discipline,
         confirm=human_decision_block(t), anchor=line_anchor_block(t),
-        # ⭐緑の検証も見せる —— origin の初版は run_verify が通った時、其の出力を**捨てて**
-        #   いた(赤の時だけ使う)。審阅からは「検証が在って通った」事が見えず、其の卡の
-        #   approve は結局散文だけを根拠にしていた。
+        # ⭐绿的验证也要给它看 —— origin 的初版在 run_verify 通过时把输出**扔掉了**
+        #   (只在红的时候用)。审阅看不到「有验证而且通过了」这件事,那张卡的
+        #   approve 到底还是只以散文为据。
         coverage=chr(10) + coverage_block(t, vr) +
                  ((chr(10) + chr(10) + "—— 本轮循环已代跑的验证(机器产出,可直接采信)——" +
                    chr(10) + fmt_verify(vr)) if (vr and vr.get("ok")) else ""))
@@ -628,7 +628,7 @@ def review_one(t, vr=None):
         if not os.path.isfile(out):
             return None, f"(没写出判决文件)rc={r.returncode}\n{tail}"
         raw = io.open(out, encoding="utf-8", errors="replace").read().strip()
-    m = re.search(r"\{.*\}", raw, re.S)          # 万一代码块で包まれても拾う
+    m = re.search(r"\{.*\}", raw, re.S)          # 万一被代码块包住也能取到
     try:
         d = json.loads(m.group(0) if m else raw)
     except Exception as e:
@@ -639,15 +639,15 @@ def review_one(t, vr=None):
 
 
 def judge_one(t):
-    """一枚の卡に対する判読の**全経路**。("mech_reject"|"model", 中身, err, vr) を返す。
-    ⭐main の中の閉包ではなく module 関数なのは、**試験から撃てる形**にする為。
-    ⭐vr を返すのは origin の実バグの修正: 旧形は vr が main へ戻らず、審阅経由の
-      resolve に verify_ok が一度も乗らなかった —— 聯動結案(機械緑が引金)が審阅路径で
-      恒久不発だった。効果断言の隣に前提断言を(vr が戻らなければ緑は「起きていない」)。
-    経路は三段で、順序に意味が在る:
-      ① 卡が指名した検証を先に撃つ —— 赤なら模型を焼かずに機械打回。
-      ② 模型が読む(緑の検証出力と逐条の勘定を渡す)。
-      ③ 模型の approve に機器産出の機械闸を掛ける —— 判据が足りなければ escalate へ落とす。"""
+    """对一张卡的判读**全路径**。返回 ("mech_reject"|"model", 内容, err, vr)。
+    ⭐做成模块级函数而不是 main 里的闭包,是为了**能从测试直接调用**。
+    ⭐返回 vr 是修 origin 的一个真 bug:旧形里 vr 回不到 main,经审阅的
+      resolve 上从来没带过 verify_ok —— 联动结案(以机器绿为引信)在审阅路径上
+      永远不会触发。效果断言旁边要放前提断言(vr 没回来,绿就是「没发生」)。
+    路径分三段,顺序有意义:
+      ① 先跑卡点名的验证 —— 红了就机器打回,不烧模型。
+      ② 模型读(把绿的验证输出与逐条清点一并递给它)。
+      ③ 给模型的 approve 套上机器产出闸 —— 判据不够就降为转人工(escalate)。"""
     vr = run_verify(t)
     if vr and not vr.get("ok"):
         return "mech_reject", vr, None, vr
@@ -658,7 +658,7 @@ def judge_one(t):
 
 
 def fmt_escalation(t, d):
-    """人が読む物として組み立てる。判決 JSON を其のまま貼っても誰も読まない。"""
+    """按给人读的样子组装。判决 JSON 原样贴上去没人会读。"""
     L = []
     L.append("## 需要你确认")
     L.append("")
@@ -707,9 +707,9 @@ def apply_verdict(t, d, vr=None):
     note = f"【自动审阅】{reason}"
     if checked: note += "\n核对过:" + " / ".join(str(c) for c in checked)
     if v in ("approve", "reject"):
-        # ⭐联动结案の引金は**機械の緑**であって approve ではない。此処で渡すのは
-        #   「本審で実際に撃った verify の結果」だけ —— 撃っていなければ渡さない
-        #   (推論して true にしない。推論は測定ではない)。
+        # ⭐联动结案的引信是**机器的绿**,不是 approve。这里递过去的只是
+        #   「本次审阅实际跑过的 verify 的结果」—— 没跑过就不递
+        #   (不推断成 true。推断不是测量)。
         body = {"verdict": v, "note": note, "resolved_by": "auto"}
         if vr is not None and vr.get("key"):
             body["verify_ok"] = bool(vr.get("ok"))
@@ -772,21 +772,21 @@ def main():
     # 每轮默认最多 6 件;要不限,显式传 --limit 0。argv 显式给的优先于 env。
     limit = (int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv
              else int(os.environ.get("REVIEWER_LIMIT", "6")))
-    # 无人で回す時は審阅も燃料を食う。締切は worker と同じ形で持たせる。
+    # 无人值守跑的时候审阅也烧燃料。截止时刻与 worker 用同一种形式。
     until = None
     if "--until" in sys.argv:
         import datetime as _dt
         _v = sys.argv[sys.argv.index("--until") + 1]
-        if "T" in _v:            # 絶対時刻(server の標準形)。過去=即時到期、順延しない
+        if "T" in _v:            # 绝对时刻(server 的标准形)。已过 = 立即到期,不顺延
             until = _dt.datetime.fromisoformat(_v)
             if until.tzinfo is not None: until = until.astimezone().replace(tzinfo=None)
-        else:                    # 旧形 HH:MM は順延(人の手打ち用)
+        else:                    # 旧形 HH:MM 顺延(留给人手打)
             hh, mm = (int(x) for x in _v.split(":"))
             now = _dt.datetime.now()
             until = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
             if until <= now: until += _dt.timedelta(days=1)
     log(f"自动审阅 runtime={RUNTIME} model={MODEL} effort={EFFORT} interval={interval}s base={BASE} dry={dry}"
-        + (f" 締切={until:%m-%d %H:%M}" if until else " 締切=無し"))
+        + (f" 截止={until:%m-%d %H:%M}" if until else " 截止=无"))
     while True:
         cgate = context_lib.context_gate(REPO, None, RUNTIME)
         sgate = gates_lib.source_gate(CODE_ROOT, DATA, log=log, loaded_tree=LOADED_TREE)
@@ -796,7 +796,7 @@ def main():
         if until:
             import datetime as _dt2
             if _dt2.datetime.now() >= until:
-                log(f"締切 {until:%H:%M} を過ぎた —— 審阅を終了する(未審の卡は残るだけで壊れない)")
+                log(f"已过截止 {until:%H:%M} —— 审阅结束(未审的卡只是留着,不会坏)")
                 return
         try:
             st, r = call("GET", "/api/review/pending")
@@ -855,8 +855,8 @@ def main():
                     if s0 < 400 else f"  #{t['id']} 机械打回落盘失败 {s0}")
                 continue
             if err:
-                # 审阅自身が落ちた卡にも「見た」印を付ける —— 次周期には拾われない
-                # (壊れた卡で金を燃やし続けない)。卡が動けば自動的に再審対象へ戻る。
+                # 审阅自己崩掉的卡也盖上「看过」的印 —— 下个周期不再捡起
+                # (不在坏卡上一直烧钱)。卡一动就自动回到重审对象里。
                 call("POST", f"/api/tasks/{t['id']}/autoreview",
                      {"note": f"【自动审阅】本次未能出判决:{err[:400]}"})
                 log(f"  #{t['id']} 审阅失败:{err.splitlines()[0][:80]}")
@@ -867,8 +867,8 @@ def main():
         time.sleep(30 if len(todo) > len(batch) else interval)
 
 
-# ⭐素の `main()` だと **import した瞬間に板を叩き始める**ので、判据の門
-#   (gate_verdict / judge_one)だけを試験する事が出来ない。守りを付けても
-#   `python reviewer_loop.py --once` も server.mjs の起動も一切変わらない。
+# ⭐裸的 `main()` 会**在 import 的瞬间就开始敲板**,那样判据的门
+#   (gate_verdict / judge_one)就没法单独测试。加了这道守卫,
+#   `python reviewer_loop.py --once` 与 server.mjs 的启动都一点不变。
 if __name__ == "__main__":
     main()

@@ -656,7 +656,7 @@ process.stdin.on("end", () => {
   ok("⭐'not claimed' is reported as not claimed (no false green)", !cn.claimed,
      `claimed=${cn.claimed} status=${tn?.status} attempts=${tn?.attempts}`);
   ok("the loop DID look and found nothing (missed ≠ never happened)",
-     /无可领任务/.test(rn.out), (rn.out.match(/无可领任务[^\n]*/) || ["(none)"])[0]);
+     /无可领的卡/.test(rn.out), (rn.out.match(/无可领的卡[^\n]*/) || ["(none)"])[0]);
 
   // ── ⑥d entry gate: refuses BEFORE claiming, with exit code 3 (refusal ≠ crash) ──
   console.log("\n[⑥d ⭐entry gate: a batch CLI refuses startup before any card is claimed]");

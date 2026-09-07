@@ -56,7 +56,7 @@ def run_verify(t):
     #     `["python", ...]` 的键依然赌 PATH(Windows 还可能撞上商店占位 exe)。
     #     **半接线状态最危险** —— 读的人以为接上了。
     #   ⭐sys.executable = 正在跑本 loop 的实体,是唯一不靠环境约定的权威源。
-    #   ⛔映射不了就 loud 失败,不赌 PATH。
+    #   ⛔映射不了就显式失败,不赌 PATH。
     real = list(argv)
     if real and real[0] in ("python", "python3", "py"):
         if not sys.executable:

@@ -81,7 +81,7 @@ def manifest(repo, docs):
 
 
 def context_gate(repo, anchor=None, runtime="codex"):
-    """通过返 None;配置了基线/锚点但验不过时返 loud 理由,供领卡前 fail-closed。
+    """通过返 None;配置了基线/锚点但验不过时返显式理由,供领卡前 fail-closed。
     什么都没配置 = 直接通过(此门未启用)。"""
     try:
         docs = baseline_docs()

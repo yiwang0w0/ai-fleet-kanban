@@ -123,6 +123,69 @@ Test-only escape hatches (never production defaults): `BOARD_ALLOW_UNPINNED`
 Note: 收起 in the panel means **fold/collapse a UI section**, not "hold a card" —
 holding displays as 未放行 / 收进协调待机区. Do not reuse 收起 for holds.
 
+## 中文正名表 (display-wording normalization — executed 2026-09-07, v0.13.0)
+
+One concept, one Chinese word. Machine values, JSON keys, event kinds and env names are
+untouched (the freeze rule above); this pins the DISPLAY / prose layer. Counts are what
+`grep` found on this tree at v0.12.1 across `core/ loops/ cli/ watchers/ examples/` —
+**lines, tests excluded**. (The draft this was built from counted one file,
+`loops/worker_loop.py`, and labelled the numbers repo-wide; those are superseded.)
+After v0.13.0 every banned variant below greps to zero in those directories.
+
+### A. 一词多译 → 正名
+
+| 概念 | 正名 | 弃用变体(v0.12.1 实测) | 备注 |
+|---|---|---|---|
+| 上下文压缩 (`compact`) | **压缩** | 折叠(源 17 行,其中 2 行是运行期日志)· 整理(18 行,其中 `panel.html` 6 行是按钮 / alert 文案 —— 曝光最高的一组)· 「已压缩」1 处 | 三译都曾用户可见。`/compact` 作命令名时保留英文 |
+| 卡 (`card`) | **卡 #N** | 任务 N(`store.js` 21 行报错 · `server.mjs` 2 行 · worker 提示词 1 行 · 「无可领任务」3 行 · `board.py` 1 行) | 任务卡 / 任务链 / 子任务卡 是合法复合词,不动 |
+| 起跑档 (`weight`) | **起跑档(weight)** | 强度权重(`server.mjs` 1 行) | ⚠ **强度 = effort**(CLI 的 `--effort`;面板 / 座席文案一律「强度」,保留)。**档位 = rung**(一格 = model × effort)。三者不互借 |
+| 转人工 (`escalate` verdict) | **转人工(escalate)** | 散文里裸写 escalate | 首次出现带英文原词;落点状态显示仍是 待确认(冻结) |
+| 回收 (`reap`) | **回收(至未开始)** | 收回(`server.mjs` 6 行 · `panel.html` 1 行 · worker 3 行 · `store.js` 2 行) | 租约 reaper 与 `releaseHeldBy` 是同一迁移,共用同一动词 |
+| 回流三路 | **打回** = reject·bounce(冻结)· **退回原线** = hand_back(按钮 回原线继续 已冻结)· **送回重审** = rearm | 回投(`worker_loop.py` 5 行) | 三个动词对三条路径,不互借。⚠「退回」另有「降级回退」义(`decision_lib.js` / `worker_loop.py` 的 fallback 句)—— 那些不是回流,不动 |
+| 冷却窗 (pool hold window) | **冷却窗** | 保持窗(`server.mjs` 1 行) | `POOL_HOLD_MS` 机器名不动 |
+| 显式 (`loud`) | **显式**(报错 / 记录 / 失败) | 中文句子里夹 loud(worker 8 行 · verify / context / codex 各 1 行) | 英文注释里的 loud 不动 |
+| UI 收起 | **收起**(冻结) | 折叠(`panel.html` 2 行:点击折叠 / 点组行折叠) | 与 compact 旧译「折叠」视觉相撞,一并消除 |
+| 归并(fold-reduce) | **归并** | 折叠(worker 3 行:异常折叠 / 路径折叠 / 折叠到那边;`servertest` 2 个测试名) | 与 compact 无关的第三个「折叠」义 |
+| 复位(backoff ladder reset) | **复位** | 梯子已折叠(`server.mjs` 1 行) | 第四个「折叠」义;崩溃退避梯归零 |
+
+### B. 日语残留 → 中文
+
+| 现状(v0.12.1 实测) | 正名 |
+|---|---|
+| `loops/reviewer_loop.py` 67 行日语注释 / docstring(含 を・が・の・で・ない・為 等接续词;26 行含 審 / 機械 / 此処 / 其の) | 逐行改写为简体中文;同文件 機械 / 机械、審阅 / 审阅 两种字体归一。**其中 2 行是运行期日志**(`締切=無し` / `を過ぎた`),优先级最高 |
+| 締切(3 行) | 截止 |
+| 素起 / 素的 / 素通(worker 4 行 · reviewer 2 行) | 裸起 / 原样 / 直通 |
+| 一枚(1 行) | 一张 |
+| ・ U+30FB(`worker_loop.py` 24 行) | 、 U+3001。⚠ `worker_loop.py` 里 `re.sub(r"[…·・…]")` 的字符类同时收 · 与 ・ 是有意的归一化范围,**不动** |
+| 座席 | **保留**(已冻结;中文可用) |
+
+Detection rule used: any hiragana / katakana letter (`[ぁ-ゖァ-ー]`) is Japanese — Chinese
+never uses them — plus the Japanese-only kanji forms above. That regex is what proved
+zero residue, not a list of particles (the particle list missed a line; the class did not).
+
+### C. 保留不译(在中文句子里就用英文)
+
+worker · fork · resume · bless · compact(作命令 / 参数名)· SSE · CLI · HEAD · WAL ·
+argv · token(仅 header / env 名;概念用 **令牌**)· prompt(仅 argv 里那段;概念用
+**提示词**)· escalate(作机器判决值)。
+
+### D. 相近而不许互借
+
+- **验收**(acceptance,标准)≠ **验证**(verify,机器执行)≠ **核对**(审阅的 checked)
+- **审阅**(自动审阅)≠ **重审**(子卡齐后送回)≠ **复核**(confirm 执行后的人工复查)
+- **放行**(release 一张卡)≠ **解禁**(codex 座席的 `release_env`)≠ **开闸**(人工闸解除)
+- **回收**(reap)≠ **归档**(archive)
+- **起跑档**(weight)≠ **档位**(rung)≠ **强度**(effort)≠ **轮**(派发轮)≠ **次**(attempt)
+- **静默**(silently)为正名;**沉默截断**是固定术语(`reviewer_loop.py` 注明「沉默截断曾是实害」),不并入
+- 指纹家族:**状态指纹** `dispatch_fp` · **交付指纹** `review_fp` · **失败指纹**(loop 侧)
+
+### E. 标点与语域
+
+- 简体为准;引号统一「」;枚举用 、;· 仅存于冻结文案(无需后续 · 结案)和英文段。
+- 中文句子用全角标点;代码、值、路径保持半角。
+- 用户可见文案(报错、日志、自动生成的卡面文本)写完整句;比喻只活在注释里。
+- 英文词不夹进中文句子 —— 查 B、C 两表。
+
 ## Alignment with Claude Code's own vocabulary
 
 This project sits **on top of the `claude` command line**, and nowhere else. It is

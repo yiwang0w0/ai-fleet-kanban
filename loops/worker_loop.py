@@ -69,20 +69,20 @@ EVID = os.path.join(DATA, "evidence")
 
 # ── 本机 CLI 的入口门 ─────────────────────────────────────────────────────────
 # ⚠⚠ CLI 若是 .bat/.cmd,**提示词就成了 cmd.exe 的命令行**。
-#   ・Windows 的 CreateProcess 经 %COMSPEC% /c 启动 .bat/.cmd(2024 年 CVE-2024-24576
+#   、Windows 的 CreateProcess 经 %COMSPEC% /c 启动 .bat/.cmd(2024 年 CVE-2024-24576
 #     『BatBadBut』)。Python 的 list2cmdline 守的是 MSVCRT 的引用规则,cmd.exe 的规则
 #     **是另一套** —— cmd 把 `\"` 读成「字面 \ + 引用开关」,参数里的 `"` 能破掉引用,
 #     其后的 `&` `|` `>` `<` 就**作为运算符被执行**。
-#   ・提示词的内容是**看板卡片的正文**(subject / description / acceptance / 同链一览 /
+#   、提示词的内容是**看板卡片的正文**(subject / description / acceptance / 同链一览 /
 #     git status 输出)⇒「能写卡的人 → cmd.exe 的命令行」这条路,在指向 .cmd 的瞬间打开。
 #     提示词里本来就含固定文案 `{"tasks":[{"line":"..."}]}`(引号与竖线的组合)——
-#     不必等恶意卡片,**素的提示词就已经能破**。
+#     不必等恶意卡片,**原样的提示词就已经能破**。
 #   ⛔修法不是"把提示词洗干净"(正文由人自由书写,清洗必然有漏)。在入口拒绝。
-#     原生可执行文件由 CreateProcess 直接启动 ⇒ 素通(无改动)。
+#     原生可执行文件由 CreateProcess 直接启动 ⇒ 直通(无改动)。
 #   ⭐这不是假想:npm 会**实际生成** `%APPDATA%\npm\claude.cmd`,而各种交接文档都在写
 #     `& "$env:APPDATA\npm\claude.cmd" ...` ⇒「说到 CLI 就是 claude.cmd」的路就在眼前。
 #     没有门,一行 env 就能打开它。
-#   逃生口:WORKER_ALLOW_BATCH_CLI=1 —— 仅供 looptest 的桩(.cmd)。用了就 loud 记录。
+#   逃生口:WORKER_ALLOW_BATCH_CLI=1 —— 仅供 looptest 的桩(.cmd)。用了就显式记录。
 BATCH_EXT   = (".bat", ".cmd")
 ALLOW_BATCH = os.environ.get("WORKER_ALLOW_BATCH_CLI", "") == "1"
 
@@ -116,7 +116,7 @@ def resolve_cli():
     ⭐这里不写死任何个人环境的路径 —— 写死的瞬间,「某个人机器上的路径」就成了正典,
       在别人机器上会静默坏掉。默认走 PATH,让零配置安装在多数机器上直接可用。
     ⭐Windows 的 PATH 常常只解析到 npm 的 .cmd shim(会被上面的门拒绝)。此时**实测**
-      旁边是否躺着原生可执行文件:躺着就用它并 loud 记录(此路不经 cmd.exe);
+      旁边是否躺着原生可执行文件:躺着就用它并显式记录(此路不经 cmd.exe);
       没躺着就让门去拒,并在拒绝文里写清怎么修。
     """
     env = os.environ.get("WORKER_CLAUDE_CLI")
@@ -124,7 +124,7 @@ def resolve_cli():
         return env, None
     found = shutil.which("claude")
     if not found:
-        return "claude", None            # 交给门与 spawn 失败去 loud 报告
+        return "claude", None            # 交给门与 spawn 失败去显式报告
     if cli_is_batch(found) and not ALLOW_BATCH:
         native = _npm_native_sibling(found)
         if native:
@@ -164,9 +164,9 @@ def cli_gate(path=None, allow=None):
 
 
 # 槽配置(面板 agents[])经 env 降下来。⭐默认值必须**落在阶梯的某一段上**
-#   —— 默认落在阶梯外的话,素起的 loop 整个提权阶梯都不会挂上(默认值静默杀功能)。
+#   —— 默认落在阶梯外的话,裸起的 loop 整个提权阶梯都不会挂上(默认值静默杀功能)。
 MODEL  = os.environ.get("WORKER_MODEL", "claude-opus-5")
-# 持续会话:每条线复用固定 session id,上下文跨卡累积,代价是要定期整理(/compact)
+# 持续会话:每条线复用固定 session id,上下文跨卡累积,代价是要定期压缩(/compact)
 # ——面板的「上下文」栏就是那个窗口。
 SESSION = os.environ.get("WORKER_SESSION") or None
 # 初次可从桌面对话 fork 继承记忆,以后 resume 自己的 session。
@@ -199,7 +199,7 @@ BUILTIN_LADDER = [
 
 def _load_ladder():
     """阶梯的取值顺序:env WORKER_LADDER > fleet.config.ladder > 内置默认。
-    ⚠读不了/格式不对时**不静默降级** —— loud 一行然后用内置默认(阶梯是机构,
+    ⚠读不了/格式不对时**不静默降级** —— 显式报一行然后用内置默认(阶梯是机构,
       不是判决:错误的配置不该让整条线停,但必须能被看见)。"""
     raw = os.environ.get("WORKER_LADDER")
     src = "env WORKER_LADDER"
@@ -241,7 +241,7 @@ WEIGHT_START = {"light": 0, "standard": 1, "heavy": 2}
 
 
 def tier_label(model, effort):
-    """日志・账本里的短名。`claude-opus-5/max` 太长,叠成 `opus-5/max`。"""
+    """日志、账本里的短名。`claude-opus-5/max` 太长,叠成 `opus-5/max`。"""
     return "%s/%s" % (re.sub(r"^claude-", "", str(model or "")), str(effort or ""))
 
 
@@ -256,14 +256,14 @@ def tier_of(weight, attempt, model=None, effort=None):
     """第 attempt 次尝试使用的 (model, effort, 段号)。⭐**纯函数** —— 不需要板也不需要 CLI,
     可以单独测(不制造"必须跑真实输出才能验收"的形)。
 
-    ・**起点**:卡片明示的 weight(light/heavy)**卡片赢**(L1 / L3)。
+    、**起点**:卡片明示的 weight(light/heavy)**卡片赢**(L1 / L3)。
       standard(默认 = 「本卡没有特别意见」)以**槽配置所在段**为起点。
-    ・**重试提权**:起点 + (attempt-1),到顶档封顶。同一张卡的最后一搏自然够到顶。
-    ・**槽配置在阶梯外**则不挂阶梯,逐字沿用该组合(段号 None)。
+    、**重试提权**:起点 + (attempt-1),到顶档封顶。同一张卡的最后一搏自然够到顶。
+    、**槽配置在阶梯外**则不挂阶梯,逐字沿用该组合(段号 None)。
       理由:面板上的选择变成「按了也不会怎样的摆设」是最坏的情形。
       代替地,「没挂阶梯」这件事会出现在日志和账本里(段=None 可观测)。
 
-    ⚠ attempt 是 claim//attempt 累加的**卡片生涯次数**。park → 裁定 → 回投的卡
+    ⚠ attempt 是 claim//attempt 累加的**卡片生涯次数**。park → 裁定 → 退回原线的卡
       从上次的续接处数 ⇒ 上一轮烧过 3 次的卡一开始就在高档上跑。这是规格
       (「同一张卡的最后一搏自然到顶」),不是漏算。
     """
@@ -282,7 +282,7 @@ def tier_of(weight, attempt, model=None, effort=None):
 HB_SEC = int(os.environ.get("WORKER_HEARTBEAT_SEC", "30"))
 LEASE  = int(os.environ.get("WORKER_LEASE_MIN", "30"))
 TIMEOUT = int(os.environ.get("WORKER_TIMEOUT_SEC", "3600"))
-# 上下文超过这个数就在**领卡前**折叠。定得太高的话,压缩发生之前每张卡都在
+# 上下文超过这个数就在**领卡前**压缩。定得太高的话,压缩发生之前每张卡都在
 # 持续支付几十万 token 的上下文费。
 CTX_COMPACT_AT = int(os.environ.get("WORKER_CTX_COMPACT", "200000"))
 
@@ -331,17 +331,17 @@ def call(method, path, body=None, timeout=20):
     except (TimeoutError, OSError) as e:
         # ⚠socket 读超时不是 URLError,而是裸的 TimeoutError。
         #   漏掉它会让整个进程死掉(实测:等 compact 应答时两条线一起落,静默停了 5.5 小时)。
-        #   调用方已经把 RuntimeError 当作"没能和板说上话"处理,所以折叠到那边。
+        #   调用方已经把 RuntimeError 当作"没能和板说上话"处理,所以归并到那边。
         raise RuntimeError(f"看板无应答({type(e).__name__}: {e})—— {method} {path}") from None
 
 
 def deliver(tid, worker, outcome, evidence, what="交付", _call=None, _log=None):
     """report 的着弹判定 —— 看板的**拒收必须被读**。
-    409 = 卡已不在我手上(租约到期被 reaper 收回 / 被 releaseHeldBy 打回 / 改手);404 = 卡没了。
+    409 = 卡已不在我手上(租约到期被 reaper 回收 / 被 releaseHeldBy 打回 / 改手);404 = 卡没了。
     此前六处调用把返回码整个丢掉:日志照打「→ 等待中/待验收」,handle 照样 return "done",
     主循环据此**清零线级熔断** —— 一个会反复发生的故障(租约太短、心跳线程死了)被洗成正常。
     「交付被拒收」和「交付成功」长同一张脸,正是本仓库点名的事故形状(外部审阅 2026-09-07)。
-    返回 True = 着床;False = 被拒收(已 loud 记录;调用方**不得**再当成 done)。
+    返回 True = 着床;False = 被拒收(已显式记录;调用方**不得**再当成 done)。
     _call/_log 可注入,给自测用(照 pool_state.report_exhausted 的形)。"""
     c, lg = (_call or call), (_log or log)
     s, r = c("POST", f"/api/tasks/{tid}/report",
@@ -349,7 +349,7 @@ def deliver(tid, worker, outcome, evidence, what="交付", _call=None, _log=None
     if s == 200:
         return True
     lg(f"  ⚠ #{tid} {what}被看板拒收 {s} {(r or {}).get('error', '')} —— 这张卡已不在本 worker 手上,"
-       f"本轮成果**没有**着床。最常见:租约到期被收回(查 WORKER_LEASE_MIN 与心跳线程的日志)。")
+       f"本轮成果**没有**着床。最常见:租约到期被回收(查 WORKER_LEASE_MIN 与心跳线程的日志)。")
     return False
 
 
@@ -401,8 +401,8 @@ def harvest_spawned(t, worker):
     """把 worker 放下的 spawn 文件变成卡。**建卡的是 loop**。
     ⭐派生闸:「子任务」是「候选发现」。
       1) 只在**父卡成功+验证通过之后**调用(由调用方 handle 保证)
-      2) 同一父卡**生涯只收割一次**(flag 文件。重试・重开都不再收割)
-      3) 每父最多 2 案・自动放行只有 1 案(第 2 案进候选池=released 0)・溢出进证据
+      2) 同一父卡**生涯只收割一次**(flag 文件。重试、重开都不再收割)
+      3) 每父最多 2 案、自动放行只有 1 案(第 2 案进候选池=released 0)、溢出进证据
       4) (父+规范化标题)的重复不建(DB 唯一索引是最终防波堤,这里是先手门)
       5) 链深:目标(0)→执行卡(1)→必要后续(2)**两层为止**。会成为第 3 层的发现
          上浮到链根目标直下并保持未放行(发现不丢,队列不被劫持)
@@ -467,7 +467,7 @@ def harvest_spawned(t, worker):
             if nt.get("parent_id") != t["id"]:
                 log(f"  ⚠#{nt.get('id')} 被链深闸上浮了(父 #{t['id']} → "
                     f"{('#' + str(nt.get('parent_id'))) if nt.get('parent_id') else '无(链根)'}"
-                    f"・released={nt.get('released')})")
+                    f"、released={nt.get('released')})")
         else:
             log(f"  派生建卡失败 {s2} {r2.get('error','')}")
     memo = None
@@ -515,10 +515,10 @@ def chain_of(tid):
 
 
 # ── 把人的裁定运到 worker ────────────────────────────────────────────────────
-# 洞:审阅 escalate → 卡进「待确认」→ 人在面板写点什么再 resolve → store.resolve 把卡
+# 洞:审阅转人工(escalate)→ 卡进「待确认」→ 人在面板写点什么再 resolve → store.resolve 把卡
 #   退回 **not_started + 原线**,人的话**追记进 verdict_note**。而 build_prompt 只画
 #   description ⇒ 一个字都到不了 worker。
-#   ⇒ 人已经裁过了,worker 却还在猜、还在问。「escalate → 人回答 → 回投」的环每转一圈,
+#   ⇒ 人已经裁过了,worker 却还在猜、还在问。「转人工 → 人回答 → 退回原线」的环每转一圈,
 #     就**空烧一次 attempt**。
 #   worker 侧没有补救手段:没有 Bash、没有查板的工具、board.db 是 SQLite 二进制,
 #   Read 读不了、Grep 也不可信 ⇒ 能运的地方只有这里。
@@ -527,7 +527,7 @@ def chain_of(tid):
 #   build_prompt 跑的时候卡已经是 in_progress —— claim() 返回前就写了 status
 #   ⇒ 拿 not_started 当条件会变成**一次都不会为真的死条件**(不出红,只是静默失效)。
 #   verdict 只有 resolve() 会写,claim 和 report 都不清 ⇒「verdict 非空的卡此刻又被领了」
-#   就等同于「经裁定回投」。面板的同款判定能看 status,是因为面板映的是 **claim 前**的卡。
+#   就等同于「经裁定退回原线」。面板的同款判定能看 status,是因为面板映的是 **claim 前**的卡。
 #
 # ⭐自动审阅的打回也走同一条路进 verdict_note。这个也运 —— 条件既然是 verdict 非空,
 #   就没有理由排除它;排除了,「机器说哪儿不行」又会对 worker 不可见(同一个洞的另一个口)。
@@ -588,11 +588,11 @@ def verdict_tail(note):
 
 
 def verdict_block(t):
-    """如果是经裁定回投的卡,返回要插进提示词的行。
+    """如果是经裁定退回原线的卡,返回要插进提示词的行。
     普通的卡(一次都没经裁定)返回 **[]** —— 提示词的形状一毫米都不动(回归条件)。
 
     ⭐看的是 `last_verdict`(本轮裁定)而不是 `verdict`(结案结果):
-      回投的卡 `verdict` 是 **NULL** —— 用旧判据的话,人写了指示送回来的卡反而
+      退回原线的卡 `verdict` 是 **NULL** —— 用旧判据的话,人写了指示送回来的卡反而
       会把裁定从提示词里丢掉(静默死法。合成卡里显式带了 verdict,所以试验也发现不了)。
     ⚠ 留 `or t.get("verdict")` 是对旧板的保险。新旧板都运 —— 倒向"丢掉"那侧
       就是「人的指示到不了 worker」= 代价最高的坏法。"""
@@ -765,14 +765,14 @@ def prompt_selftest():
 
     # ── 交付的着弹判定(P1-2,外部审阅 2026-09-07)──────────────────────────────
     # 六处 report 曾把返回码整个丢掉。桩板永远 200,所以 harness 看不见 —— 这里用注入的
-    # call 造一个 409,断言它被读到、被 loud 记录、且不被当成成功。
+    # call 造一个 409,断言它被读到、被显式记录、且不被当成成功。
     sent, seen = [], []
     def fake409(m, p, body=None, timeout=20):
-        sent.append((m, p, body)); return 409, {"error": "任务 7 状态是 not_started,不是 in_progress,不能交付"}
+        sent.append((m, p, body)); return 409, {"error": "卡 #7 状态是 not_started,不是 in_progress,不能交付"}
     def fake200(m, p, body=None, timeout=20):
         sent.append((m, p, body)); return 200, {"id": 7}
     ok("⭐拒收(409)→ deliver 返回 False", deliver(7, "alpha", "done", "证据", _call=fake409, _log=seen.append) is False)
-    ok("⭐拒收被 loud 记录,且说清了「没有着床」", any("拒收" in x and "没有" in x for x in seen), str(seen)[:160])
+    ok("⭐拒收被显式记录,且说清了「没有着床」", any("拒收" in x and "没有" in x for x in seen), str(seen)[:160])
     ok("拒收文案带上了服务端的原话", any("not_started" in x for x in seen))
     ok("发的是 report 端点,outcome / evidence 原样",
        sent[-1][1] == "/api/tasks/7/report" and sent[-1][2]["outcome"] == "done" and sent[-1][2]["evidence"] == "证据")
@@ -798,7 +798,7 @@ def prompt_selftest():
 def build_prompt(t, worker, evidence_path, prev_tail=None, attempt=1):
     spawn_path = spawn_path_for(t["id"])
     p = [
-        f"你是看板 worker(线名 {worker}),任务 #{t['id']} 已经为你认领,这是第 {attempt} 次尝试。",
+        f"你是看板 worker(线名 {worker}),卡 #{t['id']} 已经为你认领,这是第 {attempt} 次尝试。",
         f"标题:{t['subject']}",
         "说明:\n" + cut_to(t.get("description", ""), CARD_DESC_BUDGET, t["id"]),
     ]
@@ -898,13 +898,13 @@ def build_prompt(t, worker, evidence_path, prev_tail=None, attempt=1):
         if RUNTIME == "codex":
             p += ["", "【链上其他卡你自己能读】"
                   "`python cli/board.py show <id>` 可以拉同链任意卡的全文"
-                  "(只读・板在 localhost。⚠外向通信被阻断,到不了外部系统)。"
+                  "(只读、板在 localhost。⚠外向通信被阻断,到不了外部系统)。"
                   "上面的一览**只有标题**,涉及依赖或既有裁定时**必须拉现物**。"
                   "尤其是:依赖方『依据什么』那样决定,从标题绝对看不出来。"]
 
     # ⭐工作区里已经有改动的话,动手前**一定**告知。
     #   上一次尝试崩掉只留下半成品的事真的发生过(孤儿 worker 写了 3 个文件后被杀,
-    #   卡退回「尝试 1・无结果」)。不告知的话,下一个人会在自己没写过的改动上开工,
+    #   卡回到「尝试 1、无结果」)。不告知的话,下一个人会在自己没写过的改动上开工,
     #   要么覆盖掉,要么把做完的事再做一遍。
     ws = worktree_state()
     if ws:
@@ -941,8 +941,8 @@ FORK_DONE  = False  # 本进程是否已完成继承(一个进程内不 fork 两
 
 def session_args():
     """自己的转录已存在则 resume。没有的话:
-       ・指定了桌面对话就 **--resume <桌面> --fork-session --session-id <新 id>**
-       ・没指定就用 --session-id 新建(全新的新人)
+       、指定了桌面对话就 **--resume <桌面> --fork-session --session-id <新 id>**
+       、没指定就用 --session-id 新建(全新的新人)
 
     ⭐旧实现是用「转录文件的 mtime 差」去**猜** fork 后的新 id。那会抓到同一时刻诞生的
       别的会话 —— 并行起的别的线、用户的别的窗口、我自己的试验运行,都是污染源,
@@ -1127,7 +1127,7 @@ def probe_runtime(live=False):
     g = codex_gate()
     if g:
         print("[probe] ⛔ 被门拒绝:" + chr(10) + g); return 1
-    print(f"[probe] 门 OK(绝对路径・实体在・非 .bat): {CODEX_CLI}", flush=True)
+    print(f"[probe] 门 OK(绝对路径、实体在、非 .bat): {CODEX_CLI}", flush=True)
     try:
         v = subprocess.run([CODEX_CLI, "--version"], capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=60)
@@ -1298,13 +1298,13 @@ def read_evidence(path):
 
 
 def _failure_fp(vr, tail):
-    """失败指纹:把数字・路径・空白规范化后取 md5 —— 同因异文面折成同一指纹。
+    """失败指纹:把数字、路径、空白规范化后取 md5 —— 同因异文面折成同一指纹。
     指纹被行号或时刻切碎的话,刹车永远不会生效(规范化才是本体)。"""
     if vr and not vr.get("ok"):
         src = "verify:%s:rc=%s:%s" % (vr.get("key"), vr.get("rc"), (vr.get("out") or "")[-400:])
     else:
         src = (tail or "")[-400:]
-    # 路径折叠要认两种形:Windows 盘符形与 POSIX 绝对路径形。只认一种的话,
+    # 路径归一要认两种形:Windows 盘符形与 POSIX 绝对路径形。只认一种的话,
     # 另一个平台上带路径的报错永远折不进同一指纹,刹车在那边就是聋的。
     s0 = re.sub(r"[A-Za-z]:[\\/][^\s'\"]+|(?:/[^\s'\"/]+){2,}", "@path", src)
     s0 = re.sub(r"\d+", "#", s0)
@@ -1339,7 +1339,7 @@ def handle(t, worker):
             ev_path = os.path.join(EVID, f"task-{tid}-attempt-{attempt}.md")
             try: os.path.isfile(ev_path) and os.remove(ev_path)   # 别把上次残骸当证据
             except Exception: pass
-            # ⭐档位在**这一处**定好,再把同一个东西发给日志・argv・账本三方。
+            # ⭐档位在**这一处**定好,再把同一个东西发给日志、argv、账本三方。
             #   三方各读各的会出现「日志说 max 而 argv 是 high」,而且谁都看不见
             #   (观测不到的不一致必然在生产爆出来)。
             a_model, a_effort, a_rung = tier_of(weight, attempt)
@@ -1391,7 +1391,7 @@ def handle(t, worker):
                 #   档位是 attempt 的函数,而这条分支不推进 attempt ⇒ 结构上原地不动。
                 log(f"  ⚠疑似限流输出。**不消耗尝试次数**,等 {RATE_WAIT_SEC}s 后重打同一轮"
                     f"(累计 {rate_waits}/{RATE_MAX_WAITS} 次;档位仍 [{tier_label(a_model, a_effort)}])")
-                # 心跳由另一条线程在打,等待期间不会被收回卡
+                # 心跳由另一条线程在打,等待期间不会被回收卡
                 time.sleep(RATE_WAIT_SEC)
                 continue
             if FORKED_SID:
@@ -1497,9 +1497,9 @@ def handle(t, worker):
 
 def parse_until(v):
     """截止时刻的解释。
-    ・`2026-08-20T01:00`(ISO・带日期)= **绝对时刻**。已过就**立即到期**(不顺延)。
+    、`2026-08-20T01:00`(ISO、带日期)= **绝对时刻**。已过就**立即到期**(不顺延)。
       server 总是给这个形 —— HH:MM 顺延曾造出「截止 1 分钟后重启,却跑到明天」。
-    ・`01:30`(旧形)= 顺延到今天/明天。留给人手打时用。"""
+    、`01:30`(旧形)= 顺延到今天/明天。留给人手打时用。"""
     if not v: return None
     if "T" in v:
         dt = datetime.datetime.fromisoformat(v)
@@ -1516,8 +1516,8 @@ LAST_CARD_ID = None      # 上一张处理过的卡(用于链边界判定)
 
 
 def chain_has_open_cards():
-    """上一张卡的**同一条链**里是否还有未结的卡。还有就不折叠。
-    ⚠判不出来时倒向 **True(不折叠)** —— 折叠那边不可逆
+    """上一张卡的**同一条链**里是否还有未结的卡。还有就不压缩。
+    ⚠判不出来时倒向 **True(不压缩)** —— 压缩那边不可逆
       (改写了前缀之后才发现"其实还有后续"是复原不了的)。
     ⚠链的定义归板(`/api/tasks/<id>/related`)。在这边重新遍历 parent 的话,
       就有了两套定义,早晚只有一套被改。"""
@@ -1534,36 +1534,36 @@ def chain_has_open_cards():
                  if by.get(i) and by[i].get("status") in ("not_started", "in_progress", "waiting")
                  and by[i].get("released")]
         if open_:
-            log(f"  链 #{LAST_CARD_ID} 还有未结的卡 {open_[:6]} —— 本轮不整理(到链边界才折叠)")
+            log(f"  链 #{LAST_CARD_ID} 还有未结的卡 {open_[:6]} —— 本轮不压缩(到链边界才压缩)")
         return bool(open_)
     except Exception as e:
-        log(f"  链边界判定失败({type(e).__name__}: {e})—— 倒向安全侧(不折叠)")
+        log(f"  链边界判定失败({type(e).__name__}: {e})—— 倒向安全侧(不压缩)")
         return True
 
 
 def maybe_compact(chain_open=False):
-    """在卡与卡之间折叠上下文。**跑着的时候不折叠**(同一个 session 正被 CLI 抓着的时候
-    打 /compact,两边的结果都不可信了)。折叠本身也要花 token,但让窗口溢出更贵
+    """在卡与卡之间压缩上下文。**跑着的时候不压缩**(同一个 session 正被 CLI 抓着的时候
+    打 /compact,两边的结果都不可信了)。压缩本身也要花 token,但让窗口溢出更贵
     —— 溢出之后那条线就只能靠眼前那点东西做判断了。"""
     if not SESSION:
-        # 加派槽(每卡新会话)没有可折叠的东西。⚠而且 /api/context/{线}/compact 折的是
+        # 加派槽(每卡新会话)没有可压缩的东西。⚠而且 /api/context/{线}/compact 压的是
         # **槽 1 的持续会话** —— 从这里打就成了折别人的会话。默默返回才是对的。
         return
     try:
         s, r = call("GET", "/api/context")
     except Exception as e:
-        log(f"  上下文取得失败({e})—— 本轮不整理"); return
+        log(f"  上下文取得失败({e})—— 本轮不压缩"); return
     me = next((c for c in (r.get("lines") or []) if c.get("line") == WORKER_LINE), None)
     tok = (me or {}).get("tokens")
     if not isinstance(tok, int):
-        log("  上下文量读不出来 —— 本轮不整理(**读不出来不等于 0**)"); return
+        log("  上下文量读不出来 —— 本轮不压缩(**读不出来不等于 0**)"); return
     # ⭐只有硬顶在链的中途也无条件(让窗口溢出更贵)。
     hard = int(os.environ.get("WORKER_CTX_HARD", "600000"))
     if chain_open and tok < hard:
         return
     if tok < CTX_COMPACT_AT:
         return
-    log(f"  上下文 {tok:,} tok ≥ {CTX_COMPACT_AT:,} —— 下一张卡之前先整理")
+    log(f"  上下文 {tok:,} tok ≥ {CTX_COMPACT_AT:,} —— 下一张卡之前先压缩")
     # ⭐留个印。没有它,「压缩花了多少」就**永远无法从账本测出**
     #   (只能看到紧接着的尝试 `in` 跳高,却说不出那是压缩造成的)。
     try:
@@ -1572,21 +1572,21 @@ def maybe_compact(chain_open=False):
              "event": "compact", "worker": WORKER_LINE, "before": tok,
              "chain_open": bool(chain_open)}, ensure_ascii=False) + chr(10))
     except Exception as e:
-        log(f"  压缩印记账失败({e})—— 整理继续")
+        log(f"  压缩印记账失败({e})—— 压缩继续")
     try:
         # 压缩要让 CLI 往返一次,**几分钟**起步。默认 20s 必然读超时,
         # 未捕获的话进程会整个死掉(已实测)。等久一点,任何情况下都继续运行。
         s2, r2 = call("POST", f"/api/context/{WORKER_LINE}/compact",
-                      {"note": "看板 worker: 卡与卡之间的自动整理。"
-                               "该留下的是 约定・踩过的坑・已裁定的事・进行中卡片的上下文。"
+                      {"note": "看板 worker: 卡与卡之间的自动压缩。"
+                               "该留下的是 约定、踩过的坑、已裁定的事、进行中卡片的上下文。"
                                "各张卡逐条的作业日志不需要。"},
                       timeout=900)
-        log(f"  整理 {'完成' if s2 == 200 else '失败 %s' % s2}"
+        log(f"  压缩 {'完成' if s2 == 200 else '失败 %s' % s2}"
             + (f" → {r2.get('after'):,} tok" if isinstance(r2.get("after"), int) else ""))
     except Exception as e:
         # server 侧的压缩通常在投出去的那一刻就已经在跑(实测:超时之后它也完成了)。
         # 下一周回的 GET /api/context 会告诉我们折没折成,所以这里可以放弃。
-        log(f"  整理的应答等待失败({type(e).__name__}: {e})—— 继续运行")
+        log(f"  压缩的应答等待失败({type(e).__name__}: {e})—— 继续运行")
 
 
 def main():
@@ -1603,7 +1603,7 @@ def main():
     # 并行槽: 身份(worker)与线(line)分离。槽 1 无 --worker,两者同名 = 与单槽一致。
     worker = arg_of("--worker", line)
     # ⭐probe 在**门之前**(它是为了测量未解禁的座席,放门内就永远测不了)。
-    #   只读: 不领卡・不写看板・不碰证据文件。
+    #   只读: 不领卡、不写看板、不碰证据文件。
     if "--probe-runtime" in sys.argv:
         sys.exit(probe_runtime(live="--live" in sys.argv))
     # 座席 allowlist(未知值落拒绝侧)
@@ -1616,7 +1616,7 @@ def main():
               + chr(10) + "  解禁前能做的只有 --probe-runtime(只读)。", flush=True)
         sys.exit(gates_lib.EXIT_REFUSED)
     # 宿主配置的门。server 在启动请求时也会拒,但**这里也放一道** ——
-    #   手动执行・试验等不经 server 的路径上,同一判据同样生效才是防御的本体。
+    #   手动执行、试验等不经 server 的路径上,同一判据同样生效才是防御的本体。
     if RUNTIME == "codex":
         g2 = codex_gate()
         if g2:
@@ -1683,22 +1683,22 @@ def main():
             log(f"dry-run:{worker} 可领 {n} 件(归档 {r.get('archived_count')} 件不在其中)")
             return
         # ⭐压缩在**领卡前**。放在事后的话,「压缩发生之前的那张卡」要付全额。
-        # ⭐折叠的位置是**链边界**而不是卡边界(账本实测):
+        # ⭐压缩的位置是**链边界**而不是卡边界(账本实测):
         #   全量 36 行里 缓存读 92.6% / 缓存写 5.8% / 输入 **0.2%** ⇒ 只要缓存是热的,
         #   长上下文就便宜。贵的是**冷掉的前缀** —— 单发输入 40 万 tok
         #   (账本输入总量的 99.2% 出自那一行)。压缩会改写前缀 = **自己把它弄冷**。
-        #   加上在链中途折叠的话,链内已经查明的事(文件:行・试过不行的路)会从摘要里掉,
-        #   下一张卡**把同一个发现再做一遍**。⇒ 链还在就不折叠。
+        #   加上在链中途压缩的话,链内已经查明的事(文件:行、试过不行的路)会从摘要里掉,
+        #   下一张卡**把同一个发现再做一遍**。⇒ 链还在就不压缩。
         try:
             maybe_compact(chain_open=chain_has_open_cards())
         except Exception as e:
-            log(f"  整理时出了意外({type(e).__name__}: {e})—— 继续运行")
+            log(f"  压缩时出了意外({type(e).__name__}: {e})—— 继续运行")
         if until and datetime.datetime.now() >= until:
             log(f"过了截止 {until:%H:%M} —— 不再取新卡,就此结束"
                 "(在途没有卡的状态下停=不会悬空)")
             return
         # ⭐全局预算前置查: 余额见底就不领新卡 —— 在途允许收尾,新开一律等窗口。
-        #   loud 报数(与用量纪律同形: 不许只说「还够/不够」)。默认此闸是关的。
+        #   显式报数(与用量纪律同形: 不许只说「还够/不够」)。默认此闸是关的。
         rem, spent, _n, cap = gates_lib.remaining_today(DATA)
         if RUNTIME == "claude" and rem < 1.0:
             log(f"⛔ 全局预算见底: 今日已花 ${spent:.2f} / ${cap:.2f},余 ${rem:.2f} < $1 "
@@ -1715,7 +1715,7 @@ def main():
             log(str(e)); time.sleep(min(interval, 30)); continue
 
         # 503(池满/全局停)不要和 204(队列空)长同一张脸 —— 池塌了的舰队日志
-        #   如果显示"无可领任务",就没人会去怀疑池(说不出理由的饥饿)。
+        #   如果显示"无可领的卡",就没人会去怀疑池(说不出理由的饥饿)。
         if s == 503:
             log("⛔ 池额度门(HTTP 503): " + str((r or {}).get("error") or "pool down")
                 + f" —— 不是队列空,是 server 拒发。睡 {max(interval, 120)}s")
@@ -1727,7 +1727,7 @@ def main():
             time.sleep(min(interval, 60)); continue
         if s == 204 or not r.get("task"):
             # ⭐同一条家规的第三次应用(503 vs 204 之后):**队列被无进展闸清空**
-            #   和**队列真的空**长得一模一样。板上明明堆着卡,线却说"无可领任务",
+            #   和**队列真的空**长得一模一样。板上明明堆着卡,线却说"无可领的卡",
             #   操作者读日志只会以为没活干,不会去想「那些卡为什么没人碰」。
             held = int((r or {}).get("held") or 0)
             if held:
@@ -1738,14 +1738,14 @@ def main():
                       "它就会自己恢复;确实要照跑,面板上点名认领并强制"
                     + ("(once 退出)" if once else f",睡 {interval}s"))
             else:
-                log("无可领任务" + ("(once 退出)" if once else f",睡 {interval}s"))
+                log("无可领的卡" + ("(once 退出)" if once else f",睡 {interval}s"))
             if once: return
             time.sleep(interval); continue
 
         t = r["task"]
         log(f"领到 #{t['id']}: {t['subject']}")
         # ⚠这个 try 是为了「不把卡留在 in_progress」,线的生存保证由下面的
-        #   except Exception(周回总保险)和 call() 的异常折叠承担。
+        #   except Exception(周回总保险)和 call() 的异常归并承担。
         try:
             outcome = handle(t, worker)
         except Exception as e:
@@ -1774,7 +1774,7 @@ def main():
         log(f"  ({outcome})继续领下一张")
 
 
-# ⭐素的 `main()` 会**在 import 的瞬间开始循环**,那样就没法只试验提示词的组装
+# ⭐裸的 `main()` 会**在 import 的瞬间开始循环**,那样就没法只试验提示词的组装
 #   (「必须跑真实输出才能验收」的一种形)。加了这个守卫,
 #   `python loops/worker_loop.py --as <线>` 与 server 的启动都一点不变。
 if __name__ == "__main__":

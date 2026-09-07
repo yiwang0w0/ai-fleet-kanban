@@ -653,7 +653,7 @@ function badRoutable(res, b) {
     return true;
   }
   if (b.weight !== undefined && !WEIGHTS.includes(b.weight)) {
-    json(res, 400, { error: `未知的强度权重: ${b.weight}`, allowed: WEIGHTS });
+    json(res, 400, { error: `未知的起跑档(weight): ${b.weight}`, allowed: WEIGHTS });
     return true;
   }
   return false;
@@ -1133,7 +1133,7 @@ async function compactLine(line, note) {
   const sid = sessionOf(line);
   // The line exists (badLine passed) but has no conversation yet = the BOARD STATE
   // refuses ⇒ CONFLICT (it passes once the line has run).
-  if (!transcriptOf(sid)) throw store.err(store.ERR.CONFLICT, `${line} 还没有会话记录,没什么可整理的`);
+  if (!transcriptOf(sid)) throw store.err(store.ERR.CONFLICT, `${line} 还没有会话记录,没什么可压缩的`);
   const before = contextOf(line);
   let memo = (note || "").trim();
   if (!memo) {
@@ -1440,7 +1440,7 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
       //   OTHER slots' in-flight cards too.
       const freed = store.releaseHeldBy(db, key);
       if (freed.length) {
-        w.log.push(`[在途 ${freed.join(",")} 收回未开始]`);
+        w.log.push(`[在途 ${freed.join(",")} 回收至未开始]`);
         emit("task.reaped", { count: freed.length });
       }
     } catch (e) { console.error(`${key} 退出后的返还失败:`, e.message); }
@@ -1457,7 +1457,7 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
       setDesired(line, false);
       resetLadder(line);
       w.log.push("[⛔ 门拒绝启动(exit 3)—— **不自动重启**。" +
-                 "修好上方给出的理由后再按『启动』(梯子已折叠)]");
+                 "修好上方给出的理由后再按『启动』(梯子已复位)]");
       console.log(`${key} 拒绝启动(exit ${code})—— 不自动重启;理由见 log 尾`);
       emit("worker.changed", { line, running: false });
       return;
@@ -1529,7 +1529,7 @@ async function workerStop(line, { keepIntent = false,
     const idle = [];
     for (let k = 1; k <= MAX_PARALLEL; k++) idle.push(...store.releaseHeldBy(db, slotKey(line, k)));
     if (idle.length) {
-      console.log(`${line} 停止(进程本就不在): 在途 ${idle.join(",")} 已收回未开始`);
+      console.log(`${line} 停止(进程本就不在): 在途 ${idle.join(",")} 已回收至未开始`);
       emit("task.reaped", { count: idle.length });
     }
     emit("worker.changed", { line, running: false });
@@ -1568,7 +1568,7 @@ async function workerStop(line, { keepIntent = false,
   const freed = [];
   resetLadder(line);                    // human stop ⇒ next start begins at the base
   for (let k = 1; k <= MAX_PARALLEL; k++) freed.push(...store.releaseHeldBy(db, slotKey(line, k)));
-  if (freed.length) { console.log(`${line} 停止: 在途 ${freed.join(",")} 已收回未开始`); emit("task.reaped", { count: freed.length }); }
+  if (freed.length) { console.log(`${line} 停止: 在途 ${freed.join(",")} 已回收至未开始`); emit("task.reaped", { count: freed.length }); }
   return { line, stopping: true, tree_killed: treeKilled, released: freed,
            stop_reason: stop, stop_text: stopText(stop, null) };
 }
@@ -1615,7 +1615,7 @@ async function reconcilePools(reason = "timer") {
       if (!poolDown(p) || Date.parse(poolState[p].until) > now) continue;
       const pr = await probePool(p);
       if (pr.ok) { clearPool(p); console.log(`池复查 ${p}: 成功 → 解禁`); }
-      else { markPoolDown(p, Date.now()); console.error(`池复查 ${p}: 失败 → 下个保持窗再查: ${redact(pr.detail)}`); }
+      else { markPoolDown(p, Date.now()); console.error(`池复查 ${p}: 失败 → 下个冷却窗再查: ${redact(pr.detail)}`); }
     }
     updateGlobalStopMarker(reason);
 
@@ -2053,7 +2053,7 @@ const server = http.createServer(async (req, res) => {
       // Lines without a persistent session (review = fresh per judgment) have
       // nothing to fold — do not mint a ghost session.
       if (!settings[mc[1]]?.session_id)
-        return json(res, 400, { error: `${mc[1]} 没有持续会话可整理` });
+        return json(res, 400, { error: `${mc[1]} 没有持续会话可压缩` });
       const b = await readBody(req);
       const r = await compactLine(mc[1], b.note);
       emit("context.compacted", { line: mc[1] });
@@ -2315,7 +2315,7 @@ const server = http.createServer(async (req, res) => {
         // verify_ok is the RULER's declaration (ran the verify just now, was it
         // green) — the store links only when true; undeclared = no linkage.
         const t = store.get(db, id);
-        if (!t) throw store.err(store.ERR.NOT_FOUND, `任务 ${id} 不存在`);
+        if (!t) throw store.err(store.ERR.NOT_FOUND, `卡 #${id} 不存在`);
         // The handoff archive is an external side effect BEFORE the state change:
         // validate everything store.resolve would refuse FIRST, or "ruling failed"
         // can still have copied SQL = half-application.
@@ -2338,7 +2338,7 @@ const server = http.createServer(async (req, res) => {
           throw store.err(store.ERR.BAD_INPUT,
             "operator 令牌不能以 resolved_by=auto 裁定 —— auto 专属审阅线(review_token);人的裁定写 human");
         if (t.status !== "waiting")
-          throw store.err(store.ERR.CONFLICT, `任务 ${id} 状态是 ${t.status},没有待裁定的产出`);
+          throw store.err(store.ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},没有待裁定的产出`);
         // ⭐ Re-entry gate: hold_for_review KEEPS the card in waiting, so the
         //   one-shot protection above stops working — resending the same POST would
         //   re-run archiveOptionFiles, overwrite the receipt and wake the reviewer
@@ -2581,7 +2581,7 @@ const REAP_MS = Number(process.env.BOARD_REAP_MS || 30000);
 setInterval(() => {
   try {
     const n = store.reapExpired(db);
-    if (n) { console.log(`租约到期 ${n} 件 收回未开始`); emit("task.reaped", { count: n }); }
+    if (n) { console.log(`租约到期 ${n} 件 回收至未开始`); emit("task.reaped", { count: n }); }
     // Complement pair — always swept in THIS order.
     const dr = store.deferToRearm(db);
     if (dr.length) { console.log(`子任务卡未齐 → 转入等待重审: #${dr.join(" #")}`); emit("task.deferred", { ids: dr }); }
@@ -2623,7 +2623,7 @@ server.listen(PORT, HOST, () => {
     const still = store.list(db, { status: "in_progress" }).tasks;
     console.log(`盘点: 未开始 ${c.not_started} / 进行中 ${inflight.length} / 等待中 ${c.waiting} / 已完成 ${c.done}`);
     if (reaped) {
-      console.log(`  ⚠ 租约已过期的 ${reaped} 件收回未开始(worker 在上次运行中失联):`);
+      console.log(`  ⚠ 租约已过期的 ${reaped} 件回收至未开始(worker 在上次运行中失联):`);
       for (const t of inflight.filter((t) => !still.some((s) => s.id === t.id)))
         console.log(`     #${t.id} [${t.worker}] ${t.subject.slice(0, 46)}`);
     }
@@ -2633,7 +2633,7 @@ server.listen(PORT, HOST, () => {
         const left = Math.round(((t.lease_until || 0) - Date.now()) / 1000);
         console.log(`     #${t.id} [${t.worker}] 租约还剩 ${left}s — ${t.subject.slice(0, 40)}`);
       }
-      console.log("     若机器刚重启过,这些 worker 其实已经死了,等租约到期会自动收回。");
+      console.log("     若机器刚重启过,这些 worker 其实已经死了,等租约到期会自动回收。");
     }
     // Undelivered evidence files = "produced, then died before reporting". Kept and
     // announced, never deleted.

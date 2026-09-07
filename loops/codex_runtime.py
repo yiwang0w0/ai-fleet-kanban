@@ -127,7 +127,7 @@ def judge(rc, stdout, last_path):
 
 
 def append_usage(data_dir, who, model, effort, verdict, *, card=None, attempt=None, note=None, log=print):
-    """把 Codex JSONL usage 写入共享 usage_ledger;拿不到用量也写一行 loud 说明。"""
+    """把 Codex JSONL usage 写入共享 usage_ledger;拿不到用量也显式写一行说明。"""
     usage = dict(verdict.get("usage") or
                  {"calls": 0, "in": 0, "cc": 0, "cr": 0, "out": 0,
                   "note": note or "未见 turn.completed usage"})

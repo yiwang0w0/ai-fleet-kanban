@@ -674,7 +674,7 @@ try {
     await B.api("POST", `/api/workers/${LINE}/stop`, {});
     await sleep(2600);   // longer than the pending 2s backoff — a revived slot would log
     const tail = B.out().split(NL).slice(-8).join(NL);
-    ok("L3 人停之后梯子折叠,到点的退避不再复活任何槽",
+    ok("L3 人停之后梯子复位,到点的退避不再复活任何槽",
        !/自动重启\(第/.test(tail) || /用户停止/.test(B.out()),
        tail.slice(-120).replace(/\n/g, " | "));
   }
@@ -716,13 +716,13 @@ try {
     ok("M5 ⭐写到一半的行不入账(等它完整)", !u3["3"], JSON.stringify(u3["3"] || null));
     writeFileSync(LEDGER, readFileSync(LEDGER, "utf8") + partial.slice(20) + NL, "utf8");
     const u4 = (await B.api("GET", "/api/usage")).body?.cards || {};
-    ok("M6 ⭐补完后恰好入账一次(不重复折叠前半段)",
+    ok("M6 ⭐补完后恰好入账一次(不重复归并前半段)",
        u4["3"]?.in === 7777 && u4["3"]?.rows === 1, JSON.stringify(u4["3"]));
 
     // A truncated/replaced ledger refolds from scratch instead of double counting.
     writeFileSync(LEDGER, row(9), "utf8");
     const u5 = (await B.api("GET", "/api/usage")).body?.cards || {};
-    ok("M7 文件被替换(变短)→ 重新折叠,不叠旧账",
+    ok("M7 文件被替换(变短)→ 重新归并,不叠旧账",
        u5["9"]?.in === 1000 && !u5["1"], JSON.stringify(Object.keys(u5)));
 
     // The panel actually consumes it (source-shape pin, same style as B3b).
