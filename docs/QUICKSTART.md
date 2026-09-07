@@ -21,6 +21,17 @@ read ahead or work without the panel.
 - Windows PowerShell users: set `$env:PYTHONUTF8 = "1"` in each shell — pipes
   default to a legacy codepage and the harnesses print CJK
 
+**The short path** — one command does steps 0 and 1 and prints the two that are yours:
+
+```
+npm run setup      # doctor → fleet.config.json → core/verify_registry.json → "now bless, then start"
+npm start          # = node core/server.mjs
+```
+
+Nothing below is skipped by the shortcut, only typed for you; read on to see each
+step. (`npm` is used only for its `scripts` table — `package.json` declares zero
+dependencies, and there is nothing to install.)
+
 ```
 node cli/doctor.mjs
 ```
@@ -43,6 +54,11 @@ a worker would fail at start time rather than at test time.
 ```
 node cli/init.mjs        # copies examples/fleet.config.json to the BOARD repo root
 ```
+
+(`npm run setup` runs this for you, and also drops `core/verify_registry.json`
+from its example — the file `store.js` validates a card's `verify_cmd` keys
+against. A fresh clone has none, and the QUICKSTART used to leave that discovery
+to the first refused card. Both copies are gitignored and never overwritten.)
 
 The config is two things at once. It is your **fleet vocabulary** — edit
 `lines[]` and `handoff_targets[]`, or skip the editor and tell your Claude what
@@ -94,8 +110,11 @@ crash), and after you commit a change you re-bless the same way.
 ## 3 · Board up
 
 ```
-node core/server.mjs
+node core/server.mjs     # or: npm start
 ```
+
+On a Node older than 22.5 this now stops with one readable sentence (the store
+runs on `node:sqlite`) instead of a module-resolution trace.
 
 Open http://127.0.0.1:47824 — the panel is for your eyes; agents use the API.
 The tab title carries the waiting-card count, so a delivered card is visible
@@ -180,7 +199,8 @@ cards itself. Four moves, one page: `docs/OPERATE_WITH_CLAUDE.md`.
 
 ## Kick the tires
 
-The README's "500+ machine assertions" are not a brochure number — run them:
+The README's "500+ machine assertions" are not a brochure number — run them
+(`npm test` runs the eight Node harnesses; the Python self-tests are the last line):
 
 ```
 node tests/selftest.mjs && node tests/servertest.mjs && node tests/looptest.mjs && node tests/reviewtest.mjs
@@ -210,6 +230,21 @@ measures all three — a banner appears at the top listing only what is left:
 None of these is a button, for the same reason blessing has none: accepting code
 is yours to do, and a restart interrupts whatever is in flight. The footer
 always shows the revision the board is actually running.
+
+## Start over
+
+```
+npm run reset -- --yes       # = node cli/reset.mjs --yes
+```
+
+Wipes THIS board's runtime state — the database, the three tokens, evidence,
+the usage ledger, worker settings, pool state and `accepted_rev` — and nothing
+else: not the repo, not `fleet.config.json`, not the verify registry. Without
+`--yes` it only lists what it would delete. It refuses while anything answers on
+the board's port (the running server owns those files — stop it first), and it
+refuses a data dir that resolves to a filesystem root or your home directory.
+After a reset the next start mints fresh tokens, and lines refuse to start until
+you bless again — that is the source gate, not damage.
 
 ## When something refuses
 

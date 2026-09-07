@@ -70,7 +70,12 @@ if (parts.length !== 2) {
 }
 const stubServerFor = (py) => {
   const src = parts.join(`[${JSON.stringify(py)}, "--as", line,`)
-    .replaceAll("import.meta.url", JSON.stringify(pathToFileURL(SERVER).href));
+    .replaceAll("import.meta.url", JSON.stringify(pathToFileURL(SERVER).href))
+    // Static ESM imports resolve against the COPY's directory, not against the
+    // import.meta.url we just rewrote (createRequire uses that URL; `import` does not).
+    // The copy lives in a temp dir with no siblings, so every relative specifier is
+    // pointed back at the real core/ — whoever relocates a file rewrites its references.
+    .replace(/from "\.\/([^"]+)"/g, (_, rel) => "from " + JSON.stringify(pathToFileURL(join(dirname(SERVER), rel)).href));
   const p = join(STUBS, `server-${py.replace(/[^a-z]/gi, "")}.mjs`);
   writeFileSync(p, src, "utf8");
   return p;

@@ -60,6 +60,8 @@ jobs:
         run: bash hrun.sh node tests/gatetest.mjs
       - name: decomposetest (decompose prompt)
         run: bash hrun.sh node tests/decomposetest.mjs
+      - name: clitest (setup / reset / node preflight)
+        run: bash hrun.sh node tests/clitest.mjs
       - name: gates_lib selftest (revision pin + budget)
         run: bash hrun.sh python gates/gates_lib.py
       - name: worker_loop codex selftest (pure functions)

@@ -24,3 +24,13 @@ Thumbs.db
 # tracked). It names local directories (handoff targets); committing it would leak
 # one machine's layout into everyone's clone.
 /fleet.config.json
+
+# The operator's LOCAL verify registry (created by `npm run setup` from
+# examples/verify_registry.example.json, which stays tracked). Its keys name this
+# deployment's commands; the example is the template, the copy is yours.
+/core/verify_registry.json
+
+# Build artifacts of the registry-claim packages (the files themselves stay on
+# disk for twine; only the TREE stays clean)
+packaging/**/dist/
+*.egg-info/

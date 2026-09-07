@@ -18,9 +18,20 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import { nodeTooOld } from "./env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require_ = createRequire(import.meta.url);
+// ── Preflight: the one failure a newcomer could not read. store.js requires node:sqlite,
+//    which arrived in Node 22.5; on an older Node the require below dies with a module
+//    resolution stack trace that names nothing a person can act on. One sentence instead.
+//    (python and git are already checked where they are used — the messages there are
+//    readable; this is the only one that was not.)
+if (nodeTooOld()) {
+  console.error(`需要 Node ≥ 22.5(看板的存储用 node:sqlite),当前 ${process.version} —— 升级 Node 后再启动。`
+    + " node cli/doctor.mjs 可以一次看全所有前提。");
+  process.exit(1);
+}
 const store = require_("./store.js");
 const decision = require_("./decision_lib.js");
 const decompose = require_("./decompose_lib.js");

@@ -1,0 +1,17 @@
+{
+  "name": "ai-fleet-kanban",
+  "version": "0.14.0",
+  "private": true,
+  "description": "The acceptance-first kanban for mixed AI fleets.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "setup": "node cli/setup.mjs",
+    "doctor": "node cli/doctor.mjs",
+    "start": "node core/server.mjs",
+    "reset": "node cli/reset.mjs",
+    "test": "node tests/selftest.mjs && node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs && node tests/clitest.mjs && node tests/looptest.mjs && node tests/servertest.mjs && node tests/reviewtest.mjs"
+  }
+}
