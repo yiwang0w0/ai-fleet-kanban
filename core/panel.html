@@ -2584,7 +2584,7 @@ function renderGuide(su){
     //    source gate accept code nobody looked at, which is the one thing it
     //    exists to prevent. Say so, right where the button would have been.
     const why = (isNow && s.key === "bless")
-      ? `<div class="why">这一步没有一键按钮:验收=你说「这棵树我看过、我接受」。按钮替你点头,闸就白设了。</div>` : "";
+      ? `<div class="why">这一步故意没有一键按钮:接受代码 = 你亲口说「这份我看过、我认」。按钮替你点头,这道门就白设了。</div>` : "";
     return `<div class="gs ${cls}">
       <span class="mk">${MARK[s.state] || "·"}</span>
       <div><span class="ti">${esc(s.title)}</span>${s.detail ? ` <span class="de">— ${esc(s.detail)}</span>` : ""}

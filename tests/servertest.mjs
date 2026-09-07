@@ -1135,8 +1135,8 @@ try {
     // bless step must say "restart", not "you never decided" (a browser walk of
     // the guide got stuck exactly here).
     const afterBless = (await stepOf("bless")).s;
-    ok("S3b ⭐生成配置后:验收步不再说「没决定」,而是「配置里有了,但 server 是在那之前起的 → 重启」",
-       afterBless.state === "todo" && /server 是在那之前起的/.test(afterBless.detail || "") &&
+    ok("S3b ⭐生成配置后:验收步不再说「先生成配置」,而是「配置已经写好了,但看板是在那之前起的 → 重启」",
+       afterBless.state === "todo" && /在那之前起的/.test(afterBless.detail || "") &&
        /server\.mjs/.test(afterBless.action?.text || ""), `${afterBless.state} ${(afterBless.detail || "").slice(0, 30)}`);
     const cfgDrift = (await stepOf("config")).s;
     ok("S3c 配置步同时报出漂移:磁盘上的部署键与本进程启动时读到的不一致 → 提示重启",
@@ -1182,14 +1182,14 @@ try {
     const cy2 = (await D.api("GET", "/api/setup")).body;
     ok("S8 一轮:无卡 → 有卡未走完 → 有 done 卡时该步完成",
        cy0.state === "todo" && /还没有卡/.test(cy0.detail || "") &&
-       cy1.state === "todo" && /还没有一张走完/.test(cy1.detail || "") &&
+       cy1.state === "todo" && /板上有卡了/.test(cy1.detail || "") &&
        cy2.steps.find((x) => x.key === "cycle").state === "done",
        `${cy0.detail} | ${cy1.detail}`);
     D.kill();
     // The panel consumes it (source-shape pin) and refuses a one-click bless.
     const panelSrc2 = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
     ok("S9 面板消费 /api/setup,且在验收步明写「没有一键按钮」的理由",
-       /\/api\/setup/.test(panelSrc2) && /renderGuide/.test(panelSrc2) && /这一步没有一键按钮/.test(panelSrc2), "");
+       /\/api\/setup/.test(panelSrc2) && /renderGuide/.test(panelSrc2) && /故意没有一键按钮/.test(panelSrc2), "");
     try { rmSync(DS, { recursive: true, force: true }); } catch {}
   }
 

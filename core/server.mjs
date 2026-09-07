@@ -536,12 +536,12 @@ function blessStep() {
     const d = diskConfig();
     if (d && d.gated_subtree)
       return { state: "todo",
-               detail: `配置里已经写着 gated_subtree: "${d.gated_subtree}",但这个 server 是在那之前起的`,
-               hint: "重启 server 让它读到 —— 端口/工作仓/闸子树这三个键只在启动时读一次(加线才是免重启的)",
+               detail: "配置已经写好了,但看板是在那之前起的 —— 重启一次让它读到",
+               hint: "端口、工作仓路径、要盯住的代码范围这三项只在启动时读一次;加线不用重启",
                action: { type: "cmd", text: "node core/server.mjs" } };
     return { state: "blocked",
-             detail: "还没决定闸住哪棵子树",
-             hint: '独立部署就写整棵树:在 fleet.config.json 里加 "gated_subtree": "."(生成的示例配置已经带了这一行,加完重启 server)' };
+             detail: "先做第二步生成配置,再重启看板",
+             hint: '生成的示例配置已经带了 "gated_subtree": "."(意思是:盯住整棵代码树)。看板重启读到它之后,这一步才能做' };
   }
   const revFile = join(store.DATA_DIR, "accepted_rev");
   let head = null;
@@ -550,19 +550,20 @@ function blessStep() {
     head = execFileSync("git", ["-C", CODE_ROOT, "rev-parse", `HEAD:${spec}`],
                         { encoding: "utf8", windowsHide: true }).trim();
   } catch (e) {
-    return { state: "unknown", detail: `读不到 ${CFG_GATED_SUBTREE} 的树哈希(${String(e.message).slice(0, 60)})`,
-             hint: "看板目录得是一个 git 仓库 —— 源码闸就站在它上面" };
+    return { state: "unknown", detail: `读不到代码的版本(${String(e.message).slice(0, 60)})`,
+             hint: "看板目录得是一个 git 仓库 —— 「接受代码」就是记下它当前的 git 树哈希" };
   }
   let accepted = null;
   try { accepted = readFileSync(revFile, "utf8").trim(); } catch {}
   if (!accepted)
-    return { state: "todo", detail: "还没有验收过任何版本", hint: "在看板目录里跑这一行,表示「这棵树我接受」",
+    return { state: "todo", detail: "在看板目录跑一行命令,表示「当前这份代码我看过、我接受」",
+             hint: "起线之前必须先接受一次;以后每次改了代码都要再接受一次 —— 这道门(源码闸)就是用来挡没人确认过的代码的。命令会先打出上次接受的版本、这次的版本和两者之间改了哪些文件",
              action: { type: "cmd", text: "python cli/board.py bless" } };
   if (accepted !== head)
-    return { state: "todo", detail: "代码变了,验收记录还停在旧版本(自动拉取会拒启,exit 3)",
-             hint: "看过改动后重新验收 —— 这不是故障,是闸在挡未验收的代码",
+    return { state: "todo", detail: "代码改过了,接受记录还停在旧版本 —— 再接受一次",
+             hint: "看过这次改了什么,再跑同一行命令。在这之前自动拉取会拒绝起线(exit 3)—— 那是门在挡没确认过的代码,不是故障",
              action: { type: "cmd", text: "python cli/board.py bless" } };
-  return { state: "done", detail: `已验收 ${CFG_GATED_SUBTREE} = ${accepted.slice(0, 12)}` };
+  return { state: "done", detail: `已接受 ${CFG_GATED_SUBTREE} = ${accepted.slice(0, 12)}` };
 }
 
 /** What it takes for a `git pull` to actually be in effect. Three things run
@@ -620,34 +621,34 @@ function setupState() {
     { key: "config", title: "有一份属于你的配置", ...(hasConfig
         ? (() => { const drift = configDrift();
                    return drift
-                     ? { state: "done", detail: `${CONFIG_FILE} —— ⚠ ${drift.join("/")} 改过了,这个 server 还在用启动时读到的值`,
-                         hint: "重启 server 让新值生效(这三个键只在启动时读;线是热的)",
+                     ? { state: "done", detail: `${CONFIG_FILE} —— ⚠ ${drift.join("/")} 改过了,看板还在用启动时读到的旧值`,
+                         hint: "重启看板让新值生效 —— 这几项只在启动时读一次;加线不用重启",
                          action: { type: "cmd", text: "node core/server.mjs" } }
                      : { state: "done", detail: CONFIG_FILE }; })()
-        : { state: "todo", detail: "现在用的是内置缺省(线只有 alpha/coord)",
-            hint: "生成一份配置文件,之后线、端口、工作仓都写在里面;它被 gitignore,只属于这台机器",
+        : { state: "todo", detail: "点下面的按钮,生成一份属于你的配置文件",
+            hint: "你的线、端口、工作仓路径都会写在这份文件里;它被 gitignore,只留在这台机器。现在用的是内置缺省,线只有 alpha 和 coord 两条占位",
             action: { type: "api", method: "POST", path: "/api/setup/init-config", label: "生成配置文件" } }) },
     { key: "lines", title: "定义你自己的线", ...(custom
         ? { state: "done", detail: `线: ${LINES.join(" / ")}` }
         : !hasConfig
-          ? { state: "blocked", detail: "先生成配置文件", hint: "线写在配置里,所以上一步先做" }
-          : { state: "todo", detail: `还是内置的 ${builtinIds}`,
-              hint: "用上面的「加线」框直接加(免重启),或让协调席看看你最近在干什么、替你起草",
-              action: { type: "quick", kind: "propose-lines", label: "让协调席替我起草线路" } }) },
-    { key: "bless", title: "验收这份代码(源码闸)", ...blessStep() },
-    { key: "sentry", title: "协调席在听", ...(sentries.size > 0
-        ? { state: "done", detail: `${sentries.size} 个哨连着 —— 板上的事会自动出现在那个对话里` }
-        : { state: "todo", detail: "没有哨连着:卡交付了、快捷指令按了,没人会被告知",
-            hint: "在看板目录开一个终端跑这行(让你的 Claude 挂在它的持续监视下最好)",
+          ? { state: "blocked", detail: "先做上一步 —— 你的线就写在那份配置里" }
+          : { state: "todo", detail: `内置的 ${builtinIds} 只是占位,换成你自己的活分几条`,
+              hint: "「线」= 一条自动领卡、一张接一张干下去的流水线,按你的工作切:比如 后端 / 前端 / 文档。用上面的「加线」框直接加(写进配置即生效,不用重启),或按下面的按钮让你的 Claude 看看你最近在忙什么、替你起草几条",
+              action: { type: "quick", kind: "propose-lines", label: "让我的 Claude 替我起草线路" } }) },
+    { key: "bless", title: "接受当前代码(起线的前提)", ...blessStep() },
+    { key: "sentry", title: "挂上通知:卡交付了、指令按了,你能知道", ...(sentries.size > 0
+        ? { state: "done", detail: `${sentries.size} 个通知进程连着 —— 板上的事会自动出现在那个对话里` }
+        : { state: "todo", detail: "现在没挂通知,板上发生什么都不会有人知道",
+            hint: "在看板目录开一个终端跑这行。挂上之后,worker 交完卡、你按了快捷指令,消息就推到你的对话里;不挂就全部静默发生。最好让你的 Claude 把它挂在持续监视下 —— 那个对话就成了「协调席」",
             action: { type: "cmd", text: "python watchers/sse_watch.py" } }) },
     { key: "cycle", title: "跑通一整轮", ...(c.done > 0
         ? { state: "done", detail: `已经有 ${c.done} 张卡走完了全程` }
         : (c.not_started + c.in_progress + c.waiting) > 0
-          ? { state: "todo", detail: "板上有卡,但还没有一张走完",
-              hint: "在「自动拉取」行按启动让线自己领;卡交付后会落到「等待中」等你裁定",
-              action: { type: "focus", target: "rig", label: "去「自动拉取」行" } }
-          : { state: "todo", detail: "板上还没有卡",
-              hint: "先种三张演示卡走一遍(不花 token),或在「目标」栏写下你真正的目标让它拆解",
+          ? { state: "todo", detail: "板上有卡了 —— 去「自动拉取」行按启动,让线跑一圈",
+              hint: "线会自己领卡干活;卡交付后落到「等待中」,由你验收 —— 通过还是打回,永远是你来点",
+              action: { type: "focus", target: "rig", label: "带我去「自动拉取」行" } }
+          : { state: "todo", detail: "板上还没有卡 —— 先种三张演示卡跑一遍(不花 token)",
+              hint: "跑下面这行就有三张演示卡;或者直接在左边「目标」栏写下一个真目标,让板把它拆成卡",
               action: { type: "cmd", text: "node examples/seed_demo.mjs" } }) },
   ];
   const doneN = steps.filter((s) => s.state === "done").length;
