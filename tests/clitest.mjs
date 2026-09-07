@@ -3,7 +3,7 @@
 // axis). Everything runs against temp files and a temp port; nothing here can reach a
 // live board's data dir — reset is pointed at a temp BOARD_DATA_DIR and refuses when
 // something listens on its (temp) port, which is exactly the property under test.
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -40,7 +40,7 @@ console.log(NL + "[① package.json]");
       if (!existsSync(join(ROOT, m[1]))) missing.push(`${name}: ${m[1]}`);
   ok("every `node <file>` in scripts names an existing file", missing.length === 0, missing.join(", "));
   ok("setup / start / reset / doctor / test all present",
-     ["setup", "start", "reset", "doctor", "test"].every((k) => k in (pkg.scripts || {})));
+     ["setup", "start", "reset", "doctor", "demo", "test"].every((k) => k in (pkg.scripts || {})));
 }
 
 // ── ② node preflight predicate ──────────────────────────────────────────────
@@ -99,6 +99,46 @@ console.log(NL + "[④ reset]");
   ok("tells the operator to re-bless (accepted_rev is gone with the rest)", /bless/.test(wipe.out));
   const again = run("cli/reset.mjs", ["--yes"], env);
   ok("(idempotent) an empty dir is reported as already empty, exit 0", again.code === 0 && /已经是空的/.test(again.out));
+}
+
+// ── ⑤ demo: gate first, then the whole zero-token cycle on a throwaway board ─
+//    The blessed path uses BOARD_ALLOW_UNPINNED — the isolated-harness hatch every
+//    other harness uses — and BOARD_TEST_SHUTDOWN_MS so the server it starts stops
+//    itself: no tree-kill, nothing leaks. The unblessed path must refuse BEFORE any
+//    board starts, with the gate's own words.
+console.log(NL + "[⑤ demo]");
+{
+  const src = readFileSync(join(ROOT, "cli", "demo.mjs"), "utf8");
+  ok("⭐(structure) demo never sets the gate hatch itself", !/ALLOW_UNPINNED\s*[:=]/.test(src) && /source_gate/.test(src));
+  const listening = (port) => new Promise((res) => {
+    const s = createServer(); s.once("error", () => res(true)); s.listen(port, "127.0.0.1", () => s.close(() => res(false)));
+  });
+  const data = join(TMP, "demo-data"); mkdirSync(data, { recursive: true });
+  const port = 48450 + Math.floor(Math.random() * 40);
+  const base = `http://127.0.0.1:${port}`;
+  const env = { BOARD_DATA_DIR: data, BOARD_PORT: String(port), BOARD_URL: base, BOARD_CONFIG: join(TMP, "none.json"),
+                BOARD_GATED_SUBTREE: ".", PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" };
+  const g = run("cli/demo.mjs", [], env);
+  ok("⭐未 bless → exit 3,是源码闸自己的话,并给出 bless 命令", g.code === 3 && /REFUSED/.test(g.out) && /board\.py bless/.test(g.out), `code=${g.code} ${g.out.slice(0, 120)}`);
+  ok("未 bless 时什么都没起(端口仍空)", !(await listening(port)));
+
+  const envB = { ...process.env, ...env, BOARD_ALLOW_UNPINNED: "1", BOARD_TEST_SHUTDOWN_MS: "30000",
+                 BOARD_POOL_TEST_MODE: "1", BOARD_POOL_TEST_PROBE: "ok" };
+  const child = spawn(process.execPath, [join(ROOT, "cli", "demo.mjs")], { env: envB, windowsHide: true });
+  let out = ""; child.stdout.on("data", (b) => out += b); child.stderr.on("data", (b) => out += b);
+  const deadline = Date.now() + 26000; let waitingCard = null;
+  while (Date.now() < deadline && !waitingCard) {
+    try {
+      const j = await (await fetch(base + "/api/tasks?archived=false")).json();
+      waitingCard = (j.tasks || []).find((t) => t.status === "waiting" && t.waiting_for === "review") || null;
+    } catch {}
+    if (!waitingCard) await new Promise((r) => setTimeout(r, 400));
+  }
+  ok("⭐bless 通过 → 起板、种子、mock 一轮:一张卡落在 等待中/待验收(零 token)", !!waitingCard, waitingCard ? `#${waitingCard.id}` : out.slice(-300));
+  const exited = await new Promise((res) => { const t = setTimeout(() => res(null), 40000); child.on("exit", (c) => { clearTimeout(t); res(c); }); });
+  ok("server 到点自停后 demo 也退出(没有留下孤儿进程)", exited !== null, `exit=${exited}`);
+  ok("demo 的收尾把面板地址和等待裁定的卡告诉了人", /面板/.test(out) && /等待你裁定/.test(out) && /human-gated/.test(out), out.slice(-200));
+  ok("(前提)确实是 mock 跑的:输出里有 worker 的一轮日志", /--once|第 1\/3 次尝试|等待中\/待验收/.test(out));
 }
 
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}

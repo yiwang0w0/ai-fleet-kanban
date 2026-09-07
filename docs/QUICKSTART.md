@@ -25,8 +25,14 @@ read ahead or work without the panel.
 
 ```
 npm run setup      # doctor → fleet.config.json → core/verify_registry.json → "now bless, then start"
-npm start          # = node core/server.mjs
+python cli/board.py bless
+npm run demo       # board up → seed → one mock worker round (zero tokens) → "card #N awaits your ruling"
 ```
+
+(`npm run demo` is steps 3–4 below in one command. It asks the source gate first
+— an unblessed tree is refused with the gate's own words, there is no demo flag
+around it — and it stops rather than run a mock worker on a board that already
+has real cards.)
 
 Nothing below is skipped by the shortcut, only typed for you; read on to see each
 step. (`npm` is used only for its `scripts` table — `package.json` declares zero
@@ -130,7 +136,8 @@ somebody else's live board.)
 
 ## 4 · Seed the demo and run the mock cycle (zero tokens)
 
-In a second shell. With the step-1 config, the new shell needs **no exports** —
+(`npm run demo` does this section and the previous one for you; what follows is
+the same, by hand.) In a second shell. With the step-1 config, the new shell needs **no exports** —
 port and gate subtree come from the config:
 
 ```bash
