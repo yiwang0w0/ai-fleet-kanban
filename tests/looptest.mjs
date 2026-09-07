@@ -772,6 +772,27 @@ process.stdin.on("end", () => {
        `领到 ${(rb.out.match(/领到 #/g) || []).length} 张`);
   }
 
+  // ── ⑭ the Claude seat's argv carries path-scoped deny rules (v0.17.0) ────────
+  //    A python stub stands in for the CLI (WORKER_CLI_ARGV), dumps its argv to a file
+  //    and fails — so this is the REAL loop composing the REAL argv, not a unit test.
+  console.log("\n[⑭ Claude 座席的 argv 带 --disallowedTools(令牌目录 / 登记簿)]");
+  {
+    const dump = join(TMP, "argvdump.py"), argvFile = join(TMP, "argv.json");
+    writeFileSync(dump, ["import sys, json, io",
+      "io.open(" + JSON.stringify(argvFile) + ", 'w', encoding='utf-8').write(json.dumps(sys.argv))",
+      "sys.exit(3)"].join("\n"), "utf8");
+    await api("POST", "/api/tasks", { subject: "argv-dump", line: LINE, maxAttempts: 1, description: "只为抓 argv" });
+    await runLoopOnce({ WORKER_CLAUDE_CLI: "", WORKER_ALLOW_BATCH_CLI: "", WORKER_CLI_ARGV: JSON.stringify([PY, dump]) }, 60000);
+    let argv = []; try { argv = JSON.parse(readFileSync(argvFile, "utf8")); } catch {}
+    const i = argv.indexOf("--disallowedTools"); const rules = i >= 0 ? argv.slice(i + 1) : [];
+    const dataFwd = TMP.replace(/\\/g, "/");
+    ok("⭐真 loop 起的 CLI argv 里有 --disallowedTools", i >= 0, argv.length ? argv.slice(-4).join(" ") : "(argv 未落盘 — 桩没被调到?)");
+    ok("⭐规则覆盖本板的数据目录(<data>/**)与登记簿,五种工具各一条",
+       rules.filter((r) => r.includes(dataFwd + "/**)")).length === 5 && rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 5 &&
+       ["Read", "Edit", "Write", "Glob", "Grep"].every((t) => rules.some((r) => r.startsWith(t + "("))), rules.slice(0, 3).join(" "));
+    ok("规则里没有反斜杠(正斜杠绝对路径,两平台一致)", rules.length > 0 && rules.every((r) => !r.includes("\\")));
+  }
+
 } catch (e) {
   console.error("the harness itself fell over:", e);
   fail++;
@@ -788,6 +809,7 @@ process.stdin.on("end", () => {
     console.log("\n──── board output (last 800 chars) ────\n" + srvOut.slice(-800));
   }
   try { rmSync(TMP, { recursive: true, force: true }); } catch {}
+
   console.log(`\n${"─".repeat(56)}\nresult: ${pass} PASS / ${fail} FAIL  (temp ${BASE} / ${TMP})`);
   void 0;
   process.exit(fail ? 1 : 0);

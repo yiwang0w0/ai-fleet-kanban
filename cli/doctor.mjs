@@ -11,7 +11,7 @@
 import { execFileSync, execSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, accessSync, constants } from "node:fs";
 import { createServer } from "node:net";
-import { join, dirname, isAbsolute } from "node:path";
+import { join, dirname, isAbsolute, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyConfigDefaults } from "../core/env.mjs";
 
@@ -179,7 +179,7 @@ await new Promise((resolve) => {
 {
   // "-p, --print" is checked as one help fragment: the loops pass the SHORT form,
   // so asserting only "--print" would test a spelling we never use.
-  const CLI_FLAGS = ["-p, --print", "--model", "--effort", "--permission-mode",
+  const CLI_FLAGS = ["-p, --print", "--model", "--effort", "--permission-mode", "--disallowedTools",
                      "--allowedTools", "--add-dir", "--output-format",
                      "--resume", "--session-id", "--fork-session", "--max-budget-usd"];
   const CLI_CHOICES = { "--effort": ["low", "medium", "high", "xhigh", "max"],
@@ -211,6 +211,23 @@ await new Promise((resolve) => {
       wr(`CLI --help 跑不起来(${String(e.message).slice(0, 50)})`, "参数契约这一项没测成 —— 不是通过,是没测");
     }
   }
+}
+
+// ── ⑤c the trust boundary: are the tokens and the registry inside the worker's reach? ─
+// Measured 2026-09-07 with the real CLI: a Claude worker in -p mode can Read any absolute
+// path on the machine, so moving .data out of the repo is not a barrier by itself; the
+// loops now pass path-scoped --disallowedTools rules, which held in nine experiments. The
+// codex seat has no equivalent — there the boundary is prose. Say which case this is.
+{
+  const REPO_ROOT = resolve(process.env.BOARD_REPO || ROOT);
+  const DATA = resolve(process.env.BOARD_DATA_DIR || join(ROOT, "core", ".data"));
+  const REG = resolve(process.env.BOARD_VERIFY_REGISTRY || join(ROOT, "core", "verify_registry.json"));
+  const inside = (p) => { const r = relative(REPO_ROOT, p); return r !== "" && !r.startsWith("..") && !isAbsolute(r); };
+  const exposed = [DATA, REG].filter(inside);
+  if (exposed.length)
+    wr(`令牌目录 / 登记簿在工作仓之内(${exposed.map((x) => relative(REPO_ROOT, x)).join(", ")})`,
+       "Claude 座席已由 --disallowedTools 路径规则封住(实测);codex 座席只有提示词纪律。若要跑 codex 座席,把 BOARD_DATA_DIR 与 BOARD_VERIFY_REGISTRY 指到工作仓之外,或让舰队用独立的 OS 用户跑");
+  else ok("令牌目录与登记簿都在工作仓之外(Claude 座席另有 deny 规则兜底)");
 }
 
 // ── ⑥b browser (optional) — only front-end verification needs it ────────────

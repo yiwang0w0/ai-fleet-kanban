@@ -206,8 +206,8 @@ spelled as `claude --help` spells it. Values likewise: `--effort` takes
 takes `json` for the reviewer. `--model` receives a full model id, not an alias.
 
 ```
--p/--print  --model  --effort  --permission-mode  --allowedTools  --add-dir
---output-format  --resume  --session-id  --fork-session  --max-budget-usd
+-p/--print  --model  --effort  --permission-mode  --allowedTools  --disallowedTools
+--add-dir  --output-format  --resume  --session-id  --fork-session  --max-budget-usd
 ```
 
 The loops pass `-p`, the short form; `--allowedTools` is the camelCase spelling

@@ -23,6 +23,25 @@ VERIFY_TIMEOUT = int(os.environ.get("WORKER_VERIFY_SEC", "900"))
 #     那个分叉。警告写在这里,踩也踩在这里(外部审阅 2026-09-07 指出)。
 REGISTRY = os.environ.get("BOARD_VERIFY_REGISTRY") or os.path.join(CODE_ROOT, "core", "verify_registry.json")
 
+def cli_deny_rules(data_dir, registry=None):
+    """Claude 座席的路径级 deny 规则(v0.17.0)。两条 loop 共用 —— 写在两处必有一处腐烂。
+
+    为什么需要:worker 的 cwd / --add-dir 是工作仓;默认部署里看板就是工作仓,于是令牌目录
+    (core/.data,含 operator 全权的 board_token)与验证登记簿都在模型伸手可及之处 ——
+    改登记簿一个键就能借 loop 之手执行任意命令;读到 board_token 就拿到裁定权(外部审计 2026-09-07)。
+
+    为什么是这个形:2026-09-07 用真 CLI(-p 模式)做了 9 组对照实验 ——
+      · `--disallowedTools "Read(<dir>/**)"` 拦住了相对路径读、**绝对路径读**、以及 Grep 读内容;
+        Edit/Write 对登记簿的 deny 同样生效(阳性对照:无 deny 时文件确实被改写、秘密确实泄露)。
+      · **把 .data 搬出仓库挡不住**:cwd 之外的绝对路径 Read 成功。同一 OS 用户下没有文件系统屏障。
+    ∴ 结构防线是这组规则;搬家只是纵深。规则用正斜杠绝对路径(两种写法都被接受;正斜杠两平台皆稳)。
+    ⚠ 这只管 Claude 座席。codex 没有等价机制,那边只有提示词纪律 —— 写进 SECURITY,不假装。"""
+    rules = []
+    for base, tail in ((data_dir, "/**"), (registry or REGISTRY, "")):
+        path = os.path.abspath(base).replace("\\", "/") + tail
+        rules += [f"{tool}({path})" for tool in ("Read", "Edit", "Write", "Glob", "Grep")]
+    return rules
+
 def verify_registry():
     """卡可以指名的验证集合。"""
     try:

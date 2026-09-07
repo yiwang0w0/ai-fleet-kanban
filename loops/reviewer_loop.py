@@ -39,7 +39,7 @@ import gates_lib          # revision 绑定门 + 全局预算(诸 loop 共用,�
 import codex_runtime
 import context_lib
 from pool_state import report_exhausted
-from verify_lib import run_verify, fmt_verify, verify_registry
+from verify_lib import run_verify, fmt_verify, verify_registry, cli_deny_rules
 
 BASE = os.environ.get("BOARD_URL") or (
     "http://127.0.0.1:" + os.environ["BOARD_PORT"] if os.environ.get("BOARD_PORT")
@@ -593,7 +593,9 @@ def review_one(t, vr=None):
             "或真实业务数据;若证据只能靠这些内容核实,必须 escalate。")
     else:
         delivery = f"只做一件事:用 Write 工具把判决写进这个文件,别的什么都不要动。\n\n  {out}"
-        tool_discipline = "- ⭐你没有 Bash,跑不了任何命令。"
+        tool_discipline = ("- ⭐你没有 Bash,跑不了任何命令。\n"
+                           "- 绝对不得读取或搜索 .env/.env.*、看板数据目录(board_token/worker_token/review_token 所在)"
+                           "或真实业务数据;若证据只能靠这些内容核实,必须 escalate。")
     prompt = PROMPT.format(
         id=t["id"], subject=t["subject"], wf=t.get("waiting_for") or "-",
         attempts=t.get("attempts"), max_attempts=t.get("max_attempts"),
@@ -637,7 +639,9 @@ def review_one(t, vr=None):
                         if REVIEWER_BUDGET not in ("0", "") else []),
                       "--output-format", "json", "--permission-mode", "acceptEdits",
                       "--allowedTools", "Read", "Glob", "Grep", "Write",
-                      "--add-dir", REPO, "--add-dir", OUTDIR]
+                      "--add-dir", REPO, "--add-dir", OUTDIR,
+                      # ⭐ v0.17.0:令牌目录与登记簿对审阅模型不可读不可写(verify_lib.cli_deny_rules,实测有效)。
+                      "--disallowedTools", *cli_deny_rules(DATA)]
         try:
             r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", env=env, timeout=900, cwd=REPO)

@@ -61,6 +61,7 @@ const STUB = join(TMP, "review_stub.py");
 writeFileSync(STUB, [
   "import sys, os, re, io, json",
   "argv = sys.argv",
+  "io.open(os.environ.get('REVIEW_STUB_ARGV', os.devnull), 'w', encoding='utf-8').write(json.dumps(argv))",
   "prompt = argv[argv.index('-p') + 1]",
   "io.open(os.environ['REVIEW_STUB_MARK'], 'a', encoding='utf-8').write('invoked' + chr(10))",
   "m = re.search(r'\\u628a\\u5224\\u51b3\\u5199\\u8fdb\\u8fd9\\u4e2a\\u6587\\u4ef6[\\s\\S]*?\\n\\n\\s*(\\S+)', prompt)",
@@ -68,6 +69,7 @@ writeFileSync(STUB, [
   "print(json.dumps({'total_cost_usd': 0}))",
 ].join(NL), "utf8");
 const MARK = join(TMP, "stub_invoked.log");
+const ARGVF = join(TMP, "review_argv.json");
 
 const PORT = await freePort();
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -121,7 +123,7 @@ try {
       env: { ...commonEnv,
              REVIEWER_CLI_ARGV: JSON.stringify(["python", STUB]),
              REVIEW_STUB_JSON: JSON.stringify(verdict),
-             REVIEW_STUB_MARK: MARK,
+             REVIEW_STUB_MARK: MARK, REVIEW_STUB_ARGV: ARGVF,
              REVIEWER_PARALLEL: "1", REVIEWER_LIMIT: "6" },
       encoding: "utf8", timeout: 120000 });
     return (r.stdout || "") + (r.stderr || "");
@@ -140,6 +142,13 @@ try {
   ok("R3 ⭐绿验证随判决落库:verify_ok === true(origin 死分支修正的钉子)",
      tA.verify_ok === true, `verify_ok=${JSON.stringify(tA.verify_ok)}`);
   ok("R4 stub 被调用过(判决确实出自模型路径)", existsSync(MARK), logA.slice(-200));
+
+  console.log(NL + "[§2b 审阅座席的 argv 也带 --disallowedTools(v0.17.0)]");
+  {
+    let av = []; try { av = JSON.parse(readFileSync(ARGVF, "utf8")); } catch {}
+    const i = av.indexOf("--disallowedTools"); const rules = i >= 0 ? av.slice(i + 1) : [];
+    ok("R4b ⭐审阅的真 argv 带 --disallowedTools,覆盖数据目录与登记簿", i >= 0 && rules.some((r) => /\/\*\*\)$/.test(r)) && rules.some((r) => /verify_registry\.json\)$/.test(r)), rules.slice(0, 2).join(" ") || "(no argv)");
+  }
 
   console.log(NL + "[§3 机器产出闸:验收要机器、证据纯散文、模型说 approve → 机械降 escalate]");
   const idB = await toWaiting({

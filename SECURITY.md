@@ -21,9 +21,19 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   full power; `worker_token` = execution face only (a worker compromised through
   card text cannot close, re-scope or re-parent anything); `review_token` =
   ruling face, and only as `resolved_by=auto`. All three live in the data
-  directory (gitignored) — that directory is **operator territory**: grant a
-  worker agent `BOARD_REPO` and nothing else, because filesystem access to the
-  data dir hands over every token at once.
+  directory (gitignored) — that directory is **operator territory**.
+  **Measured 2026-09-07 with the real CLI (nine experiments, positive controls
+  included):** a Claude worker in `-p` mode can `Read` any absolute path on the
+  machine, inside or outside its working directory — so moving the data dir out
+  of the repo is *not* a barrier by itself. What held, against relative reads,
+  absolute reads and `Grep`, is the path-scoped deny rule the loops now pass:
+  `--disallowedTools Read/Edit/Write/Glob/Grep(<data>/**)` and the same for the
+  verify registry (v0.17.0). Same for the registry hole: a worker that could edit
+  `verify_registry.json` could nominate any command for the loop to run — the
+  Edit/Write deny closes it, measured. **The codex seat has no equivalent
+  mechanism**; there the boundary is the prompt, which is discipline, not
+  structure. On a shared machine run the fleet as its own OS user; `doctor` and
+  the server both say which case a deployment is in.
 - **Card text is never a command line.** The worker refuses `.bat/.cmd` CLIs
   (CVE-2024-24576, "BatBadBut": cmd.exe re-parses arguments, so a card body
   could become an executable command line). The gate judges by extension on

@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { execFile, execFileSync, execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, relative } from "node:path";
 import { createRequire } from "node:module";
 import { nodeTooOld } from "./env.mjs";
 
@@ -38,6 +38,7 @@ const decompose = require_("./decompose_lib.js");
 const dgate = require_("../gates/deliverable_gate.js");
 
 const CODE_ROOT = resolve(__dirname, "..");
+const isAbsolutePath = (p) => /^(?:[A-Za-z]:[\\/]|[\\/])/.test(String(p));
 const LOOPS_DIR = join(__dirname, "..", "loops");
 
 // ── Fleet configuration ───────────────────────────────────────────────────────
@@ -2669,6 +2670,16 @@ server.listen(PORT, HOST, () => {
   console.log(HANDOFF_TARGETS.length
     ? `handoff 目标: ${HANDOFF_TARGETS.map((t) => `${t.id}→${t.dir}`).join("  ")}`
     : "未配置 handoff 目标 —— apply 方案归档将拒绝(声明 handoff_targets 或 BOARD_HANDOFF_DIR)");
+  // ⭐ Trust boundary, said at startup (v0.17.0). Inside the work repo, the tokens and the
+  //   registry are within a worker's reach. The Claude seat is fenced by the deny rules the
+  //   loops pass (measured); the codex seat is not. Name the case, do not imply the other.
+  {
+    const inside = (p) => { const r = relative(REPO_ROOT, resolve(p)); return r !== "" && !r.startsWith("..") && !isAbsolutePath(r); };
+    const reg = process.env.BOARD_VERIFY_REGISTRY || join(CODE_ROOT, "core", "verify_registry.json");
+    const exposed = [store.DATA_DIR, reg].filter(inside);
+    if (exposed.length)
+      console.log(`⚠ 令牌目录 / 登记簿在工作仓之内(${exposed.map((x) => relative(REPO_ROOT, resolve(x))).join(", ")})—— Claude 座席由 deny 规则封住;codex 座席只有提示词纪律(见 SECURITY.md)`);
+  }
 
   // ── Startup recovery inventory. After a machine dies, the first question is
   //    "what is left hanging" — answered NOW, not after the first 30s sweep

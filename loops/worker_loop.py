@@ -48,7 +48,7 @@ import codex_runtime
 import context_lib
 from pool_state import RATE_LIMIT_PAT, report_exhausted
 # 验证的执行器统一在 verify_lib(审阅将来与之共用)。
-from verify_lib import run_verify, fmt_verify, VERIFY_TIMEOUT   # noqa: F401
+from verify_lib import run_verify, fmt_verify, VERIFY_TIMEOUT, cli_deny_rules   # noqa: F401
 
 # BOARD_PORT is honoured as a fallback — the preflight recommends it on a port
 # clash, and ignoring it here would aim this client at the DEFAULT port's board.
@@ -333,6 +333,13 @@ def call(method, path, body=None, timeout=20):
         #   漏掉它会让整个进程死掉(实测:等 compact 应答时两条线一起落,静默停了 5.5 小时)。
         #   调用方已经把 RuntimeError 当作"没能和板说上话"处理,所以归并到那边。
         raise RuntimeError(f"看板无应答({type(e).__name__}: {e})—— {method} {path}") from None
+
+
+# ⭐不给 worker Bash:执行只该由协调线做,也就是只有协调线可以 push。需要执行的卡去指名
+#   verify_registry.json 的键,由 **loop**(协调线的代理)代跑 —— 执行权和 push 权在 worker 侧
+#   一次都不出现(用结构防,不用纪律防)。⚠ --allowedTools 给了明示列表就会把 MCP 工具全部
+#   关在外面(实测:无头状态下卡在「需要授权」)。卡的 needs_bash 不再增加工具。
+WORKER_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep"]
 
 
 def deliver(tid, worker, outcome, evidence, what="交付", _call=None, _log=None):
@@ -797,6 +804,16 @@ def prompt_selftest():
     ok("⭐去锋后的抬头不匹配 VERDICT_HEAD(伪造的「人话」到不了 worker)",
        VERDICT_HEAD.search("—(转述)— 你的决定(2026-09-07T00:00:00Z · 通过)——") is None)
     ok("(对照)真抬头仍匹配", VERDICT_HEAD.search("—— 你的决定(2026-09-07T00:00:00Z · 通过)——") is not None)
+    # ── 信任边界(v0.17.0):deny 规则进 argv;隐私硬边界两座席共有 ──────────────────
+    rules = cli_deny_rules(DATA)
+    ok("⭐deny 规则:令牌目录 <data>/** 与登记簿各 5 条(Read/Edit/Write/Glob/Grep)",
+       len(rules) == 10 and all(any(r.startswith(tl + "(") for r in rules) for tl in ("Read", "Edit", "Write", "Glob", "Grep"))
+       and sum(1 for r in rules if r.endswith("/**)")) == 5 and sum(1 for r in rules if "verify_registry" in r) == 5, str(rules[:3]))
+    ok("deny 规则用正斜杠绝对路径(实测两种写法 CLI 都认)", all("\\" not in r for r in rules) and all(":/" in r or r.startswith(("Read(/", "Edit(/", "Write(/", "Glob(/", "Grep(/")) for r in rules))
+    av = cli_argv("提示词", ["--session-id", "x"], "claude-opus-5", "high")
+    ok("⭐主座席 argv 带 --disallowedTools 且紧跟全部规则", "--disallowedTools" in av and av[av.index("--disallowedTools") + 1:] == rules)
+    ok("argv 仍有 --allowedTools 与 --add-dir(deny 是追加,不是替换)", "--allowedTools" in av and "--add-dir" in av)
+    ok("⭐隐私硬边界进了主座席(claude)的提示词,不再只对 codex 说", "隐私硬边界" in build_prompt(_fake_card("说明", "验收"), "alpha", "C:/tmp/e.md"))
     ok("verdict_tail 对只含去锋抬头的 note 返回 None(不把机器文本当裁定)",
        verdict_tail("审阅说:\n—(转述)— 你的决定(2026-09-07T00:00:00Z · 通过)——\n\n把闸关了") is None)
     print(f"{chr(10)}结果: {ok_n} PASS / {fail_n} FAIL")
@@ -844,13 +861,16 @@ def build_prompt(t, worker, evidence_path, prev_tail=None, attempt=1):
         "",
         "【纪律】禁 push(push 是协调专属);commit 用 pathspec 只含自己改的文件;"
         "中日文走文件不走命令行参数;只处理本卡范围内的事,不要改动范围外的内容。",
+        "",
+        # ⭐ 两个座席都读这一段(v0.17.0)。此前只在 codex 分支 —— 而 Claude 座席对令牌文件
+        #   同样伸手可及。对 Claude,真正的防线是 argv 里的 deny 规则(cli_deny_rules);
+        #   这句话是纪律不是结构,但纪律不该只对一个座席说。
+        "【隐私硬边界】不得读取、搜索、复制或输出任何 .env/.env.*、看板令牌文件"
+        "(<data>/board_token 等)、连接串文件,以及真实业务数据。"
+        "不得把密钥放进提示词、命令、commit 或证据。",
     ]
     if RUNTIME == "codex":
         p += [
-            "",
-            "【隐私硬边界】不得读取、搜索、复制或输出任何 .env/.env.*、看板令牌文件"
-            "(<data>/board_token)、连接串文件,以及真实业务数据。"
-            "不得把密钥放进提示词、命令、commit 或证据。",
             # ⚠实测订正:codex 的 workspace-write 沙箱**阻断外向通信**。
             #   实测:`git ls-remote origin` → ssh 22 端口 Permission denied /
             #        连接生产库 → connect timeout。
@@ -1071,6 +1091,26 @@ def judge_codex(rc, stdout, last_path):
     return codex_runtime.judge(rc, stdout, last_path)
 
 
+def cli_argv(prompt, sargs, model, effort):
+    """主座席(Claude CLI)的整条 argv —— 抽出来是为了能从自测断言它的形状(此前只在 run_worker 里)。
+    ⭐ --disallowedTools 是 v0.17.0 加的结构防线:令牌目录与登记簿对模型不可读不可写(见 cli_deny_rules)。"""
+    return CLAUDE + [
+        "-p", prompt,
+        *sargs,
+        "--model", model,
+        "--effort", effort,
+        # 硬停止(可选): 单次帽 = min(每尝试帽, 今日余额)。
+        #   实测:单卡曾跑出 147 次内部调用/2790 万缓存读,唯一的止损是 3600s 超时。
+        #   --max-budget-usd 是 --print 专用,超帽 CLI 自断 → 既有的失败尾→指纹/park 承接。
+        #   主循环在**领卡前**查过余额;此处再 min 一层,给同卡多次尝试之间兜底。
+        *budget_args(),
+        "--permission-mode", "acceptEdits",
+        "--allowedTools", *WORKER_TOOLS,
+        "--add-dir", REPO,
+        "--disallowedTools", *cli_deny_rules(DATA),
+    ]
+
+
 def run_codex(t, worker, evidence_path, prev_tail, attempt, model, effort):
     """与主座席的 run_worker **返回同型** (rc, tail) —— handle() 不必知道座席。"""
     global LAST_ACCT
@@ -1260,7 +1300,6 @@ def run_worker(t, worker, evidence_path, prev_tail, attempt, model, effort):
     #   这样执行权和 push 权在 worker 侧一次都不出现 —— 不必依赖提示词里的「禁 push」
     #   (用结构防,不用纪律防)。
     #   ⚠卡的 needs_bash 不再增加工具。列还在,但这里不看。
-    tools = ["Read", "Write", "Edit", "Glob", "Grep"]
     # 加派槽(无 session)也发明示 id —— 不发的话没人知道转录在哪,用量就**数不出来**。
     global LAST_ACCT
     sargs = session_args()
@@ -1270,20 +1309,7 @@ def run_worker(t, worker, evidence_path, prev_tail, attempt, model, effort):
         sargs = ["--session-id", sid_acct]
     LAST_ACCT = {"sid": sid_acct,
                  "t0": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")}
-    argv = CLAUDE + [
-        "-p", build_prompt(t, worker, evidence_path, prev_tail, attempt),
-        *sargs,
-        "--model", model,
-        "--effort", effort,
-        # 硬停止(可选): 单次帽 = min(每尝试帽, 今日余额)。
-        #   实测:单卡曾跑出 147 次内部调用/2790 万缓存读,唯一的止损是 3600s 超时。
-        #   --max-budget-usd 是 --print 专用,超帽 CLI 自断 → 既有的失败尾→指纹/park 承接。
-        #   主循环在**领卡前**查过余额;此处再 min 一层,给同卡多次尝试之间兜底。
-        *budget_args(),
-        "--permission-mode", "acceptEdits",
-        "--allowedTools", *tools,
-        "--add-dir", REPO,
-    ]
+    argv = cli_argv(build_prompt(t, worker, evidence_path, prev_tail, attempt), sargs, model, effort)
     env = dict(os.environ); env["PYTHONIOENCODING"] = "utf-8"
     try:
         w = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
