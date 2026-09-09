@@ -29,7 +29,7 @@ OS process, **not** a subagent. `docs/GLOSSARY.md` maps the two vocabularies, an
 
 ## Status
 
-**v0.21.0.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (620+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+**v0.21.1.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (620+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 
 v0.21.0 follows three operator rulings. The buttons say what the human is doing: a delivery waiting for acceptance offers 通过 (write a note and it becomes 打回), a question waiting for the human offers 同意 / 否决 — same `approve` / `reject` verdicts underneath. A line can be configured `accept: "auto"`: deliveries on it complete on report, through the same close gates as a human's 通过, recorded as `resolved_by: auto` with the reason; human-gated cards still wait. Lines carry a display `label` (Chinese welcome) while the id stays the machine's name — the built-in lines, the example config, every badge, the rig, the pick menu and the timeline show the label; the add-line form takes a display name and a 「交付即完成」 checkbox.
 

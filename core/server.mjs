@@ -713,7 +713,8 @@ function upgradeState() {
 
 function setupState() {
   const c = store.counts(db);
-  const builtinIds = BUILTIN_CONFIG.lines.map((l) => l.id).join(",");
+  const builtinIds = BUILTIN_CONFIG.lines.map((l) => l.id).join(",");          // the comparison key (machine ids)
+  const builtinNames = BUILTIN_CONFIG.lines.map((l) => l.label ? `「${l.label}」` : l.id).join("");   // what the guide shows
   const custom = LINES.join(",") !== builtinIds;
   const hasConfig = existsSync(CONFIG_FILE);
   const steps = [
@@ -728,13 +729,13 @@ function setupState() {
                                                 confirm: "重启看板,让它读到改过的配置。\n\n卡、事件、账本都在库里,不会丢;在跑的线会先停下,起来后照原样恢复。" } }
                      : { state: "done", detail: CONFIG_FILE }; })()
         : { state: "todo", detail: "点下面的按钮,生成一份属于你的配置文件",
-            hint: "你的线、端口、工作仓路径都会写在这份文件里;它被 gitignore,只留在这台机器。现在用的是内置缺省,线只有 alpha 和 coord 两条占位",
+            hint: "你的线、端口、工作仓路径都会写在这份文件里;它被 gitignore,只留在这台机器。现在用的是内置缺省,只有「实装」「协调」两条占位线",
             action: { type: "api", method: "POST", path: "/api/setup/init-config", label: "生成配置文件" } }) },
     { key: "lines", title: "定义你自己的线", ...(custom
         ? { state: "done", detail: `线: ${LINES.join(" / ")}` }
         : !hasConfig
           ? { state: "blocked", detail: "先做上一步 —— 你的线就写在那份配置里" }
-          : { state: "todo", detail: `内置的 ${builtinIds} 只是占位,换成你自己的活分几条`,
+          : { state: "todo", detail: `内置的 ${builtinNames} 只是占位,换成你自己的活分几条`,
               hint: "「线」= 一条自动领卡、一张接一张干下去的流水线,按你的工作切:比如 后端 / 前端 / 文档。用上面的「加线」框直接加,或按下面的按钮让你的 Claude 看看你最近在忙什么、替你起草几条",
               action: { type: "quick", kind: "propose-lines", label: "让我的 Claude 替我起草线路" } }) },
     { key: "bless", title: "接受当前代码(起线的前提)", ...blessStep() },
