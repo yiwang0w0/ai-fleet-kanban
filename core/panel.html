@@ -236,6 +236,7 @@
      deployment reported the arm-time growth itself as the defect, not only the
      second press missing. armSwap() still pins as a backstop for odd fonts. */
   button[data-a="approve"]{min-width:9.5em}
+  button[data-a="reject"]{min-width:6.5em}
   button[data-a="archive"]{min-width:7.5em}
   button[data-final-close]{min-width:9.5em}
   button[data-decide]{min-width:14em}
@@ -272,6 +273,7 @@
   #quick-list .rq{color:var(--dim)} #quick-list .rq.late{color:var(--warn)} #quick-list .rq.acked{color:var(--fg)}
   .line-add{display:flex;gap:6px;align-items:center;padding:4px 14px 8px;font-size:12px;flex-wrap:wrap}
   .line-add input{width:11em}
+  .line-add label.chk{display:flex;gap:4px;align-items:center;color:var(--dim);font-size:var(--fs-sm);cursor:pointer}
   .line-add .note.ok{color:var(--ok)} .line-add .note.bad{color:var(--warn)}
   .tag.offrig{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);border:1px dashed var(--warn)}
   /* Held by the no-progress brake: dimmed rather than alarming — nothing is wrong,
@@ -404,8 +406,10 @@
      re-rendered on every refresh and would erase an in-progress entry. -->
 <form class="line-add" id="line-add" autocomplete="off">
   <label for="line-add-id">加线</label>
-  <input id="line-add-id" placeholder="线名(小写/数字/-_)" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{0,31}" required>
+  <input id="line-add-label" placeholder="显示名(可中文)" maxlength="24">
+  <input id="line-add-id" placeholder="标识(小写/数字/-_,给命令行用)" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{0,31}" required>
   <input id="line-add-hint" placeholder="一句用途(可选)" maxlength="80">
+  <label class="chk" title="勾上=这条线交付的卡不用你点「通过」,交付即完成(交付物闸照常检查);要你决定的卡照样进等待中"><input type="checkbox" id="line-add-auto"> 交付即完成</label>
   <button type="submit">加入</button>
   <span class="note" id="line-add-note" aria-live="polite"></span>
 </form>
@@ -481,7 +485,12 @@ const lineColor = (l) => {
   const i = LINES.indexOf(root);
   return i >= 0 ? PALETTE[i % PALETTE.length] : "#5d6472";
 };
-const lineLabel = (l) => String(l || "") || "未指派";
+let LINE_LABELS = {};   // id → display name (fleet.config lines[].label); the id stays the machine's
+const lineLabel = (l) => {
+  const s = String(l || ""); if (!s) return "未指派";
+  const m = s.match(/^(.*?)(@\d+)?$/);
+  return (LINE_LABELS[m[1]] || m[1]) + (m[2] || "");
+};
 // Runtime badge text: conventional short forms with a generic fallback.
 const RT_BADGE = { claude: "CC", codex: "CX" };
 const rtColor = (rt) => rt === "codex" ? "#b07dd8" : "var(--cc)";
@@ -570,7 +579,7 @@ function openDecisionModal(t){
     `<textarea class="vin" data-vin="${t.id}" rows="2" placeholder="可选:补充给原 Agent 的一句指示"></textarea>` +
     `<div class="hoh" data-hoh></div><div class="acts decision-actions">` +
     `<button class="pri" data-decide="${t.id}" disabled>先选择 A / B / C</button>` +
-    `<button data-final-close="${t.id}">无需后续 · 结案</button></div>`;
+    `<button data-final-close="${t.id}">无需后续 · 通过</button></div>`;
   const vin = box.querySelector("[data-vin]");
   if (vin) vin.value = verdictDraft.get(t.id) || "";
   const receipt = box.querySelector("[data-handoff-receipt]");
@@ -767,7 +776,7 @@ function cardParts(t){
   //   Both show — forecast alone leaves "why did it close" unreadable, result alone
   //   leaves "why could it close".
   if (t.oneof_key) top += `<span class="tag oneof" title="同一个父下,这一组只要有一张走通(且通过机器验证),其余自动关闭">备选组·${esc(t.oneof_key)}</span>`;
-  if (t.proves_parent) top += `<span class="tag oneof" title="本卡的验证通过即回答了父卡的问题 —— 父卡会联动结案">验证父卡</span>`;
+  if (t.proves_parent) top += `<span class="tag oneof" title="本卡的验证通过即回答了父卡的问题 —— 父卡会跟着通过">验证父卡</span>`;
   if (t.resolved_by === "cascade") top += `<span class="tag casc" title="非人工裁定:同链另一张卡通过机器验证,本卡因此不再需要。理由见卡面裁定记录">联动关闭</span>`;
   if (t.status === "waiting" && t.waiting_for)
     top += `<span class="tag wf ${t.waiting_for}">${wfLabel(t.waiting_for)}</span>`;
@@ -853,8 +862,14 @@ function cardParts(t){
     //   write = hand back, empty = close. One button says it all. (The machine
     //   bounce — auto-review — is a separate road; the API's verdict:'reject' is
     //   unchanged.)
+    // v0.21 (user ruling): a DELIVERY waiting for acceptance says 通过 (write a note → 打回);
+    //   a QUESTION waiting for the human (waiting_for=decision, from `wait`) says 同意 / 否决.
+    //   Same verdicts underneath (approve / reject) — different words, because the human is
+    //   doing a different thing, and the old 「结案」 read like paperwork.
     if (!t.decision_package?.options?.length){
-      acts += `<button class="pri" data-a="approve" data-id="${t.id}">结案</button>`;
+      const q = t.waiting_for === "decision";
+      acts += `<button class="pri" data-a="approve" data-id="${t.id}" data-kind="${q ? "decide" : "accept"}">${q ? "同意" : "通过"}</button>`;
+      if (q) acts += `<button class="danger" data-a="reject" data-id="${t.id}" data-kind="decide">否决</button>`;
     }
     // [Edit]: fix line/route/caps WITHOUT rebuilding the card. Bounce-and-rebuild
     // severs attempts, derivations and ruling records — untraceable afterwards.
@@ -997,18 +1012,22 @@ function syncHandoff(scope){
   // ⭐ One button, TWO meanings — the caption says which, literally. It used to say
   //   "approve" while text present meant not-closing: display and behavior split.
   for (const b of scope.querySelectorAll("[data-a='approve']")){
-    b.textContent = on ? "回原线继续" : "结案";
+    const q = b.dataset.kind === "decide";
+    b.textContent = on ? (q ? "同意并附指示" : "打回并交回原线") : (q ? "同意" : "通过");
     b.classList.toggle("handoff", on);
   }
+  const isQ = !!scope.querador?.call?.(scope, "[data-kind='decide']") || !!scope.querySelector("[data-kind='decide']");
   const h = scope.querySelector("[data-hoh]");
   // ⭐ The bounce hint must state the REAL budget mechanics: a claim = a new
   //   dispatch = the per-dispatch budget resets in full (store re-stamps
   //   attempts_base). The old wording "续 1 次尝试预算" described a +1 that does
   //   not exist — a cold-machine walkthrough read the API after a bounce, saw
   //   nothing "+1", and correctly could not reconcile the two.
-  if (h) h.textContent = on
-    ? "按下=**不结案** —— 这段文字作为指令交回原 Agent 继续;卡回到原线,下次认领按新一轮派发计算尝试预算(attempts 累计不清零,预算锚在认领时重打)"
-    : "空白提交=**结案**(计入已完成)。需修改或继续:先在上方写明指示再提交 —— 未写指示不会产生后续动作";
+  if (h) h.textContent = isQ
+    ? (on ? "同意=按这段指示交回原 Agent 执行;否决=退回,写一句为什么更好"
+          : "同意=按建议执行(卡完成);否决=退回原线,写一句为什么更好")
+    : (on ? "按下=**打回** —— 这段文字作为指令交回原 Agent 继续;卡回到原线,下次认领按新一轮派发计算尝试预算(attempts 累计不清零,预算锚在认领时重打)"
+          : "空白提交=**通过**(计入已完成)。需修改或继续:先在上方写明指示再提交 —— 未写指示不会产生后续动作");
 }
 
 function syncDecision(scope, t){
@@ -1053,7 +1072,7 @@ function syncDecision(scope, t){
         : outcome === "success"
           ? "本次会记录为执行成功:保留回执、把文件归档到 handoff 目标,并交回原 Agent 做结果验证。"
           : "先取走并自行应用上面的文件,再明确选择成功或失败并填写原始回执。"
-      : "确认后不会结案:选择与补充指示会原样交回原 Agent 继续。";
+      : "确认后不会通过(卡回原线):选择与补充指示会原样交回原 Agent 继续。";
 }
 
 function upsert(t, wanted){
@@ -2337,7 +2356,7 @@ async function refresh(){
     ctxLines = cres.lines;
     claimMisses = wres.claim_misses || [];
     workers = wres.workers; LINES = wres.lines; MODELS = wres.models; EFFORTS = wres.efforts;
-    LINE_HINTS = wres.line_hints || {}; ROUTES = wres.routes || [];
+    LINE_HINTS = wres.line_hints || {}; LINE_LABELS = wres.line_labels || {}; ROUTES = wres.routes || [];
     RUNTIMES = wres.runtimes || []; MAXP = wres.max_parallel || 0;
     DECOMP = wres.decompose_models || [];
     if (r.server_now) skew = r.server_now - Date.now();
@@ -2520,7 +2539,7 @@ ${r.memo}`);
       setTimeout(() => { if (finalClose.dataset.armed === "1"){
         finalClose.dataset.armed = ""; finalClose.classList.remove("armed");
         disarmRestore(finalClose);
-        if (!finalClose.dataset.orig) finalClose.textContent = "无需后续 · 结案";
+        if (!finalClose.dataset.orig) finalClose.textContent = "无需后续 · 通过";
       } }, 4000);
       return;
     }
@@ -2529,7 +2548,7 @@ ${r.memo}`);
       await post(`/api/tasks/${id}/resolve`, { verdict:"approve", note:"", resolved_by:"human" });
       verdictDraft.delete(id); decisionChoice.delete(id); receiptDraft.delete(id); outcomeDraft.delete(id);
       closeDecisionModal(); await refresh();
-    }catch(err){ alert("结案失败:" + err.message); finalClose.disabled = false; }
+    }catch(err){ alert("通过失败:" + err.message); finalClose.disabled = false; }
     return;
   }
 
@@ -2556,13 +2575,15 @@ ${r.memo}`);
   //   without a second press disarms). No confirm() dialogs — dialogs train
   //   "confirm" into a reflex; the armed state at least demands a conscious second
   //   press, and disarming is the default direction (not pressing = nothing).
-  if ((a === "approve" || a === "archive") && b.dataset.armed !== "1") {
+  if ((a === "approve" || a === "reject" || a === "archive") && b.dataset.armed !== "1") {
     b.dataset.armed = "1";
     b.dataset.orig = b.textContent;
     b.classList.add("armed");
     const hasNote = ((document.querySelector(`textarea[data-vin="${id}"]`) || {}).value || "").trim();
+    const q = b.dataset.kind === "decide";
     armSwap(b, a === "archive" ? "再按=确认归档"
-              : hasNote ? "再按=交回原 Agent" : "再按=确认结案");
+              : a === "reject" ? "再按=确认否决"
+              : hasNote ? (q ? "再按=同意并交回" : "再按=确认打回") : (q ? "再按=确认同意" : "再按=确认通过"));
     setTimeout(() => { if (b.dataset.armed === "1") {
       b.dataset.armed = ""; b.classList.remove("armed");
       disarmRestore(b);
@@ -2779,16 +2800,18 @@ document.getElementById("line-add").addEventListener("submit", async (e) => {
   e.preventDefault();
   const idEl = document.getElementById("line-add-id");
   const hintEl = document.getElementById("line-add-hint");
+  const labelEl = document.getElementById("line-add-label");
+  const autoEl = document.getElementById("line-add-auto");
   const note = document.getElementById("line-add-note");
-  const id = idEl.value.trim(), hint = hintEl.value.trim();
+  const id = idEl.value.trim(), hint = hintEl.value.trim(), label = labelEl.value.trim();
   if (!id) return;
   note.className = "note";
   note.textContent = "写入中…";
   try {
-    const r = await post("/api/config/lines", { id, hint });
+    const r = await post("/api/config/lines", { id, hint, label, accept: autoEl.checked ? "auto" : "human" });
     note.className = "note ok";
-    note.textContent = `已加入线「${r.line.id}」—— 配置已写盘,自动拉取行可直接启动`;
-    idEl.value = ""; hintEl.value = "";
+    note.textContent = `已加入线「${r.line.label || r.line.id}」${r.line.accept === "auto" ? "(交付即完成)" : ""}—— 配置已写盘,自动拉取行可直接启动`;
+    idEl.value = ""; hintEl.value = ""; labelEl.value = ""; autoEl.checked = false;
     await refresh();
   } catch (err) {
     note.className = "note bad";

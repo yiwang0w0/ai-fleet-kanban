@@ -1009,16 +1009,16 @@ try {
     ok("Q1b 阳性对照:上报池耗尽 → 至少 1 次 pool.changed(仪器看得见广播,Q1 的 0 才算数)",
        loud.n >= 1, `pool.changed=${loud.n} in ${loud.ms}ms`);
 
-    const add = await B.api("POST", "/api/config/lines", { id: "docs", hint: "文档/注释" });
+    const add = await B.api("POST", "/api/config/lines", { id: "docs", hint: "文档/注释", label: "文档" });
     ok("Q2 加线 201,响应带更新后的线表", add.status === 201 && (add.body?.lines || []).includes("docs"),
        `HTTP ${add.status} lines=${JSON.stringify(add.body?.lines)}`);
     const onDisk = JSON.parse(readFileSync(CFGQ, "utf8"));
     ok("Q3 ⭐配置文件已落盘(持久化先于内存;重启不丢线)",
-       (onDisk.lines || []).some((l) => l.id === "docs" && l.hint === "文档/注释"), JSON.stringify(onDisk.lines));
+       (onDisk.lines || []).some((l) => l.id === "docs" && l.hint === "文档/注释" && l.label === "文档" && l.accept === undefined), JSON.stringify(onDisk.lines));
     const ws = (await B.api("GET", "/api/workers")).body;
     ok("Q4 /api/workers 立即列出新线与其 hint(面板 rig 下一次刷新即见)",
-       (ws.lines || []).includes("docs") && ws.line_hints?.docs === "文档/注释" &&
-       (ws.workers || []).some((w) => w.line === "docs"), "");
+       (ws.lines || []).includes("docs") && ws.line_hints?.docs === "文档/注释" && ws.line_labels?.docs === "文档" &&
+       ws.line_accept?.docs === "human" && (ws.workers || []).some((w) => w.line === "docs"), "");
     const bad = await B.api("POST", "/api/config/lines", { id: "Docs Team" });
     const dup = await B.api("POST", "/api/config/lines", { id: "docs" });
     const role = await B.api("POST", "/api/config/lines", { id: "review" });
@@ -1284,6 +1284,41 @@ try {
     ok("T7 面板渲染升级横幅(带更新按钮;收到 board.restarting 后等新版本回来自己刷新)并在底栏显示版本号",
        /renderUpgrade/.test(panelSrc3) && /id="upg"/.test(panelSrc3) && /f-rev/.test(panelSrc3) &&
        /data-upg-apply/.test(panelSrc3) && /board\.restarting/.test(panelSrc3), "");
+  }
+
+  // ══ §W accept:"auto" — a line the operator configured to complete on delivery (v0.21) ══
+  {
+    console.log(NL + "[§W 线级 accept:auto(交付即完成;闸照常;人工线不变)]");
+    const DW = mkdtempSync(join(tmpdir(), "servertest-w-"));
+    const CFGW = join(DW, "fleet.config.json");
+    writeFileSync(CFGW, JSON.stringify({ lines: [{ id: "autol", hint: "自动线", label: "自动", accept: "auto" }, { id: "manl", label: "人工" }] }));
+    const B = await mk({ env: { BOARD_CONFIG: CFGW, BOARD_GATED_SUBTREE: "", BOARD_REPO: ROOT } });
+    const ws = (await B.api("GET", "/api/workers")).body;
+    ok("W1 /api/workers 带 line_labels 与 line_accept(显示名中文;机器 id 不变;未配置=human)",
+       ws.line_labels?.autol === "自动" && ws.line_accept?.autol === "auto" && ws.line_accept?.manl === "human" && (ws.lines || []).includes("autol"),
+       JSON.stringify([ws.line_labels, ws.line_accept]));
+    const mkCard = async (line) => (await B.api("POST", "/api/tasks", { subject: "w-card", line, humanGate: false })).body.task.id;
+    const a1 = await mkCard("autol");
+    await B.api("POST", "/api/claim", { worker: "autol", line: "autol", route: "default" });
+    const r1 = await B.api("POST", `/api/tasks/${a1}/report`, { worker: "autol", outcome: "done", evidence: "证据" });
+    const t1 = (await B.api("GET", `/api/tasks/${a1}`)).body?.task;
+    ok("W2 ⭐accept:auto 的线:交付即完成(done · resolved_by=auto · 裁定文字说明按线配置)",
+       r1.status === 200 && t1?.status === "done" && t1?.resolved_by === "auto" && /accept:auto/.test(t1?.verdict_note || ""),
+       `status=${t1?.status} by=${t1?.resolved_by} note=${String(t1?.verdict_note || "").slice(0, 40)}`);
+    const m1 = await mkCard("manl");
+    await B.api("POST", "/api/claim", { worker: "manl", line: "manl", route: "default" });
+    await B.api("POST", `/api/tasks/${m1}/report`, { worker: "manl", outcome: "done", evidence: "证据" });
+    const tm = (await B.api("GET", `/api/tasks/${m1}`)).body?.task;
+    ok("W3 默认线(human):交付照旧进等待中/待验收", tm?.status === "waiting" && tm?.waiting_for === "review", `${tm?.status}/${tm?.waiting_for}`);
+    const a3 = await mkCard("autol");
+    await B.api("POST", "/api/claim", { worker: "autol", line: "autol", route: "default" });
+    await B.api("POST", `/api/tasks/${a3}/report`, { worker: "autol", outcome: "done", evidence: "新增 core/ghost_w4_a.js 与 core/ghost_w4_b.js,全部实装完毕。" });   // same fictional shape N2 pins
+    const t3 = (await B.api("GET", `/api/tasks/${a3}`)).body?.task;
+    ok("W4 ⭐自动完成也过交付物闸:点名的文件一个都不存在 → 不完成,留在等待中给人,日志说明原因",
+       t3?.status === "waiting" && /accept:auto 未能自动完成/.test(B.out()),
+       `${t3?.status} log=${(B.out().match(/未能自动完成[^\n]*/) || [""])[0].slice(0, 90)}`);
+    B.kill();
+    try { rmSync(DW, { recursive: true, force: true }); } catch {}
   }
 
 } catch (e) {

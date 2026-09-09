@@ -60,8 +60,9 @@ const LOOPS_DIR = join(__dirname, "..", "loops");
 const CONFIG_FILE = process.env.BOARD_CONFIG || join(CODE_ROOT, "fleet.config.json");
 const BUILTIN_CONFIG = {
   lines: [
-    { id: "alpha", hint: "实装" },
-    { id: "coord", hint: "协调/裁定/跑命令" },
+    // label = what the operator sees (Chinese); id = what machines use (CLI, config, slot names)
+    { id: "alpha", hint: "实装", label: "实装" },
+    { id: "coord", hint: "协调/裁定/跑命令", label: "协调" },
   ],
   // Built-in single-seat roles ("review" only; reorg was retired by operator
   // ruling 2026-09-02 — long dead upstream, never shipped here) join SUPERVISED
@@ -403,11 +404,17 @@ const ROLES = (CFG.roles || []).filter((r) => ["review"].includes(r));
 // /api/workers), and per-line runtime state is lazy (settingsOf / slotsOf look
 // up by name) — so adding a line is: persist to the config, rebuild, announce.
 // No restart, no dropped SSE clients, no in-flight worker touched.
-let LINES, SUPERVISED, LINE_HINT;
+let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT;
 function rebuildLines() {
   LINES = CFG.lines.map((l) => String(l.id));
   SUPERVISED = [...LINES, ...ROLES];
   LINE_HINT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.hint || ""]));
+  // v0.21: display name (Chinese welcome; the id stays a machine contract) and the line's
+  // acceptance policy — "human" (default: a delivery waits for the operator's 通过) or "auto"
+  // (the operator decided once, in the config, that deliveries on this line complete on
+  // report; the close gates still run; human-gated cards are never auto-completed).
+  LINE_LABEL = Object.fromEntries(CFG.lines.map((l) => [l.id, String(l.label || "").trim()]));
+  LINE_ACCEPT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.accept === "auto" ? "auto" : "human"]));
 }
 rebuildLines();
 
@@ -418,9 +425,13 @@ rebuildLines();
 const LINE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 /** Add a line: validate → persist to the config file (atomic) → rebuild → the
  *  caller announces. Throws store.err on refusal (unknown/duplicate/role/shape). */
-function addLine(idRaw, hintRaw) {
+function addLine(idRaw, hintRaw, labelRaw, acceptRaw) {
   const id = String(idRaw ?? "").trim();
   const hint = String(hintRaw ?? "").trim();
+  const label = String(labelRaw ?? "").trim();
+  const accept = acceptRaw == null || acceptRaw === "" ? "human" : String(acceptRaw);
+  if (label.length > 24) throw store.err(store.ERR.BAD_INPUT, "显示名最多 24 字");
+  if (!["human", "auto"].includes(accept)) throw store.err(store.ERR.BAD_INPUT, `accept 只接受 human / auto —— 收到 ${JSON.stringify(acceptRaw)}`);
   if (!LINE_ID_RE.test(id))
     throw store.err(store.ERR.BAD_INPUT, `线名只允许小写字母/数字/-/_,1-32 位,且以字母或数字开头 —— 收到 ${JSON.stringify(id)}`);
   if (LINES.includes(id) || ROLES.includes(id) || ["review"].includes(id))
@@ -433,14 +444,14 @@ function addLine(idRaw, hintRaw) {
   if (existsSync(CONFIG_FILE)) onDisk = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));   // broken = throws = refuse
   const lines = Array.isArray(onDisk.lines) && onDisk.lines.length
     ? onDisk.lines : BUILTIN_CONFIG.lines.map((l) => ({ ...l }));
-  lines.push(hint ? { id, hint } : { id });
+  lines.push({ id, ...(hint ? { hint } : {}), ...(label ? { label } : {}), ...(accept === "auto" ? { accept } : {}) });
   const next = { ...onDisk, lines };
   const tmp = CONFIG_FILE + ".tmp";
   writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n", "utf8");
   renameSync(tmp, CONFIG_FILE);
   CFG = { ...CFG, lines };     // never mutate BUILTIN_CONFIG through the alias
   rebuildLines();
-  return { id, hint };
+  return { id, hint, label, accept };
 }
 
 const workers = new Map();   // slotKey -> { line, slot, proc, startedAt, route, log: [] }
@@ -1974,6 +1985,53 @@ function redact(text) {
 /** Authenticate a write. Returns the caller's ROLE ("operator"/"worker"/"review")
  *  or null after refusing. The role check lives HERE, at the single choke point —
  *  per-endpoint "remember to add it" forgets exactly one. */
+/** The deliverable gates that stand between "waiting" and "done" — measured ONLY when closing.
+ *  One function, two callers: the human's 通过 (resolve route) and a line's accept:"auto" on
+ *  report (v0.21). Throws store.err(CONFLICT) with the reason a human can act on. */
+function closeGateOrThrow(t) {
+    const left = uncommittedOf(t);
+    // null = the gate could not measure. Refusing here is the point:
+    // "unmeasurable ⇒ pass" would make every git hiccup a free close.
+    if (left === null)
+      throw store.err(store.ERR.CONFLICT,
+        `通过被拦: 交付物闸不可测(读不到宿主仓 HEAD/git)—— 不可测不等于没有违规。` +
+        `\n  修复 git 环境后重试;确属无 git 部署,用 BOARD_DELIVERABLE_GATE=off 显式关闸(每次通过都会记录);` +
+        `\n  或对这一张卡人工担责:resolve 带 allow_uncommitted:true 并在裁定里写明理由。`);
+    if (left.length)
+      throw store.err(store.ERR.CONFLICT,
+        `通过被拦: 证据里点名的 ${left.length} 个交付物在工作树里存在,但**没有入库**(HEAD 里找不到)` +
+        ` —— 先 commit 再通过,否则这张卡对别人是空的。` +
+        `\n  ${left.join("\n  ")}` +
+        `\n  ⚠若这些路径确实不该入库(例如实数据文件),在 resolve 时带 allow_uncommitted:true 并在裁定里写明理由。`);
+    // ⭐ The other half of INCIDENT-1 (v0.16.1, external audit): a delivery whose
+    //   named files exist NOWHERE — not on disk, not in HEAD. The comment above
+    //   rules out reporting every absent path (typos, command fragments: false
+    //   positives get the gate switched off), and that ruling stands. So this fires
+    //   only when the evidence names files and NONE of them exists anywhere: that is
+    //   not a typo, that is a fictional delivery. One real deliverable next to a typo
+    //   still closes. Unmeasurable here is already refused above (uncommittedOf).
+    const ab = absentOf(t);
+    if (ab && ab.named > 0 && ab.absent.length === ab.named)
+      throw store.err(store.ERR.CONFLICT,
+        `通过被拦: 证据点名了 ${ab.named} 个交付物,但**一个都不存在**(工作树里没有,HEAD 里也没有)—— 声称的交付没有实物。` +
+        `\n  ${ab.absent.join("\n  ")}` +
+        `\n  ⚠若这些只是引用别处的路径而不是本卡的交付,在 resolve 时带 allow_uncommitted:true 并写明。`);
+    // The reverse blind spot: "touched but never named". Attribution is by
+    // TIME (work_spans) — on a shared work tree, "is the tree dirty" cannot
+    // attribute.
+    const unnamed = unnamedOf(t);
+    if (unnamed === null)
+      throw store.err(store.ERR.CONFLICT,
+        `通过被拦: 交付物闸不可测(读不到 git status)—— 不可测不等于没有违规。` +
+        `\n  修复 git 环境后重试;或 resolve 带 allow_uncommitted:true 人工担责并写明理由。`);
+    if (unnamed.length)
+      throw store.err(store.ERR.CONFLICT,
+        `通过被拦: 本卡作业区间内有 ${unnamed.length} 个文件被改动却**未入库、且证据里一个都没点名**` +
+        ` —— 纯文字描述不算交付。先 commit(或在证据里点名并说明为何不入库)再通过。` +
+        `\n  ${unnamed.join("\n  ")}` +
+        `\n  ⚠若这些改动不属于本卡(共享工作树上别的线在途),在 resolve 时带 allow_uncommitted:true 并写明归属。`);
+}
+
 function guardWrite(req, res, p) {
   const origin = req.headers.origin;
   if (origin && !ALLOWED_ORIGINS.has(origin)) {
@@ -2275,14 +2333,14 @@ const server = http.createServer(async (req, res) => {
     //    review allowlists do not carry this path, so they 403 by construction).
     if (m === "POST" && p === "/api/config/lines") {
       const b = await readBody(req);
-      const added = addLine(b.id, b.hint);
+      const added = addLine(b.id, b.hint, b.label, b.accept);
       emit("config.lines", { line: added.id });
-      console.log(`线已加入: ${added.id}${added.hint ? "(" + added.hint + ")" : ""} —— 已写入 ${CONFIG_FILE},无需重启`);
-      return json(res, 201, { line: added, lines: LINES, line_hints: LINE_HINT });
+      console.log(`线已加入: ${added.id}${added.label ? "「" + added.label + "」" : ""}${added.hint ? "(" + added.hint + ")" : ""}${added.accept === "auto" ? " · 交付即完成" : ""} —— 已写入 ${CONFIG_FILE},无需重启`);
+      return json(res, 201, { line: added, lines: LINES, line_hints: LINE_HINT, line_labels: LINE_LABEL, line_accept: LINE_ACCEPT });
     }
     if (m === "GET" && p === "/api/workers")
       return json(res, 200, { workers: SUPERVISED.map(workerInfo), lines: LINES,
-                              line_hints: LINE_HINT, routes: ROUTES,
+                              line_hints: LINE_HINT, line_labels: LINE_LABEL, line_accept: LINE_ACCEPT, routes: ROUTES,
                               models: MODELS, efforts: EFFORTS, weights: WEIGHTS,
                               max_parallel: MAX_PARALLEL, runtimes: RUNTIMES,
                               decompose_models: DECOMPOSE_MODELS,
@@ -2466,6 +2524,23 @@ const server = http.createServer(async (req, res) => {
       if (action === "report") {
         const r = store.report(db, { id, worker: b.worker, outcome: b.outcome, evidence: b.evidence });
         emit("task.reported", r);
+        // ⭐ v0.21 (user ruling 2026-09-09): on a line configured accept:"auto" a delivery completes
+        //   without a human click — the operator decided that ONCE, in the config, for the whole
+        //   line. Same close gates as a human's 通过 (closeGateOrThrow); a refusal leaves the card
+        //   in 等待中 for a human, loudly. Human-gated cards are never auto-completed.
+        const after = store.get(db, id);
+        if (b.outcome === "done" && after && after.status === "waiting" && after.waiting_for === "review"
+            && LINE_ACCEPT[after.line] === "auto" && Number(after.human_gate) === 0) {
+          try {
+            closeGateOrThrow(after);
+            const rr = store.resolve(db, { id, verdict: "approve", resolvedBy: "auto", disposition: "close",
+                                           note: `线「${LINE_LABEL[after.line] || after.line}」配置 accept:auto —— 交付即完成(交付物闸照常检查过)` });
+            emit("task.resolved", rr);
+            console.log(`#${id} 线 ${after.line} accept:auto → 已完成`);
+          } catch (e) {
+            console.log(`#${id} 线 ${after.line} accept:auto 未能自动完成 —— 留在等待中给人:${String(e.message).split("\n")[0].slice(0, 120)}`);
+          }
+        }
         return json(res, 200, { task: store.get(db, id) });
       }
       if (action === "resolve") {
@@ -2507,7 +2582,7 @@ const server = http.createServer(async (req, res) => {
         if (b.selected_option != null && t.confirm_pending === true)
           throw store.err(store.ERR.CONFLICT,
             "本卡的执行确认已经提交,正在等待复核(v0.1 由人在面板完成)—— 不能重复确认。" +
-            "要改判请用「无需后续 · 结案」,或等审阅出结果。");
+            "要改判请用「无需后续 · 通过」,或等审阅出结果。");
 
         // ══ ① pure validation phase (ZERO side effects) ═══════════════════════
         let archive = null;
@@ -2578,49 +2653,7 @@ const server = http.createServer(async (req, res) => {
         //   ⚠ Only UNCOMMITTED counts. Paths absent from disk too (command-line
         //     fragments, typos) are not reported — false positives blocking
         //     closure get the gate itself switched off.
-        if (disp === "close" && b.allow_uncommitted !== true) {
-          const left = uncommittedOf(t);
-          // null = the gate could not measure. Refusing here is the point:
-          // "unmeasurable ⇒ pass" would make every git hiccup a free close.
-          if (left === null)
-            throw store.err(store.ERR.CONFLICT,
-              `结案被拦: 交付物闸不可测(读不到宿主仓 HEAD/git)—— 不可测不等于没有违规。` +
-              `\n  修复 git 环境后重试;确属无 git 部署,用 BOARD_DELIVERABLE_GATE=off 显式关闸(每次结案都会记录);` +
-              `\n  或对这一张卡人工担责:resolve 带 allow_uncommitted:true 并在裁定里写明理由。`);
-          if (left.length)
-            throw store.err(store.ERR.CONFLICT,
-              `结案被拦: 证据里点名的 ${left.length} 个交付物在工作树里存在,但**没有入库**(HEAD 里找不到)` +
-              ` —— 先 commit 再结案,否则这张卡对别人是空的。` +
-              `\n  ${left.join("\n  ")}` +
-              `\n  ⚠若这些路径确实不该入库(例如实数据文件),在 resolve 时带 allow_uncommitted:true 并在裁定里写明理由。`);
-          // ⭐ The other half of INCIDENT-1 (v0.16.1, external audit): a delivery whose
-          //   named files exist NOWHERE — not on disk, not in HEAD. The comment above
-          //   rules out reporting every absent path (typos, command fragments: false
-          //   positives get the gate switched off), and that ruling stands. So this fires
-          //   only when the evidence names files and NONE of them exists anywhere: that is
-          //   not a typo, that is a fictional delivery. One real deliverable next to a typo
-          //   still closes. Unmeasurable here is already refused above (uncommittedOf).
-          const ab = absentOf(t);
-          if (ab && ab.named > 0 && ab.absent.length === ab.named)
-            throw store.err(store.ERR.CONFLICT,
-              `结案被拦: 证据点名了 ${ab.named} 个交付物,但**一个都不存在**(工作树里没有,HEAD 里也没有)—— 声称的交付没有实物。` +
-              `\n  ${ab.absent.join("\n  ")}` +
-              `\n  ⚠若这些只是引用别处的路径而不是本卡的交付,在 resolve 时带 allow_uncommitted:true 并写明。`);
-          // The reverse blind spot: "touched but never named". Attribution is by
-          // TIME (work_spans) — on a shared work tree, "is the tree dirty" cannot
-          // attribute.
-          const unnamed = unnamedOf(t);
-          if (unnamed === null)
-            throw store.err(store.ERR.CONFLICT,
-              `结案被拦: 交付物闸不可测(读不到 git status)—— 不可测不等于没有违规。` +
-              `\n  修复 git 环境后重试;或 resolve 带 allow_uncommitted:true 人工担责并写明理由。`);
-          if (unnamed.length)
-            throw store.err(store.ERR.CONFLICT,
-              `结案被拦: 本卡作业区间内有 ${unnamed.length} 个文件被改动却**未入库、且证据里一个都没点名**` +
-              ` —— 纯文字描述不算交付。先 commit(或在证据里点名并说明为何不入库)再结案。` +
-              `\n  ${unnamed.join("\n  ")}` +
-              `\n  ⚠若这些改动不属于本卡(共享工作树上别的线在途),在 resolve 时带 allow_uncommitted:true 并写明归属。`);
-        }
+        if (disp === "close" && b.allow_uncommitted !== true) closeGateOrThrow(t);
 
         // ══ ④ side effects (from here on, no refusals are written) ════════════
         let receiptBlock = null;
@@ -2644,7 +2677,7 @@ const server = http.createServer(async (req, res) => {
                 `\n\n—— 执行回执(失败 · 用户填写)——\n${receipt}` + extra
               : `采用方案 ${opt.key}:${opt.title}。文件已由用户应用成功;` +
                 (disp === "hold_for_review"
-                  ? `**本卡不交回原 Agent** —— 留在等待中,复核通过后方可结案(v0.1 复核由人在面板完成)。`
+                  ? `**本卡不交回原 Agent** —— 留在等待中,复核通过后方可完成(v0.1 复核由人在面板完成)。`
                   : `请按该方案继续并根据下面的回执完成验证。`) +
                 `\n\n—— 执行回执(成功 · 用户填写)——\n${receipt}` + extra;
             // ⭐ The receipt survives as ONE block. The four existing carriers do
