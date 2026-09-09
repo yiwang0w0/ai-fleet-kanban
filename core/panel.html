@@ -249,8 +249,6 @@
   .upg .us:last-child{padding-bottom:10px}
   .upg .de{color:var(--dim)} .upg .hi{margin-top:2px}
   .upg .act{margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .upg code{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r-sm);padding:2px 6px;
-            font:12px var(--mono);user-select:all}
   /* Setup guide: the first thing a new operator sees, and it disappears into a
      single line once the deployment measures complete. */
   .guide{margin:8px 14px 4px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);font-size:var(--fs-md)}
@@ -268,9 +266,6 @@
   .guide .gs .de{color:var(--dim)}
   .guide .gs .hi{margin-top:2px}
   .guide .gs .act{margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-  .guide code{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r-sm);padding:2px 6px;
-              font:12px var(--mono);user-select:all}
-  .guide .why{color:var(--dim2);font-size:11.5px;margin-top:3px}
   .quick{display:flex;gap:6px;align-items:center;padding:2px 14px 8px;font-size:12px;flex-wrap:wrap}
   .quick .lbl{color:var(--dim)}
   #quick-list{flex-basis:100%;display:flex;flex-direction:column;gap:2px}
@@ -329,37 +324,44 @@
   .line-badge.ro{cursor:default}
   .ctxwrap{padding:0 16px}
   .ctxwrap + .ctxwrap{padding-top:8px}
-  /* ── Timeline (SourceTree-style horizontal graph) ── */
+  /* ── Timeline (SourceTree-style horizontal graph). Drawing = docs/style-guide.md §5: bars not
+     fat lines, orthogonal connectors, paper under every label, the ONE accent only on what waits
+     for you. Layout constants live in the renderer, not here. ── */
   #tl-scroll{overflow:auto;max-height:72vh}
-  .tl-lab{font:10px var(--mono);fill:var(--fg);opacity:.82}
-  .tl-ghead{font:600 10.5px system-ui;cursor:pointer}
   #tl-bar{display:flex;align-items:center;gap:6px;padding-bottom:6px}
   #tl-bar input{background:var(--panel2);color:var(--fg);border:1px solid var(--line);
-                border-radius:var(--r-sm);padding:2px 6px;font:11px inherit}
+                border-radius:var(--r-sm);padding:2px 6px;font:var(--fs-sm) var(--font)}
   #tl-bar button{padding:2px 8px}
-  #tl-note{color:var(--dim);font-size:10.5px;margin-left:4px}
-  .tl-rowband{opacity:.05}
-  .tl-rowlab{font:600 10px system-ui}
-  .tl-cont{font:9px var(--mono);fill:var(--dim)}
-  .tl-band{opacity:.28}
-  .tl-cluster{cursor:zoom-in}
-  .tl-cluster text{font:600 9px var(--mono);fill:#fff;pointer-events:none}
-  .tl-seg.sel .tl-work{stroke-width:7}
+  #tl-note{color:var(--dim);font-size:var(--fs-xs);margin-left:4px}
   #tl-svg{display:block}
+  .tl-ghead{cursor:pointer}
+  .tl-ghead text{font:600 var(--fs-sm) var(--font);fill:var(--fg)}
+  .tl-eyebrow{font:500 var(--fs-xs) var(--mono);fill:var(--dim);letter-spacing:.04em}
+  .tl-rowband{fill:var(--fg)}
+  .tl-rowlab{font:600 var(--fs-xs) var(--font);fill:var(--fg)}
+  .tl-cont{font:var(--fs-xs) var(--mono)}
+  .tl-band{opacity:.18}
+  .tl-tick{stroke:var(--line);stroke-width:1}
+  .tl-ticklab{font:var(--fs-xs) var(--mono);fill:var(--dim)}
+  .tl-mask{fill:var(--panel)}
+  .tl-life{stroke:var(--dim2);stroke-width:1;opacity:.55}
+  .tl-junction{fill:var(--dim)}
+  .tl-edge{fill:none;stroke:var(--dim2);stroke-width:1;opacity:.8}
+  .tl-edge.merge{stroke:var(--ok)}
+  .tl-bar{fill:var(--panel2);stroke:var(--dim2);stroke-width:1.2}
+  .tl-bar.active{stroke:var(--cc)}
+  .tl-bar.done{stroke:var(--ok)}
+  .tl-bar.past{stroke:var(--dim2);stroke-dasharray:3 2}
+  .tl-bar.focal{stroke:var(--accent);stroke-width:2}
+  .tl-pill{fill:var(--panel2);stroke:var(--line)}
+  .tl-cluster{cursor:zoom-in}
+  .tl-cluster text{font:600 10px var(--mono);fill:var(--fg);pointer-events:none}
   .tl-seg{cursor:pointer}
-  .tl-seg .tl-life{stroke-width:1;opacity:.22}
-  .tl-seg .tl-work{stroke-width:5;stroke-linecap:round}
   .tl-seg line{stroke-linecap:round}
-  .tl-seg.not_started{opacity:.38}
-  .tl-seg.waiting line{stroke-dasharray:4 3}
-  .tl-seg.goal line{stroke-width:5;opacity:.55}
-  .tl-head{font:600 10px system-ui}
+  .tl-seg.sel .tl-bar{stroke:var(--cc);stroke-width:2.5}
+  .tl-seg.sel .tl-id{font-weight:700}
   .tl-seg.dimmed{opacity:.15}
   .tl-seg text{font:9.5px var(--mono);fill:var(--fg);opacity:.85;pointer-events:none}
-  .tl-edge{fill:none;stroke:var(--dim2);stroke-width:1;opacity:.55}
-  .tl-edge.merge{stroke:var(--ok)}
-  .tl-tick{stroke:var(--line);stroke-width:1}
-  .tl-ticklab{font:9px var(--mono);fill:var(--dim)}
   .ctx{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md)}
   .ctx > h2{margin:0;padding:8px 12px;font-size:var(--fs-sm);font-weight:600;letter-spacing:.04em;border-bottom:1px solid var(--line);
             display:flex;align-items:center;gap:8px;cursor:pointer}
@@ -1125,6 +1127,43 @@ function syncGoalPrev(){
       Derivation = ╲  merge = ╱ (COMPLETED cards only). Waiting = hollow circle.
    ② Load: per-line work segments + waiting-count bands + start clusters.
       Carries NO lineage (edges removed) + explicit cross-day labels. */
+// ── tl-geometry(pure;tests/tltest.mjs)──
+// Drawing primitives shared by both timeline views (docs/style-guide.md §5). Pure functions of
+// numbers and strings — no DOM, no globals — so the test harness can slice this block out of
+// the page and run it. Keep it that way.
+function tlTextWidth(text, px){
+  // CJK ≈ 1em per glyph, everything else ≈ 0.58em: enough to size the paper under a label.
+  let w = 0;
+  for (const ch of String(text))
+    w += /[\u1100-\u11ff\u2e80-\ua4cf\uac00-\ud7af\uf900-\ufaff\ufe30-\ufe4f\uff00-\uffef]/.test(ch) ? 1 : 0.58;
+  return w * px;
+}
+function tlLabelBox(text, x, y, px, anchor = "start", pad = 3){
+  // The rect under a label drawn at (x, baseline y): a connector must never run through text
+  // (diagram-design's masking rule). Ascent ≈ .8em, descent ≈ .2em.
+  const w = tlTextWidth(text, px) + 2 * pad, h = px + 2 * pad;
+  const left = anchor === "end" ? x - w + pad : anchor === "middle" ? x - w / 2 : x - pad;
+  return { x: left, y: y - px * 0.8 - pad, w, h };
+}
+function tlOrthoPath(x1, y1, x2, y2, r = 5){
+  // Horizontal first, then vertical, one rounded corner. Connectors read as routes, not
+  // curves; r is clamped so the arc never overshoots either leg. Only M/H/V/A commands.
+  const dx = x2 - x1, dy = y2 - y1;
+  if (Math.abs(dy) < 0.5) return `M ${x1} ${y1} H ${x2}`;
+  if (Math.abs(dx) < 0.5) return `M ${x1} ${y1} V ${y2}`;
+  const rr = Math.min(r, Math.abs(dx), Math.abs(dy));
+  const sx = Math.sign(dx), sy = Math.sign(dy);
+  const sweep = sx * sy > 0 ? 1 : 0;        // right-then-down / left-then-up turn clockwise on screen
+  return `M ${x1} ${y1} H ${x2 - sx * rr} A ${rr} ${rr} 0 0 ${sweep} ${x2} ${y1 + sy * rr} V ${y2}`;
+}
+function tlSpanState(status, active, isLast){
+  // A work span's stroke says the state; the ONE accent is reserved for "waiting for you".
+  if (active) return "active";
+  if (isLast && status === "waiting") return "focal";
+  if (isLast && status === "done") return "done";
+  return "past";
+}
+// ── /tl-geometry ──
 const TL = { PXH: 56, ROWH: 34, BANDH: 10, AXH: 22, LABW: 96, STEP: 26, LROW: 20 };
 let tlDate = null;
 let tlMode = "lineage";
@@ -1310,7 +1349,7 @@ function renderLineage(wrap){
   }
 
   const CSTEP = 24, LROW = 20, HEADH = 22, GX0 = 74;
-  const colorOf = (t) => t.kind === "goal" ? "#c084fc" : lineColor(t.line);
+  const colorOf = (t) => t.kind === "goal" ? "var(--l0)" : lineColor(t.line);
   const esc2 = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const NLC = String.fromCharCode(10);
 
@@ -1351,11 +1390,14 @@ function renderLineage(wrap){
   // ── pass 2: draw ─────────────────────────────────────────────────────
   let svg = "";
   for (const g of gArr){
-    const root = g.root, gc = root ? colorOf(root) : "#5d6472";
-    const glab = root ? `目标#${root.id} ${esc2(String(root.subject).slice(0, 30))}` : "散卡(无目标)";
+    // Group header = eyebrow (mono, muted: 目标 #id) + name; the goal colour is a 3px left bar only
+    const root = g.root, gc = root ? colorOf(root) : "var(--dim2)";
+    const gEye = root ? `目标 #${root.id}` : "散卡", gName = root ? esc2(String(root.subject).slice(0, 30)) : "无目标";
     svg += `<g class="tl-ghead" data-tlgroup="${g.key}">` +
-      `<rect x="2" y="${g.headY}" width="${W - 4}" height="${HEADH - 4}" fill="${gc}" opacity=".07" rx="4"/>` +
-      `<text x="8" y="${g.headY + 13}" fill="${gc}">${g.open ? "▾" : "▸"} ${glab} · ${g.members.length} 张 · ${g.nev} 事件</text>` +
+      `<rect x="2" y="${g.headY}" width="${W - 4}" height="${HEADH - 4}" fill="var(--fg)" opacity=".04" rx="4"/>` +
+      `<rect x="2" y="${g.headY + 2}" width="3" height="${HEADH - 8}" fill="${gc}" rx="1"/>` +
+      `<text x="11" y="${g.headY + 13}"><tspan class="tl-eyebrow">${g.open ? "▾" : "▸"} ${gEye}</tspan> ${gName}` +
+      `<tspan class="tl-eyebrow"> · ${g.members.length} 张 · ${g.nev} 事件</tspan></text>` +
       `<title>${g.open ? "点击收起" : "点击展开"}</title></g>`;
     if (!g.open) continue;
     const X = (ev) => g.colX.get(ev);
@@ -1379,15 +1421,16 @@ function renderLineage(wrap){
     for (const m of g.members){
       const r = inc.get(m), pid = r.t.parent_id;
       if (pid == null || !inc.has(pid) || !g.laneOf.has(pid)) continue;
-      const py = Y(pid), cy2 = Y(m), pc = colorOf(inc.get(pid).t);
+      const py = Y(pid), cy2 = Y(m);
       const bEv = r.evs[0], bx = X(bEv);
-      svg += `<circle cx="${bx - 9}" cy="${py}" r="2.2" fill="${pc}" opacity=".9"/>` +
-        `<path class="tl-edge" d="M ${bx - 9} ${py} Q ${bx} ${py} ${bx} ${cy2}"/>`;
+      // Orthogonal routes: along the parent's lane, one rounded corner, down to the child
+      svg += `<circle class="tl-junction" cx="${bx - 9}" cy="${py}" r="2.2"/>` +
+        `<path class="tl-edge" d="${tlOrthoPath(bx - 9, py, bx, cy2)}"/>`;
       if (r.t.status === "done"){
         const dEv = r.evs.find((e) => e.k === "done");
         if (dEv){ const dx2 = X(dEv);
-          svg += `<circle cx="${dx2 + 9}" cy="${py}" r="2.2" fill="${pc}" opacity=".9"/>` +
-            `<path class="tl-edge merge" d="M ${dx2} ${cy2} Q ${dx2} ${py} ${dx2 + 9} ${py}"/>`; }
+          svg += `<circle class="tl-junction" cx="${dx2 + 9}" cy="${py}" r="2.2"/>` +
+            `<path class="tl-edge merge" d="${tlOrthoPath(dx2 + 9, py, dx2, cy2)}"/>`; }
       }
     }
     // Lanes + nodes per card. A lane spans only its own nodes ∪ junctions — never
@@ -1403,34 +1446,42 @@ function renderLineage(wrap){
         const dEv = cr.t.status === "done" ? cr.evs.find((e) => e.k === "done") : null;
         if (dEv) x1 = Math.max(x1, X(dEv) + 9);
       }
-      let gg = `<text class="tl-ticklab" x="${x0 - 6}" y="${yy + 3}" text-anchor="end" fill="${c}">#${t.id}</text>`;
+      // The id is the card's eyebrow — the line colour lives here (and in the badge), nowhere else
+      // 9px clear of the lane start: a child's derive edge comes down exactly at x0
+      const idLab = `#${t.id}`, idBox = tlLabelBox(idLab, x0 - 9, yy + 3, 9.5, "end");
+      let gg = `<rect class="tl-mask" x="${idBox.x}" y="${idBox.y}" width="${idBox.w}" height="${idBox.h}" rx="3"/>` +
+        `<text class="tl-ticklab tl-id" x="${x0 - 9}" y="${yy + 3}" text-anchor="end" style="fill:${c}">${idLab}</text>`;
       if (x1 > x0)
-        gg += `<line x1="${x0}" y1="${yy}" x2="${x1}" y2="${yy}" stroke="${c}" stroke-width="${t.kind === "goal" ? 2.4 : 1.3}" opacity="${t.kind === "goal" ? ".55" : ".4"}"/>`;
-      for (let i2 = 0; i2 < r.evs.length; i2++){        // work spans = thick segments (open→close/now)
+        gg += `<line class="tl-life" x1="${x0}" y1="${yy}" x2="${x1}" y2="${yy}"${t.kind === "goal" ? ` style="stroke:${c};stroke-width:2;opacity:.5"` : ""}/>`;
+      // Work spans = rounded bars; the stroke says the state (tlSpanState), the accent = waiting for you
+      for (let i2 = 0; i2 < r.evs.length; i2++){
         if (r.evs[i2].k !== "open") continue;
         const nxt = r.evs.slice(i2 + 1).find((e) => e.k === "close" || e.k === "now");
-        if (nxt) gg += `<line x1="${X(r.evs[i2])}" y1="${yy}" x2="${X(nxt)}" y2="${yy}" stroke="${c}" stroke-width="4.5" stroke-linecap="round" opacity=".95"/>`;
+        if (!nxt) continue;
+        const isLast = !r.evs.slice(i2 + 1).some((e) => e.k === "open");
+        const bx0 = X(r.evs[i2]), bw = Math.max(X(nxt) - bx0, 6);
+        gg += `<rect class="tl-bar ${tlSpanState(t.status, nxt.k === "now", isLast)}" x="${bx0}" y="${yy - 6}" width="${bw}" height="12" rx="6"/>`;
       }
       r.evs.forEach((e, i2) => {
         const x = X(e), tt = `${fmtMD(e.at)} ${fmtHM(e.at)}`, last = i2 === r.evs.length - 1;
         if (e.k === "entry")
-          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="none" stroke="${c}" stroke-width="1.5" stroke-dasharray="2 2"><title>#${t.id} 来自此前(窗口外历史未导入)${NLC}${esc2(t.subject)}</title></circle>`;
+          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="none" stroke="var(--dim2)" stroke-width="1.5" stroke-dasharray="2 2"><title>#${t.id} 来自此前(窗口外历史未导入)${NLC}${esc2(t.subject)}</title></circle>`;
         else if (e.k === "birth")
-          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="${c}"><title>#${t.id} 启动 ${tt}${NLC}${esc2(t.subject)}</title></circle>`;
+          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="var(--dim)"><title>#${t.id} 启动 ${tt}${NLC}${esc2(t.subject)}</title></circle>`;
         else if (e.k === "open")
-          gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="${c}"><title>#${t.id} 开工 ${tt} · ${esc2(lineLabel(e.w))}${whyRan(e)}</title></rect>`;
+          gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="var(--cc)"><title>#${t.id} 开工 ${tt} · ${esc2(lineLabel(e.w))}${whyRan(e)}</title></rect>`;
         else if (e.k === "close"){
           if (last && t.status === "waiting")
-            gg += `<circle cx="${x}" cy="${yy}" r="4" fill="var(--panel)" stroke="${c}" stroke-width="1.8"><title>#${t.id} 交付→等待${t.waiting_for ? "/" + esc2(wfLabel(t.waiting_for)) : ""} ${tt}</title></circle>`;
+            gg += `<circle cx="${x}" cy="${yy}" r="4" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"><title>#${t.id} 交付→等待${t.waiting_for ? "/" + esc2(wfLabel(t.waiting_for)) : ""} ${tt}</title></circle>`;
           else
-            gg += `<circle cx="${x}" cy="${yy}" r="2.6" fill="${c}"><title>#${t.id} 收段 ${tt}</title></circle>`;
+            gg += `<circle cx="${x}" cy="${yy}" r="2.6" fill="var(--dim)"><title>#${t.id} 收段 ${tt}</title></circle>`;
         } else if (e.k === "done")
-          gg += `<circle cx="${x}" cy="${yy}" r="3.6" fill="${c}"><title>#${t.id} 完成 ${tt}</title></circle>`;
+          gg += `<circle cx="${x}" cy="${yy}" r="3.6" fill="var(--ok)"><title>#${t.id} 完成 ${tt}</title></circle>`;
         else if (e.k === "now")
-          gg += `<circle cx="${x}" cy="${yy}" r="3" fill="${c}" opacity=".5"><title>#${t.id} 进行中(现在)</title></circle>`;
+          gg += `<circle cx="${x}" cy="${yy}" r="3" fill="var(--cc)" opacity=".6"><title>#${t.id} 进行中(现在)</title></circle>`;
       });
       if (t.status === "waiting" && r.evs[r.evs.length - 1].k === "birth")
-        gg += `<circle cx="${X(r.evs[r.evs.length - 1])}" cy="${yy}" r="5" fill="none" stroke="${c}" stroke-width="1.6"><title>#${t.id} 等待中(未经处理)</title></circle>`;
+        gg += `<circle cx="${X(r.evs[r.evs.length - 1])}" cy="${yy}" r="5" fill="none" stroke="var(--accent)" stroke-width="1.8"><title>#${t.id} 等待中(未经处理)</title></circle>`;
       svg += `<g class="tl-seg${focusId === t.id ? " sel" : ""}" data-tlid="${t.id}">` +
         `<title>#${t.id} ${esc2(t.subject)}${NLC}${esc2(lineLabel(t.line))} · ${esc2(t.status)}</title>${gg}</g>`;
     }
@@ -1442,7 +1493,7 @@ function renderLineage(wrap){
     `${gArr.length} 组 · ${inc.size} 张 · ${evTotal} 事件${rangeLab ? " · " + rangeLab : ""}`;
   document.getElementById("tl-note").textContent = focusing
     ? `聚焦中: 只画 #${focusId} 家族(再点该卡节点=恢复全图)`
-    : `横=事件顺序(时刻见悬浮/时变小字) 纵=活跃分支(完成即回收轨道) ╮派生 ╯合流(仅完成) ●启动 ■开工 ○等待 ◌来自此前 · 点组行收起/展开 · 点节点=只留该家族`;
+    : `横=事件顺序(时刻见悬浮/时变小字) 纵=活跃分支(完成即回收轨道) ┐派生 ┘合流(仅完成) ▭处理段(橙=等你) ●启动 ■开工 ○等待 ◌来自此前 · 点组行收起/展开 · 点节点=只留该家族`;
 }
 document.addEventListener("click", (e) => {
   const gh = e.target.closest("[data-tlgroup]");
@@ -1516,7 +1567,7 @@ function renderLoad(wrap){
   const rowY = new Map(); let cy = TL.AXH + 6;
   for (const k of lanesK){ rowY.set(k, cy); cy += TL.ROWH; }
   const H = cy + 8;
-  const colorOf = (k) => k === "goal" ? "#c084fc" : lineColor(k);
+  const colorOf = (k) => k === "goal" ? "var(--l0)" : lineColor(k);
   const esc2 = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const NLC = String.fromCharCode(10);
 
@@ -1537,11 +1588,13 @@ function renderLoad(wrap){
     svg += `<text class="tl-ticklab" x="${x + 2}" y="${TL.AXH - 8}">${dayChg ? dk + " " : ""}${String(d.getHours()).padStart(2, "0")}${d.getMinutes() ? ":30" : ""}</text>`;
   }
   // Row names (◀ carried-in count folds into the name) + row bands
-  for (const k of lanesK){
+  for (const [ri, k] of lanesK.entries()){
     const y = rowY.get(k), c = colorOf(k);
-    svg += `<rect class="tl-rowband" x="${TL.LABW - 4}" y="${y - 4}" width="${W - TL.LABW}" height="${TL.ROWH - 6}" fill="${c}" rx="5" opacity="0.05"></rect>`;
+    // Alternating neutral bands for readability; the line's colour is a 3px bar by its name
+    svg += `<rect class="tl-rowband" x="${TL.LABW - 4}" y="${y - 4}" width="${W - TL.LABW}" height="${TL.ROWH - 6}" rx="5" opacity="${ri % 2 ? ".05" : "0"}"></rect>` +
+      `<rect x="0" y="${y - 2}" width="3" height="${TL.ROWH - 10}" fill="${c}" rx="1"></rect>`;
     const nm = k === "goal" ? "目标" : k === "unassigned" ? "未指派" : lineLabel(k);
-    svg += `<text class="tl-rowlab" x="4" y="${y + 8}" fill="${c}">${esc2(nm)}${rowIn.get(k) ? ` ·◀${rowIn.get(k)}` : ""}</text>`;
+    svg += `<text class="tl-rowlab" x="7" y="${y + 8}">${esc2(nm)}${rowIn.get(k) ? ` ·◀${rowIn.get(k)}` : ""}</text>`;
   }
   // Per row: waiting-count step band + work segments + start clusters
   let clusterN = 0;
@@ -1558,8 +1611,8 @@ function renderLoad(wrap){
       path = `M ${px} ${yB}`;
       for (const ws of waitStarts){ const x = X(ws); path += ` L ${x} ${yB - cnt * 2} L ${x} ${yB - (cnt + 1) * 2}`; cnt++; }
       path += ` L ${X(w1)} ${yB - cnt * 2} L ${X(w1)} ${yB} Z`;
-      svg += `<path class="tl-band" d="${path}" fill="${c}"><title>${esc2(k)}: 等待中 ${cnt} 张(阶梯=进入等待的时刻)</title></path>`;
-      svg += `<text class="tl-cont" x="${X(w1) - 16}" y="${yB - cnt * 2 - 2}">${cnt}</text>`;
+      svg += `<path class="tl-band" d="${path}" fill="var(--accent)"><title>${esc2(k)}: 等待中 ${cnt} 张(阶梯=进入等待的时刻)</title></path>`;
+      svg += `<text class="tl-cont" x="${X(w1) - 16}" y="${yB - cnt * 2 - 2}" fill="var(--accent)">${cnt}</text>`;
     }
     // ── Work segments (thick, one lane) — spans go to span.w's row (from vis, not mine)
     for (const it of vis){
@@ -1569,9 +1622,10 @@ function renderLoad(wrap){
         if ((lineOfW(sp.w) || colKey(t)) !== k) continue;
         const a = P(sp.s), b = sp.e ? P(sp.e) : now2;
         if (a >= w1 || b <= w0) continue;
-        const x1 = X(a), x2 = Math.max(X(b), x1 + 3);
+        const x1 = X(a), x2 = Math.max(X(b), x1 + 6);
+        const spans = t.work_spans || [], isLast = sp === spans[spans.length - 1];
         svg += `<g class="tl-seg${dim ? " dimmed" : ""}${focusId === t.id ? " sel" : ""}" data-tlid="${t.id}">` +
-          `<line class="tl-work" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${c}"></line>` +
+          `<rect class="tl-bar ${tlSpanState(t.status, !sp.e, isLast)}" x="${x1}" y="${y - 6}" width="${x2 - x1}" height="12" rx="6"></rect>` +
           `<title>#${t.id} ${esc2(t.subject)}${NLC}处理 ${((b - a) / 60000).toFixed(1)} 分 · ${esc2(lineLabel(sp.w))}</title></g>`;
       }
     }
@@ -1587,14 +1641,14 @@ function renderLoad(wrap){
         const it = group[0], t = it.t, x = X(it.s);
         const dim = focusId != null && !relSet.has(t.id);
         svg += `<g class="tl-seg${dim ? " dimmed" : ""}" data-tlid="${t.id}">` +
-          `<circle cx="${x}" cy="${y}" r="3" fill="${c}"${t.status === "not_started" ? "" : ' opacity=".65"'}></circle>` +
+          `<circle cx="${x}" cy="${y}" r="3" fill="var(--dim)"${t.status === "not_started" ? "" : ' opacity=".65"'}></circle>` +
           `<title>#${t.id} ${esc2(t.subject)}${NLC}${esc2(t.status)}${t.waiting_for ? "/" + esc2(t.waiting_for) : ""}</title></g>`;
       } else {
         const mid = (group[0].s + group[group.length - 1].s) / 2;
         clusterN++;
         svg += `<g class="tl-cluster" data-from="${group[0].s - 1800_000}" data-to="${group[group.length - 1].s + 1800_000}">` +
-          `<circle cx="${X(mid)}" cy="${y}" r="8" fill="${c}"></circle>` +
-          `<text x="${X(mid)}" y="${y + 3}" text-anchor="middle">${group.length}</text>` +
+          `<rect class="tl-pill" x="${X(mid) - Math.max(9, tlTextWidth(String(group.length), 10) / 2 + 6)}" y="${y - 8}" width="${Math.max(18, tlTextWidth(String(group.length), 10) + 12)}" height="16" rx="8"></rect>` +
+          `<text x="${X(mid)}" y="${y + 3.5}" text-anchor="middle">${group.length}</text>` +
           `<title>${group.length} 张卡在此启动: ${group.map((g) => "#" + g.t.id).join(" ")}${NLC}点击放大此段</title></g>`;
       }
       iB = jB;
@@ -1607,7 +1661,9 @@ function renderLoad(wrap){
         const sp = (it.t.work_spans || [])[0];
         const x = X(sp ? P(sp.s) : it.s);
         if (x - lastEnd < 30) continue;
-        svg += `<text class="tl-ticklab" x="${x + 4}" y="${y - 6}" fill="${c}">#${it.t.id}</text>`;
+        const lb = tlLabelBox(`#${it.t.id}`, x + 4, y - 6, 10.5);
+        svg += `<rect class="tl-mask" x="${lb.x}" y="${lb.y}" width="${lb.w}" height="${lb.h}" rx="3"/>` +
+          `<text class="tl-ticklab" x="${x + 4}" y="${y - 6}" style="fill:${c}">#${it.t.id}</text>`;
         lastEnd = x + 30;
       }
     }
@@ -1617,7 +1673,7 @@ function renderLoad(wrap){
   document.getElementById("tl-sum").textContent =
     `负载 · ${lanesK.length} 条线 · ${vis.length} 张 · ${viewLab} ${fmtRange(w0, w1)}`;
   document.getElementById("tl-note").textContent =
-    `粗=处理段 带=等待数量 ●N=同刻启动(点击放大) · 本图只表达负载,谱系见「谱系」`;
+    `▭=处理段(橙=等你) 带=等待数量 ⬭N=同刻启动(点击放大) · 本图只表达负载,谱系见「谱系」`;
 }
 document.getElementById("tl-mode-lin").addEventListener("click", () => { tlMode = "lineage"; renderTimeline(); });
 document.getElementById("tl-mode-load").addEventListener("click", () => { tlMode = "load"; renderTimeline(); });
@@ -2651,10 +2707,6 @@ function renderGuide(su){
         act = `<button class="pri" data-guide-api="${esc(a.path)}"${a.confirm ? ` data-guide-confirm="${esc(a.confirm)}"` : ""}${a.body ? ` data-guide-body="${esc(JSON.stringify(a.body))}"` : ""}>${esc(a.label || "执行")}</button>`;
       else if (a.type === "quick")
         act = `<button data-guide-quick="${esc(a.kind)}">${esc(a.label || "让我的 Claude 去做")}</button>`;
-      else if (a.type === "focus")
-        act = `<button data-guide-focus="${esc(a.target)}">${esc(a.label || "带我去")}</button>`;
-      else if (a.type === "cmd")
-        act = `<code>${esc(a.text)}</code><button data-guide-copy="${esc(a.text)}">复制</button>`;
     }
     // v0.18: accepting code IS a button — one that first shows the tree, the previously
     //   accepted one and the diff, and carries the tree you saw (confirm_tree). The server
@@ -2673,8 +2725,6 @@ document.getElementById("guide").addEventListener("click", async (e) => {
   if (head){ guideOpen = !(document.querySelector("#guide .gsteps")); await refresh(); return; }
   const api = e.target.closest("[data-guide-api]");
   const quick = e.target.closest("[data-guide-quick]");
-  const focus = e.target.closest("[data-guide-focus]");
-  const copy = e.target.closest("[data-guide-copy]");
   try {
     if (api){
       if (api.dataset.guideConfirm && !confirm(api.dataset.guideConfirm)) return;
@@ -2685,15 +2735,6 @@ document.getElementById("guide").addEventListener("click", async (e) => {
       await refresh();
     }
     else if (quick){ quick.disabled = true; await post("/api/requests", { kind: quick.dataset.guideQuick, params: { days: 14, authorized: true } }); await refresh(); }
-    else if (focus){
-      const t = document.getElementById(focus.dataset.guideFocus) || document.getElementById("rig");
-      t?.scrollIntoView({ behavior: "smooth", block: "center" });
-      t?.animate?.([{ outline: "2px solid var(--ok)" }, { outline: "2px solid transparent" }], { duration: 1600 });
-    }
-    else if (copy){
-      try { await navigator.clipboard.writeText(copy.dataset.guideCopy); copy.textContent = "已复制"; }
-      catch { copy.textContent = "复制失败,手动选中"; }
-    }
   } catch (err) { alert("这一步没能完成:" + err.message); await refresh(); }
 });
 

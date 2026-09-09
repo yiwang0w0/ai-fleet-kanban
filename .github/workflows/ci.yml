@@ -88,6 +88,8 @@ jobs:
         run: bash hrun.sh node tests/sentrytest.mjs
         env:
           PYTHON: python
+      - name: "tltest (timeline drawing primitives + source shape)"
+        run: bash hrun.sh node tests/tltest.mjs
 
   gitleaks:
     runs-on: ubuntu-latest

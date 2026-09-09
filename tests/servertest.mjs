@@ -1198,6 +1198,9 @@ try {
     ok("S8b ⭐带 force → 202 {restarting, mode:exit},进程以 75 退出(BOARD_RESTART_MODE=exit 留给外层守护进程重起)",
        r2.status === 202 && r2.body?.restarting === true && r2.body?.mode === "exit" && code === 75,
        `${r2.status} mode=${r2.body?.mode} exit=${code}`);
+    ok("S8d ⭐退出前把自己的版本和触发者留给继任(<data>/restart_from;守护只知道 exit 75)",
+       existsSync(join(D.DATA, "restart_from")) && /^\S+ panel-restart$/.test(readFileSync(join(D.DATA, "restart_from"), "utf8").trim()),
+       existsSync(join(D.DATA, "restart_from")) ? readFileSync(join(D.DATA, "restart_from"), "utf8").trim() : "(missing)");
     ok("S8c 重启日志说了退出方式,而不是无声消失",
        /重启\(panel-restart\)/.test(D.out()), D.out().split("\n").filter((l) => /重启/.test(l)).join(" | ").slice(0, 120));
     D.kill();
@@ -1274,6 +1277,8 @@ try {
        applied.status === 202 && applied.body?.restarting === true && applied.body?.accepted === ud.apply.body.confirm_tree &&
        readFileSync(join(B.DATA, "accepted_rev"), "utf8").trim() === ud.apply.body.confirm_tree && exitCode === 75,
        `${applied.status} exit=${exitCode}`);
+    ok("T6d restart_from 记的是本进程假装的旧版本(继任据此打「0ldb00t → 新」)",
+       /^0ldb00t panel-upgrade$/.test((() => { try { return readFileSync(join(B.DATA, "restart_from"), "utf8").trim(); } catch { return "(missing)"; } })()), "");
     B.kill();
     const panelSrc3 = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
     ok("T7 面板渲染升级横幅(带更新按钮;收到 board.restarting 后等新版本回来自己刷新)并在底栏显示版本号",

@@ -139,9 +139,14 @@ while True:
     try:
         stream_once()
         if REEXEC[0]:
-            import subprocess
+            env = dict(os.environ, SSE_WATCH_REEXECED=REEXEC[0])
             sys.stdout.flush()
-            rc = subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, SSE_WATCH_REEXECED=REEXEC[0]))
+            if os.name != "nt":
+                # POSIX: replace this process in place — same pid, same stdout, and no parent
+                # left waiting per upgrade (v0.20; self-audit P3-7).
+                os.execve(sys.executable, [sys.executable] + sys.argv, env)
+            import subprocess   # Windows has no exec that keeps the pid: run the new code as a child, wait
+            rc = subprocess.call([sys.executable] + sys.argv, env=env)
             sys.exit(rc)
         emit("⚠ SSE 流正常结束(服务端关闭?)—— 10s 后重连")
     except Exception as e:

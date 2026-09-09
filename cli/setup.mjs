@@ -10,9 +10,9 @@
 //      absent. store.js validates a card's verify_cmd against this file, and a fresh
 //      clone has none; the QUICKSTART used to leave that discovery to the first
 //      refused card.
-//   ④ say what is left and is YOURS: bless, then start. Accepting the tree is a human
-//      act — v0.6 ruled it must never be a button — so setup prints the command and
-//      stops.
+//   ④ say what is left and is YOURS: start, then accept the tree. Accepting is a human act —
+//      since v0.18 a panel button that shows the diff and carries the tree you saw
+//      (confirm_tree); the CLI stays as the alternative — so setup points there and stops.
 import { copyFileSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -49,10 +49,10 @@ applyConfigDefaults();               // the config exists now; read its port for
 const port = process.env.BOARD_PORT || 47824;
 
 say();
-say("剩下两步是你的(不做成按钮,是裁定 —— 接受代码的人得是人):");
-say("  A. 接受这棵树   python cli/board.py bless");
-say("     闸只放行你 bless 过的代码;以后每次 git pull 都要重新 bless。");
-say(`  B. 起板         npm start          → http://127.0.0.1:${port}`);
+say("剩下两步是你的 —— 接受代码的人得是人,但不用敲命令:");
+say(`  A. 起板         npm start          → http://127.0.0.1:${port}(端口取 fleet.config.json 的 port;没写就是 47824)`);
+say("  B. 接受这棵树   打开面板,引导里按「接受当前代码」(会先列出版本和改动)。命令行也行:python cli/board.py bless");
+say("     闸只放行你接受过的代码;以后每次 git pull 都要再接受一次 —— 面板横幅上有「更新到新代码」一键。");
 say();
 say(created.length
   ? "然后跟着面板顶部的上手引导走 —— 每一步都是实测的,做到哪一步就亮到哪一步。"

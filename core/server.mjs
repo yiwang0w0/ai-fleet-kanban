@@ -2788,8 +2788,14 @@ server.on("error", (e) => {
 });
 server.listen(PORT, HOST, () => {
   console.log(`看板 http://${HOST}:${PORT}  DB=${store.DB_PATH}`);
-  if (process.env.BOARD_RESTARTED_FROM)
-    console.log(`↻ 由「更新」重启接手: ${process.env.BOARD_RESTARTED_FROM} → ${BOOT_REV}(${process.env.BOARD_RESTART_TRIGGER || "panel"})`);
+  if (process.env.BOARD_RESTARTED_FROM) {
+    // Under a supervisor the env only says "supervised"; the previous process left the real
+    // revision and trigger in <data>/restart_from (see restartBoard). Read once, then remove.
+    let from = process.env.BOARD_RESTARTED_FROM, trig = process.env.BOARD_RESTART_TRIGGER || "panel";
+    const rf = join(store.DATA_DIR, "restart_from");
+    try { const [r0, t0] = readFileSync(rf, "utf8").trim().split(/\s+/); if (r0) from = r0; if (t0) trig = t0; unlinkSync(rf); } catch {}
+    console.log(`↻ 由「更新」重启接手: ${from} → ${BOOT_REV}(${trig})`);
+  }
   console.log(`状态四值: ${store.STATUS.join(" / ")}`);
   console.log(`配置: ${existsSync(CONFIG_FILE) ? CONFIG_FILE : "(内置缺省)"}  线=${LINES.join(",")}  路由=${ROUTES.join(",")}`
     // A knob that silently does nothing is worse than no knob: say it out loud when set.
@@ -2922,6 +2928,9 @@ async function restartBoard(trigger) {
   for (const c of clients) { try { c.end(); } catch {} }   // open SSE streams would hold close() forever
   await new Promise((r) => { server.close(() => r()); server.closeAllConnections?.(); });
   if (RESTART_MODE === "exit") {
+    // The supervisor cannot know which revision this process ran (it only sees exit 75); leave
+    // it in the data dir on the way out so the successor's boot line reads "old → new" (v0.20).
+    try { writeFileSync(join(store.DATA_DIR, "restart_from"), `${BOOT_REV || "?"} ${trigger}\n`, "utf8"); } catch {}
     console.log(`重启(${trigger}): 以 exit 75 退出,交给外层(npm start 守护 / pm2 / systemd)在原地重起`);
     process.exit(75);
   }

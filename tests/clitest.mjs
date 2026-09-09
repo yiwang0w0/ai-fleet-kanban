@@ -66,6 +66,8 @@ console.log(NL + "[③ setup]");
   ok("creates verify_registry.json from the example (store validates verify_cmd against it)", existsSync(reg) &&
      readFileSync(reg, "utf8") === readFileSync(join(ROOT, "examples", "verify_registry.example.json"), "utf8"));
   ok("prints the two human steps: bless, then start", /bless/.test(r1.out) && /npm start/.test(r1.out));
+  ok("⭐closing text follows the v0.18 ruling: accepting code is the panel button (CLI optional), no 「不做成按钮」",
+     /接受当前代码/.test(r1.out) && !/不做成按钮/.test(r1.out));
   ok("says the doctor step was skipped, loudly", /--no-doctor/.test(r1.out));
   writeFileSync(cfg, '{"lines":[{"id":"mine"}]}');           // the operator edited it
   const r2 = run("cli/setup.mjs", ["--no-doctor"], env);
