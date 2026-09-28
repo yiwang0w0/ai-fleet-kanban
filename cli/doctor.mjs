@@ -213,11 +213,51 @@ await new Promise((resolve) => {
   }
 }
 
+// ── ⑤b′ the deny rules' SPELLING — the part a stub cannot see and the CLI silently drops ─
+// Measured 2026-09-28 on Linux with Claude Code 2.1.283: inside a --disallowedTools rule
+// "/x" is project-root-relative and only "//x" is absolute — v0.17.0's rules matched
+// nothing on POSIX (single slash let every action through; the same paths with a double
+// slash refused every one). A Write(...)/Glob(...)/Grep(...) rule on its own stops nothing
+// (the CLI's stderr warning about it shows only in text output mode), so only Read/Edit
+// rules are emitted. This asks the
+// real cli_deny_rules for the rules the loops will send and checks their SHAPE. Whether a
+// rule HOLDS is semantics, and semantics can only be measured against the real CLI:
+//   python loops/deny_probe.py     (manual — burns tokens, needs the CLI; not in CI)
+{
+  if (!PY) {
+    wr("跳过 deny 规则写法检查(没有 python)", "装了 python 再跑一次 doctor");
+  } else {
+    try {
+      const DATA = resolve(process.env.BOARD_DATA_DIR || join(ROOT, "core", ".data"));
+      const code = "import sys, json; sys.path.insert(0, sys.argv[1]); import verify_lib; print(json.dumps(verify_lib.cli_deny_rules(sys.argv[2])))";
+      const rules = JSON.parse(execFileSync(PY, ["-c", code, join(ROOT, "loops"), DATA],
+                                            { encoding: "utf8", windowsHide: true, timeout: 15000 }).trim());
+      const win = process.platform === "win32";
+      const badKind = rules.filter((r) => !/^(Read|Edit)\(/.test(r));
+      const badPath = rules.filter((r) => win ? !/^(Read|Edit)\([A-Za-z]:\//.test(r) : !/^(Read|Edit)\(\/\/[^/]/.test(r));
+      if (!rules.length)
+        no("cli_deny_rules 产出为空 —— Claude 座席对令牌与登记簿没有任何结构防线", "升级看板;这不是可以跑的状态");
+      else if (badPath.length)
+        no(`deny 规则的路径写法不是 CLI 认的绝对路径(${badPath[0]})`,
+           win ? "Windows 上应是 C:/… 形" : "POSIX 上 /x 是项目根相对,//x 才是绝对 —— 这样写的规则一条都不匹配(2026-09-28 实测)。升级看板到 v0.21.2+");
+      else if (badKind.length)
+        no(`deny 规则里有 CLI 不认的写法(${badKind[0]})`, "CLI 只按 Read(path)/Edit(path) 做文件权限判断;Write/Glob/Grep 写法被忽略并每次刷警告");
+      else
+        ok(`deny 规则写法合规(${rules.length} 条;${win ? "C:/ 绝对路径" : "// 绝对路径"};只有 Read/Edit)`,
+           "写法≠语义 —— 拦不拦得住只能用真 CLI 量:python loops/deny_probe.py(2026-09-28 Linux · CLI 2.1.283 全部符合;Windows 形本轮未复测)");
+    } catch (e) {
+      wr(`deny 规则写法没测成(${String(e.message).slice(0, 60)})`, "不是通过,是没测");
+    }
+  }
+}
+
 // ── ⑤c the trust boundary: are the tokens and the registry inside the worker's reach? ─
-// Measured 2026-09-07 with the real CLI: a Claude worker in -p mode can Read any absolute
-// path on the machine, so moving .data out of the repo is not a barrier by itself; the
-// loops now pass path-scoped --disallowedTools rules, which held in nine experiments. The
-// codex seat has no equivalent — there the boundary is prose. Say which case this is.
+// Measured 2026-09-07 with the real CLI on Windows: a Claude worker in -p mode can Read any
+// absolute path on the machine, so moving .data out of the repo is not a barrier by itself;
+// the loops pass path-scoped --disallowedTools rules, which held in nine experiments there
+// — and, re-measured 2026-09-28 on Linux (Claude Code 2.1.283), hold only when spelled
+// "//abs" (⑤b′ above; v0.17.0's "/abs" matched nothing on POSIX). The codex seat has no
+// equivalent — there the boundary is prose. Say which case this is.
 {
   const REPO_ROOT = resolve(process.env.BOARD_REPO || ROOT);
   const DATA = resolve(process.env.BOARD_DATA_DIR || join(ROOT, "core", ".data"));
@@ -226,8 +266,8 @@ await new Promise((resolve) => {
   const exposed = [DATA, REG].filter(inside);
   if (exposed.length)
     wr(`令牌目录 / 登记簿在工作仓之内(${exposed.map((x) => relative(REPO_ROOT, x)).join(", ")})`,
-       "Claude 座席已由 --disallowedTools 路径规则封住(实测);codex 座席只有提示词纪律。若要跑 codex 座席,把 BOARD_DATA_DIR 与 BOARD_VERIFY_REGISTRY 指到工作仓之外,或让舰队用独立的 OS 用户跑");
-  else ok("令牌目录与登记簿都在工作仓之外(Claude 座席另有 deny 规则兜底)");
+       "Claude 座席由 --disallowedTools 路径规则封住(写法见上一项;语义实测:2026-09-07 Windows 九组、2026-09-28 Linux · CLI 2.1.283 —— 别的平台或 CLI 版本请用 python loops/deny_probe.py 自己量);codex 座席只有提示词纪律。若要跑 codex 座席,把 BOARD_DATA_DIR 与 BOARD_VERIFY_REGISTRY 指到工作仓之外,或让舰队用独立的 OS 用户跑");
+  else ok("令牌目录与登记簿都在工作仓之外(Claude 座席另有 deny 规则兜底 —— 写法见上一项,语义用 loops/deny_probe.py 量)");
 }
 
 // ── ⑥b browser (optional) — only front-end verification needs it ────────────

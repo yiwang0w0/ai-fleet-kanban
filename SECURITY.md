@@ -22,18 +22,42 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   card text cannot close, re-scope or re-parent anything); `review_token` =
   ruling face, and only as `resolved_by=auto`. All three live in the data
   directory (gitignored) — that directory is **operator territory**.
-  **Measured 2026-09-07 with the real CLI (nine experiments, positive controls
-  included):** a Claude worker in `-p` mode can `Read` any absolute path on the
-  machine, inside or outside its working directory — so moving the data dir out
-  of the repo is *not* a barrier by itself. What held, against relative reads,
-  absolute reads and `Grep`, is the path-scoped deny rule the loops now pass:
-  `--disallowedTools Read/Edit/Write/Glob/Grep(<data>/**)` and the same for the
-  verify registry (v0.17.0). Same for the registry hole: a worker that could edit
+  **Measured 2026-09-07 with the real CLI on Windows (nine experiments, positive
+  controls included):** a Claude worker in `-p` mode can `Read` any absolute path
+  on the machine, inside or outside its working directory — so moving the data
+  dir out of the repo is *not* a barrier by itself. What held, against relative
+  reads, absolute reads and `Grep`, is the path-scoped `--disallowedTools` rule
+  the loops pass (v0.17.0). Same for the registry hole: a worker that could edit
   `verify_registry.json` could nominate any command for the loop to run — the
-  Edit/Write deny closes it, measured. **The codex seat has no equivalent
-  mechanism**; there the boundary is the prompt, which is discipline, not
-  structure. On a shared machine run the fleet as its own OS user; `doctor` and
-  the server both say which case a deployment is in.
+  Edit deny closes it, measured.
+  **Re-measured 2026-09-28 on Linux (Claude Code 2.1.283, with positive
+  controls; reproducible with `loops/deny_probe.py`):** inside a Claude Code
+  permission rule `/path` is relative to the project root and only `//path` is
+  absolute, so the
+  `Read(/home/…/.data/**)` rules v0.17.0 emitted on POSIX matched nothing — every
+  action they were meant to stop went through, and the same rules spelled `//`
+  stopped every one. Two more things the measurement said: a `Write(…)`,
+  `Glob(…)` or `Grep(…)` rule on its own stops nothing (only `Edit(path)` and
+  `Read(path)` rules take part in file checks — the CLI says so on stderr, but
+  only in text output mode, never under `--output-format json`), and a
+  `Read(<data>/**)` rule also refuses the `Write` that *creates* a
+  file under it — so a whole-directory rule would have fenced off the worker's
+  evidence file and the reviewer's verdict file as well, and deny always beats
+  allow. Since v0.21.2 the loops therefore pass `Read(//…)` + `Edit(//…)` per
+  operator-written file in the data dir (the three tokens, `board.db*`,
+  `accepted_rev`, both ledgers, pool/lineage/settings state, the probe credential
+  and archives, the decompose output, the restart marker, the board log) and for
+  the registry, leaving `evidence/` and `review/` — the two channels the seats
+  write into — open; a lexical guard in
+  the prompt selftest goes red when code writes a new, unclassified file name
+  into the data dir. The Windows `C:/…` spelling was not re-measured this round.
+  `doctor` checks the spelling the loops will send; the *semantics* can only be
+  measured against the real CLI: `python loops/deny_probe.py` (manual, not in
+  CI — every harness drives a stub, and a stub cannot say whether a rule holds).
+  **The codex seat has no equivalent mechanism**; there the boundary is the
+  prompt, which is discipline, not structure. On a shared machine run the fleet
+  as its own OS user; `doctor` and the server both say which case a deployment
+  is in.
 - **Card text is never a command line.** The worker refuses `.bat/.cmd` CLIs
   (CVE-2024-24576, "BatBadBut": cmd.exe re-parses arguments, so a card body
   could become an executable command line). The gate judges by extension on
@@ -96,4 +120,5 @@ it (`exit`); a bare process starts a detached successor from its own
 `accepted_rev`, a file in the data dir). Restarting is a new, bounded one: it stops the lines
 and re-runs the board from the code on disk — the source gate covers lines, not the board
 process, exactly as a manual restart does. What keeps a worker away from all of this is the
-Claude seat's deny rules on the data dir (above).
+Claude seat's per-file deny rules on the data dir (above — spelled `//` on POSIX since
+v0.21.2; before that they matched nothing there).

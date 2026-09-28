@@ -224,6 +224,19 @@ the exact spelling the loops send, not the one that reads better.
 check no harness can perform, because every harness drives a stub and a stub
 accepts anything, including a flag that was renamed last week.
 
+**Path rules have a spelling of their own.** Inside a `--disallowedTools` rule,
+`Read(/x)` is relative to the project root and `Read(//x)` is absolute (measured
+2026-09-28 on Linux with Claude Code 2.1.283 — v0.17.0's single-slash rules
+matched nothing on POSIX; the nine experiments behind v0.17.0 were run on
+Windows, where `C:/x` is absolute and unambiguous). Only `Read(path)` and
+`Edit(path)` rules take part in file permission checks — a `Write(…)`, `Glob(…)`
+or `Grep(…)` rule on its own stops nothing, and the CLI's stderr warning about
+it appears only in text output mode, not under `--output-format json` — and a
+`Read` deny on a directory also refuses *creating* a file under it, which is why
+the rules pin files one by one and leave `evidence/` and `review/` open.
+`verify_lib.cli_deny_rules` emits that form; doctor checks the spelling;
+`loops/deny_probe.py` (manual, real CLI) measures whether the rules hold.
+
 ### Terms that look official but are ours
 
 | our term | what it is here | the official term it is NOT |

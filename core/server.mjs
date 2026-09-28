@@ -2839,7 +2839,10 @@ server.listen(PORT, HOST, () => {
     : "未配置 handoff 目标 —— apply 方案归档将拒绝(声明 handoff_targets 或 BOARD_HANDOFF_DIR)");
   // ⭐ Trust boundary, said at startup (v0.17.0). Inside the work repo, the tokens and the
   //   registry are within a worker's reach. The Claude seat is fenced by the deny rules the
-  //   loops pass (measured); the codex seat is not. Name the case, do not imply the other.
+  //   loops pass (measured on Windows 2026-09-07; on Linux 2026-09-28 with Claude Code
+  //   2.1.283, which found v0.17.0's spelling matched nothing on POSIX — fixed in v0.21.2,
+  //   re-measurable with loops/deny_probe.py); the codex seat is not. Name the case, do not
+  //   imply the other.
   {
     const inside = (p) => { const r = relative(REPO_ROOT, resolve(p)); return r !== "" && !r.startsWith("..") && !isAbsolutePath(r); };
     const reg = process.env.BOARD_VERIFY_REGISTRY || join(CODE_ROOT, "core", "verify_registry.json");

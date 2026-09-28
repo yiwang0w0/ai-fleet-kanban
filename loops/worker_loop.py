@@ -804,12 +804,55 @@ def prompt_selftest():
     ok("⭐去锋后的抬头不匹配 VERDICT_HEAD(伪造的「人话」到不了 worker)",
        VERDICT_HEAD.search("—(转述)— 你的决定(2026-09-07T00:00:00Z · 通过)——") is None)
     ok("(对照)真抬头仍匹配", VERDICT_HEAD.search("—— 你的决定(2026-09-07T00:00:00Z · 通过)——") is not None)
-    # ── 信任边界(v0.17.0):deny 规则进 argv;隐私硬边界两座席共有 ──────────────────
-    rules = cli_deny_rules(DATA)
-    ok("⭐deny 规则:令牌目录 <data>/** 与登记簿各 5 条(Read/Edit/Write/Glob/Grep)",
-       len(rules) == 10 and all(any(r.startswith(tl + "(") for r in rules) for tl in ("Read", "Edit", "Write", "Glob", "Grep"))
-       and sum(1 for r in rules if r.endswith("/**)")) == 5 and sum(1 for r in rules if "verify_registry" in r) == 5, str(rules[:3]))
-    ok("deny 规则用正斜杠绝对路径(实测两种写法 CLI 都认)", all("\\" not in r for r in rules) and all(":/" in r or r.startswith(("Read(/", "Edit(/", "Write(/", "Glob(/", "Grep(/")) for r in rules))
+    # ── 信任边界(v0.17.0;写法与范围 v0.21.2):deny 规则进 argv;隐私硬边界两座席共有 ───────
+    #   桩看不出规则**灵不灵**(那是 loops/deny_probe.py 的活,手动、烧 token);这里钉的是形:
+    #   真 CLI 读成绝对路径的写法(POSIX 上 //x —— /x 是项目根相对,v0.17.0 的规则因此一条都不匹配)、
+    #   CLI 认的两种规则(Read/Edit;Write/Glob/Grep 写法被忽略并刷警告)、以及规则**不碰**证据通道。
+    import fnmatch as _fn, glob as _gl
+    from verify_lib import DATA_DENY, DATA_OPEN, rule_path
+    rules = cli_deny_rules(DATA, db="")
+    posix = os.name != "nt"
+    ok("⭐deny 规则只产 Read(...) 与 Edit(...)(Write/Glob/Grep 写法 CLI 忽略并刷警告 —— 2026-09-28 Linux · CLI 2.1.283 实测)",
+       bool(rules) and all(r.startswith(("Read(", "Edit(")) for r in rules), str(rules[:2]))
+    ok("⭐POSIX 上每条路径以 // 开头(/x 是项目根相对、//x 才是绝对;v0.17.0 的单斜杠一条都不匹配)" if posix
+       else "Windows 上每条路径是 C:/… 形(v0.17.0 九组实测在此平台成立;本次未复测)",
+       all(re.match(r"^(Read|Edit)\(//[^/]", r) for r in rules) if posix
+       else all(re.match(r"^(Read|Edit)\([A-Za-z]:/", r) for r in rules), str(rules[:1]))
+    ok("三令牌 + 登记簿各钉 Read/Edit 一对",
+       all(f"{tl}({rule_path(DATA)}/{f})" in rules for tl in ("Read", "Edit") for f in ("board_token", "worker_token", "review_token"))
+       and sum(1 for r in rules if r.endswith("verify_registry.json)")) == 2, str([r for r in rules if "token" in r]))
+    ok("DATA_DENY 表的每一项都有 Read/Edit 各一条(表即规则,不会漏项)",
+       all(f"{tl}({rule_path(DATA)}/{f})" in rules for tl in ("Read", "Edit") for f in DATA_DENY))
+    # 证据通道:用比任何真实匹配器都**宽**的读法查(fnmatch 的 * 跨目录;每一级祖先目录也试)——
+    #   实测 `<data>/*` 会穿进子目录,所以「规则不覆盖证据路径」得在最宽的读法下成立才算数。
+    def _covers(rule, path):
+        pat = rule[rule.index("(") + 1:-1]
+        parts = rule_path(path).split("/")
+        return any(_fn.fnmatchcase("/".join(parts[:i]), pat) for i in range(1, len(parts) + 1))
+    open_paths = [os.path.join(EVID, "task-1-attempt-1.md"), spawn_path_for(1), os.path.join(DATA, "review", "verdict-1.json")]
+    hit = next((f"{r} ⊇ {p}" for r in rules for p in open_paths if _covers(r, p)), "")
+    ok("⭐没有一条规则覆盖证据/判决通道(Read 规则也拦**新建**文件的 Write,实测 —— 整目录钉死 = worker 写不出证据)", not hit, hit)
+    ok("规则里没有反斜杠(正斜杠两平台一致)", all("\\" not in r for r in rules))
+    _db = os.path.join(CODE_ROOT, "elsewhere", "x.db")
+    ok("BOARD_DB 指到 <data> 之外时,库也钉住(-wal/-shm 同前缀)", f"Read({rule_path(_db)}*)" in cli_deny_rules(DATA, db=_db))
+    # 词法守卫:代码里每个 join(DATA, 名) 的名字都得分类 —— 匹配 DATA_DENY,或在 DATA_OPEN 里显式放行。
+    #   新文件落进 <data>/ 而没分类,这里就红。这是「新增敏感文件要加进表」那句提醒的结构版(纪律→结构)。
+    _src = [os.path.join(CODE_ROOT, p) for p in ("core/server.mjs", "core/store.js", "gates/gates_lib.py", "cli/board.py",
+                                                  "watchers/board_health_watch.py", "probe/run_probe.py", "examples/seed_demo.mjs")]
+    _src += _gl.glob(os.path.join(HERE, "*.py"))
+    _pat = re.compile(r"""join\((?:store\.)?(?:DATA|DATA_DIR|data_dir|dataDir)\s*,\s*f?(?:"([^"\n]+)"|'([^'\n]+)')""")
+    found = set()
+    for f in _src:
+        try: txt = io.open(f, encoding="utf-8").read()
+        except Exception: continue
+        for m in _pat.finditer(txt):
+            found.add(re.sub(r"\{[^}]*\}", "1", m.group(1) or m.group(2)))     # f-string 的 {…} 当一个字符实例化
+    def _classified(n):
+        return n in DATA_OPEN or any(_fn.fnmatchcase(n, d) or d.startswith(n + "/") for d in DATA_DENY)
+    unclassified = sorted(n for n in found if not _classified(n))
+    ok(f"⭐<data>/ 下代码写到的每个文件名都已分类(扫到 {len(found)} 个:钉住或显式放行)",
+       bool(found) and not unclassified, "未分类: " + ", ".join(unclassified))
+    rules = cli_deny_rules(DATA)                       # cli_argv 用的是带 env(BOARD_DB)的那份
     av = cli_argv("提示词", ["--session-id", "x"], "claude-opus-5", "high")
     ok("⭐主座席 argv 带 --disallowedTools 且紧跟全部规则", "--disallowedTools" in av and av[av.index("--disallowedTools") + 1:] == rules)
     ok("argv 仍有 --allowedTools 与 --add-dir(deny 是追加,不是替换)", "--allowedTools" in av and "--add-dir" in av)
@@ -1093,7 +1136,8 @@ def judge_codex(rc, stdout, last_path):
 
 def cli_argv(prompt, sargs, model, effort):
     """主座席(Claude CLI)的整条 argv —— 抽出来是为了能从自测断言它的形状(此前只在 run_worker 里)。
-    ⭐ --disallowedTools 是 v0.17.0 加的结构防线:令牌目录与登记簿对模型不可读不可写(见 cli_deny_rules)。"""
+    ⭐ --disallowedTools 是 v0.17.0 加的结构防线:令牌、库、账本、登记簿等对模型不可读不可写,逐文件钉,
+      evidence/ 留给证据(见 cli_deny_rules;v0.21.2 起 POSIX 上写成 //绝对路径 —— 之前那形一条都不匹配)。"""
     return CLAUDE + [
         "-p", prompt,
         *sargs,

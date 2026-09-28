@@ -143,11 +143,31 @@ try {
      tA.verify_ok === true, `verify_ok=${JSON.stringify(tA.verify_ok)}`);
   ok("R4 stub 被调用过(判决确实出自模型路径)", existsSync(MARK), logA.slice(-200));
 
-  console.log(NL + "[§2b 审阅座席的 argv 也带 --disallowedTools(v0.17.0)]");
+  console.log(NL + "[§2b 审阅座席的 argv 也带 --disallowedTools(v0.17.0;写法与范围 v0.21.2)]");
   {
+    // Same three pins as looptest ⑭ (a stub cannot say whether a rule holds — that is
+    // loops/deny_probe.py): the spelling the CLI reads as absolute ("//x" on POSIX; "/x" is
+    // project-root-relative, so v0.17.0's rules matched nothing there), Read/Edit only, and
+    // no rule reaching <data>/review/ — the file the reviewer must write its verdict into.
     let av = []; try { av = JSON.parse(readFileSync(ARGVF, "utf8")); } catch {}
     const i = av.indexOf("--disallowedTools"); const rules = i >= 0 ? av.slice(i + 1) : [];
-    ok("R4b ⭐审阅的真 argv 带 --disallowedTools,覆盖数据目录与登记簿", i >= 0 && rules.some((r) => /\/\*\*\)$/.test(r)) && rules.some((r) => /verify_registry\.json\)$/.test(r)), rules.slice(0, 2).join(" ") || "(no argv)");
+    const win = process.platform === "win32";
+    const fwd = TMP.replace(/\\/g, "/");
+    const dataRule = win ? fwd : "//" + fwd.replace(/^\/+/, "");
+    const covers = (rule, p) => {      // looser than any real matcher: `*` crosses "/", ancestors tried too
+      const pat = rule.slice(rule.indexOf("(") + 1, -1);
+      const re = new RegExp("^" + pat.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*+/g, ".*") + "$");
+      const parts = p.split("/");
+      return parts.some((_, k) => re.test(parts.slice(0, k + 1).join("/")));
+    };
+    const verdict = `${dataRule}/review/verdict-1.json`;
+    ok("R4b ⭐审阅的真 argv 带 --disallowedTools,钉住三令牌与登记簿(Read/Edit 各一条)",
+       i >= 0 && ["board_token", "worker_token", "review_token"].every((f) => rules.includes(`Read(${dataRule}/${f})`) && rules.includes(`Edit(${dataRule}/${f})`))
+       && rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 2, rules.slice(0, 2).join(" ") || "(no argv)");
+    ok(win ? "R4c 规则只有 Read/Edit,路径是 C:/… 形" : "R4c ⭐规则只有 Read/Edit,POSIX 上每条以 // 开头(v0.17.0 的单斜杠一条都不匹配)",
+       rules.length > 0 && rules.every((r) => win ? /^(Read|Edit)\([A-Za-z]:\//.test(r) : /^(Read|Edit)\(\/\/[^/]/.test(r)), rules[0] || "");
+    ok("R4d ⭐没有一条规则覆盖判决通道 <data>/review/(否则审阅写不出判决)",
+       rules.length > 0 && !rules.some((r) => covers(r, verdict)), rules.find((r) => covers(r, verdict)) || "");
   }
 
   console.log(NL + "[§3 机器产出闸:验收要机器、证据纯散文、模型说 approve → 机械降 escalate]");

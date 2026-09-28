@@ -772,10 +772,18 @@ process.stdin.on("end", () => {
        `领到 ${(rb.out.match(/领到 #/g) || []).length} 张`);
   }
 
-  // ── ⑭ the Claude seat's argv carries path-scoped deny rules (v0.17.0) ────────
+  // ── ⑭ the Claude seat's argv carries path-scoped deny rules (v0.17.0; spelling and
+  //    scope re-measured 2026-09-28 on Linux with Claude Code 2.1.283 → v0.21.2) ───────
   //    A python stub stands in for the CLI (WORKER_CLI_ARGV), dumps its argv to a file
   //    and fails — so this is the REAL loop composing the REAL argv, not a unit test.
-  console.log("\n[⑭ Claude 座席的 argv 带 --disallowedTools(令牌目录 / 登记簿)]");
+  //    A stub cannot tell whether a rule HOLDS; that is loops/deny_probe.py (manual, real
+  //    CLI). What the stub CAN pin: the spelling the CLI reads as absolute ("//x" on POSIX
+  //    — "/x" is project-root-relative, which is why v0.17.0's rules matched nothing
+  //    there), the two rule kinds the CLI honours (Read/Edit; Write/Glob/Grep spellings
+  //    are ignored with a warning), and that no rule reaches the evidence channel the
+  //    worker must write into (a Read deny on a directory also refuses creating a file
+  //    under it — measured).
+  console.log("\n[⑭ Claude 座席的 argv 带 --disallowedTools(令牌 / 登记簿;证据通道留白)]");
   {
     const dump = join(TMP, "argvdump.py"), argvFile = join(TMP, "argv.json");
     writeFileSync(dump, ["import sys, json, io",
@@ -785,11 +793,30 @@ process.stdin.on("end", () => {
     await runLoopOnce({ WORKER_CLAUDE_CLI: "", WORKER_ALLOW_BATCH_CLI: "", WORKER_CLI_ARGV: JSON.stringify([PY, dump]) }, 60000);
     let argv = []; try { argv = JSON.parse(readFileSync(argvFile, "utf8")); } catch {}
     const i = argv.indexOf("--disallowedTools"); const rules = i >= 0 ? argv.slice(i + 1) : [];
-    const dataFwd = TMP.replace(/\\/g, "/");
+    const win = process.platform === "win32";
+    const fwd = TMP.replace(/\\/g, "/");
+    const dataRule = win ? fwd : "//" + fwd.replace(/^\/+/, "");      // the spelling the CLI reads as absolute
+    // Deliberately LOOSER than any real matcher: `*` crosses "/" and every ancestor directory
+    // is tried as well (measured: `<data>/*` reached into subdirectories). If nothing matches
+    // under this reading, nothing matches under the CLI's.
+    const covers = (rule, p) => {
+      const pat = rule.slice(rule.indexOf("(") + 1, -1);
+      const re = new RegExp("^" + pat.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*+/g, ".*") + "$");
+      const parts = p.split("/");
+      return parts.some((_, k) => re.test(parts.slice(0, k + 1).join("/")));
+    };
+    const openPaths = [`${dataRule}/evidence/task-1-attempt-1.md`, `${dataRule}/evidence/spawn-1.json`, `${dataRule}/review/verdict-1.json`];
     ok("⭐真 loop 起的 CLI argv 里有 --disallowedTools", i >= 0, argv.length ? argv.slice(-4).join(" ") : "(argv 未落盘 — 桩没被调到?)");
-    ok("⭐规则覆盖本板的数据目录(<data>/**)与登记簿,五种工具各一条",
-       rules.filter((r) => r.includes(dataFwd + "/**)")).length === 5 && rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 5 &&
-       ["Read", "Edit", "Write", "Glob", "Grep"].every((t) => rules.some((r) => r.startsWith(t + "("))), rules.slice(0, 3).join(" "));
+    ok("⭐规则只有 Read(...) 与 Edit(...)(Write/Glob/Grep 写法 CLI 忽略且刷警告)",
+       rules.length > 0 && rules.every((r) => /^(Read|Edit)\(/.test(r)), rules.slice(0, 2).join(" "));
+    ok(win ? "Windows 上每条路径是 C:/… 形(v0.17.0 九组实测在此平台成立;本次未复测)"
+           : "⭐POSIX 上每条路径以 // 开头(/x 是项目根相对 —— v0.17.0 的单斜杠一条都不匹配)",
+       rules.length > 0 && rules.every((r) => win ? /^(Read|Edit)\([A-Za-z]:\//.test(r) : /^(Read|Edit)\(\/\/[^/]/.test(r)), rules[0] || "");
+    ok("⭐规则钉住本板的三令牌与登记簿,Read/Edit 各一条",
+       ["board_token", "worker_token", "review_token"].every((f) => rules.includes(`Read(${dataRule}/${f})`) && rules.includes(`Edit(${dataRule}/${f})`))
+       && rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 2, rules.filter((r) => /token\)$/.test(r)).join(" ") || rules.slice(0, 2).join(" "));
+    ok("⭐没有一条规则覆盖证据通道(<data>/evidence/、<data>/review/)—— 否则 worker 写不出证据",
+       rules.length > 0 && !rules.some((r) => openPaths.some((p) => covers(r, p))), rules.find((r) => openPaths.some((p) => covers(r, p))) || "");
     ok("规则里没有反斜杠(正斜杠绝对路径,两平台一致)", rules.length > 0 && rules.every((r) => !r.includes("\\")));
   }
 

@@ -640,7 +640,8 @@ def review_one(t, vr=None):
                       "--output-format", "json", "--permission-mode", "acceptEdits",
                       "--allowedTools", "Read", "Glob", "Grep", "Write",
                       "--add-dir", REPO, "--add-dir", OUTDIR,
-                      # ⭐ v0.17.0:令牌目录与登记簿对审阅模型不可读不可写(verify_lib.cli_deny_rules,实测有效)。
+                      # ⭐ v0.17.0(写法与范围 v0.21.2):令牌等敏感文件与登记簿对审阅模型不可读不可写,
+                      #   review/ 留给判决(verify_lib.cli_deny_rules;写法 doctor 核,语义用 loops/deny_probe.py 量)。
                       "--disallowedTools", *cli_deny_rules(DATA)]
         try:
             r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
