@@ -785,11 +785,20 @@ process.stdin.on("end", () => {
     await runLoopOnce({ WORKER_CLAUDE_CLI: "", WORKER_ALLOW_BATCH_CLI: "", WORKER_CLI_ARGV: JSON.stringify([PY, dump]) }, 60000);
     let argv = []; try { argv = JSON.parse(readFileSync(argvFile, "utf8")); } catch {}
     const i = argv.indexOf("--disallowedTools"); const rules = i >= 0 ? argv.slice(i + 1) : [];
-    const dataFwd = TMP.replace(/\\/g, "/");
+    // v0.21.2: the data dir is spelled the way Claude Code reads an ABSOLUTE path — `//…`
+    // on POSIX (a single slash is project-root-relative and matched nothing, measured
+    // 2026-09-28 on Claude Code 2.1.283), the drive-letter form on Windows.
+    const dataFwd = (WIN ? "" : "/") + TMP.replace(/\\/g, "/");
     ok("⭐真 loop 起的 CLI argv 里有 --disallowedTools", i >= 0, argv.length ? argv.slice(-4).join(" ") : "(argv 未落盘 — 桩没被调到?)");
-    ok("⭐规则覆盖本板的数据目录(<data>/**)与登记簿,五种工具各一条",
-       rules.filter((r) => r.includes(dataFwd + "/**)")).length === 5 && rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 5 &&
-       ["Read", "Edit", "Write", "Glob", "Grep"].every((t) => rules.some((r) => r.startsWith(t + "("))), rules.slice(0, 3).join(" "));
+    ok("⭐规则钉住本板数据目录里的令牌与登记簿(逐文件;Read 与 Edit 各一条)",
+       ["board_token", "worker_token", "review_token"].every((f) =>
+         rules.includes(`Read(${dataFwd}/${f})`) && rules.includes(`Edit(${dataFwd}/${f})`)) &&
+       rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 2, rules.slice(0, 3).join(" "));
+    ok("⭐只有 Read / Edit 两种规则(Write/Glob/Grep 写法 CLI 明说不匹配)",
+       rules.length > 0 && rules.every((r) => /^(Read|Edit)\(/.test(r)), rules.filter((r) => !/^(Read|Edit)\(/.test(r)).slice(0, 2).join(" "));
+    ok("⭐没有一条规则盖住证据目录(整目录的 Read deny 连 Write 证据都拒 —— 实测)",
+       rules.every((r) => !r.includes(`${dataFwd}/evidence/`) && !r.endsWith(`${dataFwd}/evidence)`)
+                          && !r.endsWith(`${dataFwd}/**)`) && !r.endsWith(`${dataFwd}/*)`)));
     ok("规则里没有反斜杠(正斜杠绝对路径,两平台一致)", rules.length > 0 && rules.every((r) => !r.includes("\\")));
   }
 

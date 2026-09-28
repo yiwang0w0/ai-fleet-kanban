@@ -214,10 +214,12 @@ await new Promise((resolve) => {
 }
 
 // ── ⑤c the trust boundary: are the tokens and the registry inside the worker's reach? ─
-// Measured 2026-09-07 with the real CLI: a Claude worker in -p mode can Read any absolute
-// path on the machine, so moving .data out of the repo is not a barrier by itself; the
-// loops now pass path-scoped --disallowedTools rules, which held in nine experiments. The
-// codex seat has no equivalent — there the boundary is prose. Say which case this is.
+// Measured 2026-09-07 with the real CLI (Windows): a Claude worker in -p mode can Read any
+// absolute path on the machine, so moving .data out of the repo is not a barrier by itself;
+// the loops pass path-scoped --disallowedTools rules instead. Measured again 2026-09-28
+// (Linux, Claude Code 2.1.283): the rule's path must be spelled `//abs` — a single leading
+// slash is project-root-relative and matches nothing, which is how v0.17.0's rules were
+// inert on POSIX. The codex seat has no equivalent — there the boundary is prose.
 {
   const REPO_ROOT = resolve(process.env.BOARD_REPO || ROOT);
   const DATA = resolve(process.env.BOARD_DATA_DIR || join(ROOT, "core", ".data"));
@@ -226,8 +228,33 @@ await new Promise((resolve) => {
   const exposed = [DATA, REG].filter(inside);
   if (exposed.length)
     wr(`令牌目录 / 登记簿在工作仓之内(${exposed.map((x) => relative(REPO_ROOT, x)).join(", ")})`,
-       "Claude 座席已由 --disallowedTools 路径规则封住(实测);codex 座席只有提示词纪律。若要跑 codex 座席,把 BOARD_DATA_DIR 与 BOARD_VERIFY_REGISTRY 指到工作仓之外,或让舰队用独立的 OS 用户跑");
+       "Claude 座席靠 --disallowedTools 路径规则封住(下一项核对它的写法);codex 座席只有提示词纪律。若要跑 codex 座席,把 BOARD_DATA_DIR 与 BOARD_VERIFY_REGISTRY 指到工作仓之外,或让舰队用独立的 OS 用户跑");
   else ok("令牌目录与登记簿都在工作仓之外(Claude 座席另有 deny 规则兜底)");
+  // ⑤d the SPELLING of those rules, as this deployment would actually emit them. Every
+  // harness drives a stub and a stub enforces nothing; doctor cannot measure semantics
+  // either (that takes a live model call), but it can refuse the one shape that is known
+  // to be inert: a POSIX absolute path without the `//` prefix, or a Write/Glob/Grep rule
+  // (the CLI says those are not matched by file permission checks).
+  if (PY) {
+    try {
+      const out = execFileSync(PY, [join(ROOT, "loops", "verify_lib.py"), "--print-deny-rules"],
+                               { encoding: "utf8", windowsHide: true, timeout: 15000,
+                                 env: { ...process.env, BOARD_DATA_DIR: DATA, PYTHONIOENCODING: "utf-8" } });
+      const rules = out.split(/\r?\n/).filter(Boolean);
+      const badTool = rules.filter((r) => !/^(Read|Edit)\(/.test(r));
+      const badPath = rules.filter((r) => {
+        const p = r.replace(/^\w+\(/, "");
+        return process.platform === "win32" ? !/^[A-Za-z]:\//.test(p) : !p.startsWith("//");
+      });
+      if (!rules.length) no("deny 规则为空", "verify_lib.cli_deny_rules 没有产出 —— Claude 座席对令牌目录不设防");
+      else if (badTool.length || badPath.length)
+        no(`deny 规则写法不对(${badTool.length} 条非 Read/Edit,${badPath.length} 条路径不是绝对形)`,
+           `例: ${(badTool[0] || badPath[0]).slice(0, 80)} —— 这种写法 CLI 不匹配,规则等于没有(2026-09-28 实测)`);
+      else ok(`deny 规则写法正确(${rules.length} 条,Read/Edit,${process.platform === "win32" ? "盘符" : "//"} 绝对路径)`);
+    } catch (e) {
+      wr(`deny 规则没读到(${String(e.message).slice(0, 60)})`, "这一项没测成 —— 不是通过,是没测");
+    }
+  }
 }
 
 // ── ⑥b browser (optional) — only front-end verification needs it ────────────

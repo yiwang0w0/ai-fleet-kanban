@@ -23,24 +23,75 @@ VERIFY_TIMEOUT = int(os.environ.get("WORKER_VERIFY_SEC", "900"))
 #     那个分叉。警告写在这里,踩也踩在这里(外部审阅 2026-09-07 指出)。
 REGISTRY = os.environ.get("BOARD_VERIFY_REGISTRY") or os.path.join(CODE_ROOT, "core", "verify_registry.json")
 
+# ── 数据目录里的文件分两类(v0.21.2)。deny 规则按**文件名**逐条钉,不再整目录一网打尽:
+#   2026-09-28 在 Linux 上用真 CLI(Claude Code 2.1.283)量出 `Read(//<data>/**)` 会连带拒掉
+#   模型往 <data>/evidence 写证据文件(Write 工具先按 Read 规则查路径),`Read(//<data>/*)` 单星
+#   同样拒掉子目录里的新建;只有逐文件 / 文件名通配 / 子目录通配三种写法能在钉住敏感文件的
+#   同时把证据目录留给模型(对照 R·S·T·U·V·W,见 docs/方案-身份分配.md §6)。
+#   ⚠ 新增一个写进 <data> 的文件名时,必须归入下面两表之一 —— `--prompt-selftest` 会扫源码里
+#     所有 `join(DATA_DIR, "…")` 形的字面量,归不进去的直接红:这是防「忘了列」的结构,不是提醒。
+PROTECTED = (
+    "board_token", "worker_token", "review_token",   # 三令牌(INCIDENT-12:读到令牌 = 拿到裁定权)
+    "board.db*",                                     # 状态本体(含 -wal / -shm)
+    "accepted_rev", "restart_from",                  # 源码闸的记录 / 重启标记
+    "worker_settings.json", "lineage.json",          # 座席设置;个人会话 id
+    "pool_state.json", "pool_global_stop.json",      # 池状态(pool-quota skill:改标记≠额度回来)
+    "spend_ledger.jsonl", "usage_ledger.jsonl",      # 账本
+    "board.log",
+    "probe_conn", "probe_selfcheck_ok", "probes/**", # 探针的连接串与生产行(SECURITY:数据室不在这)
+    "codex-*.txt",                                   # codex 座席的末消息转存
+    "*.tmp",                                         # 原子写的临时文件
+)
+# 模型的「出件箱」:worker 的证据与派生卡、审阅的判决、拆解的结果。不进 deny 表。
+MODEL_OUTPUT = ("evidence", "review", "decompose")
+
+
+def deny_path(abs_path):
+    """把绝对路径拼成 Claude Code 权限规则认的绝对形。
+    ⭐ 2026-09-28 实测(Linux,Claude Code 2.1.283):规则里 `/path` 是**项目根相对**,`//path` 才是
+      绝对路径 —— v0.17.0 用 `os.path.abspath` 直接拼,POSIX 上得到单斜杠,于是**一条都不匹配**
+      (Read/Edit/Write/Grep 全部穿透;阳性对照:改成 `//` 后全部拒绝)。v0.17.0 的九组实测在
+      Windows 上做,`C:/…` 形成立,那一形保留不动。"""
+    p = str(abs_path).replace("\\", "/")
+    if re.match(r"^[A-Za-z]:/", p):
+        return p                      # already the Windows absolute form; abspath on POSIX would mangle it
+    p = os.path.abspath(p).replace("\\", "/")
+    return p if re.match(r"^[A-Za-z]:/", p) else "//" + p.lstrip("/")
+
+
 def cli_deny_rules(data_dir, registry=None):
-    """Claude 座席的路径级 deny 规则(v0.17.0)。两条 loop 共用 —— 写在两处必有一处腐烂。
+    """Claude 座席的路径级 deny 规则(v0.17.0;写法与范围于 v0.21.2 按实测改)。两条 loop 共用
+    —— 写在两处必有一处腐烂。
 
     为什么需要:worker 的 cwd / --add-dir 是工作仓;默认部署里看板就是工作仓,于是令牌目录
     (core/.data,含 operator 全权的 board_token)与验证登记簿都在模型伸手可及之处 ——
     改登记簿一个键就能借 loop 之手执行任意命令;读到 board_token 就拿到裁定权(外部审计 2026-09-07)。
+    **把 .data 搬出仓库挡不住**:cwd 之外的绝对路径 Read 成功(2026-09-07 实测)。同一 OS 用户下
+    没有文件系统屏障 ∴ 结构防线是这组规则;搬家只是纵深。
 
-    为什么是这个形:2026-09-07 用真 CLI(-p 模式)做了 9 组对照实验 ——
-      · `--disallowedTools "Read(<dir>/**)"` 拦住了相对路径读、**绝对路径读**、以及 Grep 读内容;
-        Edit/Write 对登记簿的 deny 同样生效(阳性对照:无 deny 时文件确实被改写、秘密确实泄露)。
-      · **把 .data 搬出仓库挡不住**:cwd 之外的绝对路径 Read 成功。同一 OS 用户下没有文件系统屏障。
-    ∴ 结构防线是这组规则;搬家只是纵深。规则用正斜杠绝对路径(两种写法都被接受;正斜杠两平台皆稳)。
+    为什么是这个形(2026-09-28 实测,Linux,Claude Code 2.1.283):
+      · 只产 `Read(...)` 与 `Edit(...)`:CLI 明说 `Write(path)` / `Glob(path)` 两种写法「不被文件权限
+        检查匹配」,Edit 规则覆盖所有写文件工具、Read 规则覆盖所有读文件工具(Grep 实测被 Read 拦住)。
+      · 绝对路径经 deny_path 拼成 `//…`(POSIX)—— 单斜杠是项目根相对,v0.17.0 就栽在这里。
+      · 按文件名逐条钉而不是 `<data>/**`:整目录的 Read deny 会把模型往 <data>/evidence 写证据也拒掉。
     ⚠ 这只管 Claude 座席。codex 没有等价机制,那边只有提示词纪律 —— 写进 SECURITY,不假装。"""
     rules = []
-    for base, tail in ((data_dir, "/**"), (registry or REGISTRY, "")):
-        path = os.path.abspath(base).replace("\\", "/") + tail
-        rules += [f"{tool}({path})" for tool in ("Read", "Edit", "Write", "Glob", "Grep")]
+    data = deny_path(data_dir)
+    for name in PROTECTED:
+        rules += [f"Read({data}/{name})", f"Edit({data}/{name})"]
+    reg = deny_path(registry or REGISTRY)
+    rules += [f"Read({reg})", f"Edit({reg})"]
     return rules
+
+
+if __name__ == "__main__":
+    # doctor 用:把本部署实际会发给 CLI 的 deny 规则打出来,一行一条(它只核写法,语义靠真 CLI 量)。
+    if "--print-deny-rules" in sys.argv:
+        data = os.environ.get("BOARD_DATA_DIR") or os.path.join(CODE_ROOT, "core", ".data")
+        for r in cli_deny_rules(data):
+            print(r)
+        sys.exit(0)
+    sys.exit("verify_lib: 可用 --print-deny-rules")
 
 def verify_registry():
     """卡可以指名的验证集合。"""

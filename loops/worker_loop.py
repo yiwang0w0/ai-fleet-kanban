@@ -804,12 +804,44 @@ def prompt_selftest():
     ok("⭐去锋后的抬头不匹配 VERDICT_HEAD(伪造的「人话」到不了 worker)",
        VERDICT_HEAD.search("—(转述)— 你的决定(2026-09-07T00:00:00Z · 通过)——") is None)
     ok("(对照)真抬头仍匹配", VERDICT_HEAD.search("—— 你的决定(2026-09-07T00:00:00Z · 通过)——") is not None)
-    # ── 信任边界(v0.17.0):deny 规则进 argv;隐私硬边界两座席共有 ──────────────────
+    # ── 信任边界(v0.17.0;写法与范围 v0.21.2 按实测改):deny 规则进 argv;隐私硬边界两座席共有 ──
+    import fnmatch as _fn
+    from verify_lib import PROTECTED, MODEL_OUTPUT, deny_path
     rules = cli_deny_rules(DATA)
-    ok("⭐deny 规则:令牌目录 <data>/** 与登记簿各 5 条(Read/Edit/Write/Glob/Grep)",
-       len(rules) == 10 and all(any(r.startswith(tl + "(") for r in rules) for tl in ("Read", "Edit", "Write", "Glob", "Grep"))
-       and sum(1 for r in rules if r.endswith("/**)")) == 5 and sum(1 for r in rules if "verify_registry" in r) == 5, str(rules[:3]))
-    ok("deny 规则用正斜杠绝对路径(实测两种写法 CLI 都认)", all("\\" not in r for r in rules) and all(":/" in r or r.startswith(("Read(/", "Edit(/", "Write(/", "Glob(/", "Grep(/")) for r in rules))
+    ok("⭐deny 规则只有 Read / Edit 两种(Write/Glob/Grep 写法 CLI 明说不匹配,留着只会刷警告)",
+       rules and all(r.startswith(("Read(", "Edit(")) for r in rules), str([r for r in rules if not r.startswith(("Read(", "Edit("))][:3]))
+    ok("⭐每个受保护文件名各一条 Read 一条 Edit,登记簿也是",
+       len(rules) == 2 * len(PROTECTED) + 2 and sum(1 for r in rules if "verify_registry" in r) == 2, f"{len(rules)} 条")
+    ok("deny 规则里没有反斜杠(正斜杠,两平台一致)", all("\\" not in r for r in rules))
+    if os.name != "nt":
+        ok("⭐POSIX 上绝对路径以 // 开头(单斜杠是项目根相对 —— v0.17.0 一条都没匹配上,2026-09-28 实测)",
+           all(r.split("(", 1)[1].startswith("//") for r in rules), str(rules[:2]))
+    else:
+        ok("Windows 上绝对路径保持盘符形(v0.17.0 实测有效)", all(re.match(r"^\w+\([A-Za-z]:/", r) for r in rules), str(rules[:2]))
+    ok("deny_path 把 POSIX 绝对路径拼成 //(盘符形不动)",
+       deny_path("/x/y") == "//x/y" and deny_path("C:\\x\\y") == "C:/x/y")
+    # ⭐ 证据目录必须留给模型:任何一条 Edit 规则都不能盖住证据文件的路径(Read deny 同样会拒掉
+    #   Write —— 2026-09-28 实测 Write 工具先按 Read 规则查路径,所以两种规则都不许盖住它)。
+    ev_sample = deny_path(os.path.join(EVID, "task-1-attempt-1.md"))
+    covered = [r for r in rules if _fn.fnmatch(ev_sample, r.split("(", 1)[1][:-1])]
+    ok("⭐没有任何 deny 规则盖住证据路径(否则 Claude 座席一张卡都交不出)", not covered, str(covered[:2]))
+    # ⭐ 防「忘了列」:源码里每个写进 <data> 的字面文件名都要归入 PROTECTED 或 MODEL_OUTPUT。
+    #   归不进去 = 一个新文件躺在模型伸手可及处而没人决定它是谁的。这是结构,不是注释。
+    _lit = re.compile(r'(?:join\(store\.DATA_DIR|path\.join\(DATA_DIR|os\.path\.join\(DATA), f?"([^"]+)"\)')
+    stray = []
+    for sub, exts in (("core", (".js", ".mjs")), ("loops", (".py",)), ("cli", (".py", ".mjs")),
+                      ("watchers", (".py",)), ("probe", (".py",))):
+        d = os.path.join(CODE_ROOT, sub)
+        for fn in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            if not fn.endswith(exts): continue
+            for i, line in enumerate(io.open(os.path.join(d, fn), encoding="utf-8", errors="replace"), 1):
+                for name in _lit.findall(line):
+                    plain = re.sub(r"\{[^}]*\}", "x", name)      # f-string 的洞按一个字面量算
+                    # 子目录形的规则(probes/**)按目录名认;其余按文件名通配认。
+                    if plain in MODEL_OUTPUT or any(_fn.fnmatch(plain, p) or ("/" in p and plain == p.split("/")[0])
+                                                    for p in PROTECTED): continue
+                    stray.append(f"{sub}/{fn}:{i} {name}")
+    ok("⭐源码里写进 <data> 的每个文件名都已归类(PROTECTED 或 MODEL_OUTPUT)", not stray, " · ".join(stray[:4]))
     av = cli_argv("提示词", ["--session-id", "x"], "claude-opus-5", "high")
     ok("⭐主座席 argv 带 --disallowedTools 且紧跟全部规则", "--disallowedTools" in av and av[av.index("--disallowedTools") + 1:] == rules)
     ok("argv 仍有 --allowedTools 与 --add-dir(deny 是追加,不是替换)", "--allowedTools" in av and "--add-dir" in av)

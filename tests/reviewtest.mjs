@@ -147,7 +147,15 @@ try {
   {
     let av = []; try { av = JSON.parse(readFileSync(ARGVF, "utf8")); } catch {}
     const i = av.indexOf("--disallowedTools"); const rules = i >= 0 ? av.slice(i + 1) : [];
-    ok("R4b ⭐审阅的真 argv 带 --disallowedTools,覆盖数据目录与登记簿", i >= 0 && rules.some((r) => /\/\*\*\)$/.test(r)) && rules.some((r) => /verify_registry\.json\)$/.test(r)), rules.slice(0, 2).join(" ") || "(no argv)");
+    // v0.21.2: per-file rules, `//`-absolute on POSIX (see looptest ⑭ for the measurement).
+    const dataFwd = (process.platform === "win32" ? "" : "/") + TMP.replace(/\\/g, "/");
+    ok("R4b ⭐审阅的真 argv 带 --disallowedTools,钉住令牌与登记簿(逐文件,Read+Edit)",
+       i >= 0 && rules.includes(`Read(${dataFwd}/board_token)`) && rules.includes(`Edit(${dataFwd}/board_token)`)
+       && rules.some((r) => /verify_registry\.json\)$/.test(r)), rules.slice(0, 2).join(" ") || "(no argv)");
+    // (`review_token` legitimately shares the prefix — test the directory, not the substring.)
+    ok("R4c 判决目录 <data>/review 不被任何规则盖住(否则审阅写不出判决文件)",
+       rules.length > 0 && rules.every((r) => !r.includes(`${dataFwd}/review/`) && !r.endsWith(`${dataFwd}/review)`)
+                                               && !r.endsWith(`${dataFwd}/**)`) && !r.endsWith(`${dataFwd}/*)`)));
   }
 
   console.log(NL + "[§3 机器产出闸:验收要机器、证据纯散文、模型说 approve → 机械降 escalate]");
