@@ -19,9 +19,15 @@
 const NL = String.fromCharCode(10);
 
 /** The line menu shown to the decomposer. BUILT from config — a hand-copied list
- *  once silently dropped a line, and nothing could tell. */
-function lineMenu(lines, hints = {}) {
-  return lines.map((l) => (hints[l] ? `${l} (${hints[l]})` : l)).join(", ");
+ *  once silently dropped a line, and nothing could tell. v0.22: the operator's display
+ *  name rides along in 「」 when there is one; the id stays what the model must emit. The
+ *  CALLER decides which lines enter the menu (the server passes implement lines only —
+ *  a review line takes no implementation card). */
+function lineMenu(lines, hints = {}, labels = {}) {
+  return lines.map((l) => {
+    const name = labels[l] ? `${l}「${labels[l]}」` : l;
+    return hints[l] ? `${name} (${hints[l]})` : name;
+  }).join(", ");
 }
 
 /**
@@ -29,11 +35,12 @@ function lineMenu(lines, hints = {}) {
  * @param prev     the goal this one continues, or null. Only a card whose kind is
  *                 "goal" counts; anything else is ignored.
  * @param outPath  absolute path the decomposer must write its JSON to
- * @param lines    line ids from config
+ * @param lines    line ids offered (the implement lines, in config order)
  * @param hints    line id -> hint text
+ * @param labels   line id -> display name (v0.22; "" / absent = id only)
  * @param language natural language for generated card text ("" = say nothing)
  */
-function buildDecomposePrompt({ goal, prev = null, outPath, lines, hints = {}, language = "" }) {
+function buildDecomposePrompt({ goal, prev = null, outPath, lines, hints = {}, labels = {}, language = "" }) {
   const lang = String(language || "").trim();
   return [
     "把下面这个目标拆成可以独立交付的子任务。你**不做这些活**,只做拆解。",
@@ -55,7 +62,7 @@ function buildDecomposePrompt({ goal, prev = null, outPath, lines, hints = {}, l
     "- **一张卡 = 一个可独立验收的产出**。复合的要切开。",
     "- 顺序有依赖就用 after 指出前置(填同一批里的序号,从 1 开始);没有就不填。",
     "- 每张卡要写清 acceptance:怎么判这活干没干成,能给可执行命令就给。",
-    `- line 从这些里选:${lineMenu(lines, hints)};拿不准就填 null,谁都能领。`,
+    `- line 从这些里选(填「」前面的标识):${lineMenu(lines, hints, labels)};拿不准就填 null,谁都能领。`,
     "- 要跑命令的卡把 needs_bash 设成 true;只读写文件的不要设。",
     "- 涉及生产数据、DB migration、删除、push、花钱的,**在 description 里显式写明需要人确认**。",
     "- 别拆太碎:3〜8 张为宜。拆不动就只出 1 张。",

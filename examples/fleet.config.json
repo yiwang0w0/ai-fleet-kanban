@@ -3,6 +3,7 @@
   "_deploy": "Deployment truth (v0.3, all optional; env vars override when set). port: the board's port, read by the server AND every client — set it once here instead of in two shells. repo: the WORK repo workers act in (worker cwd + deliverable-gate anchor); omit for a standalone board. gated_subtree: the source gate's subtree — '.' = the whole tree, the honest anchor for a standalone clone; with it here, no shell ever needs to export BOARD_GATED_SUBTREE.",
   "gated_subtree": ".",
   "_lines": "id = the machine's name (lowercase, CLI/config/slot names); label = what the operator sees (Chinese welcome); hint = one line of purpose for the decomposer and the humans; accept = \"human\" (default: a delivery waits for your 通过) or \"auto\" (deliveries on this line complete on report — the close gates still run, human-gated cards still wait).",
+  "_role": "v0.22, optional per line: what the line IS. kind = implement (default) | review (reads, checks and judges only — its evidence is the review; the decomposer never sends it implementation cards). tools = write (default) | read-only (review defaults to read-only): the ONE part a machine enforces — the Claude seat's argv (no Edit, the work repo under an Edit deny), the codex seat's --sandbox read-only. charter = a .md relative to THIS board repo, inlined verbatim with its sha256 into every prompt on the line; it must sit inside gated_subtree (the source gate is what pins it — edit it and the line refuses to start until you bless again). Templates: examples/roles/*.md → copy to docs/roles/. seat = {runtime, model, effort} used as Agent1 the first time the line starts (a locked seat falls back loudly; the panel shows the drift). Evidence-based default (docs/方案-身份分配.md §1.3): put the OTHER family on the review line, keep the code-stage auto-reviewer on Claude.",
   "lines": [
     {
       "id": "engine",
@@ -18,6 +19,15 @@
       "id": "coord",
       "label": "协调",
       "hint": "协调/裁定/跑命令"
+    },
+    {
+      "id": "astra",
+      "label": "架构",
+      "hint": "审方案:只指出会在哪里崩、哪些假设没验证",
+      "role": {
+        "kind": "review",
+        "tools": "read-only"
+      }
     }
   ],
   "_roles": "single-seat roles. \"review\" enables the auto-reviewer (loops/reviewer_loop.py): it pre-runs each waiting card's verify_cmd, judges with a fresh model session per card (no Edit/Bash), and rules ONLY as resolved_by=auto via its own review_token. Opt-in: set [\"review\"] and restart.",

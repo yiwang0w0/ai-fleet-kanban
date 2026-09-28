@@ -247,14 +247,26 @@ def main():
             # config file and rebuilds its registry. The hint travels via --file
             # (CJK on argv is U+FFFD on Windows — the same rule as every other
             # text field here); a missing --file = no hint.
-            if tgt == "all": sys.exit("lines add <线名> [--file hint.txt]")
+            if tgt == "all": sys.exit("lines add <线名> [--file hint.txt] [--kind implement|review] [--read-only] [--charter docs/roles/x.md]")
             hint = readfile(fp).strip() if fp else ""
-            st, dd = call("POST", "/api/config/lines", {"id": tgt, "hint": hint})
+            # v0.22: the identity. ASCII-only values, so they may travel on argv; the
+            # server validates the domains and the charter file (400 on refusal).
+            role = {}
+            if arg("--kind"): role["kind"] = arg("--kind")
+            if "--read-only" in sys.argv: role["tools"] = "read-only"
+            if arg("--charter"): role["charter"] = arg("--charter")
+            body = {"id": tgt, "hint": hint}
+            if role: body["role"] = role
+            st, dd = call("POST", "/api/config/lines", body)
             if st >= 400: die(st, dd)
+            rl = dd["line"].get("role") or {}
             print(f"已加线 {dd['line']['id']}" + (f"({dd['line']['hint']})" if dd['line'].get('hint') else "")
+                  + (f" 身份={rl.get('kind')}{'·只读' if rl.get('tools') == 'read-only' else ''}"
+                     + (f" 章程={rl['charter']}" if rl.get('charter') else "") if rl else "")
                   + f" —— 现有线: {'/'.join(dd['lines'])}(已写入配置,无需重启)")
         else:
-            sys.exit("lines status | lines start <线|all> | lines stop <线|all> | lines add <线名> [--file hint.txt]")
+            sys.exit("lines status | lines start <线|all> | lines stop <线|all> | "
+                     "lines add <线名> [--file hint.txt] [--kind implement|review] [--read-only] [--charter docs/roles/x.md]")
 
     elif cmd == "requests":
         # v0.5: the coordinator seat's side of the panel's shortcut buttons.

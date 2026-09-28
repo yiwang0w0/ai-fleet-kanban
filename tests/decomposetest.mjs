@@ -50,10 +50,23 @@ console.log("\n[② the line menu is built from config, never copied into prose]
 {
   const p = base();
   ok("every configured line appears in the menu with its hint",
-     /- line 从这些里选:alpha \(实装\), coord \(协调\/裁定\/跑命令\);/.test(p),
+     /- line 从这些里选(?:\([^)]*\))?:alpha \(实装\), coord \(协调\/裁定\/跑命令\);/.test(p),
      (p.match(/- line 从这些里选[^\n]*/) || ["(missing)"])[0]);
   ok("a line with no hint degrades to the bare id",
      lineMenu(["a", "b"], { a: "x" }) === "a (x), b", lineMenu(["a", "b"], { a: "x" }));
+  // v0.22: the operator's display name rides along; the id the model must emit stays first.
+  ok("⭐a label shows as id「label」 (hint) — the id is still what the model emits",
+     lineMenu(["engine", "coord"], { engine: "代码" }, { engine: "引擎" }) === "engine「引擎」 (代码), coord",
+     lineMenu(["engine", "coord"], { engine: "代码" }, { engine: "引擎" }));
+  ok("labels reach the prompt through buildDecomposePrompt",
+     base({ labels: { alpha: "实装线" } }).includes("alpha「实装线」 (实装)"));
+  ok("the menu tells the model to emit the identifier before 「」",
+     /填「」前面的标识/.test(base({ labels: { alpha: "实装线" } })));
+  // The caller decides which lines enter the menu (the server passes implement lines only):
+  // a review line handed in would be offered — so the pure function must not filter, and
+  // the server's filter is pinned in servertest (source shape).
+  ok("(contract) lineMenu offers exactly the lines it is given, in order",
+     lineMenu(["b", "a"], {}) === "b, a");
   ok("the JSON shape offered to the model lists the same lines plus null",
      p.includes('"line":"alpha|coord|null"'),
      (p.match(/\{"tasks".*/) || ["(missing)"])[0].slice(0, 80));

@@ -404,7 +404,66 @@ const ROLES = (CFG.roles || []).filter((r) => ["review"].includes(r));
 // /api/workers), and per-line runtime state is lazy (settingsOf / slotsOf look
 // up by name) — so adding a line is: persist to the config, rebuild, announce.
 // No restart, no dropped SSE clients, no in-flight worker touched.
-let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT;
+// ── Line identity (v0.22.0): `lines[].role` says what a line IS, in config, not in a
+//    runtime setting. Four keys, three of them closed domains:
+//      kind    implement (default) | review — picks the worker's prompt frame; the
+//              decomposer's menu lists implement lines only.
+//      tools   write (default; review defaults to read-only) | read-only — the ONE piece
+//              a machine enforces: the Claude seat's argv (no Edit, work repo under an
+//              Edit deny), the codex seat's --sandbox read-only.
+//      charter a .md relative to THIS repo (operator ruling 2026-09-28: the board repo),
+//              inlined verbatim into every prompt with its sha256. It must sit inside the
+//              gated subtree: the source gate is what pins it, and a charter nobody
+//              blessed is not a charter. Prose = discipline; "which version was accepted"
+//              = structure.
+//      seat    {runtime, model, effort} — agents[0] the first time the line starts; after
+//              that worker_settings wins and the panel shows the drift.
+//    Why on lines[] and not a new table: the line is already the claim filter, the
+//    decompose menu key, the badge and the ledger dimension — an identity hung on the same
+//    key appears everywhere the board already forks on the line, by construction.
+//    Measured basis for the defaults (docs/方案-身份分配.md §1.3): cross-model review is
+//    asymmetric, and structured adversarial review of the DESIGN scored highest — so the
+//    other family belongs on a read-only review line, not on the code-stage reviewer.
+const ROLE_KINDS = ["implement", "review"];
+const TOOL_PROFILES = ["write", "read-only"];
+function normalizeRole(raw, lineId) {
+  if (raw == null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role 必须是对象 {kind, tools, charter, seat}`);
+  const kind = raw.kind == null || raw.kind === "" ? "implement" : String(raw.kind);
+  if (!ROLE_KINDS.includes(kind))
+    throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.kind 只接受 ${ROLE_KINDS.join(" / ")} —— 收到 ${JSON.stringify(raw.kind)}`);
+  const tools = raw.tools == null || raw.tools === "" ? (kind === "review" ? "read-only" : "write") : String(raw.tools);
+  if (!TOOL_PROFILES.includes(tools))
+    throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.tools 只接受 ${TOOL_PROFILES.join(" / ")} —— 收到 ${JSON.stringify(raw.tools)}`);
+  let charter = null;
+  if (raw.charter != null && String(raw.charter).trim() !== "") {
+    charter = String(raw.charter).trim().replace(/\\/g, "/");
+    if (isAbsolutePath(charter) || charter.split("/").includes(".."))
+      throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.charter 必须是看板仓相对路径(不能是绝对路径或含 ..)—— 收到 ${JSON.stringify(raw.charter)}`);
+    if (!/\.md$/i.test(charter))
+      throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.charter 只接受 .md —— 收到 ${JSON.stringify(raw.charter)}`);
+    const abs = resolve(CODE_ROOT, charter);
+    if (!existsSync(abs))
+      throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的章程不存在: ${charter}(相对看板仓根 ${CODE_ROOT};章程住看板仓,不住工作仓)`);
+    if (CFG_GATED_SUBTREE) {
+      const gate = resolve(CODE_ROOT, CFG_GATED_SUBTREE === "." ? "." : CFG_GATED_SUBTREE);
+      const rel = relative(gate, abs);
+      if (rel.startsWith("..") || isAbsolutePath(rel))
+        throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的章程 ${charter} 不在受闸子树 ${CFG_GATED_SUBTREE} 之内 —— 没人验收过的章程不算章程`);
+    }
+  }
+  let seat = null;
+  if (raw.seat != null) {
+    if (typeof raw.seat !== "object" || Array.isArray(raw.seat))
+      throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.seat 必须是对象 {runtime, model, effort}`);
+    seat = { runtime: String(raw.seat.runtime || ""), model: String(raw.seat.model || ""), effort: String(raw.seat.effort || "") };
+    // The seat's runtime/model/effort are judged against the seat DECLARATIONS, which are
+    // built later in this file — assertRoleSeat runs right after them (and in addLine).
+  }
+  return { kind, tools, charter, seat };
+}
+let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT, LINE_ROLE, IMPL_LINES;
 function rebuildLines() {
   LINES = CFG.lines.map((l) => String(l.id));
   SUPERVISED = [...LINES, ...ROLES];
@@ -415,8 +474,15 @@ function rebuildLines() {
   // report; the close gates still run; human-gated cards are never auto-completed).
   LINE_LABEL = Object.fromEntries(CFG.lines.map((l) => [l.id, String(l.label || "").trim()]));
   LINE_ACCEPT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.accept === "auto" ? "auto" : "human"]));
+  // v0.22: identity (null = a plain line, exactly as before this version).
+  LINE_ROLE = Object.fromEntries(CFG.lines.map((l) => [l.id, normalizeRole(l.role, l.id)]));
+  IMPL_LINES = LINES.filter((id) => (LINE_ROLE[id]?.kind || "implement") === "implement");
 }
-rebuildLines();
+try { rebuildLines(); }
+catch (e) {   // a PRESENT-but-broken identity refuses startup, like any other config error
+  console.error(`拒绝启动:${CONFIG_FILE} 存在但不可用 —— ${e.message}`);
+  process.exit(1);
+}
 
 // Line ids are machine contracts: the same shape badLine's route regex admits,
 // and renaming is deliberately NOT offered — cards reference the id, a rename
@@ -425,7 +491,7 @@ rebuildLines();
 const LINE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 /** Add a line: validate → persist to the config file (atomic) → rebuild → the
  *  caller announces. Throws store.err on refusal (unknown/duplicate/role/shape). */
-function addLine(idRaw, hintRaw, labelRaw, acceptRaw) {
+function addLine(idRaw, hintRaw, labelRaw, acceptRaw, roleRaw = null) {
   const id = String(idRaw ?? "").trim();
   const hint = String(hintRaw ?? "").trim();
   const label = String(labelRaw ?? "").trim();
@@ -438,20 +504,27 @@ function addLine(idRaw, hintRaw, labelRaw, acceptRaw) {
     throw store.err(store.ERR.CONFLICT, `线 ${id} 已存在(或与角色座席同名)`);
   if (hint.length > 80)
     throw store.err(store.ERR.BAD_INPUT, "hint 最多 80 字");
+  // v0.22: the identity is validated BEFORE anything is persisted (same gate as boot).
+  const role = normalizeRole(roleRaw, id);
+  assertRoleSeat(role, id);
+  const roleDisk = role ? { kind: role.kind, tools: role.tools,
+                            ...(role.charter ? { charter: role.charter } : {}),
+                            ...(role.seat ? { seat: role.seat } : {}) } : null;
   // Persist FIRST: a line that exists in memory but not on disk would vanish on
   // the next restart with every card on it stranded on a name nobody claims.
   let onDisk = {};
   if (existsSync(CONFIG_FILE)) onDisk = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));   // broken = throws = refuse
   const lines = Array.isArray(onDisk.lines) && onDisk.lines.length
     ? onDisk.lines : BUILTIN_CONFIG.lines.map((l) => ({ ...l }));
-  lines.push({ id, ...(hint ? { hint } : {}), ...(label ? { label } : {}), ...(accept === "auto" ? { accept } : {}) });
+  lines.push({ id, ...(hint ? { hint } : {}), ...(label ? { label } : {}), ...(accept === "auto" ? { accept } : {}),
+               ...(roleDisk ? { role: roleDisk } : {}) });
   const next = { ...onDisk, lines };
   const tmp = CONFIG_FILE + ".tmp";
   writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n", "utf8");
   renameSync(tmp, CONFIG_FILE);
   CFG = { ...CFG, lines };     // never mutate BUILTIN_CONFIG through the alias
   rebuildLines();
-  return { id, hint, label, accept };
+  return { id, hint, label, accept, role };
 }
 
 const workers = new Map();   // slotKey -> { line, slot, proc, startedAt, route, log: [] }
@@ -993,6 +1066,47 @@ const effortsFor = (rt, modelId) => {
   const m = (seat.models || []).find((x) => x.id === modelId);
   return (m && m.efforts) || seat.efforts || EFFORTS;
 };
+/** v0.22: an identity's seat is judged by the seat DECLARATIONS — the same resolver as the
+ *  save gate, so a role naming a model its seat does not declare fails at config time, not
+ *  at the first start. A LOCKED seat passes here (the declaration is fine; unlocking is a
+ *  separate human act) and roleSeatDefault falls back loudly. */
+function assertRoleSeat(role, lineId) {
+  if (!role?.seat) return;
+  const s = role.seat, rt = seatOf(s.runtime);
+  if (!rt) throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.seat: 未知运行时 ${JSON.stringify(s.runtime)}(座席表: ${RUNTIME_IDS.join("/")})`);
+  if (!(rt.models || []).some((m) => m.id === s.model))
+    throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.seat: ${rt.label} 没有模型 ${JSON.stringify(s.model)}`);
+  const dom = effortsFor(s.runtime, s.model);
+  if (!dom.includes(s.effort))
+    throw store.err(store.ERR.BAD_INPUT, `线 ${lineId} 的 role.seat: ${s.model} 的强度必须是 ${dom.join("/")}(座席宣言值域)—— 收到 ${JSON.stringify(s.effort)}`);
+}
+for (const id of LINES) {
+  try { assertRoleSeat(LINE_ROLE[id], id); }
+  catch (e) { console.error(`拒绝启动:${CONFIG_FILE} 存在但不可用 —— ${e.message}`); process.exit(1); }
+}
+/** agents[0] for a line that was never configured from the panel: the identity's seat when
+ *  it names one and that seat is unlocked; otherwise the global default — said once on the
+ *  console, and visible on /api/workers as seat_drift. Never silently. */
+const roleSeatWarned = new Set();
+function roleSeatDefault(line) {
+  const seat = LINE_ROLE?.[line]?.seat;
+  if (!seat) return DEFAULT_AGENT;
+  const rt = seatOf(seat.runtime);
+  if (rt && !rt.disabled) return agentOf(seat);
+  if (!roleSeatWarned.has(line)) {
+    roleSeatWarned.add(line);
+    console.error(`⚠ 线 ${line} 的身份缺省座席 ${seat.runtime} 未解禁 —— 首次启动改用全局缺省 ` +
+                  `${DEFAULT_AGENT.runtime}/${DEFAULT_AGENT.model};解禁后在面板改回(/api/workers 的 seat_drift 会一直标着)`);
+  }
+  return DEFAULT_AGENT;
+}
+/** Does the line's effective agents[0] differ from the seat its identity names? */
+const seatDrift = (line, st) => {
+  const seat = LINE_ROLE?.[line]?.seat;
+  if (!seat) return false;
+  const a = st.agents?.[0] || {};
+  return ["runtime", "model", "effort"].some((k) => String(a[k] ?? "") !== String(seat[k] ?? ""));
+};
 
 // ───────── Line lineage: inheriting memory from a desktop conversation ─────────
 // A worker's session is born from randomUUID = a newcomer who knows NOTHING. Each
@@ -1034,8 +1148,14 @@ const agentOf = (src) => ({
   if (migrated) writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 1), "utf8");
 }
 const settingsOf = (line) => {
-  const raw = { ...DEFAULT_SET, ...(settings[line] || {}) };
-  raw.agents = (Array.isArray(raw.agents) && raw.agents.length ? raw.agents : [DEFAULT_AGENT]).map(agentOf);
+  const saved = settings[line] || {};
+  const raw = { ...DEFAULT_SET, ...saved };
+  // v0.22: a never-configured line starts on its identity's seat (roleSeatDefault), not on
+  // the global default — the identity is the operator's declaration of what runs here.
+  // ⚠ "Never configured" is judged on what was SAVED, not on `raw`: DEFAULT_SET already
+  //   carries a non-empty agents[], so testing raw.agents made the identity seat unreachable
+  //   (caught by servertest Q2-2 — the fallback's console line never appeared).
+  raw.agents = (Array.isArray(saved.agents) && saved.agents.length ? saved.agents : [roleSeatDefault(line)]).map(agentOf);
   return raw;
 };
 
@@ -1187,7 +1307,10 @@ async function decomposeGoal(goalId, model) {
   const prompt = decompose.buildDecomposePrompt({
     goal: g,
     prev: g.parent_id != null ? store.get(db, g.parent_id) : null,
-    outPath: out, lines: LINES, hints: LINE_HINT, language: LANGUAGE,
+    // v0.22: the menu is the IMPLEMENT lines only — a review line takes no implementation
+    // card (its worker would refuse to write code by construction), and a menu that offers
+    // it is a de-facto permission. Labels ride along so the model sees the operator's word.
+    outPath: out, lines: IMPL_LINES, hints: LINE_HINT, labels: LINE_LABEL, language: LANGUAGE,
   });
 
   const r = await runCli(["-p", prompt, "--model", model || DECOMPOSE_MODELS[0].id,
@@ -1223,12 +1346,14 @@ async function decomposeGoal(goalId, model) {
   list.forEach((t, i) => {
     const deps = (t.after || []).map((n) => made[Number(n) - 1]).filter((x) => x != null);
     const want = t.line && t.line !== "null" ? String(t.line) : null;
-    const line = (want === null || LINES.includes(want)) ? want : null;
+    // The domain is the implement lines (v0.22): a review line named here is out of
+    // domain exactly like a typo — the card is recorded, not silently converted.
+    const line = (want === null || IMPL_LINES.includes(want)) ? want : null;
     let description = String(t.description || "");
     if (want !== null && line === null) {
       demoted.push({ n: i + 1, subject: String(t.subject || "(无题)"), line: want });
       description += String.fromCharCode(10, 10) +
-        `⚠拆解时给的线名「${want}」不在可选表内(${LINES.join("/")}),已落为「不指定线」` +
+        `⚠拆解时给的线名「${want}」不在实现线可选表内(${IMPL_LINES.join("/")};评审线不接实现卡),已落为「不指定线」` +
         "——谁都能领,但没人被点名。请人工确认该派给哪条线。";
     }
     made[i] = store.add(db, {
@@ -1474,6 +1599,15 @@ function slotEnv(line, k, ag, isReview) {
            WORKER_MODEL: ag.model, WORKER_EFFORT: ag.effort,
            WORKER_RUNTIME: ag.runtime || RUNTIME_IDS[0],
            REVIEWER_MODEL: ag.model, REVIEWER_EFFORT: ag.effort,
+           // ⭐ v0.22: the line's identity, handed down the same way as the seat — the loop
+           //   never reads fleet.config for it (one reader of the config, not two). Absent
+           //   keys = the loop's own defaults (implement / write / no charter), so a plain
+           //   line is exactly what it was before this version.
+           ...(!isReview && LINE_ROLE?.[line] ? {
+             WORKER_ROLE_KIND: LINE_ROLE[line].kind,
+             WORKER_TOOL_PROFILE: LINE_ROLE[line].tools,
+             ...(LINE_ROLE[line].charter ? { WORKER_CHARTER: LINE_ROLE[line].charter } : {}),
+           } : {}),
            ...(isReview ? {} : k === 1 ? {
              WORKER_SESSION: sessionOf(line),
              // Not yet forked → the first run forks from the desktop conversation
@@ -1831,6 +1965,8 @@ function workerInfo(line) {
     pool_blocked: !eff, pool_failover: runningSlots.some((s2) =>
       (s2.settings?.runtime || RUNTIME_IDS[0]) !== (st.agents[(s2.slot || 1) - 1]?.runtime || RUNTIME_IDS[0])),
     stale_settings: stale,
+    // v0.22: the identity (null for a plain line) and whether agents[0] left its seat.
+    role: LINE_ROLE?.[line] || null, seat_drift: seatDrift(line, st),
     // ⭐ While a container for this run exists, only ITS reason counts; the persisted
     //   last_stop is read only when there is no container (after a board restart —
     //   which is the case "stopped with the board" exists to survive). Reading the
@@ -2334,14 +2470,19 @@ const server = http.createServer(async (req, res) => {
     //    review allowlists do not carry this path, so they 403 by construction).
     if (m === "POST" && p === "/api/config/lines") {
       const b = await readBody(req);
-      const added = addLine(b.id, b.hint, b.label, b.accept);
+      const added = addLine(b.id, b.hint, b.label, b.accept, b.role);
       emit("config.lines", { line: added.id });
-      console.log(`线已加入: ${added.id}${added.label ? "「" + added.label + "」" : ""}${added.hint ? "(" + added.hint + ")" : ""}${added.accept === "auto" ? " · 交付即完成" : ""} —— 已写入 ${CONFIG_FILE},无需重启`);
-      return json(res, 201, { line: added, lines: LINES, line_hints: LINE_HINT, line_labels: LINE_LABEL, line_accept: LINE_ACCEPT });
+      console.log(`线已加入: ${added.id}${added.label ? "「" + added.label + "」" : ""}${added.hint ? "(" + added.hint + ")" : ""}${added.accept === "auto" ? " · 交付即完成" : ""}`
+        + (added.role ? ` · 身份 ${added.role.kind}${added.role.tools === "read-only" ? "·只读" : ""}${added.role.charter ? " · 章程 " + added.role.charter : ""}` : "")
+        + ` —— 已写入 ${CONFIG_FILE},无需重启`);
+      return json(res, 201, { line: added, lines: LINES, line_hints: LINE_HINT, line_labels: LINE_LABEL, line_accept: LINE_ACCEPT,
+                              line_roles: LINE_ROLE, impl_lines: IMPL_LINES });
     }
     if (m === "GET" && p === "/api/workers")
       return json(res, 200, { workers: SUPERVISED.map(workerInfo), lines: LINES,
                               line_hints: LINE_HINT, line_labels: LINE_LABEL, line_accept: LINE_ACCEPT, routes: ROUTES,
+                              // v0.22: id → identity (null = plain line); the implement subset the decomposer sees.
+                              line_roles: LINE_ROLE, impl_lines: IMPL_LINES,
                               models: MODELS, efforts: EFFORTS, weights: WEIGHTS,
                               max_parallel: MAX_PARALLEL, runtimes: RUNTIMES,
                               decompose_models: DECOMPOSE_MODELS,
@@ -2831,7 +2972,8 @@ server.listen(PORT, HOST, () => {
     console.log(`↻ 由「更新」重启接手: ${from} → ${BOOT_REV}(${trig})`);
   }
   console.log(`状态四值: ${store.STATUS.join(" / ")}`);
-  console.log(`配置: ${existsSync(CONFIG_FILE) ? CONFIG_FILE : "(内置缺省)"}  线=${LINES.join(",")}  路由=${ROUTES.join(",")}`
+  console.log(`配置: ${existsSync(CONFIG_FILE) ? CONFIG_FILE : "(内置缺省)"}  线=${LINES.map((l) =>
+      l + (LINE_ROLE[l] ? `[${LINE_ROLE[l].kind}${LINE_ROLE[l].tools === "read-only" ? "·只读" : ""}${LINE_ROLE[l].charter ? "·章程" : ""}]` : "")).join(",")}  路由=${ROUTES.join(",")}`
     // A knob that silently does nothing is worse than no knob: say it out loud when set.
     + (LANGUAGE ? `  生成语言=${LANGUAGE}` : ""));
   console.log(HANDOFF_TARGETS.length

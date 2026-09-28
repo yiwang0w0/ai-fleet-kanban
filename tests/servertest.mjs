@@ -1045,6 +1045,85 @@ try {
     try { rmSync(DQ, { recursive: true, force: true }); } catch {}
   }
 
+  // ══ §Q2 line identity (v0.22): closed domains, charter under the gate, seat default,
+  //    identity env handed to the slot, decompose menu = implement lines ═══════════
+  {
+    console.log(NL + "[§Q2 线的身份(v0.22):闭域校验 · 章程受闸 · 座席缺省 · 身份 env 下发]");
+    const DQ2 = mkdtempSync(join(tmpdir(), "servertest-q2-"));
+    const CFG2 = join(DQ2, "fleet.config.json");
+    // gated_subtree=docs: a charter under docs/ is inside the gate, examples/ is outside.
+    writeFileSync(CFG2, JSON.stringify({ gated_subtree: "docs", lines: [
+      { id: "engine", label: "引擎", hint: "代码" },
+      { id: "astra", label: "架构", role: { kind: "review", seat: { runtime: "codex", model: "gpt-5.6-sol", effort: "high" } } },
+      // an UNLOCKED identity seat (claude is never locked): Agent1 must actually be it
+      { id: "ro", label: "只读", role: { tools: "read-only", seat: { runtime: "claude", model: "claude-sonnet-5", effort: "medium" } } },
+    ] }), "utf8");
+    const B = await mk({ env: { BOARD_CONFIG: CFG2, BOARD_SPAWN_ECHO: "1" } });
+    const ws = (await B.api("GET", "/api/workers")).body;
+    // the fallback's console line arrives on stderr asynchronously — give it a moment
+    for (let i = 0; i < 30 && !/未解禁/.test(B.out()); i++) await sleep(100);
+    ok("Q2-1 ⭐/api/workers 带 line_roles(评审线默认只读)与 impl_lines(评审线不在其中;普通线 role=null)",
+       ws.line_roles?.astra?.kind === "review" && ws.line_roles?.astra?.tools === "read-only" &&
+       ws.line_roles?.engine === null && JSON.stringify(ws.impl_lines) === JSON.stringify(["engine", "ro"]),
+       JSON.stringify({ roles: ws.line_roles, impl: ws.impl_lines }));
+    const wa = (ws.workers || []).find((w) => w.line === "astra");
+    ok("Q2-2 ⭐身份座席未解禁(codex)→ Agent1 落回全局缺省、控制台出声、seat_drift=true 一直标着",
+       wa?.settings?.agents?.[0]?.runtime === "claude" && wa?.seat_drift === true && /未解禁/.test(B.out()),
+       `agents0=${JSON.stringify(wa?.settings?.agents?.[0])} drift=${wa?.seat_drift} said=${/未解禁/.test(B.out())}`);
+    const wr = (ws.workers || []).find((w) => w.line === "ro");
+    ok("Q2-2a ⭐身份座席已解禁(claude/sonnet/medium)→ Agent1 就是它,seat_drift=false",
+       wr?.settings?.agents?.[0]?.model === "claude-sonnet-5" && wr?.settings?.agents?.[0]?.effort === "medium" && wr?.seat_drift === false,
+       `agents0=${JSON.stringify(wr?.settings?.agents?.[0])} drift=${wr?.seat_drift}`);
+    ok("Q2-2b (对照)没有身份座席的线 seat_drift=false",
+       (ws.workers || []).find((w) => w.line === "engine")?.seat_drift === false);
+    const k = await B.api("POST", "/api/config/lines", { id: "b1", role: { kind: "boss" } });
+    const t = await B.api("POST", "/api/config/lines", { id: "b2", role: { tools: "sudo" } });
+    const c = await B.api("POST", "/api/config/lines", { id: "b3", role: { charter: "docs/nope.md" } });
+    const s = await B.api("POST", "/api/config/lines", { id: "b4", role: { seat: { runtime: "claude", model: "gpt-9", effort: "high" } } });
+    const a = await B.api("POST", "/api/config/lines", { id: "b5", role: { charter: "/etc/passwd.md" } });
+    ok("Q2-3 ⭐闭域:kind 400 · tools 400 · 章程不存在 400 · 座席无此模型 400 · 绝对路径章程 400",
+       [k, t, c, s, a].every((r) => r.status === 400), [k, t, c, s, a].map((r) => r.status).join("/"));
+    ok("Q2-3b 拒绝文说出是哪条线、哪个键、收到了什么",
+       /线 b1 的 role\.kind/.test(k.body?.error || "") && /"boss"/.test(k.body?.error || ""), k.body?.error);
+    const outside = await B.api("POST", "/api/config/lines", { id: "b6", role: { charter: "examples/roles/astra.md" } });
+    ok("Q2-4 ⭐章程在受闸子树(docs)之外 → 400(没人验收过的章程不算章程)",
+       outside.status === 400 && /不在受闸子树/.test(outside.body?.error || ""), outside.body?.error);
+    ok("Q2-4b 拒绝的线一个都没落盘(校验先于持久化)",
+       !JSON.parse(readFileSync(CFG2, "utf8")).lines.some((l) => /^b\d$/.test(l.id)));
+    const good = await B.api("POST", "/api/config/lines", { id: "critic", label: "评审", role: { kind: "review", charter: "docs/GLOSSARY.md" } });
+    const disk = JSON.parse(readFileSync(CFG2, "utf8")).lines.find((l) => l.id === "critic");
+    ok("Q2-5 ⭐带身份加线 201;配置落盘含 role(评审线的缺省工具档 read-only 写明);响应带 line_roles",
+       good.status === 201 && disk?.role?.kind === "review" && disk?.role?.tools === "read-only" && disk?.role?.charter === "docs/GLOSSARY.md" &&
+       good.body?.line_roles?.critic?.charter === "docs/GLOSSARY.md" && !(good.body?.impl_lines || []).includes("critic"),
+       `HTTP ${good.status} disk=${JSON.stringify(disk?.role)}`);
+    const st = await B.api("POST", "/api/workers/critic/start", {});
+    const wc = await B.until("critic", (w) => (w.last_log || []).some((l) => /slot-env/.test(l)), 10000);
+    const envLine = (wc?.last_log || []).find((l) => /slot-env/.test(l)) || "";
+    ok("Q2-6 ⭐起线时身份三个 env 随座席一起下发(WORKER_ROLE_KIND / WORKER_TOOL_PROFILE / WORKER_CHARTER)",
+       st.status === 200 && /WORKER_ROLE_KIND/.test(envLine) && /WORKER_TOOL_PROFILE/.test(envLine) && /WORKER_CHARTER/.test(envLine),
+       `HTTP ${st.status} ${envLine.slice(-140)}`);
+    const st2 = await B.api("POST", "/api/workers/engine/start", {});
+    const we = await B.until("engine", (w) => (w.last_log || []).some((l) => /slot-env/.test(l)), 10000);
+    const envLine2 = (we?.last_log || []).find((l) => /slot-env/.test(l)) || "";
+    ok("Q2-7 (对照)普通线不下发身份 env —— 没有身份的线一字不变",
+       st2.status === 200 && /slot-env/.test(envLine2) && !/WORKER_ROLE_KIND|WORKER_TOOL_PROFILE|WORKER_CHARTER/.test(envLine2), envLine2.slice(-120));
+    // The decomposer spawns the real CLI, so its menu cannot be measured here; pin the
+    // source shape instead (the same style as P4): the prompt receives IMPL_LINES and the
+    // model's line pick is validated against IMPL_LINES.
+    const srvSrc = readFileSync(join(ROOT, "core", "server.mjs"), "utf8");
+    ok("Q2-8 拆解菜单只给实现线(源码形:buildDecomposePrompt 收 IMPL_LINES,校验也按 IMPL_LINES)",
+       /lines: IMPL_LINES, hints: LINE_HINT, labels: LINE_LABEL/.test(srvSrc) && /IMPL_LINES\.includes\(want\)/.test(srvSrc), "");
+    B.kill();
+    await sleep(300);
+    // A present-but-broken identity refuses startup, like any other config error.
+    writeFileSync(CFG2, JSON.stringify({ lines: [{ id: "x", role: { kind: "boss" } }] }), "utf8");
+    const R = await mk({ env: { BOARD_CONFIG: CFG2 } });
+    const dead = await Promise.race([R.dead(), sleep(8000).then(() => "timeout")]);
+    ok("Q2-9 ⭐配置里的身份坏了 → 拒绝启动(exit 1,说出是哪条线哪个键)",
+       dead === 1 && /拒绝启动/.test(R.out()) && /role\.kind/.test(R.out()), `exit=${dead} ${(R.out().match(/拒绝启动[^\n]*/) || [""])[0].slice(0, 80)}`);
+    try { rmSync(DQ2, { recursive: true, force: true }); } catch {}
+  }
+
   // ══ §R operator requests: a panel button wakes the seat and the loop closes ══
   {
     console.log(NL + "[§R 快捷指令(面板→哨→协调席→ack/done)]");

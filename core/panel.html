@@ -410,6 +410,13 @@
   <input id="line-add-label" placeholder="显示名(可中文)" maxlength="24">
   <input id="line-add-id" placeholder="标识(小写/数字/-_,给命令行用)" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{0,31}" required>
   <input id="line-add-hint" placeholder="一句用途(可选)" maxlength="80">
+  <!-- v0.22: the line's identity. 实现 is the plain line; 评审 reads, checks and judges only
+       (its evidence is the review), and defaults to 只读. -->
+  <select id="line-add-kind" title="身份:实现线干活;评审线只读、只核对、只判断,评审文本就是它的交付物(默认只读)">
+    <option value="implement">实现</option><option value="review">评审</option>
+  </select>
+  <label class="chk" title="勾上=这条线的 worker 改不了工作仓 —— 这是 argv / 沙箱层面的限制,不是提示词请求;证据文件照常能写"><input type="checkbox" id="line-add-ro"> 只读</label>
+  <input id="line-add-charter" placeholder="章程(看板仓相对 .md,可选)" maxlength="120" title="逐字内联进这条线每次提示词的章程;文件住看板仓且必须在受闸子树内(改了要重新接受代码)">
   <label class="chk" title="勾上=这条线交付的卡不用你点「通过」,交付即完成(交付物闸照常检查);要你决定的卡照样进等待中"><input type="checkbox" id="line-add-auto"> 交付即完成</label>
   <button type="submit">加入</button>
   <span class="note" id="line-add-note" aria-live="polite"></span>
@@ -487,6 +494,20 @@ const lineColor = (l) => {
   return i >= 0 ? PALETTE[i % PALETTE.length] : "#5d6472";
 };
 let LINE_LABELS = {};   // id → display name (fleet.config lines[].label); the id stays the machine's
+let LINE_ROLES = {};    // id → identity {kind, tools, charter, seat} or null (v0.22, lines[].role)
+/* The identity badge on the rig: only what differs from a plain line, in the operator's
+   words (实现 is the default and stays silent). seat_drift comes from the server — the
+   panel never decides it. */
+const roleBadge = (w) => {
+  const r = LINE_ROLES[w.line];
+  const parts = [];
+  if (r?.kind === "review") parts.push("评审");
+  if (r?.tools === "read-only") parts.push("只读");
+  if (r?.charter) parts.push("章程");
+  if (w.seat_drift) parts.push("⚠偏离身份座席");
+  if (!parts.length) return "";
+  return `<span class="tail" title="${esc(r?.charter ? "章程 " + r.charter : "")}${w.seat_drift ? " · 当前座席与 role.seat 不同(首次启动时该座席未解禁,或你在面板改过)" : ""}">${parts.join("·")}</span>`;
+};
 const lineLabel = (l) => {
   const s = String(l || ""); if (!s) return "未指派";
   const m = s.match(/^(.*?)(@\d+)?$/);
@@ -1977,6 +1998,7 @@ function renderRig(){
       .map((sl) => `<span class="tail">${"⓪①②③④"[sl.slot] || "#" + sl.slot}${esc(sl.tail || "")}</span>`).join("");
     return `<span class="wk${w.running ? " on" : ""}" title="${esc((w.last_log||[]).join(String.fromCharCode(10)))}">` +
            `<span class="st"></span><span class="nm" style="color:${lineColor(w.line)}" title="${esc(LINE_HINTS[w.line] || "")}">${esc(label)}${xN}</span>` +
+           roleBadge(w) +
            `<span class="tail">${esc(tail)}</span>` + extra +
            `<button class="gear" data-cfg="${w.line}" title="模型 / 强度 / 并行">⚙</button>` +
            `<button data-wk="${w.line}" data-op="${w.running ? "stop" : "start"}">${w.running ? "停止" : "启动"}</button></span>`;
@@ -2357,7 +2379,7 @@ async function refresh(){
     ctxLines = cres.lines;
     claimMisses = wres.claim_misses || [];
     workers = wres.workers; LINES = wres.lines; MODELS = wres.models; EFFORTS = wres.efforts;
-    LINE_HINTS = wres.line_hints || {}; LINE_LABELS = wres.line_labels || {}; ROUTES = wres.routes || [];
+    LINE_HINTS = wres.line_hints || {}; LINE_LABELS = wres.line_labels || {}; LINE_ROLES = wres.line_roles || {}; ROUTES = wres.routes || [];
     RUNTIMES = wres.runtimes || []; MAXP = wres.max_parallel || 0;
     DECOMP = wres.decompose_models || [];
     if (r.server_now) skew = r.server_now - Date.now();
@@ -2803,16 +2825,28 @@ document.getElementById("line-add").addEventListener("submit", async (e) => {
   const hintEl = document.getElementById("line-add-hint");
   const labelEl = document.getElementById("line-add-label");
   const autoEl = document.getElementById("line-add-auto");
+  const kindEl = document.getElementById("line-add-kind");
+  const roEl = document.getElementById("line-add-ro");
+  const charterEl = document.getElementById("line-add-charter");
   const note = document.getElementById("line-add-note");
   const id = idEl.value.trim(), hint = hintEl.value.trim(), label = labelEl.value.trim();
   if (!id) return;
+  // v0.22: send an identity only when something differs from a plain line — a plain
+  // line stays a plain line in the config file (no role key), exactly as before.
+  const kind = kindEl.value, charter = charterEl.value.trim();
+  const role = (kind !== "implement" || roEl.checked || charter)
+    ? { kind, ...(roEl.checked ? { tools: "read-only" } : {}), ...(charter ? { charter } : {}) } : null;
   note.className = "note";
   note.textContent = "写入中…";
   try {
-    const r = await post("/api/config/lines", { id, hint, label, accept: autoEl.checked ? "auto" : "human" });
+    const r = await post("/api/config/lines", { id, hint, label, accept: autoEl.checked ? "auto" : "human", ...(role ? { role } : {}) });
     note.className = "note ok";
-    note.textContent = `已加入线「${r.line.label || r.line.id}」${r.line.accept === "auto" ? "(交付即完成)" : ""}—— 配置已写盘,自动拉取行可直接启动`;
+    const rl = r.line.role;
+    note.textContent = `已加入线「${r.line.label || r.line.id}」${r.line.accept === "auto" ? "(交付即完成)" : ""}` +
+      (rl ? `(${rl.kind === "review" ? "评审" : "实现"}${rl.tools === "read-only" ? "·只读" : ""}${rl.charter ? "·章程 " + rl.charter : ""})` : "") +
+      "—— 配置已写盘,自动拉取行可直接启动";
     idEl.value = ""; hintEl.value = ""; labelEl.value = ""; autoEl.checked = false;
+    kindEl.value = "implement"; roEl.checked = false; charterEl.value = "";
     await refresh();
   } catch (err) {
     note.className = "note bad";

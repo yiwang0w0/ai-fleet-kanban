@@ -84,6 +84,52 @@ def cli_deny_rules(data_dir, registry=None):
     return rules
 
 
+def readonly_edit_rules(repo, data_dir):
+    """只读工具档(v0.22.0,`lines[].role.tools = "read-only"`)的 Edit deny 规则 —— Claude 座席的
+    「不许改工作仓」是这组 argv,不是提示词。返回 None = 列不出仓库条目(不是 git 仓 / git 不在),
+    调用方**拒绝启动**:只读身份不能靠猜。
+
+    · 数据目录在工作仓之外(split 部署,SECURITY 推荐形)⇒ 一条 `Edit(//repo/**)`。
+    · 数据目录在工作仓之内(单机克隆的缺省形)⇒ 整仓一网打尽会把 <data>/evidence 也盖住 —— 实测
+      整目录的 Edit / Read deny 都会拒掉往子目录写(2026-09-28)。所以沿数据目录的祖先链逐层下降:
+      每一层钉住 HEAD 里除该层祖先之外的全部条目(文件逐个,目录 `/**`)。数据目录本身未跟踪,
+      自然不在表里;证据目录因此留给模型。
+    ⚠ 未跟踪的新文件不在保护范围(模型可以往仓里新建文件)—— 与 write 线一样,脏工作树由源码闸
+      在下一次启动时拒绝;这里防的是「改动既有代码」,不是「往仓里丢东西」。"""
+    repo_abs = os.path.realpath(repo)
+    data_abs = os.path.realpath(data_dir)
+    try:
+        rel = os.path.relpath(data_abs, repo_abs).replace("\\", "/")
+    except ValueError:                       # Windows:不同盘符
+        rel = ".."
+    if rel == ".":
+        return None                          # 数据目录就是工作仓:无从保护
+    if rel.startswith("..") or os.path.isabs(rel):
+        return [f"Edit({deny_path(repo_abs)}/**)"]
+    base = deny_path(repo_abs)
+    parts = rel.split("/")
+    rules, prefix = [], ""
+    for depth, ancestor in enumerate(parts):
+        try:
+            r = subprocess.run(["git", "-C", repo_abs, "ls-tree", "-z", "HEAD"] + ([prefix] if prefix else []),
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        except Exception:
+            return None
+        if r.returncode != 0:
+            return None
+        keep = prefix + ancestor
+        for rec in r.stdout.split("\0"):
+            if not rec:
+                continue
+            head, _, path = rec.partition("\t")
+            if not path or path == keep:
+                continue
+            typ = head.split(" ")[1] if len(head.split(" ")) > 1 else "blob"
+            rules.append(f"Edit({base}/{path}/**)" if typ == "tree" else f"Edit({base}/{path})")
+        prefix = keep + "/"
+    return rules
+
+
 if __name__ == "__main__":
     # doctor 用:把本部署实际会发给 CLI 的 deny 规则打出来,一行一条(它只核写法,语义靠真 CLI 量)。
     if "--print-deny-rules" in sys.argv:
