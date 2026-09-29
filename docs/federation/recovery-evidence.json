@@ -5,23 +5,24 @@
   "base_commit": "cf78b11570172bfe24c28a1c041558834871ffe1",
   "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
   "code_sha256": {
-    "core/store.js": "63b18e10da187f771d42b11a59a81c589dbfa2dab0e04d9f3a03205f321e7d9b",
+    "core/store.js": "cb16b90cb71b693b08203ce4c7e00f0fadf4a3f932be5cbf69c479a9e7c4359a",
     "core/backup.mjs": "58e3ac7b137cda6b9577a725d25fbc3c32d2083e633908f0cf2228ce7a50c99c",
     "core/recovery.mjs": "2c8b6ed2f74e6f47492138b7a43cf3869b5892cb03ecba4164c39608dd7539ec",
     "core/federation/peers.mjs": "cd61461631fd7d9326ec836b7771d46a2101f3188d734d95d5b8ce3ef48d6a12",
     "cli/recovery.mjs": "e7c96b72025ba62fb61a6edede3c79dd5f56e01edc57473dd9946d9c4f732f32",
     "tests/recoverytest.mjs": "3aa383eb2dcf1a36d42f25d699453d32ee80b0e7fa6a126a2634e9c898bac9cf",
     "package.json": "1dba837c091d3f3ffff9309da7c855f2bfe3b42a90d00994f53ca5c496a7ba50",
-    ".github/workflows/ci.yml": "423cfaa004b9485d11db820dcca578d1668baaa290af308b45e1be29319b0ce2"
+    ".github/workflows/ci.yml": "423cfaa004b9485d11db820dcca578d1668baaa290af308b45e1be29319b0ce2",
+    "tests/identitytest.mjs": "9b12a01344a19cc4392b662269341ab88a9e4aea2710c82b683677f2b3edf4bb"
   },
   "local_validation": {
     "command": "npm test",
     "result": "passed",
-    "main_suite_passed": 979,
+    "main_suite_passed": 982,
     "recovery_tests": 14,
     "failed": 0,
     "skipped": 0,
-    "latest_targeted_result": "14 passed after explicit plan-field/impact-count verification",
+    "latest_targeted_result": "identity 13 passed; subsequent full npm test 982 passed after WAL bootstrap contention fix",
     "coverage": [
       "untouched restore and evidence verification; reviewed plan and live-WAL fingerprint",
       "retirement task write guards including prepared statements in another process",
@@ -29,15 +30,17 @@
       "node/task ownership retained and fresh epoch/event identities",
       "activation final-step rollback and abrupt process exit before commit, followed by retry",
       "retired original backup/restore remains quarantined",
-      "CLI plan and digest requirements; no service startup or task auto-release"
+      "CLI plan and digest requirements; no service startup or task auto-release",
+      "real SQLite DELETE-mode reader blocks WAL initialization until release; bounded failure and connection cleanup; non-BUSY errors are not retried"
     ],
     "initial_fixture_corrections": [
       "released is a boolean in store DTO",
       "report can reject status before checking run ID; assert conflict code",
       "same-worker resumed fixture now supplies explicit new input instead of bypassing no-progress hold"
-    ]
+    ],
+    "identity_tests": 13
   },
-  "ci": "pending",
+  "ci": "pending for repaired commit",
   "real_operations": {
     "deployment_changed": false,
     "real_node_retired": false,
@@ -58,5 +61,14 @@
     "old restored directories without evidence manifests must be restored again from verified backup",
     "no real Tailscale device cutover or disaster RPO/RTO acceptance",
     "MCP/adapters, cross-node delegation/relations, workspace containment and global UI remain pending"
-  ]
+  ],
+  "prior_attempt": {
+    "commit": "72f2cc7a1467a6c7e77d3182f90534c1e5a04824",
+    "run_id": 36547440416,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36547440416",
+    "linux_main_passed": 976,
+    "gitleaks": "success",
+    "windows": "failed in simultaneous initial database open: PRAGMA journal_mode=WAL returned SQLITE_BUSY; later suites skipped",
+    "repair": "retry only WAL initialization within five seconds for numeric SQLITE_BUSY; close failed connections; three added regression tests"
+  }
 }

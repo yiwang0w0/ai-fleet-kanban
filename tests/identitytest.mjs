@@ -215,3 +215,77 @@ test("three simulated nodes backfill 10,000 cards each without UID collisions", 
   assert.equal(nodes.size, 3);
   assert.equal(allUIDs.size, 30000);
 });
+test("a competing DELETE-mode reader delays WAL bootstrap, then opening succeeds after release", async () => {
+  const dbPath=join(TMP,"wal-reader.db"),reader=new DatabaseSync(dbPath);handles.push(reader);
+  reader.exec("CREATE TABLE sentinel(value TEXT); INSERT INTO sentinel VALUES('preserved'); BEGIN");
+  reader.prepare("SELECT * FROM sentinel").get(); // Hold a real shared lock against WAL conversion.
+  const script = [
+    'const {DatabaseSync}=require("node:sqlite");',
+    'const store=require(process.argv[1]);const prepare=DatabaseSync.prototype.prepare;let sent=false;',
+    'DatabaseSync.prototype.prepare=function(sql){const stmt=prepare.call(this,sql);if(sql!=="PRAGMA journal_mode=WAL")return stmt;',
+    'return {get(){try{return stmt.get();}catch(e){if(!sent){sent=true;process.send({busy:e.errcode});}throw e;}}};};',
+    'try{const db=store.open();process.send({opened:true,mode:prepare.call(db,"PRAGMA journal_mode").get().journal_mode,value:prepare.call(db,"SELECT value FROM sentinel").get().value});db.close();process.disconnect();}',
+    'catch(e){console.error(e);process.exit(1);}'
+  ].join("\n");
+  const cp=spawn(process.execPath,["-e",script,join(ROOT,"core/store.js")],{
+    env:{...process.env,BOARD_DB:dbPath,BOARD_DATA_DIR:TMP},windowsHide:true,stdio:["ignore","ignore","pipe","ipc"]
+  });
+  let stderr="",timer,busy=false,opened;
+  cp.stderr.on("data",b=>stderr+=b);
+  const closed=new Promise(resolve=>cp.once("close",resolve));
+  try{
+    await new Promise((resolve,reject)=>{
+      timer=setTimeout(()=>reject(Error("WAL opener timeout: "+stderr)),15000);
+      cp.on("error",reject);
+      cp.on("message",m=>{
+        try{
+          if(m.busy!==undefined){assert.equal(m.busy&255,5);busy=true;reader.exec("ROLLBACK");}
+          if(m.opened)opened=m;
+        }catch(e){reject(e);}
+      });
+      cp.once("close",code=>code===0?resolve():reject(Error("child exit "+code+": "+stderr)));
+    });
+    assert.equal(busy,true);assert.equal(opened.mode,"wal");assert.equal(opened.value,"preserved");
+  }finally{
+    clearTimeout(timer);if(cp.exitCode===null)cp.kill();await closed;
+    if(reader.isTransaction)reader.exec("ROLLBACK");
+  }
+});
+
+test("WAL bootstrap stops after its budget and closes the failed connection", () => {
+  const dbPath=join(TMP,"wal-deadline.db"),reader=new DatabaseSync(dbPath);handles.push(reader);
+  reader.exec("CREATE TABLE sentinel(value TEXT); INSERT INTO sentinel VALUES('preserved'); BEGIN");
+  reader.prepare("SELECT * FROM sentinel").get();
+  const script=[
+    'const assert=require("node:assert/strict"),{DatabaseSync}=require("node:sqlite");const store=require(process.argv[1]);',
+    'const close=DatabaseSync.prototype.close;let closed=0;DatabaseSync.prototype.close=function(){closed++;return close.call(this);};',
+    'const started=performance.now();assert.throws(()=>store.open(),e=>e.code==="ERR_SQLITE_ERROR"&&(e.errcode&255)===5);',
+    'assert.equal(closed,1);console.log(JSON.stringify({elapsed:performance.now()-started}));'
+  ].join("\n");
+  const child=spawnSync(process.execPath,["-e",script,join(ROOT,"core/store.js")],{
+    env:{...process.env,BOARD_DB:dbPath,BOARD_DATA_DIR:TMP},windowsHide:true,encoding:"utf8",timeout:15000
+  });
+  reader.exec("ROLLBACK");
+  assert.equal(child.status,0,child.stderr);
+  const {elapsed}=JSON.parse(child.stdout);
+  assert.ok(elapsed>=4900 && elapsed<12000,"bounded startup elapsed "+elapsed);
+  const retry=spawnSync(process.execPath,["-e",'const store=require(process.argv[1]);const db=store.open();db.close();',join(ROOT,"core/store.js")],{
+    env:{...process.env,BOARD_DB:dbPath,BOARD_DATA_DIR:TMP},windowsHide:true,encoding:"utf8",timeout:10000
+  });
+  assert.equal(retry.status,0,retry.stderr);
+});
+
+test("non-busy WAL failures are reported once without retrying or leaking a connection", () => {
+  const dbPath=join(TMP,"wal-nonbusy.db");
+  const script=[
+    'const assert=require("node:assert/strict"),{DatabaseSync}=require("node:sqlite");const store=require(process.argv[1]);',
+    'const prepare=DatabaseSync.prototype.prepare,close=DatabaseSync.prototype.close;let attempts=0,closed=0;',
+    'DatabaseSync.prototype.prepare=function(sql){if(sql!=="PRAGMA journal_mode=WAL")return prepare.call(this,sql);return {get(){attempts++;throw Object.assign(Error("injected IO failure"),{code:"ERR_SQLITE_ERROR",errcode:10});}};};',
+    'DatabaseSync.prototype.close=function(){closed++;return close.call(this);};',
+    'assert.throws(()=>store.open(),e=>e.errcode===10);assert.equal(attempts,1);assert.equal(closed,1);'
+  ].join("\n");
+  const child=spawnSync(process.execPath,["-e",script,join(ROOT,"core/store.js")],{
+    env:{...process.env,BOARD_DB:dbPath,BOARD_DATA_DIR:TMP},windowsHide:true,encoding:"utf8",timeout:10000
+  });
+  assert.equal(child.status,0,child.stderr);
+});

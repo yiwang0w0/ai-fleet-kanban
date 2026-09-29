@@ -104,3 +104,10 @@ worker 协议升级为版本 2，旧 worker 在领卡前被拒绝。人工 CLI �
 14 项恢复测试通过，本机完整主套件 979 项通过；最后补齐计划字段与影响计数校验后，针对性 14 项再次通过。最终双平台结果由 CI 复核。上一批 cf78b11 的 CI36544730710 已全绿（Windows965/Linux962），已补入 snapshots-evidence.json。
 
 说明与证据见 recovery.md / recovery-evidence.json。T05.05 仍在实施：对端接受新 epoch、保留并标记旧备份中缺失的任务/结果，以及真实唯一写者与跨机恢复验收待完成。没有退役任何真实节点、没有激活真实恢复副本，三种执行器仍各 0/1，完整阶段通过数仍 0/12。
+## 本批 CI 修复：首次并发开库
+
+72f2cc7 的运行 36547440416 中，Linux 主套件 976 项、额外检查与 gitleaks 通过；Windows 身份测试在六个进程同时首次开库时，于 PRAGMA journal_mode=WAL 返回 SQLITE_BUSY（errcode 5），后续套件没有执行。
+
+修复将 WAL 初始化限制为五秒内重试，仅处理 SQLITE_BUSY；其他错误直接返回，所有启动失败关闭连接。任务写入和迁移事务不通过这个循环重放。SQLite 官方说明 WAL 仍可能返回 SQLITE_BUSY：https://www.sqlite.org/wal.html 。
+
+新增真实 DELETE 模式读锁阻挡/释放、持续占锁超时以及非 BUSY 错误三个测试。身份测试 13 项通过，随后本机完整主套件 982 项通过；最终双平台结果待复核。没有放宽六进程同一节点身份、六个不同任务 UID 的原验收条件。

@@ -605,27 +605,46 @@ function withTaskVersion(db,args,fn) {
   } catch(e) {try {db.exec("ROLLBACK");} catch {} throw e;}
 }
 
+/** WAL bootstrap may report SQLITE_BUSY immediately while another opener changes
+ * journal mode. Retry only this idempotent setup, within one five-second budget.
+ * Business writes and migration transactions are never replayed here. */
+function enableWAL(db) {
+  const deadline = performance.now() + 5000;
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  db.exec("PRAGMA busy_timeout=0");
+  try {
+    for (;;) {
+      try {
+        const mode = db.prepare("PRAGMA journal_mode=WAL").get().journal_mode;
+        if (mode !== "wal") throw err(ERR.INTERNAL, "数据库未能进入 WAL 模式，拒绝继续初始化");
+        return;
+      } catch (e) {
+        const remaining = deadline - performance.now();
+        if (e.code !== "ERR_SQLITE_ERROR" || (e.errcode & 255) !== 5 || remaining <= 0) throw e;
+        Atomics.wait(sleeper, 0, 0, Math.min(25, remaining));
+      }
+    }
+  } finally { db.exec("PRAGMA busy_timeout=5000"); }
+}
+
 function open(readOnly = false) {
   if (!readOnly && fs.existsSync(path.join(path.dirname(DB_PATH), ".incomplete")))
     throw err(ERR.CONFLICT, "备份或恢复目录尚未完成，禁止写入或启动执行器");
   if (!readOnly && !fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH, { readOnly });
-  db.exec("PRAGMA busy_timeout=5000");
-  if (!readOnly) {
-    if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_restore_hold'").get()) {
-      db.close();
-      throw err(ERR.CONFLICT, "恢复副本处于隔离状态，禁止写入或启动执行器；先完成恢复核验与身份恢复流程");
+  try {
+    db.exec("PRAGMA busy_timeout=5000");
+    if (!readOnly) {
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_restore_hold'").get())
+        throw err(ERR.CONFLICT, "恢复副本处于隔离状态，禁止写入或启动执行器；先完成恢复核验与身份恢复流程");
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_lifecycle'").get() && db.prepare("SELECT state FROM board_lifecycle WHERE singleton=1").get()?.state === "retired")
+        throw err(ERR.CONFLICT, "节点已退役，禁止重新启动写入者");
+      enableWAL(db);
+      migrate(db);
     }
-    if(db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_lifecycle'").get() && db.prepare("SELECT state FROM board_lifecycle WHERE singleton=1").get()?.state==="retired") {
-      db.close();throw err(ERR.CONFLICT,"节点已退役，禁止重新启动写入者");
-    }
-    db.exec("PRAGMA journal_mode=WAL");
-    try { migrate(db); }
-    catch (e) { db.close(); throw e; }
-  }
-  return db;
+    return db;
+  } catch (e) { db.close(); throw e; }
 }
-
 /** Serialize schema inspection, identity generation and backfill across processes.
  * An invalid identity or failed DDL rolls back the whole migration. */
 function migrate(db) {
