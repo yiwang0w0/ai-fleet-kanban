@@ -1,0 +1,115 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-01",
+  "date": "2026-09-29",
+  "baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
+  "scope": "local identity foundation; no production migration; no model calls; no real multi-node acceptance",
+  "environment": {
+    "os": "Windows",
+    "node": "24.16.0",
+    "python": "3.12.14",
+    "git": "2.54.0.windows.1"
+  },
+  "code_sha256": {
+    "core/store.js": "5eb0181398bfcfcc9df3ffca7b824f582abf37aa8a5413253c6caf1243dc5dd7",
+    "core/server.mjs": "e76f2b48b6dcc6a23a1c588a91a294f4e8e4c00ab13fc913208f6bccc2df371f",
+    "loops/worker_loop.py": "0ed75983c860c465b1e6bb62fefb00a958823bfe2e08426519c0e2febff8cb6c",
+    "cli/node.mjs": "3c3d9561fc408fc29be8b0f8b487f927183678310506feeedbbce4a215b11318",
+    "tests/identitytest.mjs": "9cfa39ca2534e08e48b9d2457a93ae56e7ecafc857ebcf9673922e9391506cc1",
+    "tests/servertest.mjs": "1e81ddbee58b86acbe6281c7a943f64bafdb09e40c59b429a1290509b2e00b59",
+    "package.json": "8b07ab260b62a668a0b575c498212ccfd05bc5976b9d67101452d225357a199e",
+    ".github/workflows/ci.yml": "a9b84c6f5b862816a4fd9533944f74572f9d093fee425b187bafb918f3cc4cd3"
+  },
+  "checks": [
+    {
+      "command": "npm test (baseline)",
+      "result": "passed",
+      "assertions": 837,
+      "log": "baseline-test-python312.log"
+    },
+    {
+      "command": "npm test (first foundation candidate)",
+      "result": "passed",
+      "assertions": 846,
+      "log": "foundation-test.log",
+      "note": "Includes first 9 identity tests; later test-only additions were validated separately."
+    },
+    {
+      "command": "node tests/servertest.mjs (final)",
+      "result": "passed",
+      "assertions": 195,
+      "log": "foundation-server-verified.log"
+    },
+    {
+      "command": "node tests/identitytest.mjs (final)",
+      "result": "passed",
+      "tests": 10,
+      "evidence": "tool output; includes three simulated 10,000-card migrations"
+    },
+    {
+      "command": "python loops/worker_loop.py --prompt-selftest",
+      "result": "passed",
+      "assertions": 57,
+      "evidence": "tool output"
+    },
+    {
+      "command": "python gates/gates_lib.py",
+      "result": "passed",
+      "log": "foundation-gates.log"
+    },
+    {
+      "command": "python loops/worker_loop.py --codex-selftest",
+      "result": "passed",
+      "assertions": 20,
+      "log": "foundation-codex.log"
+    },
+    {
+      "command": "python watchers/board_health_watch.py --selftest",
+      "result": "passed",
+      "log": "foundation-watcher.log"
+    },
+    {
+      "command": "node examples/verify_page.mjs --selftest",
+      "result": "passed",
+      "assertions": 13,
+      "log": "foundation-page.log"
+    },
+    {
+      "command": "node cli/doctor.mjs",
+      "result": "8 pass, 3 warn, 0 fail",
+      "log": "foundation-doctor.log",
+      "warnings": [
+        "Claude npm wrapper resolves to native executable",
+        "default port is already occupied by another instance",
+        "default token/registry paths are inside the work repository; deployment isolation is pending"
+      ]
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "initial_failures": [
+    {
+      "cause": "Previously known Python 3.11 could not be spawned: EACCES",
+      "resolution": "Verified bundled Python 3.12 directly and through Node; reran baseline successfully"
+    },
+    {
+      "cause": "New HTTP mutation test initially used PATCH instead of existing POST /update",
+      "resolution": "Corrected test endpoint; final server suite 195 pass"
+    }
+  ],
+  "constraints": {
+    "physical_multi_node_test": false,
+    "linux_ci": "pending",
+    "production_deployment": false,
+    "accepted_phase_count": 0,
+    "model_calls": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 0
+    }
+  },
+  "logs_note": "Log paths are local ignored files relative to this implementation worktree; they are not committed. CI will rerun both supported platforms.",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings"
+}

@@ -36,6 +36,7 @@ const { DatabaseSync } = require("node:sqlite");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const os = require("os");
 
 const DATA_DIR = process.env.BOARD_DATA_DIR || path.join(__dirname, ".data");
 const DB_PATH = process.env.BOARD_DB || path.join(DATA_DIR, "board.db");
@@ -194,6 +195,8 @@ const STATUS_REMAP = {
 // Columns added on top of the original 13. ALTER TABLE ADD COLUMN must be idempotent,
 // so existence is checked via PRAGMA first.
 const ADDED_COLUMNS = [
+  ["task_uid", "TEXT"],
+  ["owner_node_id", "TEXT"],
   ["route", `TEXT NOT NULL DEFAULT '${DEFAULT_ROUTE.replace(/'/g, "''")}'`],
   ["line", "TEXT"],
   ["heartbeat_at", "INTEGER"],
@@ -406,19 +409,118 @@ function assertMaxAttempts(v) {
   return n;
 }
 
+
+const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const UUID_RE = new RegExp("^" + UUID_PATTERN + "$");
+
+function nodeName(value) {
+  if (typeof value !== "string" || /[\u0000-\u001f\u007f-\u009f]/u.test(value))
+    throw err(ERR.BAD_INPUT, "终端名必须是不含控制字符的文本");
+  const name = value.trim().normalize("NFC");
+  if (!name || name.length > 80)
+    throw err(ERR.BAD_INPUT, "终端名长度必须在 1 到 80 之间");
+  return name;
+}
+
+/** This is identity metadata, not proof of authentication. Peer trust is separate. */
+function localNode(db) {
+  const node = db.prepare("SELECT node_id, display_name, sync_epoch, protocol_version, created_at, updated_at FROM board_node WHERE singleton=1").get();
+  if (!node) throw err(ERR.INTERNAL, "缺少本机节点身份，请先迁移数据库");
+  return { ...node };
+}
+
+function renameNode(db, displayName) {
+  const name = nodeName(displayName);
+  db.prepare("UPDATE board_node SET display_name=?, updated_at=? WHERE singleton=1").run(name, now());
+  return localNode(db);
+}
+
+/** Only the owner store mints identity. Copies will live outside the local queue. */
+function assertLocalIdentityInput(fields) {
+  for (const key of ["task_uid", "taskUid", "owner_node_id", "ownerNodeId"]) {
+    if (Object.hasOwn(fields, key))
+      throw err(ERR.BAD_INPUT, key + " 由本机生成且不可编辑");
+  }
+}
+
+function migrateNodeIdentity(db) {
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS board_node (",
+    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),",
+    "node_id TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL,",
+    "sync_epoch TEXT NOT NULL,",
+    "protocol_version INTEGER NOT NULL DEFAULT 1 CHECK(protocol_version=1),",
+    "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+  ].join("\n"));
+  let node = db.prepare("SELECT * FROM board_node WHERE singleton=1").get();
+  if (!node) {
+    if (db.prepare("SELECT 1 FROM tasks WHERE task_uid IS NOT NULL OR owner_node_id IS NOT NULL LIMIT 1").get())
+      throw err(ERR.CONFLICT, "已有任务身份但本机身份缺失；拒绝重新生成所有者");
+    const name = nodeName(process.env.BOARD_NODE_NAME ?? os.hostname());
+    const at = now();
+    db.prepare("INSERT INTO board_node VALUES (1,?,?,?,?,?,?)")
+      .run(crypto.randomUUID(), name, crypto.randomUUID(), 1, at, at);
+    node = localNode(db);
+  }
+  if (!UUID_RE.test(node.node_id) || !UUID_RE.test(node.sync_epoch) || node.protocol_version !== 1)
+    throw err(ERR.CONFLICT, "本机节点身份或协议版本无效；拒绝自动修复");
+  nodeName(node.display_name);
+  const uidRE = new RegExp("^" + node.node_id + "/" + UUID_PATTERN + "$");
+  const stamp = db.prepare("UPDATE tasks SET task_uid=?, owner_node_id=? WHERE id=?");
+  for (const task of db.prepare("SELECT id, task_uid, owner_node_id FROM tasks").all()) {
+    if (task.task_uid === null && task.owner_node_id === null) {
+      stamp.run(node.node_id + "/" + crypto.randomUUID(), node.node_id, task.id);
+    } else if (task.owner_node_id !== node.node_id || !uidRE.test(task.task_uid)) {
+      throw err(ERR.CONFLICT, "任务 #" + task.id + " 身份不完整或属于其他终端；拒绝覆写");
+    }
+  }
+  db.exec([
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_task_uid ON tasks(task_uid);",
+    "CREATE TRIGGER IF NOT EXISTS task_identity_immutable",
+    "BEFORE UPDATE OF task_uid, owner_node_id ON tasks",
+    "WHEN NEW.task_uid IS NOT OLD.task_uid OR NEW.owner_node_id IS NOT OLD.owner_node_id",
+    "BEGIN SELECT RAISE(ABORT, 'task identity is immutable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS task_identity_local_insert BEFORE INSERT ON tasks",
+    "WHEN NEW.owner_node_id IS NOT (SELECT node_id FROM board_node WHERE singleton=1)",
+    "OR NEW.task_uid IS NULL OR length(NEW.task_uid) <> 73",
+    "OR substr(NEW.task_uid,1,37) IS NOT ((SELECT node_id FROM board_node WHERE singleton=1) || '/')",
+    "BEGIN SELECT RAISE(ABORT, 'task identity must belong to this node'); END;",
+    "CREATE TRIGGER IF NOT EXISTS node_identity_immutable BEFORE UPDATE OF node_id, sync_epoch ON board_node",
+    "WHEN NEW.node_id IS NOT OLD.node_id OR NEW.sync_epoch IS NOT OLD.sync_epoch",
+    "BEGIN SELECT RAISE(ABORT, 'node identity is immutable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS node_identity_no_delete BEFORE DELETE ON board_node",
+    "BEGIN SELECT RAISE(ABORT, 'node identity cannot be deleted'); END;"
+  ].join("\n"));
+}
+
 function open(readOnly = false) {
   if (!readOnly && !fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH, { readOnly });
   db.exec("PRAGMA busy_timeout=5000");
   if (!readOnly) {
     db.exec("PRAGMA journal_mode=WAL");
-    migrate(db);
+    try { migrate(db); }
+    catch (e) { db.close(); throw e; }
   }
   return db;
 }
 
-/** Idempotent. Runs on an empty DB and on an existing one; N runs, same end state. */
+/** Serialize schema inspection, identity generation and backfill across processes.
+ * An invalid identity or failed DDL rolls back the whole migration. */
 function migrate(db) {
+  db.exec("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    migrateInner(db);
+    migrateNodeIdentity(db);
+    db.exec("COMMIT TRANSACTION");
+  } catch (e) {
+    try { db.exec("ROLLBACK TRANSACTION"); } catch {}
+    throw e;
+  }
+}
+
+/** Idempotent. Runs on an empty DB and on an existing one; N runs, same end state. */
+function migrateInner(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     subject TEXT NOT NULL,
@@ -909,6 +1011,7 @@ function placeInChain(db, { kind, parentId, released, description }) {
  * interruption in between leaves "the state moved but the record never says so".
  */
 function add(db, args) {
+  assertLocalIdentityInput(args);
   db.exec("BEGIN IMMEDIATE");
   try {
     const id = addInner(db, args);
@@ -957,12 +1060,14 @@ function addInner(db, {
   // discovery is kept, the queue is not hijacked.
   ({ parentId, released, description } = placeInChain(db, { kind, parentId, released, description }));
   const vk = assertVerify(verifyCmd);
+  const ownerNodeId = localNode(db).node_id;
+  const taskUid = ownerNodeId + "/" + crypto.randomUUID();
   const r = db.prepare(
     `INSERT INTO tasks (subject, description, acceptance, blocked_by, created_at, updated_at,
                         route, line, lock_key, needs_bash, released, max_attempts, evidence_path,
                         kind, parent_id, verify_cmd, weight, oneof_key, proves_parent,
-                        human_gate, human_gate_src)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+                        human_gate, human_gate_src, task_uid, owner_node_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(String(subject), String(description), String(acceptance),
         // Dep edges go through the SAME single validator as update (plugging only
         // one entrance is the classic hole — goal decomposition pours model-emitted
@@ -987,7 +1092,7 @@ function addInner(db, {
         oneofKey ? String(oneofKey) : null, provesParent ? 1 : 0,
         // The lock and its source (sniffed = machine lock / explicit = deliberate
         // lock). Unknown values landed on explicit = human-only unlock.
-        hg, hg ? (humanGate == null ? "detect" : "explicit") : null);
+        hg, hg ? (humanGate == null ? "detect" : "explicit") : null, taskUid, ownerNodeId);
   return Number(r.lastInsertRowid);
 }
 
@@ -2210,6 +2315,7 @@ function prevLineStamp(oldLine, newLine) {
 /** Card edit: line/route/caps/lock/permissions reassignment. Status NEVER moves here
  *  (state transitions are report/resolve's sole responsibility). */
 function update(db, args) {
+  assertLocalIdentityInput(args);
   db.exec("BEGIN IMMEDIATE");
   try {
     const before = db.prepare(
@@ -2515,7 +2621,8 @@ function row(r) {
     } catch { return { list: [], broken: true }; }
   })();
   return {
-    id: Number(r.id), subject: r.subject, description: r.description,
+    id: Number(r.id), task_uid: r.task_uid, owner_node_id: r.owner_node_id,
+    subject: r.subject, description: r.description,
     status: r.status, waiting_for: r.waiting_for,
     worker: r.worker, line: r.line, prev_line: r.prev_line || null, route: r.route,
     // ⚠ row() is an explicit projection, not a spread — a new column does NOT ride
@@ -2714,6 +2821,7 @@ function openChildrenOnLines(db, parentId, lines) {
 }
 
 module.exports = {
+  localNode, renameNode, assertLocalIdentityInput,
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,

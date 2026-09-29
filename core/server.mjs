@@ -2396,6 +2396,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         // Display labels: the one copy lives in store.js; panel and CLI keep none.
         status_labels: store.STATUS_LABEL, wf_labels: store.WF_LABEL,
+        node: store.localNode(db),
         counts: store.counts(db),
         archived_count: store.list(db, { archived: "all" }).tasks.filter((t) => t.archived_at).length,
         uptime_sec: Math.floor((Date.now() - STARTED) / 1000),

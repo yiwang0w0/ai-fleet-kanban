@@ -597,6 +597,20 @@ try {
   {
     const B = await mk({});
     const m = (await B.api("GET", "/api/meta")).body || {};
+    // The public response must expose the same identity that the store enforces.
+    const made = await B.api("POST", "/api/tasks", { subject: "identity HTTP fixture", released: 0 });
+    const card = made.body?.task;
+    ok("J3-6 metadata and task responses agree on node ownership and global UID",
+       made.status === 201 && typeof m.node?.node_id === "string" &&
+       card?.owner_node_id === m.node.node_id && card?.task_uid?.startsWith(m.node.node_id + "/"));
+    const forgedAdd = await B.api("POST", "/api/tasks",
+      {subject: "forged owner", owner_node_id: "foreign"});
+    const forgedEdit = await B.api("POST", "/api/tasks/" + card.id + "/update", {task_uid: "foreign"});
+    ok("J3-7 API refuses caller-supplied owner and UID", forgedAdd.status === 400 && forgedEdit.status === 400);
+    const reloaded = await B.api("GET", "/api/tasks/" + card.id);
+    ok("J3-8 rejected mutation preserves the public task identity",
+       reloaded.body?.task?.task_uid === card.task_uid && reloaded.body?.task?.owner_node_id === card.owner_node_id);
+
     ok("J3-1 /api/meta 带 wf_labels 五键", m.wf_labels && ["review", "confirm", "decision", "dep", "rearm"].every((k) => typeof m.wf_labels[k] === "string"), JSON.stringify(m.wf_labels));
     ok("J3-2 /api/meta 带 status_labels 四键", m.status_labels && ["not_started", "in_progress", "waiting", "done"].every((k) => typeof m.status_labels[k] === "string"));
     ok("J3-3 词面是 GLOSSARY 冻结的那几个", m.wf_labels?.confirm === "待确认" && m.wf_labels?.rearm === "等待重审" && m.status_labels?.waiting === "等待中");
