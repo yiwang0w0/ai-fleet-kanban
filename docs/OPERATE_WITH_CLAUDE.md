@@ -59,7 +59,7 @@
 是 argv / 沙箱层面的限制,不是提示词请求);`charter` 指一份住看板仓、受源码闸保护的章程 `.md`,
 逐字进这条线每次提示词并带哈希;`seat` 是首次启动的缺省座席。按证据配家族:评审线放另一家族
 (如 codex),代码阶段的自动审阅座席留 Claude —— 反过来配是花钱买退步(`docs/方案-身份分配.md`
-§1.3 有数字)。模板在 `examples/roles/`;面板加线框与 `board.py lines add --kind/--read-only/--charter`
+§1.3 有数字);开了反亲和(v0.23)时实现线也要放另一家族,否则每张交付都留给人,doctor ⑤e 会说。模板在 `examples/roles/`;面板加线框与 `board.py lines add --kind/--read-only/--charter`
 都能写。没写 `role` 的线与以前一字不差。
 
 **方案先审再拆(v0.23)**:目标卡上按「起评审卡」,看板在评审线下挂一张对抗评审卡(只指出会在

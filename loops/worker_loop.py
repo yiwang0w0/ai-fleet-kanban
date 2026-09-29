@@ -973,6 +973,18 @@ def prompt_selftest():
         ok("章程跳出仓 → 拒绝", charter_gate() is not None)
         CHARTER = None
         ok("(对照)没有章程 → 提示词里没有章程段", "【本线章程" not in build_prompt(_fake_card("说明", "验收"), "alpha", "C:/tmp/e.md"))
+        # v0.23.1:codex 写模式的交付段给第二条路(分仓部署下沙箱写不了工作仓之外的证据路径)
+        global RUNTIME
+        _rt = RUNTIME
+        try:
+            RUNTIME = "codex"
+            cw = chr(10).join(delivery_block("C:/board/core/.data/evidence/task-1-attempt-1.md"))
+            ok("⭐codex 写模式:交付段仍要求写文件,并给出「写不了就作为最终回复输出」的第二条路",
+               "用 Write 工具" in cw and "作为最终回复原样输出" in cw)
+            RUNTIME = "claude"
+            ok("(对照)claude 座席的交付段没有这条(它写得了)", "作为最终回复" not in chr(10).join(delivery_block("C:/x/e.md")))
+        finally:
+            RUNTIME = _rt
     finally:
         TOOL_PROFILE, ROLE_KIND, CHARTER, READONLY_RULES = _saved
     print(f"{chr(10)}结果: {ok_n} PASS / {fail_n} FAIL")
@@ -1001,6 +1013,10 @@ def delivery_block(evidence_path):
          if ROLE_KIND == "review" else
          "证据里要有:改了什么(文件:行)、跑了什么、实际输出是什么。贴机器产出,别手抄。"),
         "**只要这个文件存在且非空,就算交付**——剩余步骤由循环完成,不需要调用任何看板命令。",
+        # ⚠ codex 的 workspace-write 沙箱只允许写工作仓之内;分仓部署(BOARD_REPO ≠ 看板仓)时证据
+        #   路径在工作仓之外,写会被拒。给它第二条路:最终回复,循环落盘(run_codex)。
+        *(["若沙箱不允许写这个路径(它在工作仓之外时会这样),就把**同样的证据作为最终回复原样输出**"
+           "(不要包代码块),循环会替你落成这个文件。"] if RUNTIME == "codex" else []),
         "",
         "干不动也要写这个文件,写清楚卡在哪、需要谁裁定什么。",
     ]
@@ -1344,14 +1360,18 @@ def run_codex(t, worker, evidence_path, prev_tail, attempt, model, effort):
         return -2, f"(codex spawn 失败:{e})"
     v = judge_codex(w.returncode, w.stdout, last_path)
     LAST_ACCT = {"sid": v["thread"], "t0": t0, "usage": v["usage"]}
-    # ⭐ 只读沙箱写不了证据文件:最终回复就是证据,由这里落盘(delivery_block 对模型说的正是这个)。
-    #   只在模型没写出文件时才落 —— 写出了就是它的,不覆盖。
-    if TOOL_PROFILE == "read-only" and v["ok"] and v.get("last") and not os.path.isfile(evidence_path):
+    # ⭐ 沙箱写不了证据文件时,最终回复就是证据,由这里落盘(delivery_block 对模型说的正是这个):
+    #   只读沙箱必然如此;workspace-write 在**分仓部署**(BOARD_REPO ≠ 看板仓)下也如此 —— 证据路径
+    #   在工作仓之外,沙箱拒写(v0.23.1,远程机接手时发现的形)。只在模型没写出文件时才落 ——
+    #   写出了就是它的,不覆盖;落了就出声,不让这条路静默成常态。
+    if v["ok"] and v.get("last") and not os.path.isfile(evidence_path):
         try:
             os.makedirs(os.path.dirname(evidence_path), exist_ok=True)
             io.open(evidence_path, "w", encoding="utf-8").write(v["last"])
+            log(f"  codex 没写出证据文件,最终回复已落为证据({len(v['last'])} 字)"
+                + ("" if TOOL_PROFILE == "read-only" else " —— 沙箱可能不允许写工作仓之外的路径(分仓部署)"))
         except Exception as e:
-            log(f"  ⚠只读座席的最终回复落盘失败({e})—— 本次按无证据处理")
+            log(f"  ⚠codex 座席的最终回复落盘失败({e})—— 本次按无证据处理")
     tail = v["tail"] + (chr(10) + "stderr 尾: " + (w.stderr or "").strip()[-300:] if w.stderr else "")
     # 成功返 0,失败原样用 CLI 的码(码是 0 却判定 NG 时才造一个 1)
     return (0 if v["ok"] else (w.returncode if w.returncode else 1)), tail[-1500:]
