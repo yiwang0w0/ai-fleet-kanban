@@ -131,3 +131,31 @@ test("Zcode cannot reuse an earlier event identity with a later sequence",()=>{
  const forged={...zcode[1],seq:3,eventId:zcode[0].eventId};
  assert.equal(decode("zcode",[zcode[0],middle,forged]).diagnostic,"EVENT_ID_REUSED");
 });
+
+test("Claude controlled profile verifies the complete initialized tool list and connected server",()=>{
+ const tools=["mcp__fleet__get_task","mcp__fleet__report_result"],decoder={expectedTools:tools,expectedMcpServer:"fleet"};
+ const connected={...init,tools,mcp_servers:[{name:"fleet",status:"connected"}]};
+ assert.equal(decode("claude",[connected,result],{decoder}).status,"success");
+ for(const patch of [{tools:undefined},{tools:[...tools,"Bash"]},{tools:[tools[0]]},{tools:[tools[0],tools[0]]}]){
+  assert.equal(decode("claude",[{...connected,...patch},result],{decoder}).diagnostic,"TOOL_SCOPE_MISMATCH");
+ }
+ for(const mcp_servers of [undefined,[],[{name:"fleet",status:"failed"}],[{name:"other",status:"connected"}],[...connected.mcp_servers,{name:"extra",status:"connected"}]]){
+  assert.equal(decode("claude",[{...connected,mcp_servers},result],{decoder}).diagnostic,"MCP_NOT_CONNECTED");
+ }
+});
+test("Claude controlled profile rejects unexpected tool calls and child execution",()=>{
+ const tools=["mcp__fleet__get_task"],decoder={expectedTools:tools};
+ const start={...init,tools},message={type:"assistant",session_id:sid,message:{model:"model-fixture",content:[{type:"tool_use",name:tools[0],input:{}}]}};
+ assert.equal(decode("claude",[start,message,result],{decoder}).status,"success");
+ const bad={...message,message:{...message.message,content:[{type:"tool_use",name:"Bash",input:{command:"private-fixture"}}]}};
+ const out=decode("claude",[start,bad,result],{decoder});assert.equal(out.diagnostic,"UNAUTHORIZED_TOOL");assert.ok(!JSON.stringify(out).includes("private-fixture"));
+ assert.equal(decode("claude",[start,{...message,parent_tool_use_id:"unexpected-child"},result],{decoder}).diagnostic,"UNEXPECTED_CHILD_OUTPUT");
+ assert.equal(decode("claude",[start,{...message,message:{}},result],{decoder}).diagnostic,"MALFORMED_ASSISTANT");
+});
+test("decoder rejects unsupported or malformed tool bindings instead of silently ignoring them",()=>{
+ for(const expectedTools of [{},["x","x"],[1]])assert.throws(()=>createOutputDecoder("claude",{expectedTools}),{code:"BAD_TOOL_BINDING"});
+ for(const runtime of ["codex","zcode"])assert.throws(()=>createOutputDecoder(runtime,{...options(runtime),expectedTools:["get_task"]}),{code:"UNSUPPORTED_TOOL_BINDING"});
+ const expectedTools=["mcp__fleet__get_task"],d=createOutputDecoder("claude",{expectedTools});
+ expectedTools.push("Bash");
+ d.push(encode([{...init,tools:expectedTools},result]));assert.equal(d.finish({exitCode:0}).diagnostic,"TOOL_SCOPE_MISMATCH");
+});

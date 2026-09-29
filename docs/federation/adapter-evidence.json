@@ -1,0 +1,75 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-13-executor-adapters",
+  "date": "2026-09-29",
+  "base_commit": "a47c3133dbfb08e02cccc7f7dd8e3a12b8143686",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/execution/adapters.mjs": "98301497469bfb56f67c256ded4ceb738bb3b8fae078c10b621206a0ea32d6d1",
+    "core/execution/runner.mjs": "1569778e84cfd06d0b9e4867f4c0054ce04ab0b78fa23de269da01d02eb0aa04",
+    "core/execution/receipts.mjs": "6b2861970693820fec05891f44a9044645c761fb8bc6222b5aab6d7984d10dd5",
+    "core/execution/dispatch.mjs": "beac0e1f58d307abf20c262bcbc2099530663a17c9124e7d676ef4fa191ee85e",
+    "core/execution/output.mjs": "34ed2d845195c3f624edfcd4e9b34d4311e7ed30ada4dbfef377094d3c985161",
+    "cli/dispatch.mjs": "893dc583638994f0c3bffc82d4dc5ed5f4ee4d544a393b78cfd1452f98e21ad6",
+    "tests/adaptertest.mjs": "c826011b6d82bb1f8b9916239bb019087ce276667a9820186c9868694536e11f",
+    "tests/dispatchtest.mjs": "9e2ca2a99cec7c3b7a3f94fa20caec169d30a4f3b1d793a1fdd2c079950543d2",
+    "tests/outputtest.mjs": "cb9fc3328340d86e9325053f7428d6c8f53c6e6bfbeab331a3ad386c8d00fcb2",
+    "package.json": "e865c46b7ef79bb555d2c32de097619e1f422ebb9c743487e96662a3da64d00e",
+    ".github/workflows/ci.yml": "1057298cee973916bef03fe3088d9860157520bd66722079dfd4533f99d6bcfb"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1116,
+      "classic_pass": 841,
+      "native_pass": 275,
+      "failed": 0,
+      "adapter_tests": 15,
+      "dispatch_tests": 37,
+      "output_tests": 24
+    },
+    "coverage": [
+      "fixed Claude/Codex board-tools argv, isolated configurations and explicit subscription auth home",
+      "private environment omitted from public manifest; current-process launch plan detects later mutation",
+      "Claude initialized MCP/tool scope and observed tool use checked against exact role permissions",
+      "dispatch schema 2: launch summary and budget spend commit atomically",
+      "full bounded process observation and task settlement commit or roll back together",
+      "journal reconciliation retries only persistence and never restarts a spent provider dispatch",
+      "registered identity mismatch, forged observations, immutable history and late receipts",
+      "actual OS option-error fixture tests runner failure path without starting any provider executable",
+      "settlement revocation rolls back on failure and removes post-completion MCP access"
+    ],
+    "final_targeted": {
+      "passed": 64,
+      "failed": 0,
+      "dispatch_tests": 38,
+      "mcp_tests": 26
+    },
+    "changes_after_full_suite": [
+      "atomically revoke finished executor principals with settlement"
+    ]
+  },
+  "ci": "pending",
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "native provider invocation behavior and model availability not yet confirmed by real task",
+    "board-tools only; project file editing/shell capabilities and OS file isolation remain unavailable",
+    "Codex JSONL does not attest an effective tool inventory or actual model in current decoder",
+    "Zcode desktop OAuth reuse, supported invocation/transport and usage mapping remain pending",
+    "no automatic queue or retry; pre-receipt crashes and journal write failures remain spent unknown outcomes",
+    "POSIX process-group limits from execution.md still apply",
+    "independent G04, actual multi-computer Tailscale tests and full project acceptance remain pending"
+  ]
+}

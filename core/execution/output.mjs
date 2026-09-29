@@ -25,10 +25,14 @@ function usageFrom(value){
  * session event envelopes after a protocol transport validates its RPC framing.
  * Provider text is data; parser diagnostics never include rejected input.
  */
-export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInputId=null,expectedModel=null,limits={}}={}){
+export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInputId=null,expectedModel=null,expectedTools=null,expectedMcpServer=null,limits={}}={}){
  if(!["claude","codex","zcode"].includes(runtime))fail("BAD_RUNTIME");
  if([expectedSessionId,expectedInputId,expectedModel].some(x=>x!==null&&!id(x)))fail("BAD_BINDING");
  if(runtime==="zcode"&&(!expectedSessionId||!expectedInputId))fail("BAD_BINDING");
+ if(expectedTools!==null&&(!Array.isArray(expectedTools)||expectedTools.some(t=>!id(t))||new Set(expectedTools).size!==expectedTools.length))fail("BAD_TOOL_BINDING");
+ if(expectedMcpServer!==null&&!id(expectedMcpServer))fail("BAD_TOOL_BINDING");
+ if((expectedTools!==null||expectedMcpServer!==null)&&runtime!=="claude")fail("UNSUPPORTED_TOOL_BINDING");
+ const allowedTools=expectedTools===null?null:new Set(expectedTools);
  const seenEvents=new Set();
  const bound=limitsFor(limits),hash=createHash("sha256"),utf8=new TextDecoder("utf-8",{fatal:true});
  let chunks=[],pending=0,bytes=0,events=0,closed=false,failure=null,cached=null;
@@ -57,15 +61,23 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
  function claude(event){
   // Child messages cannot impersonate the root turn or its terminal outcome.
   if(event.parent_tool_use_id!==undefined&&event.parent_tool_use_id!==null){
+   if(allowedTools)fail("UNEXPECTED_CHILD_OUTPUT");
    if(event.type==="result")fail("UNEXPECTED_CHILD_TERMINAL");
    return;
   }
   if(event.session_id!==undefined)bindSession(event.session_id);
   if(event.type==="system"&&event.subtype==="init"){
-   if(started)fail("DUPLICATE_START");bindSession(event.session_id);observeModel(event.model);started=true;
+   if(started)fail("DUPLICATE_START");bindSession(event.session_id);observeModel(event.model);
+   if(allowedTools&&(!Array.isArray(event.tools)||event.tools.length!==allowedTools.size||new Set(event.tools).size!==allowedTools.size||event.tools.some(t=>!allowedTools.has(t))))fail("TOOL_SCOPE_MISMATCH");
+   if(expectedMcpServer&&(!Array.isArray(event.mcp_servers)||event.mcp_servers.length!==1||event.mcp_servers[0]?.name!==expectedMcpServer||event.mcp_servers[0]?.status!=="connected"))fail("MCP_NOT_CONNECTED");
+   started=true;
   }else if(event.type==="assistant"){
    if(terminal)fail("OUTPUT_AFTER_TERMINAL");
    if(event.message?.model!==undefined)observeModel(event.message.model);
+   if(allowedTools){
+    if(!started||!Array.isArray(event.message?.content))fail("MALFORMED_ASSISTANT");
+    for(const part of event.message.content)if(part?.type==="tool_use"&&!allowedTools.has(part.name))fail("UNAUTHORIZED_TOOL");
+   }
   }else if(event.type==="result"){
    bindSession(event.session_id);
    if(typeof event.is_error!=="boolean"||typeof event.subtype!=="string")fail("MALFORMED_TERMINAL");

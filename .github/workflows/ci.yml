@@ -80,6 +80,8 @@ jobs:
         run: bash hrun.sh node tests/outputtest.mjs
       - name: supervisortest (pinned processes, timeout, cancellation and descendants)
         run: bash hrun.sh node tests/supervisortest.mjs
+      - name: adaptertest (explicit provider profiles, scoped tools and sealed configuration)
+        run: bash hrun.sh node tests/adaptertest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

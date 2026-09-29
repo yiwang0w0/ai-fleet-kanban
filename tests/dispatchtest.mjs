@@ -8,6 +8,9 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {execFileSync,spawn} from "node:child_process";
 import {fileURLToPath} from "node:url";
+import {prepareAdapter} from "../core/execution/adapters.mjs";
+import {executePreparedDispatch,reconcileExecutionJournal} from "../core/execution/runner.mjs";
+import {digest} from "../core/federation/sync-store.mjs";
 import {migratePeers} from "../core/federation/peers.mjs";
 import {migrateSync} from "../core/federation/sync-store.mjs";
 import {migrateBroker,putRole,issuePrincipal,revokePrincipal,authenticatePrincipal} from "../core/mcp/policy.mjs";
@@ -30,25 +33,25 @@ const SOURCE=source();
 function policy(id,kind,extra={}){
  return {role_id:id,kind,projects:["demo"],capabilities:kind==="implement"?["code"]:[],runtime:kind==="implement"?"claude":null,model:kind==="implement"?"fixture-model":null,effort:kind==="implement"?"fixture-effort":null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
 }
-function fixture({limit=5,sourceInfo=SOURCE}={}){
+function fixture({limit=5,sourceInfo=SOURCE,executionMode="fixture"}={}){
  const dbPath=path("board")+".db",db=new DatabaseSync(dbPath);dbs.push(db);db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000");store.migrate(db);migratePeers(db);migrateSync(db);migrateBroker(db);migrateDispatch(db);
  putRole(db,policy("coord","coordinate"));putRole(db,policy("engine","implement"));
  const file=path("coordinator")+".json",p=issuePrincipal(db,{roleId:"coord",projects:["demo"],credentialFile:file});
  const coord={...p,auth:"Bearer "+JSON.parse(readFileSync(file,"utf8")).token};
- const quota=putQuota(db,{quota_id:randomUUID(),runtime:"claude",execution_mode:"fixture",projects:["demo"],limit_total:limit,enabled:true});
+ const quota=putQuota(db,{quota_id:randomUUID(),runtime:"claude",execution_mode:executionMode,projects:["demo"],limit_total:limit,enabled:true});
  return {db,dbPath,coord,quota,source:sourceInfo};
 }
 const count=(f,name)=>f.db.prepare("SELECT count(*) n FROM "+name).get().n;
-function card(f,{kind="task",parent=null,release=true}={}){
- const args={request_id:randomUUID(),project_id:"demo",subject:randomUUID(),description:"fixture task",acceptance:"observed receipt",work_kind:"implement",required_capabilities:["code"]};
+function card(f,{kind="task",parent=null,release=true,capabilities=["code"]}={}){
+ const args={request_id:randomUUID(),project_id:"demo",subject:randomUUID(),description:"fixture task",acceptance:"observed receipt",work_kind:"implement",required_capabilities:capabilities};
  const created=parent?callTool(f.db,f.coord.auth,"split_task",{...args,parent_uid:parent.task_uid,expected_version:parent.aggregate_version}):callTool(f.db,f.coord.auth,"create_task",{...args,kind});
  if(release)store.setReleased(f.db,{id:created.task.id,expectedVersion:created.task.aggregate_version,released:true});
  return store.get(f.db,created.task.id);
 }
 function assign(f,t){const current=store.get(f.db,t.id);return callTool(f.db,f.coord.auth,"request_assignment",{request_id:randomUUID(),task_uid:current.task_uid,expected_version:current.aggregate_version});}
 function prepare(f,a,extra={}){
- const credentialFile=path("worker")+".json";
- const receipt=prepareDispatch(f.db,{assignmentId:a.assignment_id,quotaId:f.quota.quota_id,executionMode:"fixture",credentialFile,sourceGate:f.source.gate,...extra});
+ const credentialFile=extra.credentialFile??path("worker")+".json";
+ const receipt=prepareDispatch(f.db,{assignmentId:a.assignment_id,quotaId:f.quota.quota_id,executionMode:f.quota.execution_mode,credentialFile,sourceGate:f.source.gate,...extra});
  return {receipt,credentialFile,auth:"Bearer "+JSON.parse(readFileSync(credentialFile,"utf8")).token};
 }
 const launch=(f,w)=>authorizeLaunch(f.db,{dispatchId:w.receipt.dispatch_id,sourceGate:f.source.gate});
@@ -311,4 +314,145 @@ test("a committed dispatch permit feeds a supervised fixture and settles its obs
  assert.equal(receipt.phase,"settled");assert.equal(receipt.result.accepted,false);assert.equal(receipt.result.real_model_call_confirmed,false);
  assert.equal(store.get(f.db,t.id).waiting_for,"review");assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
  assert.throws(()=>launch(f,w),{code:"LAUNCH_NOT_AVAILABLE"});
+});
+
+function executionFor(w,extra={}){
+ return {format:"ai-fleet-process/v1",adapter_contract:"fixture/v1",adapter_digest:"1".repeat(64),runtime:"claude",model:"fixture-model",effort:"fixture-effort",
+  run_id:w.receipt.run_id,agent_instance_id:w.receipt.agent_instance_id,principal_id:w.receipt.principal_id,
+  command_sha256:"2".repeat(64),python_sha256:"3".repeat(64),files_digest:"4".repeat(64),prompt_sha256:"5".repeat(64),environment_sha256:"6".repeat(64),
+  timeout_ms:5000,heartbeat_ms:50,stderr_limit:1024,...extra};
+}
+function observed(execution,extra={}){
+ return {status:"success",evidence:"fixture observed terminal",usage:null,diagnostic:"SUCCESS",real_model_call_confirmed:false,
+  observed:{runtime:"claude",session_id:"fixture-session",turn_id:null,model:"fixture-model",terminal_status:"success",protocol_error:null,bytes:1024,events:2,stdout_sha256:"7".repeat(64)},
+  process:{started:true,pid:123,containment:"windows-job",cleanup:"job_empty",host_sha256:"8".repeat(64),executable_sha256:execution.command_sha256,python_sha256:execution.python_sha256,
+   exit_code:0,host_error:null,host_exit_code:0,stderr_bytes:0,stderr_hashed_bytes:0,stderr_sha256:"9".repeat(64)},...extra};
+}
+function recorded(f,w,execution=executionFor(w)){
+ return authorizeLaunch(f.db,{dispatchId:w.receipt.dispatch_id,sourceGate:f.source.gate,execution});
+}
+function settleObserved(f,w,observation){
+ return finishDispatch(f.db,{dispatchId:w.receipt.dispatch_id,result:{status:observation.status,evidence:observation.evidence,usage:observation.usage},observation});
+}
+test("schema 2 migration is idempotent and keeps existing execution records",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f)));recorded(f,w);
+ assert.equal(f.db.prepare("SELECT version FROM broker_dispatch_schema").get().version,2);
+ f.db.exec("UPDATE broker_dispatch_schema SET version=1");migrateDispatch(f.db);migrateDispatch(f.db);
+ assert.equal(count(f,"broker_execution_records"),1);
+ assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).execution.launch_digest,digest(executionFor(w)));
+});
+test("execution binding mismatch and launch audit failure roll back both permit and spend",()=>{
+ for(const patch of [{model:"other"},{runtime:"codex"},{principal_id:randomUUID()},{run_id:randomUUID()}]){
+  const f=fixture(),w=prepare(f,assign(f,card(f)));
+  assert.throws(()=>recorded(f,w,executionFor(w,patch)),{code:"EXECUTION_MISMATCH"});
+  assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);assert.equal(count(f,"broker_execution_records"),0);
+ }
+ const f=fixture(),w=prepare(f,assign(f,card(f)));
+ f.db.exec("CREATE TRIGGER fail_launch BEFORE INSERT ON broker_dispatch_events WHEN NEW.kind='launch_committed' BEGIN SELECT RAISE(ABORT,'injected launch'); END");
+ assert.throws(()=>recorded(f,w),/injected launch/);assert.equal(count(f,"broker_execution_records"),0);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);
+});
+test("registered launches require complete observations; settlement and observation replay are exact",()=>{
+ const f=fixture({limit:1}),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);
+ assert.throws(()=>finish(f,w),{code:"OBSERVATION_REQUIRED"});
+ const o=observed(x),receipt=settleObserved(f,w,o);assert.deepEqual(receipt.execution.observation,o);
+ assert.equal(receipt.result.accepted,false);assert.equal(receipt.real_model_call_confirmed,false);
+ assert.deepEqual(settleObserved(f,w,o).execution,receipt.execution);
+ const changed=structuredClone(o);changed.process.pid=124;
+ assert.throws(()=>settleObserved(f,w,changed),{code:"RESULT_CONFLICT"});
+ assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ const next=new DatabaseSync(f.dbPath);dbs.push(next);assert.deepEqual(dispatchStatus(next,w.receipt.dispatch_id).execution.observation,o);
+});
+test("observation validators refuse forged success, raw diagnostics, malformed counts and model mismatches",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);
+ for(const change of [
+  o=>o.real_model_call_confirmed=true,o=>o.process.stdout="private-fixture",o=>o.process.exit_code=1,
+  o=>o.process.cleanup="unconfirmed",o=>o.observed.model="fallback",o=>o.process.python_sha256="0".repeat(64),
+  o=>o.observed.events=100002,o=>o.process.stderr_hashed_bytes=1
+ ]){
+  const o=observed(x);change(o);assert.throws(()=>settleObserved(f,w,o));
+  assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).execution.observation,null);
+  assert.equal(store.get(f.db,w.receipt.task_id).status,"in_progress");
+ }
+ const g=fixture(),v=prepare(g,assign(g,card(g)));launch(g,v);
+ assert.throws(()=>settleObserved(g,v,observed(executionFor(v))),{code:"EXECUTION_NOT_REGISTERED"});
+});
+test("failed model mismatch remains observable and an uncertain supervisor cannot grant a retry",()=>{
+ for(const mode of ["model","unknown"]){
+  const f=fixture({limit:1}),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);
+  const o=mode==="unknown"?observed(x,{status:"failed",evidence:"supervisor uncertain",diagnostic:"SUPERVISOR_ERROR",observed:null,process:{started:null,cleanup:"unconfirmed",containment:null}}):observed(x,{status:"failed",diagnostic:"MODEL_MISMATCH"});
+  if(mode==="model"){o.observed.model="unexpected";o.observed.protocol_error="MODEL_MISMATCH";o.observed.terminal_status=null;}
+  const r=settleObserved(f,w,o);assert.equal(r.result.status,"failed");assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+  assert.throws(()=>launch(f,w),{code:"LAUNCH_NOT_AVAILABLE"});
+ }
+});
+test("journal reconciliation only retries terminal persistence after a rolled back database settlement",()=>{
+ const f=fixture({limit:1}),w=prepare(f,assign(f,card(f))),x=executionFor(w),permit=recorded(f,w,x),o=observed(x),journal=path("execution-journal")+".json";
+ writeFileSync(journal,JSON.stringify({format:"ai-fleet-execution-journal/v1",dispatch_id:w.receipt.dispatch_id,launch_digest:permit.execution.launch_digest,observation:o}));
+ f.db.exec("CREATE TRIGGER fail_execution_settle BEFORE INSERT ON broker_dispatch_events WHEN NEW.kind='settled' BEGIN SELECT RAISE(ABORT,'injected observation settle'); END");
+ assert.throws(()=>reconcileExecutionJournal(f.db,journal),/injected observation settle/);
+ assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).execution.observation,null);
+ assert.equal(store.get(f.db,w.receipt.task_id).status,"in_progress");
+ f.db.exec("DROP TRIGGER fail_execution_settle");
+ assert.equal(reconcileExecutionJournal(f.db,journal).phase,"settled");
+ assert.equal(reconcileExecutionJournal(f.db,journal).phase,"settled");assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ const wrong=JSON.parse(readFileSync(journal,"utf8"));wrong.launch_digest="0".repeat(64);writeFileSync(journal,JSON.stringify(wrong));
+ assert.throws(()=>reconcileExecutionJournal(f.db,journal),{code:"EXECUTION_MISMATCH"});
+});
+test("launch metadata and completed observation history are immutable",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);settleObserved(f,w,observed(x));
+ assert.throws(()=>f.db.exec("UPDATE broker_execution_records SET launch_json='{}'"),/immutable/);
+ assert.throws(()=>f.db.exec("UPDATE broker_execution_records SET observation_json='{}'"),/immutable/);
+ assert.throws(()=>f.db.exec("DELETE FROM broker_execution_records"),/append-only/);
+});
+test("late observations are retained without overwriting a replacement task state",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);
+ f.db.prepare("UPDATE tasks SET lease_until=1 WHERE id=?").run(w.receipt.task_id);store.reapExpired(f.db);
+ const before=JSON.stringify(store.get(f.db,w.receipt.task_id));
+ const receipt=settleObserved(f,w,observed(x));assert.equal(receipt.result.delivery,"stale_run_retained");
+ assert.equal(JSON.stringify(store.get(f.db,w.receipt.task_id)),before);assert.ok(receipt.execution.observation_digest);
+});
+function adapterFixture(){
+ const s=source(),bridge=join(s.codeRoot,"bridge.mjs");writeFileSync(bridge,"// fixture never contacted\n");
+ git(s.codeRoot,["add","."]);git(s.codeRoot,["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","--quiet","-m","fixture bridge"]);
+ writeFileSync(s.approvalFile,git(s.codeRoot,["rev-parse","HEAD:"]));s.gate=createSourceGate({codeRoot:s.codeRoot,approvalFile:s.approvalFile});
+ const f=fixture({sourceInfo:s,limit:1,executionMode:"provider"});
+ const role=policy("engine","implement",{capabilities:["board-tools"],model:"claude-fixture-1",effort:"low"});putRole(f.db,role,1);
+ const dirs=Object.fromEntries(["work","private","auth"].map(k=>{const p=path(k);mkdirSync(p);return [k,p];}));
+ const w=prepare(f,assign(f,card(f,{capabilities:["board-tools"]})),{credentialFile:join(dirs.private,"principal.json")});
+ // Node deliberately receives Claude flags and exits with an option error. No
+ // provider executable, account credential or network is used by this test.
+ const prepared=prepareAdapter({installation:{runtime:"claude",version:"2.1.247",program:pinFile(process.execPath),auth_home:dirs.auth},role,
+  dispatch:w.receipt,codeRoot:s.codeRoot,workspace:dirs.work,privateDirectory:dirs.private,
+  mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile:w.credentialFile},prompt:"fixture only",
+  environment:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase())))});
+ const pythonPath=execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c","import sys; print(sys.executable)"],{encoding:"utf8",windowsHide:true}).trim();
+ return {f,w,prepared,options:{dispatchId:w.receipt.dispatch_id,sourceGate:s.gate,prepared,python:pinFile(pythonPath),privateDirectory:dirs.private,timeoutMs:5000}};
+}
+test("trusted runner seals the launch, supervises an actual option-error fixture, journals and settles it once",async()=>{
+ const {f,w,options}=adapterFixture();
+ const receipt=await executePreparedDispatch(f.db,options);
+ assert.equal(receipt.phase,"settled");assert.equal(receipt.result.status,"failed");
+ assert.equal(receipt.execution.observation.process.started,true);assert.ok(existsSync(receipt.journal_file));
+ assert.equal(receipt.execution.observation.real_model_call_confirmed,false);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ assert.equal(reconcileExecutionJournal(f.db,receipt.journal_file).phase,"settled");
+ await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
+});
+test("cancelled, tampered and incorrectly pinned preparations consume no provider budget",async()=>{
+ for(const kind of ["cancel","tamper","python"]){
+  const {f,prepared,options}=adapterFixture();
+  if(kind==="cancel"){const c=new AbortController();c.abort();options.signal=c.signal;}
+  if(kind==="tamper")prepared.plan.env.NODE_OPTIONS="--require fixture-untrusted";
+  if(kind==="python")options.python.sha256="0".repeat(64);
+  await assert.rejects(executePreparedDispatch(f.db,options));
+  assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);assert.equal(count(f,"broker_execution_records"),0);
+ }
+});
+test("settlement revokes the finished executor credential in the same transaction",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f)));launch(f,w);assert.ok(authenticatePrincipal(f.db,w.auth));
+ f.db.exec("CREATE TRIGGER fail_revoke_settle BEFORE INSERT ON broker_dispatch_events WHEN NEW.kind='settled' BEGIN SELECT RAISE(ABORT,'injected revoke settle'); END");
+ assert.throws(()=>finish(f,w),/injected revoke settle/);assert.ok(authenticatePrincipal(f.db,w.auth));
+ f.db.exec("DROP TRIGGER fail_revoke_settle");finish(f,w);
+ assert.throws(()=>authenticatePrincipal(f.db,w.auth),{code:"UNAUTHENTICATED"});
+ assert.equal(f.db.prepare("SELECT action FROM broker_auth_events WHERE principal_id=? ORDER BY id DESC LIMIT 1").get(w.receipt.principal_id).action,"dispatch_settled");
+ assert.equal(finish(f,w).phase,"settled");
 });

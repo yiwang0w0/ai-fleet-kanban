@@ -45,7 +45,24 @@
       "committed dispatch permit through real fixture OS process and native waiting/review receipt"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "commit": "a47c3133dbfb08e02cccc7f7dd8e3a12b8143686",
+    "run_id": 36561834458,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36561834458",
+    "windows": {
+      "job_id": 109384287120,
+      "passed": 1088,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109384286960,
+      "passed": 1084,
+      "failed": 0,
+      "skipped_windows_only_test": 1
+    },
+    "gitleaks": "success",
+    "additional_checks": "passed"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_executor_started": false,
@@ -66,5 +83,6 @@
     "binary hashes are pre-launch observations, not filesystem ACL or atomic immutable executable guarantees",
     "supervisor metadata returned but persistent full observations and real coordinator integration pending",
     "all model responses synthetic; no subscription/model availability claim"
-  ]
+  ],
+  "tested_commit": "a47c3133dbfb08e02cccc7f7dd8e3a12b8143686"
 }

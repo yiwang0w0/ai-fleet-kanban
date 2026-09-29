@@ -6,6 +6,7 @@ import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {localIdentity} from "../federation/peers.mjs";
 import {uuid,names,version} from "../federation/protocol.mjs";
 import {exact,fail,getRole,issuePrincipal,migrateBroker} from "../mcp/policy.mjs";
+import {launchReceipt,processObservation} from "./receipts.mjs";
 import {chooseRole} from "../mcp/tools.mjs";
 const require=createRequire(import.meta.url),store=require("../store.js");
 const at=()=>new Date().toISOString();
@@ -32,7 +33,15 @@ export function migrateDispatch(db){
    "CREATE TRIGGER IF NOT EXISTS broker_dispatch_no_delete BEFORE DELETE ON broker_dispatches BEGIN SELECT RAISE(ABORT,'dispatch history is append-only'); END;",
    "CREATE TRIGGER IF NOT EXISTS broker_dispatch_run_ended AFTER UPDATE OF state ON task_runs WHEN NEW.state='ended' AND OLD.state='running' BEGIN UPDATE broker_assignments SET state='ended',reason='bound run ended' WHERE assignment_id IN(SELECT assignment_id FROM broker_dispatches WHERE run_id=NEW.run_id) AND state='claimed'; UPDATE broker_dispatches SET phase='interrupted',reason='run ended; awaiting executor receipt',finished_at=NEW.ended_at WHERE run_id=NEW.run_id AND phase IN('prepared','launch_committed'); END;"
   ].join("\n"));
-  if(db.prepare("SELECT version FROM broker_dispatch_schema").get().version!==1)fail("SCHEMA_INCOMPATIBLE","调度存储版本不兼容");
+  const schema=db.prepare("SELECT version FROM broker_dispatch_schema").get().version;
+  if(![1,2].includes(schema))fail("SCHEMA_INCOMPATIBLE","调度存储版本不兼容");
+  db.exec([
+   "CREATE TABLE IF NOT EXISTS broker_execution_records(dispatch_id TEXT PRIMARY KEY REFERENCES broker_dispatches(dispatch_id),launch_digest TEXT NOT NULL,launch_json TEXT NOT NULL,observation_digest TEXT,observation_json TEXT,created_at TEXT NOT NULL,observed_at TEXT);",
+   "CREATE TRIGGER IF NOT EXISTS broker_execution_launch_immutable BEFORE UPDATE OF dispatch_id,launch_digest,launch_json,created_at ON broker_execution_records BEGIN SELECT RAISE(ABORT,'execution launch is immutable'); END;",
+   "CREATE TRIGGER IF NOT EXISTS broker_execution_observation_once BEFORE UPDATE OF observation_digest,observation_json,observed_at ON broker_execution_records WHEN OLD.observation_digest IS NOT NULL BEGIN SELECT RAISE(ABORT,'execution observation is immutable'); END;",
+   "CREATE TRIGGER IF NOT EXISTS broker_execution_no_delete BEFORE DELETE ON broker_execution_records BEGIN SELECT RAISE(ABORT,'execution history is append-only'); END;"
+  ].join("\n"));
+  if(schema===1)db.prepare("UPDATE broker_dispatch_schema SET version=2").run();
  });
 }
 function audit(db,{dispatchId=null,quotaId=null,kind,detail={}}){
@@ -99,7 +108,8 @@ function credentialOutsideCode(file,codeRoot){
 }
 export function dispatchStatus(db,id){
  const d=fresh(db,id),run=db.prepare("SELECT state,terminal_task_status FROM task_runs WHERE run_id=?").get(d.run_id);
- return {...d,source:JSON.parse(d.source_json),result:d.result_json?JSON.parse(d.result_json):null,run,
+ const execution=db.prepare("SELECT * FROM broker_execution_records WHERE dispatch_id=?").get(id);
+ return {...d,execution:execution?{launch_digest:execution.launch_digest,launch:JSON.parse(execution.launch_json),observation_digest:execution.observation_digest,observation:execution.observation_json?JSON.parse(execution.observation_json):null}:null,source:JSON.parse(d.source_json),result:d.result_json?JSON.parse(d.result_json):null,run,
   launch_permit:false,real_model_call_confirmed:false};
 }
 /** Atomically reserves budget, claims through native gates and issues a run-bound MCP credential. Does not spawn. */
@@ -133,7 +143,8 @@ export function prepareDispatch(db,{assignmentId,quotaId,executionMode,credentia
  });}catch(e){if(issued){try{unlinkSync(credentialFile);}catch{}}throw e;}
 }
 /** Trusted runner only. A committed permit is never reissued or automatically refunded, even after a crash. */
-export function authorizeLaunch(db,{dispatchId,sourceGate}){
+export function authorizeLaunch(db,{dispatchId,sourceGate,execution=null}){
+ if(execution!==null)execution=launchReceipt(execution);
  if(db.isTransaction)fail("TRANSACTION_CONTEXT","启动许可必须自行提交后才可交付");
  return atomic(db,()=>{
   const d=fresh(db,dispatchId);
@@ -152,17 +163,21 @@ export function authorizeLaunch(db,{dispatchId,sourceGate}){
   if(!principal||principal.status!=="active"||principal.role_version!==role.version)fail("AUTHORIZATION_CHANGED","运行凭据已撤销或失效",403);
   const q=quotaFor(db,d.quota_id,{node,runtime:role.policy.runtime,project:a.project_id,mode:d.execution_mode,expectedVersion:d.quota_version});
   if(q.used>=q.limit_total)fail("BUDGET_EXHAUSTED","调用预算已耗尽");
+  if(execution){
+   if(execution.runtime!==role.policy.runtime||execution.model!==role.policy.model||execution.effort!==role.policy.effort||execution.run_id!==d.run_id||execution.agent_instance_id!==d.agent_instance_id||execution.principal_id!==d.principal_id)fail("EXECUTION_MISMATCH","启动配置与领取的身份或策略不一致");
+   db.prepare("INSERT INTO broker_execution_records(dispatch_id,launch_digest,launch_json,created_at) VALUES(?,?,?,?)").run(dispatchId,digest(execution),canonical(execution),at());
+  }
   db.prepare("UPDATE broker_call_quotas SET used=used+1 WHERE quota_id=?").run(d.quota_id);
   db.prepare("UPDATE broker_dispatches SET phase='launch_committed',launch_at=?,reason='single-use launch permit committed; process result not yet known' WHERE dispatch_id=?").run(at(),dispatchId);
   audit(db,{dispatchId,quotaId:d.quota_id,kind:"launch_committed",detail:{execution_mode:d.execution_mode}});
   return {...dispatchStatus(db,dispatchId),launch_permit:true};
  });
 }
-function revokeRunPrincipals(db,runId){
+function revokeRunPrincipals(db,runId,action="dispatch_abandoned"){
  const rows=db.prepare("SELECT principal_id,role_id,version FROM broker_principals WHERE run_id=? AND status='active'").all(runId);
  for(const p of rows){
   db.prepare("UPDATE broker_principals SET status='revoked',secret_hash='',version=version+1 WHERE principal_id=?").run(p.principal_id);
-  db.prepare("INSERT INTO broker_auth_events(principal_id,role_id,action,version,at) VALUES(?,?,'dispatch_abandoned',?,?)").run(p.principal_id,p.role_id,p.version+1,at());
+  db.prepare("INSERT INTO broker_auth_events(principal_id,role_id,action,version,at) VALUES(?,?,?,?,?)").run(p.principal_id,p.role_id,action,p.version+1,at());
  }
 }
 export function abandonPrepared(db,{dispatchId,reason}){
@@ -188,10 +203,18 @@ function processResult(input){
  return input;
 }
 /** Records an observed process outcome. Late results are retained but never overwrite a replacement run. */
-export function finishDispatch(db,{dispatchId,result}){
+export function finishDispatch(db,{dispatchId,result,observation=null}){
  result=processResult(result);const resultDigest=digest(result);
  return atomic(db,()=>{
   const d=fresh(db,dispatchId);
+  const execution=db.prepare("SELECT * FROM broker_execution_records WHERE dispatch_id=?").get(dispatchId);
+  if(execution){
+   if(observation===null)fail("OBSERVATION_REQUIRED","此运行需提供完整进程观察回执");
+   observation=processObservation(observation,{result,launch:JSON.parse(execution.launch_json)});
+   const observationDigest=digest(observation);
+   if(execution.observation_digest&&execution.observation_digest!==observationDigest)fail("RESULT_CONFLICT","同一运行不能提交不同进程观察");
+   if(!execution.observation_digest)db.prepare("UPDATE broker_execution_records SET observation_digest=?,observation_json=?,observed_at=? WHERE dispatch_id=?").run(observationDigest,canonical(observation),at(),dispatchId);
+  }else if(observation!==null)fail("EXECUTION_NOT_REGISTERED","该分派没有绑定受监管的启动配置");
   if(d.result_digest){if(d.result_digest!==resultDigest)fail("RESULT_CONFLICT","同一运行不能提交不同终态回执");return dispatchStatus(db,dispatchId);}
   if(!d.launch_at)fail("LAUNCH_NOT_AVAILABLE","尚未消费启动许可，不能记录执行成功");
   const t=task(db,d.task_uid);let delivery="stale_run_retained";
@@ -202,6 +225,7 @@ export function finishDispatch(db,{dispatchId,result}){
    const reported=db.prepare("SELECT 1 FROM broker_requests r JOIN broker_principals p ON r.principal_id=p.principal_id WHERE p.run_id=? AND r.tool_name='report_result' LIMIT 1").get(d.run_id);
    if(reported)delivery="existing_mcp_report_preserved";
   }
+  revokeRunPrincipals(db,d.run_id,"dispatch_settled");
   const receipt={...result,delivery,accepted:false,execution_mode:d.execution_mode,real_model_call_confirmed:false};
   db.prepare("UPDATE broker_dispatches SET phase='settled',reason=?,finished_at=?,result_digest=?,result_json=? WHERE dispatch_id=?").run(delivery,at(),resultDigest,canonical(receipt),dispatchId);
   db.prepare("UPDATE broker_assignments SET state='ended',reason=? WHERE assignment_id=?").run(delivery,d.assignment_id);

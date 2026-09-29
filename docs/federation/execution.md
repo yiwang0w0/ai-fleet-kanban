@@ -1,6 +1,6 @@
 # 执行器终态与进程监督合同
 
-本批提供三种输出解码器和可信本地进程监督原语，对应 T04.03–T04.06 的一部分。已通过真实 OS 子进程桩测试，并串通“单次启动许可 → 本机心跳 → 子进程 → 原生待审阅回执”。尚未提供可以直接运行三种真实模型的完整适配器或队列入口。
+本批提供三种输出解码器和可信本地进程监督原语，对应 T04.03–T04.06 的一部分。已通过真实 OS 子进程桩测试，并串通“单次启动许可 → 本机心跳 → 子进程 → 原生待审阅回执”。后续已接入 Claude/Codex 的 board-tools 启动配置与显式单次执行入口，见 [适配与回执合同](adapters.md)；三种真实模型的完整适配及队列入口仍未完成。
 
 所有新增自动化验证均使用合成供应商事件与临时脚本。没有把桩响应记为模型调用，没有修改全局 MCP、登录或部署配置。
 
@@ -50,9 +50,9 @@ Job 是生命周期管理能力，不是文件权限沙箱。通过其他服务�
 
 ## 与调度的衔接
 
-新增集成测试使用真实临时数据库、原生 claim、单次许可、独立 Node 桩进程和本机 heartbeat；将观察到的 status/evidence/usage 交给 finishDispatch。结果进入 waiting/review、额度消耗一次、重复 launch 拒绝。进程元数据由 supervisor 返回，完整元数据的持久化审计和实际 provider 启动编排仍待后续适配器接入。
+新增集成测试使用真实临时数据库、原生 claim、单次许可、独立 Node 桩进程和本机 heartbeat；将观察到的 status/evidence/usage 交给 finishDispatch。结果进入 waiting/review、额度消耗一次、重复 launch 拒绝。进程元数据由 supervisor 返回，完整元数据的原子持久化、Claude/Codex 显式单次执行及恢复补交现已接入，详见 adapters.md；真实供应商最小任务尚未执行。
 
-当前 CLI 不提供任意程序或真实模型启动入口。后续调用者不能根据已存在的 launch_committed 记录补启动；失败或不确定的启动仍占用已消费额度。
+当前 CLI 提供受限角色配置的 execute 与只补交终态的 reconcile，不接受远程任意程序。调用者不能根据已存在的 launch_committed 记录补启动；失败或不确定的启动仍占用已消费额度。
 
 ## 验证与来源
 
@@ -66,4 +66,4 @@ Zcode 依据安装包内 0.16.9 的 zcode.cjs 静态协议 schema（SHA256 fad4c
 
 Windows 生命周期依据 Microsoft [Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[AssignProcessToJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject) 与 [Extended Limit Information](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)。
 
-本批不通过完整 G04。三个真实模型仍各0/1；真实权限配置、订阅认证、Zcode RPC、文件隔离及独立验收是剩余工作。
+本批不通过完整 G04。三个真实模型仍各0/1；真实配置生效、模型可用性、Zcode 授权/传输、文件隔离及独立验收是剩余工作。

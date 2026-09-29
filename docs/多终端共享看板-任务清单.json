@@ -1296,10 +1296,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
+        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation",
         "pending": [
-          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
-          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
+          "real provider MCP/tool/config behavior and model availability; Zcode subscription/transport integration",
+          "code-work capability, filesystem containment, stronger POSIX containment and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1308,7 +1308,10 @@
         "docs/federation/execution-evidence.json",
         "tests/outputtest.mjs",
         "tests/supervisortest.mjs",
-        "tests/dispatchtest.mjs"
+        "tests/dispatchtest.mjs",
+        "docs/federation/adapters.md",
+        "docs/federation/adapter-evidence.json",
+        "tests/adaptertest.mjs"
       ]
     },
     {
@@ -1383,10 +1386,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
+        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation",
         "pending": [
-          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
-          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
+          "real provider MCP/tool/config behavior and model availability; Zcode subscription/transport integration",
+          "code-work capability, filesystem containment, stronger POSIX containment and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1395,7 +1398,10 @@
         "docs/federation/execution-evidence.json",
         "tests/outputtest.mjs",
         "tests/supervisortest.mjs",
-        "tests/dispatchtest.mjs"
+        "tests/dispatchtest.mjs",
+        "docs/federation/adapters.md",
+        "docs/federation/adapter-evidence.json",
+        "tests/adaptertest.mjs"
       ]
     },
     {
@@ -1426,10 +1432,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
+        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation",
         "pending": [
-          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
-          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
+          "real provider MCP/tool/config behavior and model availability; Zcode subscription/transport integration",
+          "code-work capability, filesystem containment, stronger POSIX containment and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1440,7 +1446,10 @@
         "docs/federation/execution.md",
         "docs/federation/execution-evidence.json",
         "tests/outputtest.mjs",
-        "tests/supervisortest.mjs"
+        "tests/supervisortest.mjs",
+        "docs/federation/adapters.md",
+        "docs/federation/adapter-evidence.json",
+        "tests/adaptertest.mjs"
       ]
     },
     {
