@@ -13,9 +13,11 @@ export function endpoint(value){
   throw new PeerError("BAD_ENDPOINT","只接受回环 HTTP 或显式指定的 Tailscale HTTPS 地址");
  return url.origin;
 }
-export function loadCredential(file,local,projectId){
+export function loadCredential(file,local,projectId,requiredScopes=["peer:handshake","sync:pull","sync:ack"]){
+ names(requiredScopes,"required_scopes",SCOPES,1);
  if(statSync(file).size>16384)throw new PeerError("BAD_CREDENTIAL","凭据文件超限");
- const c=JSON.parse(readFileSync(file,"utf8"));
+ let c;try{c=JSON.parse(readFileSync(file,"utf8"));}catch{throw new PeerError("BAD_CREDENTIAL","凭据文件不是有效 JSON");}
+ if(!c||typeof c!=="object"||Array.isArray(c))throw new PeerError("BAD_CREDENTIAL","凭据格式无效");
  for(const k of ["server_node_id","server_epoch","peer_node_id","peer_epoch","key_id"])uuid(c[k],k);
  if(c.format!==1||!Number.isSafeInteger(c.credential_version)||c.credential_version<1||
    typeof c.token!=="string"||!new RegExp("^"+c.key_id+"\\.[A-Za-z0-9_-]{43}$").test(c.token))
@@ -24,8 +26,8 @@ export function loadCredential(file,local,projectId){
  projectId??=c.projects[0];
  if(c.peer_node_id!==local.node_id||c.peer_epoch!==local.sync_epoch||c.server_node_id===local.node_id)
   throw new PeerError("IDENTITY_MISMATCH","凭据未绑定本机身份与 epoch",403);
- if(!c.projects.includes(projectId)||["peer:handshake","sync:pull","sync:ack"].some(s=>!c.scopes.includes(s)))
-  throw new PeerError("FORBIDDEN","凭据没有该项目的拉取与确认权限",403);
+ if(!c.projects.includes(projectId)||requiredScopes.some(s=>!c.scopes.includes(s)))
+  throw new PeerError("FORBIDDEN","凭据没有该项目所需的节点接口权限",403);
  return c;
 }
 export async function request(base,path,c,body,fetchImpl,signal){

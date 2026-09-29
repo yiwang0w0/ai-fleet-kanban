@@ -1,4 +1,5 @@
 import {createRequire} from "node:module";
+import {migrateDelegation,createIntent,decideIncoming,incomingStatus,outgoingStatus} from "../federation/delegation.mjs";
 import {randomUUID} from "node:crypto";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {localIdentity} from "../federation/peers.mjs";
@@ -14,6 +15,9 @@ const caps={type:"array",maxItems:32,uniqueItems:true,items:name};
 const object=(properties,required=Object.keys(properties))=>({type:"object",properties,required,additionalProperties:false});
 const taskInput={request_id:uuidSchema,project_id:name,subject:{...text(500),minLength:1},description:text(),acceptance:text(),work_kind:{enum:["implement","review"]},required_capabilities:caps};
 const defs=[
+ ["get_delegation","读取授权项目中的委派合同与接收决定",object({delegation_id:uuidSchema,direction:{enum:["incoming","outgoing"]}})],
+ ["create_delegation","提出跨终端委派；不自动发送、接受或启动",object({request_id:uuidSchema,task_uid:uid,expected_version:positive,target_node_id:uuidSchema,target_epoch:uuidSchema})],
+ ["decide_delegation","接受或拒绝接收意向；接受仍等待关系确认",object({request_id:uuidSchema,delegation_id:uuidSchema,expected_version:positive,decision:{enum:["accept","reject"]},note:text(512)})],
  ["list_nodes","列出授权项目中的终端身份与最后观察时间",object({})],
  ["list_roles","列出授权项目的角色能力和声明运行时",object({})],
  ["get_task","读取授权任务；执行身份只能读取自己的运行实例",object({task_uid:uid})],
@@ -139,6 +143,24 @@ function execute(db,p,name,args){
   if(!r||!p.projects.includes(r.project_id))fail("NOT_FOUND","授权范围内未找到该任务",404);
   const pending=db.prepare("SELECT state FROM federation_epoch_projects WHERE origin_node_id=? AND project_id=?").get(r.owner_node_id,r.project_id);
   return {task:{...JSON.parse(r.task_json),project_id:r.project_id,source_epoch:r.origin_epoch,read_only:true,recovery_state:missing?"missing_review":pending?.state==="pending"?"pending_snapshot":null}};
+ }
+ case "get_delegation":
+ case "decide_delegation":{
+  const direction=name==="decide_delegation"?"incoming":args.direction;
+  if(name==="decide_delegation")migrateDelegation(db);
+  else if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name=?").get("delegation_"+direction))fail("NOT_FOUND","授权范围内未找到委派",404);
+  const row=db.prepare("SELECT project_id,state FROM delegation_"+direction+" WHERE delegation_id=?").get(args.delegation_id);
+  if(!row||!p.projects.includes(row.project_id))fail("NOT_FOUND","授权范围内未找到委派",404);
+  if(name==="get_delegation")return direction==="incoming"?incomingStatus(db,args.delegation_id):outgoingStatus(db,args.delegation_id);
+  if(args.decision==="accept"&&row.state==="received"){
+   const n=db.prepare("SELECT count(*) n FROM broker_task_projects p JOIN tasks t ON t.id=p.task_id WHERE p.project_id=? AND t.status<>'done' AND t.archived_at IS NULL").get(row.project_id).n;
+   if(n>=p.role.policy.limits.max_open_tasks)fail("BUDGET_EXHAUSTED","接收任务超过该角色的项目上限");
+  }
+  return decideIncoming(db,{delegationId:args.delegation_id,decisionId:args.request_id,expectedVersion:args.expected_version,decision:args.decision,note:args.note});
+ }
+ case "create_delegation":{
+  localTask(db,p,args.task_uid);migrateDelegation(db);
+  return createIntent(db,{delegationId:args.request_id,taskUid:args.task_uid,expectedVersion:args.expected_version,targetNodeId:args.target_node_id,targetEpoch:args.target_epoch});
  }
  case "create_task":return newTask(db,p,args,false);
  case "split_task":return newTask(db,p,args,true);

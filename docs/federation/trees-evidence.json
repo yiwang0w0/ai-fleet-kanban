@@ -41,7 +41,24 @@
       "10000-node scan boundary and rejection beyond it"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "commit": "9adf2342873379b651066ec4d2b398ca5533f252",
+    "run_id": 36569910179,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36569910179",
+    "windows": {
+      "job_id": 109411033048,
+      "passed": 1137,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109411032865,
+      "passed": 1133,
+      "failed": 0,
+      "skipped_windows_only_test": 1
+    },
+    "gitleaks": "success",
+    "additional_checks": "passed"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_executor_started": false,
@@ -60,5 +77,6 @@
     "legacy conversion is not implemented; explicit native linked-closure semantics remain unchanged",
     "tree_mode is not in strict remote projection schema; remote parent_uid remains read-only",
     "real multiple-computer tests and independent phase acceptance pending"
-  ]
+  ],
+  "tested_commit": "9adf2342873379b651066ec4d2b398ca5533f252"
 }

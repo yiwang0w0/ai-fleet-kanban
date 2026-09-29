@@ -1,4 +1,5 @@
 import http from "node:http";
+import {migrateDelegation,receiveOffer,peerDelegationStatus} from "./delegation.mjs";
 import {sourceRecoveryMarker} from "./epoch-state.mjs";
 import {startSnapshot,snapshotPage} from "./snapshots.mjs";
 import {migrateSync,exportBatch,acknowledge} from "./sync-store.mjs";
@@ -10,12 +11,12 @@ function send(res, status, body, close = false) {
     "X-Content-Type-Options":"nosniff", ...(close ? {Connection:"close"} : {})});
   res.end(JSON.stringify(body));
 }
-async function bodyJSON(req) {
+async function bodyJSON(req,limit=8192) {
   if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(req.headers["content-type"] || ""))
     throw new PeerError("BAD_INPUT","需要 application/json",415);
   if (req.headers["content-encoding"]) throw new PeerError("BAD_INPUT","不接受压缩请求",415);
-  const limit = 8192, declared = Number(req.headers["content-length"]);
-  if (Number.isFinite(declared) && declared > limit) throw new PeerError("TOO_LARGE","请求超过 8 KiB",413);
+  const declared = Number(req.headers["content-length"]);
+  if (Number.isFinite(declared) && declared > limit) throw new PeerError("TOO_LARGE","请求超过 "+(limit/1024)+" KiB",413);
   const chunks = await new Promise((resolve,reject)=>{
     const parts=[];let bytes=0,settled=false;
     const timer=setTimeout(()=>finish(new PeerError("BODY_TIMEOUT","请求正文超时",408)),5000);
@@ -26,7 +27,7 @@ async function bodyJSON(req) {
       if(error){req.pause();reject(error);}else resolve(parts);
     }
     function onData(chunk){bytes+=chunk.length;
-      if(bytes>limit)return finish(new PeerError("TOO_LARGE","请求超过 8 KiB",413));
+      if(bytes>limit)return finish(new PeerError("TOO_LARGE","请求超过 "+(limit/1024)+" KiB",413));
       parts.push(chunk);
     }
     function onEnd(){finish();}
@@ -37,9 +38,9 @@ async function bodyJSON(req) {
   try { return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks))); }
   catch { throw new PeerError("BAD_INPUT","请求不是有效 UTF-8 JSON",400); }
 }
-/** Separate surface: serves only explicitly shared projections; never operator UI, tokens, files or model tools. */
+/** Separate authenticated node surface: explicit projections and delegation proposals; no operator UI, secrets or model execution. */
 function createPeerServer(db) {
-  localIdentity(db);migrateSync(db);
+  localIdentity(db);migrateSync(db);migrateDelegation(db);
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
@@ -72,6 +73,15 @@ function createPeerServer(db) {
         const result=transaction(db,()=>{
           const peer=authenticate(db,req.headers.authorization,"sync:pull");
           return start?startSnapshot(db,peer,body):snapshotPage(db,peer,body);
+        });
+        return send(res,200,result);
+      }
+      if (["/peer/v1/delegation/offer","/peer/v1/delegation/status"].includes(req.url) && req.method==="POST") {
+        const offering=req.url.endsWith("/offer"),body=await bodyJSON(req,offering?128*1024:8192);
+        keys(body,offering?["offer"]:["delegation_id","project_id"],"delegation request");
+        const result=transaction(db,()=>{
+          const peer=authenticate(db,req.headers.authorization,offering?"delegation:offer":"delegation:status");
+          return offering?receiveOffer(db,peer,body.offer):peerDelegationStatus(db,peer,body);
         });
         return send(res,200,result);
       }

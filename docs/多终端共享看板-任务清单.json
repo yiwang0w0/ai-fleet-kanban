@@ -1213,7 +1213,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility",
+        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility; scoped delegation proposal/read/decision tools",
         "pending": [
           "actual executor adapters, full tool set and OS isolation",
           "independent G04 acceptance"
@@ -1226,7 +1226,10 @@
         "tests/mcptest.mjs",
         "docs/federation/trees.md",
         "docs/federation/trees-evidence.json",
-        "tests/treetest.mjs"
+        "tests/treetest.mjs",
+        "docs/federation/delegation.md",
+        "docs/federation/delegation-evidence.json",
+        "tests/delegationtest.mjs"
       ]
     },
     {
@@ -1719,13 +1722,26 @@
       "evidence_required": [
         "delegation-dedupe 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "durable bilateral intents, authenticated HTTP delivery/poll, explicit receiver decisions, atomic target-owned creation and lost-ACK retries",
+        "pending": [
+          "relation registrar, global cycle checks and confirmed execution",
+          "cancellation and result acceptance lifecycle",
+          "actual multiple-device Tailscale validation and independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/delegation.md",
+        "docs/federation/delegation-evidence.json",
+        "tests/delegationtest.mjs"
+      ]
     },
     {
       "id": "T06.02",
@@ -1787,13 +1803,26 @@
       "evidence_required": [
         "owner/run 负向测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "target-owned unconfirmed tasks, no remote task entering the source queue, epoch-bound decisions and database execution hold",
+        "pending": [
+          "relation registrar, global cycle checks and confirmed execution",
+          "cancellation and result acceptance lifecycle",
+          "actual multiple-device Tailscale validation and independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/delegation.md",
+        "docs/federation/delegation-evidence.json",
+        "tests/delegationtest.mjs"
+      ]
     },
     {
       "id": "T06.04",

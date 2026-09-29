@@ -1,0 +1,73 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-15-delegation-intents",
+  "date": "2026-09-29",
+  "base_commit": "9adf2342873379b651066ec4d2b398ca5533f252",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/delegation.mjs": "afa866fc7b672e5d33649ac164a7c10acb10540ef90a306465c6197ef85294fe",
+    "core/federation/delegation-client.mjs": "21f2abe60c70326cb7b63428a5350b384439bb8f04340993c6c67291eb053353",
+    "core/federation/gateway.mjs": "6993cdb1fcae8ffe5c5cb4f2f4899b52b77a667901f1b048af89b5ca8469f461",
+    "core/federation/protocol.mjs": "12b345c254a4489ba073152b21c25e89a848003e001bee85762e1ed2d21bfa17",
+    "core/federation/sync-client.mjs": "6f93afa7913f4b78cf35dcbffa940424ccd7604f7cdd2b93e75bf896dc535115",
+    "core/mcp/policy.mjs": "174c13d0b652dbd0b9e95198f0d830da239ed43bd35066c80defffb55ad2aabc",
+    "core/mcp/tools.mjs": "3f444dd16166d3752dc2b45799a5d65d9a4c7d3fff241c92d50654f2eab17ee0",
+    "cli/delegation.mjs": "d1247535a7544e949e6117e203a0d04ae5ad730dfe739ee2f10901fa0326e469",
+    "tests/delegationtest.mjs": "64d705beffc0c8577d037cb54f880c3d8d20f532105359162072bbf06703889b",
+    "docs/federation/delegation-offer.schema.json": "9b570ad3137dcc6a874733581dadd671c8d7fe9e6b58ad1492a1f380df0a206c",
+    "docs/federation/delegation-receipt.schema.json": "6712b909a6cc4fd717e45afef960634de9270127e3796e4dbf3c701f315775e2",
+    "package.json": "1673e46afac1e853c60bc4ed314d09676025a246a3a77db5c978bfc9ade59887",
+    ".github/workflows/ci.yml": "86b551f6807c764377734e10159a43e85385897acfae1c799b542a681d9a8ef3"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1162,
+      "classic_pass": 841,
+      "native_pass": 321,
+      "failed": 0,
+      "delegation_tests": 25
+    },
+    "final_targeted": {
+      "passed": 45,
+      "failed": 0,
+      "delegation_tests": 26,
+      "peer_tests": 19
+    },
+    "changes_after_full_suite": [
+      "clear a stale delivery error when the same receiver version is acknowledged successfully"
+    ],
+    "coverage": [
+      "fixed bilateral work contract and target-owned task identity",
+      "ten retries and independent-process receipt/decision races",
+      "loss of acknowledgement, offline transport, source persistence failure and database reconnect",
+      "scoped peer and MCP permissions, receiver quotas and immutable decisions",
+      "actual quarantined backup activation invalidates prior-epoch delegation authority",
+      "unconfirmed target task cannot be released, claimed, completed or deleted",
+      "long Unicode contracts transfer intact and oversized bodies are refused without truncation",
+      "bounded project queues, rollback of tasks/enrollment/decisions/tool receipts and sanitized credential errors"
+    ]
+  },
+  "ci": "pending",
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "acceptance remains accepted_unconfirmed; there is no relation confirmation or release endpoint",
+    "project registrar and combined local/cross-node cycle validation remain pending",
+    "cancellation, candidate results, evidence transfer and final acceptance remain pending",
+    "CLI send/poll performs one operation; automatic retry scheduling and retention remain pending",
+    "real multiple-computer Tailscale and independent phase acceptance remain pending"
+  ]
+}

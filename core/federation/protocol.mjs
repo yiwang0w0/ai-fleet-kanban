@@ -2,8 +2,8 @@ export class PeerError extends Error {
   constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; }
 }
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-export const CAPABILITIES = Object.freeze(["node-identity-v1", "peer-health-v1", "task-projection-sync-v1", "task-snapshot-v1", "source-epoch-recovery-v1"]);
-export const SCOPES = Object.freeze(["peer:handshake", "peer:health", "sync:pull", "sync:ack"]);
+export const CAPABILITIES = Object.freeze(["node-identity-v1", "peer-health-v1", "task-projection-sync-v1", "task-snapshot-v1", "source-epoch-recovery-v1", "delegation-intents-v1"]);
+export const SCOPES = Object.freeze(["peer:handshake", "peer:health", "sync:pull", "sync:ack", "delegation:offer", "delegation:status"]);
 export const PROTOCOL = Object.freeze({ min: 1, max: 1 });
 export function bad(message) { throw new PeerError("BAD_INPUT", message); }
 export function object(value, label) {

@@ -61,7 +61,7 @@ node cli/peer.mjs revoke --db <board.db绝对路径> --peer <对端node_id> --ve
 }
 ~~~
 
-JSON 语法合同见 peer-hello.schema.json；实际协商还验证 max >= min、版本交集、授权身份与 epoch、必需能力，以及 extensions 序列化后不超过 2 KiB。当前支持协议 1，以及 node-identity-v1、peer-health-v1、task-projection-sync-v1、task-snapshot-v1 四项能力，不支持任何必需扩展。顶层及 protocol 对象的未知字段拒绝；可选扩展只能放 extensions 并被忽略，不得用它暗示权限或改变执行语义。
+JSON 语法合同见 peer-hello.schema.json；实际协商还验证 max >= min、版本交集、授权身份与 epoch、必需能力，以及 extensions 序列化后不超过 2 KiB。当前支持协议 1，以及 node-identity-v1、peer-health-v1、task-projection-sync-v1、task-snapshot-v1、source-epoch-recovery-v1、delegation-intents-v1 六项能力，不支持任何必需扩展。顶层及 protocol 对象的未知字段拒绝；可选扩展只能放 extensions 并被忽略，不得用它暗示权限或改变执行语义。
 
 | 对端声明 | 当前结果 |
 |---|---|
@@ -87,3 +87,5 @@ board_node.protocol_version 是本地身份格式；握手的协议范围是独�
 第六批已实现项目范围内的投影读取、主动拉取、ACK 与离线补发；第七批接入授权快照、断点续传和显式压缩，见 sync.md / snapshots.md。委派、跨端关系、证据传输和远端用户 UI 尚未实现。真实双机/三机访问矩阵、设备凭据分发及撤销传播仍需后续验收。S02/S03 全阶段尚未通过。
 
 恢复来源额外声明 source-epoch-recovery-v1 能力；已激活恢复的来源在 hello.extensions.source_recovery 给出最小标记。接收端代次接纳及反向旧凭据撤销见 source-recovery.md。
+
+委派意向新增 delegation:offer / delegation:status 项目权限与独立接口，旧同步凭据不自动获得写入能力。接受仍不放行执行，参见 [委派合同](delegation.md)。

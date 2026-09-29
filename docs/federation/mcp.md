@@ -25,6 +25,9 @@ MCP 客户端启动 cli/mcp.mjs，使用 stdio 通信。该进程只接收回环
 | create_task | coordinate | 创建本机未放行任务或目标；不自动共享 |
 | split_task | coordinate、implement | 版本匹配的父任务下创建未放行子任务；执行身份父卡须仍在执行 |
 | request_assignment | coordinate | 按声明生成路由记录；不启动执行器 |
+| create_delegation | coordinate | 固定本机任务合同并提出委派；不自动发送 |
+| decide_delegation | coordinate | 接受/拒绝本项目接收意向；接受仍等待关系确认 |
+| get_delegation | coordinate、observe | 读取获准项目的双端合同与回执 |
 | heartbeat | implement、review | 对绑定 run 续租五分钟 |
 | report_result | implement、review | done 进入待审阅；wait 进入待决策；两者均未验收 |
 
@@ -107,3 +110,5 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 规范依据为 [MCP 生命周期](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle)、[stdio 传输](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) 和 [工具合同](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)。这是所实现的已检查版本，不声称是当前全部 MCP 功能或最新版本。
 
 运行 npm run test:mcp。测试使用临时数据库、真实回环 HTTP、独立 stdio/管理 CLI 子进程和并发请求，不连接模型。覆盖角色版本/范围、撤销中途上传、旧 run、幂等与冲突、预算、同名/超深子卡、报告回滚、进程重试、恢复后凭据失效、中文分帧和输入边界。完整结果与源文件摘要见 mcp-evidence.json。
+
+委派工具不提供节点凭据、任意 URL 或执行启动。接收决定受项目配额和幂等回执约束；具体状态与未确认执行保护见 [委派合同](delegation.md)。
