@@ -234,7 +234,7 @@
     {
       "id": "S03",
       "title": "Tailscale 连通、节点认证与远端访问边界",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "S02"
       ],
@@ -934,13 +934,25 @@
       "evidence_required": [
         "protocol-schema 与版本测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "peer hello v1 protocol range, required capabilities/extensions and syntax schema",
+        "pending": [
+          "task/event protocol negotiation",
+          "cross-version real-node upgrade acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs"
+      ]
     },
     {
       "id": "T02.06",
@@ -1015,13 +1027,25 @@
       "evidence_required": [
         "impersonation 负向测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "independent peer secrets bound to node ID and epoch",
+        "pending": [
+          "physical Tailscale device/credential binding",
+          "real-node trust provisioning"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs"
+      ]
     },
     {
       "id": "T03.03",
@@ -1042,13 +1066,26 @@
       "evidence_required": [
         "HTTP 权限矩阵测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "separate authenticated hello/health listener; denies UI, task and token paths",
+        "pending": [
+          "project task data permissions",
+          "remote user UI authentication",
+          "real endpoint exposure matrix"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs"
+      ]
     },
     {
       "id": "T03.04",
@@ -1070,13 +1107,25 @@
         "key-rotation",
         "revoke 日志"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "credential replace/revoke, persistent-connection and mid-upload reauthentication",
+        "pending": [
+          "real multi-node revocation drill",
+          "offline control-plane delay presentation"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs"
+      ]
     },
     {
       "id": "T03.05",

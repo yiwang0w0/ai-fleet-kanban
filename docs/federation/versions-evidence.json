@@ -49,7 +49,17 @@
     "screenshot": "local untracked task-version-conflict.png",
     "screenshot_sha256": "0eb13e1e88545e4cbd93f78aa03b2e0f03109d9defb64fce878d6775c1fe22c3"
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36536293454,
+    "result": "passed",
+    "windows_main_passed": 900,
+    "linux_main_passed": 897,
+    "jobs": {
+      "ubuntu": 109301003537,
+      "windows": 109301003986,
+      "gitleaks": 109301003856
+    }
+  },
   "real_model_calls": {
     "claude": 0,
     "codex": 0,
@@ -73,5 +83,6 @@
       "failure": "Concurrency fixture child exited during startup before commands; original stderr was missing. Thirty local repetitions did not reproduce.",
       "followup": "Use WAL before spawning; IPC barrier proves both processes observed version 1 before writing; retain stderr, wait for both exits and bound readiness. All 18 targeted tests passed."
     }
-  ]
+  ],
+  "tested_commit": "939cbd49a2131a59f022ca3e74f6c1dd4a4e95b7"
 }

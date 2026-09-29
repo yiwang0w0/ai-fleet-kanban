@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Fleet peer hello v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "node_id",
+    "sync_epoch",
+    "protocol",
+    "required_capabilities"
+  ],
+  "properties": {
+    "node_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "sync_epoch": {
+      "$ref": "#/$defs/uuid"
+    },
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max"
+      ],
+      "properties": {
+        "min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "description": "The implementation additionally enforces max >= min and intersects the supported range."
+    },
+    "required_capabilities": {
+      "$ref": "#/$defs/names"
+    },
+    "required_extensions": {
+      "$ref": "#/$defs/names"
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Optional only; serialized UTF-8 size must not exceed 2048 bytes; ignored in v1."
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "names": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,79}$"
+      }
+    }
+  }
+}

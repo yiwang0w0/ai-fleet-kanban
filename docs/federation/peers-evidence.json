@@ -1,0 +1,56 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-05-peer-gateway",
+  "date": "2026-09-29",
+  "base_commit": "939cbd49a2131a59f022ca3e74f6c1dd4a4e95b7",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/protocol.mjs": "1239b4fc0dc73958972e201fc5a99f06ce421621e354050059d56fb4f8ea3f67",
+    "core/federation/peers.mjs": "47d11a9bfac8881d32b77deefc7153e471a610be30fb799081ee4ed4642a5855",
+    "core/federation/gateway.mjs": "d93e66f1202d2be4cc4cce7f8185fa370a23f6f55f9dcff807e30d6e08881129",
+    "cli/peer.mjs": "b9e95fcf2e406d4b76ffa5e5395e1e5948fc27047b4d8cf9ac52608dd7da98f7",
+    "tests/peertest.mjs": "1474398a1234bc1b6a03421a9cd215e308dca68114a177b842b572cd572b6fa7",
+    "docs/federation/peer-hello.schema.json": "fd9e10374b9b202c8f662fa8828485933b850b9c0bcd5cef3073492fa74bad73",
+    "package.json": "515362a85bece886540c7806d0b675fa903762db90e1688691478a46603bed8c",
+    ".github/workflows/ci.yml": "8b3fe145a2b188235eaded78d5b72277bd44739794eefea7b4cd48d23856c7a7"
+  },
+  "local_validation": {
+    "command": "npm test",
+    "result": "passed",
+    "main_suite_passed": 919,
+    "failed": 0,
+    "skipped": 0,
+    "peer_tests": 19,
+    "coverage": [
+      "per-peer secret digest and identity/epoch binding",
+      "scope and protocol negatives",
+      "exclusive credential output and rollback",
+      "credential replacement/revocation with observed versions",
+      "next request on same TCP socket denied after revocation",
+      "mid-upload revoke denied before hello",
+      "strict body size/UTF-8/timeout limits",
+      "backup/restore quarantine denied",
+      "independent CLI gateway process; no operator token minted"
+    ]
+  },
+  "ci": "pending",
+  "network": {
+    "scope": "temporary localhost only",
+    "tailscale_configuration_changed": false,
+    "real_multi_node_acceptance": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "handshake/health only; no task replication or delegation",
+    "project scope stored but project data endpoints not implemented",
+    "physical Tailscale device binding and endpoint permissions not verified",
+    "copied full credentials cannot be distinguished by application alone",
+    "Windows directory ACL isolation not verified",
+    "restore activation and epoch/credential/cursor reset not implemented"
+  ]
+}

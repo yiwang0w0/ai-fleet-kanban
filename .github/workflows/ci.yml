@@ -62,6 +62,8 @@ jobs:
         run: bash hrun.sh node tests/runfencetest.mjs
       - name: versiontest (stale task commands and concurrent edits)
         run: bash hrun.sh node tests/versiontest.mjs
+      - name: peertest (credential binding, revocation and protocol negotiation)
+        run: bash hrun.sh node tests/peertest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)
