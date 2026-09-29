@@ -4,7 +4,7 @@ import {PeerError,keys,uuid,names,version} from "./protocol.mjs";
 import {localIdentity,transaction} from "./peers.mjs";
 import {canonical,digest,taskUID} from "./sync-store.mjs";
 import {migrateBroker} from "../mcp/policy.mjs";
-const require=createRequire(import.meta.url),store=require("../store.js");
+const require=createRequire(import.meta.url),store=require("../store.js"),bindingGuard=require("../delegation_guard.js");
 export const MAX_OFFER_BYTES=120*1024,MAX_OPEN_OFFERS=1000;
 const at=()=>new Date().toISOString();
 const fail=(code,message,status=409)=>{throw new PeerError(code,message,status);};
@@ -71,9 +71,9 @@ const outgoingRow=(db,id)=>{uuid(id,"delegation_id");const r=db.prepare("SELECT 
 const incomingRow=(db,id)=>{uuid(id,"delegation_id");const r=db.prepare("SELECT * FROM delegation_incoming WHERE delegation_id=?").get(id);if(!r)fail("NOT_FOUND","未找到接收委派",404);return r;};
 export function outgoingStatus(db,id){
  const n=localIdentity(db),r=outgoingRow(db,id),o=JSON.parse(r.offer_json);
- return {identity_current:n.node_id===o.source_node_id&&n.sync_epoch===o.source_epoch,delegation_id:id,project_id:r.project_id,state:r.state,offer:JSON.parse(r.offer_json),offer_digest:r.offer_digest,receipt:r.receipt_json?JSON.parse(r.receipt_json):null,attempts:r.attempts,last_error_code:r.last_error_code,dispatch_ready:false};
+ return {binding:bindingGuard.projection(db,id),identity_current:n.node_id===o.source_node_id&&n.sync_epoch===o.source_epoch,delegation_id:id,project_id:r.project_id,state:r.state,offer:JSON.parse(r.offer_json),offer_digest:r.offer_digest,receipt:r.receipt_json?JSON.parse(r.receipt_json):null,attempts:r.attempts,last_error_code:r.last_error_code,dispatch_ready:false};
 }
-export function incomingStatus(db,id){const n=localIdentity(db),r=incomingRow(db,id),o=JSON.parse(r.offer_json);return {identity_current:n.node_id===o.target_node_id&&n.sync_epoch===o.target_epoch,offer:o,receipt:receipt(r),target_task_id:r.target_task_id};}
+export function incomingStatus(db,id){const n=localIdentity(db),r=incomingRow(db,id),o=JSON.parse(r.offer_json);return {binding:bindingGuard.projection(db,id),identity_current:n.node_id===o.target_node_id&&n.sync_epoch===o.target_epoch,offer:o,receipt:receipt(r),target_task_id:r.target_task_id};}
 function receipt(r){const o=JSON.parse(r.offer_json);return {schema_version:1,delegation_id:r.delegation_id,project_id:r.project_id,offer_digest:r.offer_digest,source_node_id:o.source_node_id,source_epoch:o.source_epoch,target_node_id:o.target_node_id,target_epoch:o.target_epoch,version:r.version,state:r.state,target_task_uid:r.target_task_uid,note:r.note,dispatch_ready:false};}
 export function listDelegations(db,{direction,projectId,limit=100}){
  localIdentity(db);project(projectId);if(!["incoming","outgoing"].includes(direction)||!Number.isInteger(limit)||limit<1||limit>1000)fail("BAD_INPUT","委派列表参数无效",400);

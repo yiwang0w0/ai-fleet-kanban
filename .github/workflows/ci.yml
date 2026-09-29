@@ -80,6 +80,8 @@ jobs:
         run: bash hrun.sh node tests/relationstest.mjs
       - name: topologytest (local graph commitments, offline transitions and MCP placement)
         run: bash hrun.sh node tests/topologytest.mjs
+      - name: bindingtest (endpoint contracts, bilateral readiness and scoped release)
+        run: bash hrun.sh node tests/bindingtest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

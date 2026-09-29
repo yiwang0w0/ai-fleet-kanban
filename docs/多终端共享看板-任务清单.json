@@ -1213,10 +1213,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility; scoped delegation proposal/read/decision tools; coordinator-only registered topology preparation and transactional managed-tree splitting with explicit pending placement",
+        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility; scoped delegation proposal/read/decision tools; coordinator-only registered topology preparation and transactional managed-tree splitting with explicit pending placement; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
         "pending": [
-          "actual executor adapters, full tool set and OS isolation",
-          "independent G04 acceptance"
+          "actual subscription executor calls and OS isolation",
+          "complete user-facing orchestration and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1232,7 +1232,10 @@
         "tests/delegationtest.mjs",
         "docs/federation/topology.md",
         "docs/federation/topology-evidence.json",
-        "tests/topologytest.mjs"
+        "tests/topologytest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs"
       ]
     },
     {
@@ -1732,18 +1735,21 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "durable bilateral intents, authenticated HTTP delivery/poll, explicit receiver decisions, atomic target-owned creation and lost-ACK retries",
+        "scope": "durable bilateral intents, authenticated HTTP delivery/poll, explicit receiver decisions, atomic target-owned creation and lost-ACK retries; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
         "pending": [
-          "local topology coupling, endpoint contract verification and confirmed execution",
-          "cancellation and result acceptance lifecycle",
-          "actual multiple-device Tailscale validation and independent G06 acceptance"
+          "execution cancellation, late outcomes, evidence and source acceptance lifecycle",
+          "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
+          "physical multi-node Tailscale validation and independent G06 acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/delegation.md",
         "docs/federation/delegation-evidence.json",
-        "tests/delegationtest.mjs"
+        "tests/delegationtest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs"
       ]
     },
     {
@@ -1772,11 +1778,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "serialized project registrar, combined declared local/cross-node graph validation, independent authenticated approvals, stale-attempt withdrawal and durable receipts; SQL/native local topology coupling, remove-before-publish/receipt-before-add transitions, durable retries, guarded claims and pending metadata reservations",
+        "scope": "serialized project registrar, combined declared local/cross-node graph validation, independent authenticated approvals, stale-attempt withdrawal and durable receipts; SQL/native local topology coupling, remove-before-publish/receipt-before-add transitions, durable retries, guarded claims and pending metadata reservations; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
         "pending": [
-          "binding both endpoint contracts and releasing execution only after validated current receipts",
-          "automatic submission scheduling, confirmed-edge retirement and coordinated graph recovery",
-          "registrar-offline delegated execution/reconciliation and physical multi-node acceptance"
+          "execution cancellation, late outcomes, evidence and source acceptance lifecycle",
+          "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
+          "physical multi-node Tailscale validation and independent G06 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1789,7 +1795,10 @@
         "tests/relationstest.mjs",
         "docs/federation/topology.md",
         "docs/federation/topology-evidence.json",
-        "tests/topologytest.mjs"
+        "tests/topologytest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs"
       ]
     },
     {
@@ -1819,18 +1828,21 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "target-owned unconfirmed tasks, no remote task entering the source queue, epoch-bound decisions and database execution hold",
+        "scope": "target-owned unconfirmed tasks, no remote task entering the source queue, epoch-bound decisions and database execution hold; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
         "pending": [
-          "local topology coupling, endpoint contract verification and confirmed execution",
-          "cancellation and result acceptance lifecycle",
-          "actual multiple-device Tailscale validation and independent G06 acceptance"
+          "execution cancellation, late outcomes, evidence and source acceptance lifecycle",
+          "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
+          "physical multi-node Tailscale validation and independent G06 acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/delegation.md",
         "docs/federation/delegation-evidence.json",
-        "tests/delegationtest.mjs"
+        "tests/delegationtest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs"
       ]
     },
     {

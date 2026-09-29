@@ -58,7 +58,28 @@
       "Preparation additionally trials restoration of the old structure under a rollback savepoint; closed old ancestors or archived old prerequisites cannot leave an uncancellable staged operation. Final 35 targeted tests pass; exact final full-suite verification is delegated to both CI lanes."
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "commit": "5e2a6bec0d83039be73b82c7d851271066a4183c",
+    "run_id": 36585969247,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36585969247",
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109466253262,
+      "passed": 1226,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109466253504,
+      "passed": 1222,
+      "failed": 0,
+      "skipped_windows_only_test": 1
+    },
+    "topology_tests": 35,
+    "gitleaks": "success",
+    "gitleaks_job_id": 109466252862,
+    "additional_checks": "passed",
+    "verified_at": "2026-09-29T15:01:29.251Z"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_executor_started": false,
@@ -78,5 +99,6 @@
     "no topology unbinding, vertex retirement, compensating applied operation or coordinated epoch recovery",
     "native local database permissions are the trust boundary; no protection against a database administrator forging internal tables",
     "real three-node Tailscale tests, subscription executor calls and independent phase acceptance remain pending"
-  ]
+  ],
+  "tested_commit": "5e2a6bec0d83039be73b82c7d851271066a4183c"
 }

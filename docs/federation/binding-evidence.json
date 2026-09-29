@@ -1,0 +1,71 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-18-bilateral-bindings",
+  "date": "2026-09-30",
+  "base_commit": "5e2a6bec0d83039be73b82c7d851271066a4183c",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/bindings.mjs": "bce3ab3c47caa4d15f3e8b5b4dbc0bab8ab5f3c2e085bf056681da1e648af4db",
+    "core/federation/binding-client.mjs": "18d2d93f5bc4a1c2318316403615c9a143b3f1366c073ab4e1753533eef4c70f",
+    "core/delegation_guard.js": "610866c238916f41aa20e338a54ab15b2ab29c36f3237e456c6e56e7a7ff83ee",
+    "core/federation/delegation.mjs": "bd61a97b9bf4e4a3eb4de959d5447c3981a1d1f55111b3bd311f9a01839d927b",
+    "core/federation/gateway.mjs": "d530de5614d27418f6e1b6ec283024a1744c102ee421eee658d07f1e3000e8a6",
+    "core/federation/protocol.mjs": "aaa9e2904f5a2da18fe5c05aec7bb0f25a402bd8ee19c3e27291574239c964c7",
+    "core/mcp/policy.mjs": "cb0a169f77e92ed1e8e46cf9ceee68bd8e3de95a27f08071af3c3a2be826fd26",
+    "core/mcp/tools.mjs": "4af407d7bf41fe97b72375a9c4fa7062b991f3e28ceb2378e20416e5da12a4af",
+    "core/store.js": "886b8b66761b1884a332f12b909022d440103e9d3fa3a566c5e41cdd90be9d1d",
+    "cli/binding.mjs": "5d2c8f62e50093853d729fd4546408ca6c274053a7b1eee3489c5137a5e7c78c",
+    "tests/bindingtest.mjs": "b0721ed16b20b491362b24d7aeed375086910838ec075e4b2e12f2f5d2a8e74f",
+    "tests/selftest.mjs": "b93e738098de4409d9c5aefaa6af1836949bbb4606a7f6ccb2f9de5f5b81d5ab",
+    "package.json": "516f6c7dc1043ef0adf04af9b62c04c85eea74a730e5029c2d1c901f6dc56ea7",
+    ".github/workflows/ci.yml": "98a17bbac5ceb028eaaed210009571df573afeab73667072877987a87156a51e"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1254,
+      "classic_pass": 841,
+      "native_pass": 413,
+      "failed": 0,
+      "binding_tests": 28,
+      "log": ".data/binding-full-suite.log"
+    },
+    "coverage": [
+      "actual accepted offer, full public contract, current task CAS and committed endpoint topology identity",
+      "independent registrar receipts plus authenticated source-ready commitment; graph proof alone cannot release",
+      "real loopback lost responses and local confirmation storage failure replay exactly one durable request",
+      "source/ancestor claim and completion holds; existing target runs still report after credential revocation",
+      "MCP project/role authorization and atomic release/task audit/binding audit/tool response rollback",
+      "credential rotation refresh with the same message, retired source epochs and revocation during actual HTTP upload",
+      "independent-process local claim versus binding preparation race",
+      "actual backup restore activation invalidates old endpoint identity",
+      "explicit CLI database targeting, repeated migrations and reopened databases",
+      "three-node instance chain A to B to C without concurrent local execution at B",
+      "withdrawal racing confirmation returns explicit refusal and permits receipt recovery",
+      "immutable wire acceptance receipt remains separate from current local binding projection"
+    ]
+  },
+  "ci": "pending",
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "confirmed execution cancellation, relation retirement, candidate results/evidence and source acceptance remain pending; source completion and contract holds are retained",
+    "automatic delivery/retry scheduling and full global UI are not yet connected",
+    "stale received proposals without local preparation need an explicit dismissal/retention workflow; the bounded pending queue is not automatically reclaimed",
+    "coordinated graph/binding epoch recovery is not implemented; old commitments remain quarantined",
+    "local database permissions are the trust boundary; no protection against a database administrator forging internal rows",
+    "physical multi-computer Tailscale and real subscription executor acceptance remain pending"
+  ]
+}

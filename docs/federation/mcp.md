@@ -29,6 +29,9 @@ MCP 客户端启动 cli/mcp.mjs，使用 stdio 通信。该进程只接收回环
 | create_delegation | coordinate | 固定本机任务合同并提出委派；不自动发送 |
 | decide_delegation | coordinate | 接受/拒绝本项目接收意向；接受仍等待关系确认 |
 | get_delegation | coordinate、observe | 读取获准项目的双端合同与回执 |
+| list_bindings / get_binding | coordinate、observe | 查看授权项目的端点绑定和当前条件 |
+| prepare_binding | coordinate | 核对实际接受合同和任务版本，准备本方绑定 |
+| release_delegation | coordinate | 仅放行满足双方证明、当前授权与本地结构条件的接收任务；不启动模型 |
 | heartbeat | implement、review | 对绑定 run 续租五分钟 |
 | report_result | implement、review | done 进入待审阅；wait 进入待决策；两者均未验收 |
 
@@ -113,3 +116,5 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 运行 npm run test:mcp。测试使用临时数据库、真实回环 HTTP、独立 stdio/管理 CLI 子进程和并发请求，不连接模型。覆盖角色版本/范围、撤销中途上传、旧 run、幂等与冲突、预算、同名/超深子卡、报告回滚、进程重试、恢复后凭据失效、中文分帧和输入边界。完整结果与源文件摘要见 mcp-evidence.json。
 
 委派工具不提供节点凭据、任意 URL 或执行启动。接收决定受项目配额和幂等回执约束；具体状态与未确认执行保护见 [委派合同](delegation.md)。
+
+端点绑定及放行的完整顺序、旧接受回执与当前条件的区分见 [双方端点绑定](bindings.md)。网络投递不向 agent 开放任意 URL 或凭据文件。

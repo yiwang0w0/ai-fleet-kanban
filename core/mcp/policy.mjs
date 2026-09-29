@@ -7,9 +7,9 @@ import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {PeerError,keys,names,uuid,version} from "../federation/protocol.mjs";
 import {writeRecoveryJSON} from "../recovery.mjs";
 export const ROLE_KINDS=["coordinate","implement","review","observe"];
-export const READ_TOOLS=["list_nodes","list_roles","get_task","get_sync_status","get_delegation"];
+export const READ_TOOLS=["list_nodes","list_roles","get_task","get_sync_status","get_delegation","list_bindings","get_binding"];
 export const ROLE_TOOLS=Object.freeze({
- coordinate:[...READ_TOOLS,"create_task","split_task","request_assignment","create_delegation","decide_delegation","prepare_topology"],
+ coordinate:[...READ_TOOLS,"create_task","split_task","request_assignment","create_delegation","decide_delegation","prepare_topology","prepare_binding","release_delegation"],
  implement:["get_task","list_roles","report_result","heartbeat","split_task"],
  review:["get_task","list_roles","report_result","heartbeat"],
  observe:READ_TOOLS

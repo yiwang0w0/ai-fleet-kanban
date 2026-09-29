@@ -1,3 +1,4 @@
+import {migrateBindings,prepareBinding,bindingState,listBindings,releaseBoundTask} from "../federation/bindings.mjs";
 import {prepareTopology,topologyState} from "../federation/topology.mjs";
 import {createRequire} from "node:module";
 import {migrateDelegation,createIntent,decideIncoming,incomingStatus,outgoingStatus} from "../federation/delegation.mjs";
@@ -15,7 +16,12 @@ const positive={type:"integer",minimum:1,maximum:Number.MAX_SAFE_INTEGER};
 const caps={type:"array",maxItems:32,uniqueItems:true,items:name};
 const object=(properties,required=Object.keys(properties))=>({type:"object",properties,required,additionalProperties:false});
 const taskInput={request_id:uuidSchema,project_id:name,subject:{...text(500),minLength:1},description:text(),acceptance:text(),work_kind:{enum:["implement","review"]},required_capabilities:caps};
+const relationInput=object({schema_version:{enum:[1]},type:{enum:["delegation"]},relation_id:uuidSchema,delegation_id:uuidSchema,project_id:name,graph_id:uuidSchema,graph_epoch:uuidSchema,source_node_id:uuidSchema,source_epoch:uuidSchema,source_task_uid:uid,target_node_id:uuidSchema,target_epoch:uuidSchema,target_task_uid:uid,offer_digest:{type:"string",pattern:"^[0-9a-f]{64}$"},source_topology_revision:positive,target_topology_revision:positive});
 const defs=[
+ ["list_bindings","列出授权项目的端点绑定和待处理提案",object({project_id:name,limit:{...positive,maximum:100}})],
+ ["get_binding","读取授权项目的端点确认与放行条件",object({relation_id:uuidSchema})],
+ ["prepare_binding","核对实际委派合同并准备本方端点绑定",object({request_id:uuidSchema,relation:relationInput,expected_version:positive})],
+ ["release_delegation","仅放行双方已确认且当前授权有效的接收任务；不启动模型",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive})],
  ["prepare_topology","提交授权项目的本地结构修改；等待登记回执，不发起网络请求",object({request_id:uuidSchema,project_id:name,expected_revision:{...positive,minimum:0},edits:{type:"array",maxItems:100,items:object({task_uid:uid,expected_version:positive,parent_uid:{type:["string","null"],pattern:uid.pattern},blocked_by:{type:"array",maxItems:10000,uniqueItems:true,items:uid}})}})],
  ["get_delegation","读取授权项目中的委派合同与接收决定",object({delegation_id:uuidSchema,direction:{enum:["incoming","outgoing"]}})],
  ["create_delegation","提出跨终端委派；不自动发送、接受或启动",object({request_id:uuidSchema,task_uid:uid,expected_version:positive,target_node_id:uuidSchema,target_epoch:uuidSchema})],
@@ -134,12 +140,21 @@ function assign(db,p,args){
 }
 function execute(db,p,name,args){
  switch(name){
+ case "list_bindings":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?listBindings(db,{projectId:args.project_id,limit:args.limit}):{bindings:[],proposals:[]};
+ case "get_binding":
+ case "release_delegation":{
+  const b=db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?db.prepare("SELECT project_id FROM delegation_bindings WHERE relation_id=?").get(args.relation_id):null;
+  if(!b||!p.projects.includes(b.project_id))fail("NOT_FOUND","授权范围内未找到端点绑定",404);
+  return name==="get_binding"?bindingState(db,args.relation_id):releaseBoundTask(db,{relationId:args.relation_id,expectedTaskVersion:args.expected_version});
+ }
+ case "prepare_binding":{scoped(p,args.relation.project_id);migrateBindings(db);const b=prepareBinding(db,{relation:args.relation,expectedTaskVersion:args.expected_version});return {relation_id:b.relation_id,side:b.side,state:b.state,execution_authorized:b.execution_authorized,dispatch_started:false};}
  case "list_roles":return {roles:db.prepare("SELECT role_id FROM broker_roles ORDER BY role_id").all().map(x=>getRole(db,x.role_id)).filter(r=>r.policy.projects.some(x=>p.projects.includes(x))).map(r=>({...r,policy:{...r.policy,projects:r.policy.projects.filter(x=>p.projects.includes(x))},enforcement:"board_tool_scope_only"}))};
  case "list_nodes":{
   const local=localIdentity(db),sources=db.prepare("SELECT DISTINCT s.* FROM federation_sources s JOIN federation_cursors c ON s.origin_node_id=c.origin_node_id WHERE c.project_id IN("+marks(p)+") ORDER BY s.origin_node_id").all(...p.projects);
   return {local:{node_id:local.node_id,display_name:local.display_name,sync_epoch:local.sync_epoch},sources};
  }
  case "get_sync_status":return {
+  bindings:db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?db.prepare("SELECT relation_id,delegation_id,project_id,side,state,task_uid FROM delegation_bindings WHERE project_id IN("+marks(p)+") ORDER BY rowid DESC LIMIT 100").all(...p.projects):[],
   topologies:db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()?db.prepare("SELECT b.project_id,b.graph_id,b.graph_epoch,b.registrar_node_id,b.registrar_epoch,b.revision,b.phase,b.owner_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current,o.operation_id FROM topology_bindings b LEFT JOIN topology_operations o ON o.project_id=b.project_id AND o.state=\'prepared\' WHERE b.project_id IN("+marks(p)+") ORDER BY b.project_id").all(...p.projects):[],
   dispatches:db.prepare("SELECT 1 FROM sqlite_master WHERE name='broker_dispatches'").get()?db.prepare("SELECT d.dispatch_id,d.task_uid,d.run_id,d.role_id,d.execution_mode,d.phase,d.reason,d.launch_at,d.finished_at FROM broker_dispatches d JOIN broker_assignments a ON d.assignment_id=a.assignment_id WHERE a.project_id IN("+marks(p)+") ORDER BY d.rowid DESC LIMIT 100").all(...p.projects):[],
   cursors:db.prepare("SELECT * FROM federation_cursors WHERE project_id IN("+marks(p)+")").all(...p.projects),
