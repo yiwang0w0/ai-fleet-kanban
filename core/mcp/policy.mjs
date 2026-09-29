@@ -128,7 +128,7 @@ export function authenticatePrincipal(db,authorization){
 }
 export function loadPrincipalCredential(file){
  if(statSync(file).size>16384)fail("BAD_CREDENTIAL","MCP凭据文件超限",400);
- const c=JSON.parse(readFileSync(file,"utf8"));exact(c,["format","node_id","node_epoch","principal_id","credential_version","token"],"credential");
+ let c;try{c=JSON.parse(readFileSync(file,"utf8"));}catch{fail("BAD_CREDENTIAL","MCP凭据不是有效 JSON",400);}exact(c,["format","node_id","node_epoch","principal_id","credential_version","token"],"credential");
  for(const k of ["node_id","node_epoch","principal_id"])uuid(c[k],k);version(c.credential_version);
  if(c.format!=="ai-fleet-mcp-credential/v1"||typeof c.token!=="string"||!new RegExp("^"+c.principal_id+"\\.[A-Za-z0-9_-]{43}$").test(c.token))fail("BAD_CREDENTIAL","MCP凭据格式无效",400);
  return c;

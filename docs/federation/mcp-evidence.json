@@ -6,13 +6,13 @@
   "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
   "code_sha256": {
     "core/store.js": "45d32e4708aa7346fff1d4345f9f13a704d8616c56d7c91d0e3fde7cc85715de",
-    "core/mcp/policy.mjs": "40cee10fd02b8490d0ef3a3896e62621086e5152f105804531e2f5fca9f01328",
+    "core/mcp/policy.mjs": "6ce921d9b8bf7600bc9b7957ad4c351ae9fa6f7c5105c0ca89ececf620654664",
     "core/mcp/tools.mjs": "c4b0f0b1f0cb4b7626ea92f8492df28eaaac33ab7f1bc63a94e8bb8a94255b78",
     "core/mcp/gateway.mjs": "dc7a49dd1d2a6aae757b0e25d09f5d96e65448760475f4599abf004a16973062",
     "core/mcp/stdio.mjs": "509d72a8279cac91a75b8c336b66be2795e1486555f2f63bc24fbba9ef9328c5",
     "cli/mcp.mjs": "899f1e4aee2d248069a1471745176b6854b517c3be19d352adb01725175130d9",
     "cli/mcp-admin.mjs": "9929cf2abf866c6ffbebd9fd68ef798efc2be7e20b929a589ae0538bf0c3cca9",
-    "tests/mcptest.mjs": "3059b0ffb9c54cb0e4d38f25395dd9e9995f543eafd938b234f0dc41a121cea3",
+    "tests/mcptest.mjs": "2c01a0cb0b45945758f164f49aba01d236e53313d56e0a5fce6ef8d0ebe20655",
     "package.json": "d2710521648a3f6ed0f0e05879c818aebc86c8a56e53b38389d01da4bb3a8745",
     ".github/workflows/ci.yml": "0877b0cdeb753026ae2fe4f984f0a6a867b3af8f752403ef5aa4ad3629207f4f"
   },
@@ -22,7 +22,7 @@
     "main_suite_passed": 1025,
     "failed": 0,
     "skipped": 0,
-    "mcp_tests": 25,
+    "mcp_tests": 26,
     "coverage": [
       "strict role/project/run policies, version invalidation and hashed credential lifecycle",
       "durable idempotency including two independent simultaneous processes; changed request rejected",
@@ -32,13 +32,22 @@
       "revocation during HTTP body upload, malformed/oversized input and loopback-only endpoints",
       "MCP lifecycle, tools and errors, notifications cannot mutate, Unicode framing and JSON-only stdout",
       "actual stdio and administration CLI subprocesses",
-      "quarantined, retired and restored node epochs reject prior MCP credentials"
+      "quarantined, retired and restored node epochs reject prior MCP credentials",
+      "malformed credential file diagnostics never echo secret fragments"
     ],
     "fixture_corrections": [
       "report spans are a task JSON column, not a separate table",
       "cleanup checks signalCode as well as exitCode to avoid waiting again for an already terminated child"
     ],
-    "product_correction": "preflight existing chain placement before add so a refused depth cannot first collide with a sibling during legacy uplift"
+    "product_correction": "preflight existing chain placement before add so a refused depth cannot first collide with a sibling during legacy uplift",
+    "full_suite_commit": "8a283c81968f91fcb98c57e3a784a9ed1b808573",
+    "followup": {
+      "command": "node tests/mcptest.mjs",
+      "passed": 26,
+      "failed": 0,
+      "change": "sanitize malformed credential JSON errors; do not echo secret fragments",
+      "full_suite_on_final_revision": "CI pending"
+    }
   },
   "ci": "pending",
   "broker_schema_version": 1,

@@ -328,3 +328,11 @@ test("gateway rejects malformed, oversized and unknown input fields without crea
  assert.equal((await send(Buffer.from([0xff]))).status,400);
  assert.equal(count(f,"tasks"),0);
 });
+
+test("malformed credential files never echo secret fragments through stdio startup diagnostics",()=>{
+ const f=fixture(),bad=path("broken-credential")+".json";
+ writeFileSync(bad,f.coord.credential.token);
+ const r=spawnSync(process.execPath,[join(ROOT,"cli/mcp.mjs"),"--url","http://127.0.0.1:1","--credential-file",bad],{windowsHide:true,encoding:"utf8",timeout:10000});
+ assert.equal(r.status,1);assert.equal(r.stdout,"");assert.match(r.stderr,/BAD_CREDENTIAL/);
+ assert.ok(!r.stderr.includes(f.coord.credential.token.slice(0,16)));
+});
