@@ -46,7 +46,27 @@
       "immutable wire acceptance receipt remains separate from current local binding projection"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36591482851,
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109485410140,
+      "passed": 1254,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109485410388,
+      "passed": 1250,
+      "failed": 0,
+      "skipped": 1
+    },
+    "gitleaks": {
+      "job_id": 109485410604,
+      "conclusion": "success"
+    },
+    "extra_checks": "passed",
+    "receipt": ".data/binding-ci.json"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_executor_started": false,
@@ -67,5 +87,6 @@
     "coordinated graph/binding epoch recovery is not implemented; old commitments remain quarantined",
     "local database permissions are the trust boundary; no protection against a database administrator forging internal rows",
     "physical multi-computer Tailscale and real subscription executor acceptance remain pending"
-  ]
+  ],
+  "tested_commit": "23f4acee14c7239f6180aa71c0cca510eca36282"
 }

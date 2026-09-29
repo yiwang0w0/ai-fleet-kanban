@@ -118,3 +118,5 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 委派工具不提供节点凭据、任意 URL 或执行启动。接收决定受项目配额和幂等回执约束；具体状态与未确认执行保护见 [委派合同](delegation.md)。
 
 端点绑定及放行的完整顺序、旧接受回执与当前条件的区分见 [双方端点绑定](bindings.md)。网络投递不向 agent 开放任意 URL 或凭据文件。
+
+未准备绑定提案提供 get_binding_proposal（coordinate/observe）及 decline_binding_proposal（coordinate）。拒绝要求审核的精确摘要和固定原因码，与审计、MCP 回执同事务提交；不能代替来源登记撤回。list_bindings 将当前待办与最近历史分别返回。见 [提案拒绝与保留](proposal-decisions.md)。

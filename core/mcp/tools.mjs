@@ -1,4 +1,4 @@
-import {migrateBindings,prepareBinding,bindingState,listBindings,releaseBoundTask} from "../federation/bindings.mjs";
+import {migrateBindings,prepareBinding,bindingState,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal,PROPOSAL_DECLINE_REASONS} from "../federation/bindings.mjs";
 import {prepareTopology,topologyState} from "../federation/topology.mjs";
 import {createRequire} from "node:module";
 import {migrateDelegation,createIntent,decideIncoming,incomingStatus,outgoingStatus} from "../federation/delegation.mjs";
@@ -20,6 +20,8 @@ const relationInput=object({schema_version:{enum:[1]},type:{enum:["delegation"]}
 const defs=[
  ["list_bindings","列出授权项目的端点绑定和待处理提案",object({project_id:name,limit:{...positive,maximum:100}})],
  ["get_binding","读取授权项目的端点确认与放行条件",object({relation_id:uuidSchema})],
+ ["get_binding_proposal","读取授权项目的认证提案及其本方决定",object({relation_id:uuidSchema})],
+ ["decline_binding_proposal","明确拒绝尚未准备的提案；不代替来源撤回或执行取消",object({request_id:uuidSchema,relation_id:uuidSchema,expected_descriptor_digest:{type:"string",pattern:"^[0-9a-f]{64}$"},reason_code:{enum:PROPOSAL_DECLINE_REASONS}})],
  ["prepare_binding","核对实际委派合同并准备本方端点绑定",object({request_id:uuidSchema,relation:relationInput,expected_version:positive})],
  ["release_delegation","仅放行双方已确认且当前授权有效的接收任务；不启动模型",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive})],
  ["prepare_topology","提交授权项目的本地结构修改；等待登记回执，不发起网络请求",object({request_id:uuidSchema,project_id:name,expected_revision:{...positive,minimum:0},edits:{type:"array",maxItems:100,items:object({task_uid:uid,expected_version:positive,parent_uid:{type:["string","null"],pattern:uid.pattern},blocked_by:{type:"array",maxItems:10000,uniqueItems:true,items:uid}})}})],
@@ -140,7 +142,14 @@ function assign(db,p,args){
 }
 function execute(db,p,name,args){
  switch(name){
- case "list_bindings":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?listBindings(db,{projectId:args.project_id,limit:args.limit}):{bindings:[],proposals:[]};
+ case "list_bindings":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?listBindings(db,{projectId:args.project_id,limit:args.limit}):{bindings:[],proposals:[],pending_proposals:[],pending_count:0};
+ case "get_binding_proposal":
+ case "decline_binding_proposal":{
+  const q=db.prepare("SELECT 1 FROM sqlite_master WHERE name='binding_proposals'").get()?db.prepare("SELECT project_id FROM binding_proposals WHERE relation_id=?").get(args.relation_id):null;
+  if(!q||!p.projects.includes(q.project_id))fail("NOT_FOUND","授权范围内未找到绑定提案",404);
+  if(name==="get_binding_proposal")return bindingProposalState(db,args.relation_id);
+  migrateBindings(db);return declineBindingProposal(db,{relationId:args.relation_id,expectedDescriptorDigest:args.expected_descriptor_digest,reasonCode:args.reason_code});
+ }
  case "get_binding":
  case "release_delegation":{
   const b=db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?db.prepare("SELECT project_id FROM delegation_bindings WHERE relation_id=?").get(args.relation_id):null;

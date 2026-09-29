@@ -1735,7 +1735,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "durable bilateral intents, authenticated HTTP delivery/poll, explicit receiver decisions, atomic target-owned creation and lost-ACK retries; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
+        "scope": "durable bilateral intents, authenticated HTTP delivery/poll, explicit receiver decisions, atomic target-owned creation and lost-ACK retries; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release; explicit unprepared proposal decline with immutable history, scoped atomic MCP decisions and current-epoch bounded queue recovery",
         "pending": [
           "execution cancellation, late outcomes, evidence and source acceptance lifecycle",
           "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
@@ -1749,7 +1749,9 @@
         "tests/delegationtest.mjs",
         "docs/federation/bindings.md",
         "docs/federation/binding-evidence.json",
-        "tests/bindingtest.mjs"
+        "tests/bindingtest.mjs",
+        "docs/federation/proposal-decisions.md",
+        "docs/federation/proposal-evidence.json"
       ]
     },
     {

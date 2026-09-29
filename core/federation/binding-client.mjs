@@ -40,6 +40,6 @@ export async function submitBinding(db,{relationId,mode="approve",url,credential
 export async function sendBindingMessage(db,{relationId,kind,url,credentialFile,fetchImpl=fetch,signal}){
  const body=bindingMessage(db,{relationId,kind}),d=body.relation;
  const call=remote(db,{url,credentialFile,projectId:d.project_id,nodeId:d.target_node_id,epoch:d.target_epoch,scopes:["delegation:offer","delegation:binding"],capability:"delegation-bindings-v1",fetchImpl,signal});let stage="network";
- try{const r=await call("/peer/v1/delegation/binding",body);stage="persist";return {...recordBindingMessage(db,{requestId:body.request_id,receipt:r}),delivery_state:"acknowledged"};}
+ try{const r=await call("/peer/v1/delegation/binding",body,["PROPOSAL_DECLINED"]);stage="persist";return {...recordBindingMessage(db,{requestId:body.request_id,receipt:r}),delivery_state:"acknowledged"};}
  catch(e){return {...bindingState(db,relationId),...failure(e,stage)};}
 }

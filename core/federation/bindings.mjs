@@ -15,7 +15,7 @@ export function migrateBindings(db){return unit(db,()=>{
  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name='federation_peers'").get())fail("PEERS_NOT_INITIALIZED","先初始化节点认证存储");
  migrateSync(db);migrateDelegation(db);migrateTopology(db);
  db.exec("CREATE TABLE IF NOT EXISTS binding_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL); INSERT OR IGNORE INTO binding_schema VALUES(1,1)");
- if(db.prepare("SELECT version FROM binding_schema").get().version!==1)fail("SCHEMA_INCOMPATIBLE","端点绑定存储格式不兼容");
+ if(![1,2].includes(db.prepare("SELECT version FROM binding_schema").get().version))fail("SCHEMA_INCOMPATIBLE","端点绑定存储格式不兼容");
  db.exec([
  "CREATE TABLE IF NOT EXISTS delegation_bindings(relation_id TEXT PRIMARY KEY,delegation_id TEXT NOT NULL,project_id TEXT NOT NULL,side TEXT NOT NULL CHECK(side IN('source','target')),node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,task_id INTEGER NOT NULL,task_uid TEXT NOT NULL,task_version INTEGER NOT NULL,registrar_node_id TEXT NOT NULL,registrar_epoch TEXT NOT NULL,descriptor_digest TEXT NOT NULL,descriptor_json TEXT NOT NULL,contract_json TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('prepared','confirmed','cancelled')),confirmation_json TEXT,created_at TEXT NOT NULL);",
  "CREATE UNIQUE INDEX IF NOT EXISTS binding_one_delegation ON delegation_bindings(delegation_id) WHERE "+active+";",
@@ -23,6 +23,9 @@ export function migrateBindings(db){return unit(db,()=>{
  "CREATE TABLE IF NOT EXISTS binding_attempts(request_id TEXT PRIMARY KEY,relation_id TEXT NOT NULL,action TEXT NOT NULL CHECK(action IN('approve','withdraw')),args_json TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('pending','acknowledged','rejected')),receipt_json TEXT,error_code TEXT,created_at TEXT NOT NULL);",
  "CREATE UNIQUE INDEX IF NOT EXISTS binding_one_attempt ON binding_attempts(relation_id) WHERE state='pending';",
  "CREATE TABLE IF NOT EXISTS binding_proposals(relation_id TEXT PRIMARY KEY,project_id TEXT NOT NULL,source_node_id TEXT NOT NULL,source_epoch TEXT NOT NULL,descriptor_json TEXT NOT NULL,descriptor_digest TEXT NOT NULL,created_at TEXT NOT NULL);",
+ "CREATE TABLE IF NOT EXISTS binding_proposal_decisions(relation_id TEXT PRIMARY KEY,descriptor_digest TEXT NOT NULL,reason_code TEXT NOT NULL CHECK(reason_code IN('stale_topology','contract_changed','duplicate','operator_declined')),created_at TEXT NOT NULL);",
+ "CREATE TRIGGER IF NOT EXISTS binding_decline_unprepared BEFORE INSERT ON binding_proposal_decisions WHEN NOT EXISTS(SELECT 1 FROM binding_proposals WHERE relation_id=NEW.relation_id AND descriptor_digest=NEW.descriptor_digest) OR EXISTS(SELECT 1 FROM delegation_bindings WHERE relation_id=NEW.relation_id) BEGIN SELECT RAISE(ABORT,'PROPOSAL_BOUND: only an unprepared proposal may be declined'); END;",
+ "CREATE TRIGGER IF NOT EXISTS binding_declined_hold BEFORE INSERT ON delegation_bindings WHEN EXISTS(SELECT 1 FROM binding_proposal_decisions WHERE relation_id=NEW.relation_id) BEGIN SELECT RAISE(ABORT,'PROPOSAL_DECLINED: a declined proposal cannot be prepared'); END;",
  "CREATE TABLE IF NOT EXISTS binding_outbox(request_id TEXT PRIMARY KEY,relation_id TEXT NOT NULL,kind TEXT NOT NULL,body_json TEXT NOT NULL,receipt_json TEXT,created_at TEXT NOT NULL,UNIQUE(relation_id,kind));",
  "CREATE TABLE IF NOT EXISTS binding_inbox(source_node_id TEXT NOT NULL,source_epoch TEXT NOT NULL,request_id TEXT NOT NULL,body_digest TEXT NOT NULL,receipt_json TEXT NOT NULL,PRIMARY KEY(source_node_id,source_epoch,request_id));",
  "CREATE TABLE IF NOT EXISTS binding_source_commits(relation_id TEXT NOT NULL,credential_version INTEGER NOT NULL,confirmation_json TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(relation_id,credential_version));",
@@ -39,8 +42,9 @@ export function migrateBindings(db){return unit(db,()=>{
  "DROP TRIGGER IF EXISTS delegation_unconfirmed_execution;",
  "CREATE TRIGGER delegation_unconfirmed_execution BEFORE UPDATE OF released,status ON tasks WHEN (NEW.released=1 AND OLD.released<>1 OR NEW.status IN('in_progress','done') AND NEW.status<>OLD.status) AND EXISTS(SELECT 1 FROM delegation_incoming i WHERE i.target_task_id=NEW.id AND i.state='accepted_unconfirmed') AND NOT "+guard.readySQL("NEW.id")+" BEGIN SELECT RAISE(ABORT,'DELEGATION_UNCONFIRMED: both endpoint commitments are required'); END;"
  ].join("\n"));
- for(const t of ["binding_proposals","binding_inbox","binding_source_commits","binding_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_immutable BEFORE UPDATE ON "+t+" BEGIN SELECT RAISE(ABORT,'binding history is immutable'); END");
- for(const t of ["delegation_bindings","binding_attempts","binding_proposals","binding_outbox","binding_inbox","binding_source_commits","binding_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_retained BEFORE DELETE ON "+t+" BEGIN SELECT RAISE(ABORT,'binding history must be retained'); END");
+ for(const t of ["binding_proposals","binding_proposal_decisions","binding_inbox","binding_source_commits","binding_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_immutable BEFORE UPDATE ON "+t+" BEGIN SELECT RAISE(ABORT,'binding history is immutable'); END");
+ for(const t of ["delegation_bindings","binding_attempts","binding_proposals","binding_proposal_decisions","binding_outbox","binding_inbox","binding_source_commits","binding_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_retained BEFORE DELETE ON "+t+" BEGIN SELECT RAISE(ABORT,'binding history must be retained'); END");
+ db.exec("UPDATE binding_schema SET version=2 WHERE singleton=1 AND version=1");
 });}
 function event(db,id,kind,detail={}){db.prepare("INSERT INTO binding_events(relation_id,kind,detail_json,created_at) VALUES(?,?,?,?)").run(id,kind,canonical(detail),at());}
 function row(db,id){uuid(id,"relation_id");const b=db.prepare("SELECT * FROM delegation_bindings WHERE relation_id=?").get(id);if(!b)fail("NOT_FOUND","未找到端点绑定",404);const n=localIdentity(db);if(n.node_id!==b.node_id||n.sync_epoch!==b.node_epoch)fail("BINDING_RECOVERY_REQUIRED","恢复换代后的旧端点绑定不能继续");return b;}
@@ -70,10 +74,34 @@ function sourceGrant(db,d,peer=null){
 export function bindingState(db,id){
  const b=row(db,id);return {relation_id:id,delegation_id:b.delegation_id,project_id:b.project_id,side:b.side,state:b.state,task_uid:b.task_uid,task_version:b.task_version,registrar_node_id:b.registrar_node_id,registrar_epoch:b.registrar_epoch,relation:JSON.parse(b.descriptor_json),confirmation:b.confirmation_json?JSON.parse(b.confirmation_json):null,binding_authorized:b.side==="target"&&guard.ready(db,b.task_id),execution_authorized:b.side==="target"&&guard.ready(db,b.task_id)&&topologyGuard.claimable(db,b.task_id)&&!guard.sourceHeld(db,b.task_id),dispatch_started:false,attempts:db.prepare("SELECT request_id,action,state,error_code FROM binding_attempts WHERE relation_id=? ORDER BY rowid").all(id)};
 }
+export const PROPOSAL_DECLINE_REASONS=Object.freeze(["stale_topology","contract_changed","duplicate","operator_declined"]);
+const hasDecisions=db=>!!db.prepare("SELECT 1 FROM sqlite_master WHERE name='binding_proposal_decisions'").get();
+function proposalView(db,p){
+ const d=JSON.parse(p.descriptor_json),n=localIdentity(db),b=db.prepare("SELECT state FROM delegation_bindings WHERE relation_id=?").get(p.relation_id),c=hasDecisions(db)?db.prepare("SELECT reason_code FROM binding_proposal_decisions WHERE relation_id=?").get(p.relation_id):null;
+ return {relation_id:p.relation_id,relation:d,descriptor_digest:p.descriptor_digest,state:c?"declined":b?.state||"pending",reason_code:c?.reason_code||null,identity_current:d.target_node_id===n.node_id&&d.target_epoch===n.sync_epoch,dispatch_started:false};
+}
+export function bindingProposalState(db,relationId){uuid(relationId,"relation_id");const p=db.prepare("SELECT * FROM binding_proposals WHERE relation_id=?").get(relationId);if(!p)fail("NOT_FOUND","未找到认证绑定提案",404);return proposalView(db,p);}
+function pendingProposals(db,projectId,{unprepared=false,limit=null}={}){
+ const n=localIdentity(db),join=hasDecisions(db)?" LEFT JOIN binding_proposal_decisions c USING(relation_id)":"",filter=hasDecisions(db)?" AND c.relation_id IS NULL":"";
+ const sql=" FROM binding_proposals p LEFT JOIN delegation_bindings b USING(relation_id)"+join+" WHERE p.project_id=? AND json_extract(p.descriptor_json,'$.target_node_id')=? AND json_extract(p.descriptor_json,'$.target_epoch')=? AND "+(unprepared?"b.relation_id IS NULL":"(b.state IS NULL OR b.state='prepared')")+filter;
+ return limit===null?db.prepare("SELECT count(*) n"+sql).get(projectId,n.node_id,n.sync_epoch).n:db.prepare("SELECT p.*"+sql+" ORDER BY p.rowid LIMIT ?").all(projectId,n.node_id,n.sync_epoch,limit);
+}
 export function listBindings(db,{projectId,limit=100}){
  names([projectId],"project",null,1);if(!Number.isInteger(limit)||limit<1||limit>1000)fail("BAD_INPUT","列表上限无效",400);
- return {bindings:db.prepare("SELECT relation_id,delegation_id,side,state,task_uid,node_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current FROM delegation_bindings WHERE project_id=? ORDER BY rowid DESC LIMIT ?").all(projectId,limit),proposals:db.prepare("SELECT relation_id,descriptor_json FROM binding_proposals WHERE project_id=? ORDER BY rowid DESC LIMIT ?").all(projectId,limit).map(p=>({relation_id:p.relation_id,relation:JSON.parse(p.descriptor_json)}))};
+ return {bindings:db.prepare("SELECT relation_id,delegation_id,side,state,task_uid,node_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current FROM delegation_bindings WHERE project_id=? ORDER BY rowid DESC LIMIT ?").all(projectId,limit),
+ proposals:db.prepare("SELECT * FROM binding_proposals WHERE project_id=? ORDER BY rowid DESC LIMIT ?").all(projectId,limit).map(p=>proposalView(db,p)),
+ pending_proposals:pendingProposals(db,projectId,{unprepared:true,limit}).map(p=>proposalView(db,p)),pending_count:pendingProposals(db,projectId)};
 }
+export function declineBindingProposal(db,{relationId,expectedDescriptorDigest,reasonCode}){
+ if(typeof expectedDescriptorDigest!=="string"||!/^[0-9a-f]{64}$/.test(expectedDescriptorDigest)||!PROPOSAL_DECLINE_REASONS.includes(reasonCode))fail("BAD_INPUT","提案摘要或拒绝原因无效",400);
+ return unit(db,()=>{const p=bindingProposalState(db,relationId);if(!p.identity_current)fail("BINDING_RECOVERY_REQUIRED","不能裁定恢复换代前的旧端点提案");if(p.descriptor_digest!==expectedDescriptorDigest)fail("REQUEST_CONFLICT","审核的提案摘要不匹配");
+  if(p.state==="declined"){if(p.reason_code!==reasonCode)fail("REQUEST_CONFLICT","拒绝决定已固定");return p;}
+  if(p.state!=="pending")fail("PROPOSAL_BOUND","提案已有本方绑定，须恢复审批或通过登记节点撤回");
+  db.prepare("INSERT INTO binding_proposal_decisions VALUES(?,?,?,?)").run(relationId,expectedDescriptorDigest,reasonCode,at());event(db,relationId,"proposal_declined",{descriptor_digest:expectedDescriptorDigest,reason_code:reasonCode});
+  return bindingProposalState(db,relationId);
+ });
+}
+
 export function prepareBinding(db,{relation,expectedTaskVersion}){
  const d=normalizeRelation(relation);version(expectedTaskVersion);
  return unit(db,()=>{const n=localIdentity(db),side=n.node_id===d.source_node_id?"source":n.node_id===d.target_node_id?"target":null;if(!side)fail("FORBIDDEN","本机不是委派端点",403);
@@ -82,7 +110,7 @@ export function prepareBinding(db,{relation,expectedTaskVersion}){
   if(t.aggregate_version!==expectedTaskVersion||t.status==="done"||t.archived_at)fail("CONFLICT","端点版本已变化或已关闭");
   if(t.status==="in_progress"||db.prepare("SELECT 1 FROM task_runs WHERE task_id=? AND state='running'").get(t.id))fail("ACTIVE_WORK","先结束已有本机运行，再委派该工作");
   if(canonical(contract(t))!==canonical({...o.task,capabilities:[...o.task.capabilities].sort()}))fail("CONTRACT_CHANGED","实际任务公开工作字段与已接受合同不同");
-  if(side==="target"){sourceGrant(db,d);const p=db.prepare("SELECT descriptor_digest FROM binding_proposals WHERE relation_id=?").get(d.relation_id);if(!p||p.descriptor_digest!==digest(d))fail("PROPOSAL_REQUIRED","先取得认证来源发送的同一绑定提案");if(t.released||t.route!=="mcp")fail("ENDPOINT_MISMATCH","接收任务必须保持未放行的MCP工作");}
+  if(side==="target"){if(db.prepare("SELECT 1 FROM binding_proposal_decisions WHERE relation_id=?").get(d.relation_id))fail("PROPOSAL_DECLINED","本方已拒绝该绑定提案");sourceGrant(db,d);const p=db.prepare("SELECT descriptor_digest FROM binding_proposals WHERE relation_id=?").get(d.relation_id);if(!p||p.descriptor_digest!==digest(d))fail("PROPOSAL_REQUIRED","先取得认证来源发送的同一绑定提案");if(t.released||t.route!=="mcp")fail("ENDPOINT_MISMATCH","接收任务必须保持未放行的MCP工作");}
   if(db.prepare("SELECT 1 FROM delegation_bindings WHERE (delegation_id=? OR task_uid=? AND side=?) AND "+active).get(d.delegation_id,t.task_uid,side))fail("BINDING_EXISTS","同一工作已有未结束的委派绑定");
   db.prepare("INSERT INTO delegation_bindings VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prepared',NULL,?)").run(d.relation_id,d.delegation_id,d.project_id,side,n.node_id,n.sync_epoch,t.id,t.task_uid,t.aggregate_version,b.registrar_node_id,b.registrar_epoch,digest(d),canonical(d),canonical(contract(t)),at());
   event(db,d.relation_id,"prepared",{side,task_version:t.aggregate_version});return bindingState(db,d.relation_id);
@@ -151,8 +179,9 @@ export function receiveBindingMessage(db,peer,body){
   const hash=digest(body),prior=db.prepare("SELECT * FROM binding_inbox WHERE source_node_id=? AND source_epoch=? AND request_id=?").get(d.source_node_id,d.source_epoch,body.request_id);
   if(prior&&prior.body_digest!==hash)fail("REQUEST_CONFLICT","相同消息号内容不同");
   const proposal=db.prepare("SELECT descriptor_digest FROM binding_proposals WHERE relation_id=?").get(d.relation_id);if(proposal&&proposal.descriptor_digest!==digest(d))fail("REQUEST_CONFLICT","提案ID已经绑定不同关系");
+  if(db.prepare("SELECT 1 FROM binding_proposal_decisions WHERE relation_id=?").get(d.relation_id))fail("PROPOSAL_DECLINED","接收方已明确拒绝本提案；来源仍须撤回未确认登记申请");
   if(body.kind==="proposal"){
-   if(!proposal){if(db.prepare("SELECT count(*) n FROM binding_proposals p LEFT JOIN delegation_bindings b USING(relation_id) WHERE p.project_id=? AND (b.state IS NULL OR b.state='prepared')").get(d.project_id).n>=1000)fail("QUEUE_LIMIT","项目绑定提案达到上限");db.prepare("INSERT INTO binding_proposals VALUES(?,?,?,?,?,?,?)").run(d.relation_id,d.project_id,d.source_node_id,d.source_epoch,canonical(d),digest(d),at());}
+   if(!proposal){if(pendingProposals(db,d.project_id)>=1000)fail("QUEUE_LIMIT","项目绑定提案达到上限");db.prepare("INSERT INTO binding_proposals VALUES(?,?,?,?,?,?,?)").run(d.relation_id,d.project_id,d.source_node_id,d.source_epoch,canonical(d),digest(d),at());}
   }else{
    const b=row(db,d.relation_id);if(b.side!=="target"||b.state==="cancelled"||b.descriptor_digest!==digest(d))fail("CONTRACT_MISMATCH","本机未接受同一关系");confirmed(b,body.confirmation);checkLocal(db,b);
    if(b.confirmation_json&&b.confirmation_json!==canonical(body.confirmation))fail("RECEIPT_MISMATCH","来源证明与本机独立登记回执不同");

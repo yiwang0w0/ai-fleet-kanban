@@ -1,4 +1,4 @@
-# 委派端点绑定、双方就绪与受限放行（schema v1）
+# 委派端点绑定、双方就绪与受限放行（网络 schema v1，存储 schema v2）
 
 本模块连接实际委派合同、已提交本地结构、关系登记确认和接收任务的放行。图回执仍只证明关系图；接收端还必须独立核对本机接受记录、本机工作合同和来源端的就绪通知。本批支持本机验证的 A→B→C 连续委派，不启动模型。
 
@@ -71,7 +71,7 @@ peer 新增 POST /peer/v1/delegation/binding，正文上限 16 KiB，握手能�
 
 如果另一端的确认先于撤回完成，撤回明确返回 RELATION_CONFIRMED；本机保留绑定并允许查询恢复确认回执，不虚报取消成功。已确认关系不能使用该撤回流程取消。实际执行取消、已确认关系退役、候选结果/证据回传和来源验收仍待实现；当前来源完成保护保持到这些流程接入。
 
-网络、存储或响应丢失返回 retry_pending；身份/合同错误为 blocked。单次 CLI/客户端不包含后台重试调度。消息、审批、任务放行、事件和 MCP 成功回执均有事务测试；失败不能留下半次放行。
+网络、存储或响应丢失返回 retry_pending；身份/合同错误为 blocked。尚未准备的接收提案可按 [提案拒绝与保留](proposal-decisions.md) 显式关闭，来源仍须取得登记撤回回执。单次 CLI/客户端不包含后台重试调度。消息、审批、任务放行、事件和 MCP 成功回执均有事务测试；失败不能留下半次放行。
 
 ## CLI
 
@@ -96,6 +96,8 @@ node cli/binding.mjs cancel --db <DB> --relation <UUID> --url <登记节点地�
 | 工具 | 身份 | 输入与效果 |
 | --- | --- | --- |
 | list_bindings | coordinate、observe | project_id、limit（1–100），查看本项目绑定及认证提案 |
+| get_binding_proposal | coordinate、observe | relation_id，读取提案摘要与当前决定 |
+| decline_binding_proposal | coordinate | request_id、relation_id、expected_descriptor_digest、reason_code，拒绝尚未准备的提案 |
 | get_binding | coordinate、observe | relation_id，读取当前本方绑定条件 |
 | prepare_binding | coordinate | request_id、relation、expected_version，核对并持久绑定，不发起网络调用 |
 | release_delegation | coordinate | request_id、relation_id、expected_version，只放行满足条件的本机接收任务 |

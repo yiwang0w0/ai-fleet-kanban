@@ -18,7 +18,7 @@ import {enrollTask,callTool} from "../core/mcp/tools.mjs";
 import {createIntent,receiveOffer,decideIncoming,recordReceipt,incomingStatus,outgoingStatus} from "../core/federation/delegation.mjs";
 import {migrateRelations,createRelationGraph,publishTopology,approveRelation,withdrawRelation,relationStatus} from "../core/federation/relations.mjs";
 import {bindTopology,prepareTopology,startTopologyAttempt,acceptTopologyReceipt,topologyState} from "../core/federation/topology.mjs";
-import {migrateBindings,prepareBinding,bindingState,bindingMessage,receiveBindingMessage,recordBindingMessage,startBindingAttempt,acceptBindingReceipt,cancelUnsentBinding,listBindings,releaseBoundTask} from "../core/federation/bindings.mjs";
+import {migrateBindings,prepareBinding,bindingState,bindingMessage,receiveBindingMessage,recordBindingMessage,startBindingAttempt,acceptBindingReceipt,cancelUnsentBinding,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal} from "../core/federation/bindings.mjs";
 import {submitBinding,sendBindingMessage} from "../core/federation/binding-client.mjs";
 import {listenPeerServer} from "../core/federation/gateway.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
@@ -45,7 +45,7 @@ function approve(f,which){const owner=f[which],args=startBindingAttempt(owner.db
 function send(f,kind){const body=bindingMessage(f.a.db,{relationId:f.d.relation_id,kind}),receipt=receiveBindingMessage(f.b.db,f.ab.peer,body);return recordBindingMessage(f.a.db,{requestId:body.request_id,receipt});}
 function begin(f){prepare(f,"a");approve(f,"a");send(f,"proposal");prepare(f,"b");}
 function finish(f){approve(f,"b");const receipt=relationStatus(f.r.db,f.ar.peer,{project_id:"demo",graph_id:f.g.graph_id,graph_epoch:f.g.graph_epoch,relation_id:f.d.relation_id});acceptBindingReceipt(f.a.db,{relationId:f.d.relation_id,receipt});send(f,"source_ready");return receipt;}
-const state=db=>JSON.stringify(Object.fromEntries(["tasks","task_events","delegation_bindings","binding_attempts","binding_proposals","binding_inbox","binding_source_commits","binding_events"].map(n=>[n,db.prepare("SELECT * FROM "+n+" ORDER BY rowid").all()])));
+const state=db=>JSON.stringify(Object.fromEntries(["tasks","task_events","delegation_bindings","binding_attempts","binding_proposals","binding_proposal_decisions","binding_inbox","binding_source_commits","binding_events"].map(n=>[n,db.prepare("SELECT * FROM "+n+" ORDER BY rowid").all()])));
 async function network(n){const s=await listenPeerServer(n.db,{port:0});servers.push(s);return "http://127.0.0.1:"+s.address().port;}
 
 test("both verified endpoint commitments permit an explicitly released target while holding its source",()=>{
@@ -257,4 +257,115 @@ test("local delegation status distinguishes immutable acceptance receipts from c
  const target=incomingStatus(f.b.db,f.out.delegation_id),source=outgoingStatus(f.a.db,f.out.delegation_id);
  assert.equal(target.receipt.state,"accepted_unconfirmed");assert.equal(target.receipt.dispatch_ready,false);
  assert.equal(target.binding.state,"confirmed");assert.equal(target.binding.binding_authorized,true);assert.equal(source.binding.side,"source");assert.equal(source.binding.binding_authorized,false);
+});
+
+function proposalOnly(f){prepare(f,"a");approve(f,"a");send(f,"proposal");}
+function decline(f,reasonCode="operator_declined"){return declineBindingProposal(f.b.db,{relationId:f.d.relation_id,expectedDescriptorDigest:digest(f.d),reasonCode});}
+test("unprepared proposals can be explicitly declined with immutable evidence and no source release",()=>{
+ const f=fixture();proposalOnly(f);const before=state(f.b.db);
+ assert.throws(()=>declineBindingProposal(f.b.db,{relationId:f.d.relation_id,expectedDescriptorDigest:"0".repeat(64),reasonCode:"operator_declined"}),{code:"REQUEST_CONFLICT"});
+ assert.throws(()=>declineBindingProposal(f.b.db,{relationId:f.d.relation_id,expectedDescriptorDigest:digest(f.d),reasonCode:"arbitrary"}),{code:"BAD_INPUT"});
+ assert.equal(state(f.b.db),before);assert.equal(decline(f).state,"declined");assert.equal(decline(f).state,"declined");
+ assert.throws(()=>decline(f,"duplicate"),{code:"REQUEST_CONFLICT"});
+ assert.equal(f.b.db.prepare("SELECT count(*) n FROM binding_events WHERE kind='proposal_declined'").get().n,1);
+ assert.throws(()=>prepare(f,"b"),{code:"PROPOSAL_DECLINED"});assert.equal(store.get(f.b.db,f.target.id).released,false);
+ assert.equal(bindingState(f.a.db,f.d.relation_id).state,"prepared");assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"held"}).ok,false);
+ for(const table of ["binding_proposal_decisions","binding_proposals"])assert.throws(()=>f.b.db.exec("DELETE FROM "+table),/retained/);
+ assert.throws(()=>f.b.db.exec("UPDATE binding_proposal_decisions SET reason_code='duplicate'"),/immutable/);
+ const list=listBindings(f.b.db,{projectId:"demo"});assert.equal(list.pending_count,0);assert.deepEqual(list.pending_proposals,[]);assert.equal(list.proposals[0].state,"declined");
+});
+test("decline cannot replace prepared, pending-approval, confirmed or cancelled binding recovery",()=>{
+ const f=fixture();begin(f);assert.throws(()=>decline(f),{code:"PROPOSAL_BOUND"});
+ startBindingAttempt(f.b.db,{relationId:f.d.relation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version});assert.throws(()=>decline(f),{code:"PROPOSAL_BOUND"});
+ finish(f);assert.throws(()=>decline(f),{code:"PROPOSAL_BOUND"});
+ const g=fixture();begin(g);const a=startBindingAttempt(g.b.db,{relationId:g.d.relation_id,action:"withdraw"}),receipt=withdrawRelation(g.r.db,g.br.peer,a);acceptBindingReceipt(g.b.db,{relationId:g.d.relation_id,requestId:a.request_id,receipt});assert.throws(()=>decline(g),{code:"PROPOSAL_BOUND"});
+ assert.equal(listBindings(g.b.db,{projectId:"demo"}).pending_count,0);
+});
+test("MCP proposal decline requires coordinate/project scope and rolls back with both audit and response",()=>{
+ const f=fixture();proposalOnly(f);const coord=principal(f.b),observe=principal(f.b,"observe"),other=principal(f.b,"coordinate",["secret"]),args={request_id:randomUUID(),relation_id:f.d.relation_id,expected_descriptor_digest:digest(f.d),reason_code:"stale_topology"};
+ assert.equal(callTool(f.b.db,observe,"get_binding_proposal",{relation_id:f.d.relation_id}).state,"pending");
+ assert.throws(()=>callTool(f.b.db,observe,"decline_binding_proposal",args),{code:"FORBIDDEN"});
+ for(const tool of ["get_binding_proposal","decline_binding_proposal"])assert.throws(()=>callTool(f.b.db,other,tool,tool==="get_binding_proposal"?{relation_id:f.d.relation_id}:args),{code:"NOT_FOUND"});
+ const before=state(f.b.db);
+ for(const table of ["binding_events","broker_requests"]){f.b.db.exec("CREATE TRIGGER injected BEFORE INSERT ON "+table+" BEGIN SELECT RAISE(ABORT,'decline persistence fault'); END");assert.throws(()=>callTool(f.b.db,coord,"decline_binding_proposal",args),/decline persistence fault/);assert.equal(state(f.b.db),before);f.b.db.exec("DROP TRIGGER injected");}
+ const r=callTool(f.b.db,coord,"decline_binding_proposal",args);assert.equal(r.state,"declined");assert.deepEqual(callTool(f.b.db,coord,"decline_binding_proposal",args),r);
+ assert.throws(()=>callTool(f.b.db,coord,"decline_binding_proposal",{...args,reason_code:"duplicate"}),{code:"REQUEST_CONFLICT"});
+});
+test("authenticated retry sees current decline without overwriting historical ACK or cancelling source automatically",async()=>{
+ const f=fixture();proposalOnly(f);const url=await network(f.b),rurl=await network(f.r),body=bindingMessage(f.a.db,{relationId:f.d.relation_id,kind:"proposal"});
+ const ack=f.a.db.prepare("SELECT receipt_json FROM binding_outbox WHERE request_id=?").get(body.request_id).receipt_json;decline(f);
+ const unknown=await sendBindingMessage(f.a.db,{relationId:f.d.relation_id,kind:"proposal",url,credentialFile:f.ab.file,fetchImpl:async(u,o)=>{const r=await fetch(u,o);if(u.endsWith("/binding")){await r.arrayBuffer();throw Error("lost decline response");}return r;}});assert.equal(unknown.delivery_state,"retry_pending");
+ const r=await sendBindingMessage(f.a.db,{relationId:f.d.relation_id,kind:"proposal",url,credentialFile:f.ab.file});assert.equal(r.delivery_state,"blocked");assert.equal(r.error_code,"PROPOSAL_DECLINED");
+ assert.equal(f.a.db.prepare("SELECT receipt_json FROM binding_outbox WHERE request_id=?").get(body.request_id).receipt_json,ack);
+ assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"still-held"}).ok,false);
+ const cancel=await submitBinding(f.a.db,{relationId:f.d.relation_id,mode:"withdraw",url:rurl,credentialFile:f.ar.file});assert.equal(cancel.state,"cancelled");
+ assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"after-verified-withdrawal"}).ok,true);
+ const before=state(f.b.db);assert.throws(()=>receiveBindingMessage(f.b.db,f.ab.peer,{...body,relation:{...body.relation,target_topology_revision:2}}),{code:"REQUEST_CONFLICT"});assert.equal(state(f.b.db),before);
+});
+test("declined history releases one bounded queue slot, stays visible, and cannot hide older pending proposals",()=>{
+ const f=fixture();proposalOnly(f);const body=bindingMessage(f.a.db,{relationId:f.d.relation_id,kind:"proposal"}),messages=[];
+ for(let i=1;i<1000;i++){const m={...body,request_id:randomUUID(),relation:{...f.d,relation_id:randomUUID()}};receiveBindingMessage(f.b.db,f.ab.peer,m);messages.push(m);}
+ assert.equal(listBindings(f.b.db,{projectId:"demo",limit:1}).pending_count,1000);
+ const next={...body,request_id:randomUUID(),relation:{...f.d,relation_id:randomUUID()}};
+ assert.throws(()=>receiveBindingMessage(f.b.db,f.ab.peer,next),{code:"QUEUE_LIMIT"});decline(f);receiveBindingMessage(f.b.db,f.ab.peer,next);
+ assert.equal(listBindings(f.b.db,{projectId:"demo",limit:1}).pending_count,1000);
+ assert.throws(()=>receiveBindingMessage(f.b.db,f.ab.peer,body),{code:"PROPOSAL_DECLINED"});
+ declineBindingProposal(f.b.db,{relationId:next.relation.relation_id,expectedDescriptorDigest:digest(next.relation),reasonCode:"duplicate"});
+ const list=listBindings(f.b.db,{projectId:"demo",limit:1});assert.equal(list.proposals[0].state,"declined");assert.equal(list.pending_proposals[0].relation_id,messages[0].relation.relation_id);assert.equal(list.pending_count,999);
+ assert.equal(f.b.db.prepare("SELECT count(*) n FROM binding_proposals").get().n,1001);
+});
+test("schema v1 upgrades transactionally and read-only inspection remains available before migration",()=>{
+ const f=fixture();proposalOnly(f);f.b.db.exec("DROP TRIGGER binding_decline_unprepared; DROP TRIGGER binding_declined_hold; DROP TABLE binding_proposal_decisions; UPDATE binding_schema SET version=1");
+ assert.equal(listBindings(f.b.db,{projectId:"demo"}).pending_count,1);assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"pending");
+ f.b.db.exec("CREATE TRIGGER injected BEFORE UPDATE ON binding_schema BEGIN SELECT RAISE(ABORT,'migration fault'); END");
+ assert.throws(()=>migrateBindings(f.b.db),/migration fault/);assert.equal(f.b.db.prepare("SELECT version FROM binding_schema").get().version,1);assert.equal(f.b.db.prepare("SELECT count(*) n FROM sqlite_master WHERE name='binding_proposal_decisions'").get().n,0);
+ f.b.db.exec("DROP TRIGGER injected");migrateBindings(f.b.db);decline(f);migrateBindings(f.b.db);
+ assert.equal(f.b.db.prepare("SELECT version FROM binding_schema").get().version,2);assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"declined");
+ const db=new DatabaseSync(f.b.path);try{migrateBindings(db);assert.equal(bindingProposalState(db,f.d.relation_id).state,"declined");}finally{db.close();}
+});
+test("stale topology and revoked source access do not prevent an offline local decline",()=>{
+ const f=fixture();proposalOnly(f);
+ const op=prepareTopology(f.b.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:1}),a=startTopologyAttempt(f.b.db,{operationId:op.operation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version}),r=publishTopology(f.r.db,f.br.peer,a);acceptTopologyReceipt(f.b.db,{operationId:op.operation_id,requestId:a.request_id,receipt:r});
+ assert.throws(()=>prepare(f,"b"),{code:"TOPOLOGY_PENDING"});revokePeer(f.b.db,{peerNodeId:f.a.node.node_id,expectedVersion:1});
+ assert.equal(decline(f,"stale_topology").state,"declined");assert.equal(f.b.db.prepare("SELECT count(*) n FROM binding_attempts").get().n,0);
+});
+test("CLI reads and declines the exact proposal from an explicitly selected database",()=>{
+ const f=fixture();proposalOnly(f);const cli=(...args)=>spawnSync(process.execPath,[join(ROOT,"cli/binding.mjs"),...args],{cwd:ROOT,encoding:"utf8",windowsHide:true});
+ const read=cli("get-proposal","--db",f.b.path,"--relation",f.d.relation_id);assert.equal(read.status,0,read.stderr);assert.equal(JSON.parse(read.stdout).descriptor_digest,digest(f.d));
+ const result=cli("decline","--db",f.b.path,"--relation",f.d.relation_id,"--digest",digest(f.d),"--reason","contract_changed");assert.equal(result.status,0,result.stderr);assert.equal(JSON.parse(result.stdout).state,"declined");assert.equal(store.get(f.b.db,f.target.id).attempts,0);
+});
+test("restored epochs retain proposal history without filling or authorizing the new epoch's pending queue",()=>{
+ const f=fixture();proposalOnly(f);const evidence=join(f.b.dir,"evidence");mkdirSync(evidence);writeFileSync(join(evidence,"fixture.txt"),"synthetic proposal evidence");const backup=createBackup({dbPath:f.b.path,evidenceDir:evidence,destination:join(TMP,"proposal-backup"+serial++)}),dir=join(TMP,"proposal-restore"+serial++);restoreBackup({backupDirectory:backup.destination,destination:dir});const path=join(dir,"board.db"),db=new DatabaseSync(path);dbs.push(db);
+ retireNode({dbPath:f.b.path,expectedEpoch:f.b.node.sync_epoch});const plan=prepareRecovery({dbPath:path});activateRecovery({dbPath:path,plan,expectedPlanDigest:plan.plan_digest,attestation:{format:"ai-fleet-retirement-attestation/v1",node_id:plan.node_id,retired_epoch:plan.retired_epoch,plan_digest:plan.plan_digest,original_board_stopped:true,original_agents_stopped:true,original_identity_disabled:true,other_restored_writers_stopped:true,evidence_ref:"isolated proposal recovery fixture",attested_at:new Date().toISOString()}});
+ const list=listBindings(db,{projectId:"demo"});assert.equal(list.proposals.length,1);assert.equal(list.proposals[0].identity_current,false);assert.equal(list.pending_count,0);assert.deepEqual(list.pending_proposals,[]);
+ assert.throws(()=>declineBindingProposal(db,{relationId:f.d.relation_id,expectedDescriptorDigest:digest(f.d),reasonCode:"operator_declined"}),{code:"BINDING_RECOVERY_REQUIRED"});
+});
+test("independent processes serialize target preparation against proposal decline",async()=>{
+ const f=fixture();proposalOnly(f);const script=join(TMP,"proposal-race"+serial+++".mjs"),data=join(TMP,"proposal-race-data"+serial+++".json");writeFileSync(data,JSON.stringify({relation:f.d,expectedTaskVersion:store.get(f.b.db,f.target.id).aggregate_version,descriptorDigest:digest(f.d)}));
+ writeFileSync(script,[
+  'import {DatabaseSync} from "node:sqlite"; import {readFileSync} from "node:fs";',
+  'import {prepareBinding,declineBindingProposal} from '+JSON.stringify(new URL("../core/federation/bindings.mjs",import.meta.url).href)+';',
+  'const [path,file,action]=process.argv.slice(2),db=new DatabaseSync(path),d=JSON.parse(readFileSync(file,"utf8"));db.exec("PRAGMA busy_timeout=5000");',
+  'process.send("ready");process.once("message",()=>{let result;try{result=action==="prepare"?prepareBinding(db,d):declineBindingProposal(db,{relationId:d.relation.relation_id,expectedDescriptorDigest:d.descriptorDigest,reasonCode:"operator_declined"});}catch(e){result={error:e.code};}db.close();process.stdout.write(JSON.stringify(result));process.disconnect();});'
+ ].join("\n"));
+ const children=["prepare","decline"].map(action=>{const p=spawn(process.execPath,[script,f.b.path,data,action],{stdio:["ignore","pipe","pipe","ipc"],windowsHide:true});let out="",err="";p.stdout.on("data",x=>out+=x);p.stderr.on("data",x=>err+=x);return {p,ready:new Promise((resolve,reject)=>{p.once("message",resolve);p.once("error",reject);p.once("exit",code=>{if(code!==0)reject(Error("startup "+code+" "+err));});}),done:new Promise((resolve,reject)=>{p.once("error",reject);p.once("close",code=>{if(code!==0)return reject(Error(err));try{resolve(JSON.parse(out));}catch(e){reject(e);}});})};});
+ await Promise.all(children.map(c=>c.ready));for(const c of children)c.p.send("go");const [prepared,declined]=await Promise.all(children.map(c=>c.done));
+ assert.equal(Number(prepared.state==="prepared")+Number(declined.state==="declined"),1);
+ if(prepared.state==="prepared"){assert.equal(declined.error,"PROPOSAL_BOUND");assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"prepared");}else{assert.equal(prepared.error,"PROPOSAL_DECLINED");assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"declined");}
+});
+
+test("declined attempt can be replaced only with a new relation after verified registrar withdrawal",()=>{
+ const f=fixture();proposalOnly(f);const oldId=f.d.relation_id;decline(f);
+ const a=startBindingAttempt(f.a.db,{relationId:oldId,action:"withdraw"}),receipt=withdrawRelation(f.r.db,f.ar.peer,a);acceptBindingReceipt(f.a.db,{relationId:oldId,requestId:a.request_id,receipt});
+ f.d={...f.d,relation_id:randomUUID()};begin(f);finish(f);releaseBoundTask(f.b.db,{relationId:f.d.relation_id,expectedTaskVersion:store.get(f.b.db,f.target.id).aggregate_version});
+ assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"replacement"}).ok,true);assert.equal(bindingProposalState(f.b.db,oldId).state,"declined");assert.equal(bindingState(f.a.db,oldId).state,"cancelled");assert.equal(f.r.db.prepare("SELECT count(*) n FROM relation_edges").get().n,1);
+});
+test("a decline committed during an HTTP retry upload is checked before any receipt is returned",async()=>{
+ const f=fixture();proposalOnly(f);const text=JSON.stringify(bindingMessage(f.a.db,{relationId:f.d.relation_id,kind:"proposal"})),url=await network(f.b),server=servers.at(-1);let notify;
+ const receiving=new Promise(resolve=>notify=resolve);server.once("request",()=>notify());
+ const result=new Promise((resolve,reject)=>{
+  const req=http.request(url+"/peer/v1/delegation/binding",{method:"POST",headers:{Authorization:f.ab.auth,"Content-Type":"application/json","Content-Length":Buffer.byteLength(text)}},res=>{let body="";res.setEncoding("utf8");res.on("data",x=>body+=x);res.on("end",()=>{try{resolve({status:res.statusCode,body:JSON.parse(body)});}catch(e){reject(e);}});});req.on("error",reject);
+  const split=Math.floor(text.length/2);req.write(text.slice(0,split));receiving.then(()=>{decline(f);req.end(text.slice(split));}).catch(reject);
+ });
+ const r=await result;assert.equal(r.status,409);assert.equal(r.body.code,"PROPOSAL_DECLINED");assert.equal(f.b.db.prepare("SELECT count(*) n FROM binding_inbox").get().n,1);assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"declined");
 });
