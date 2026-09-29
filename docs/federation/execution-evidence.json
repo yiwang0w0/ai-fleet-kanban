@@ -1,0 +1,70 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-12-execution-supervision",
+  "date": "2026-09-29",
+  "base_commit": "1662945b07a247dd6605e27202492a162c5f7ccb",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/execution/output.mjs": "e8a19653b210c8499de6eb70283659113f6cd85a4ee22a5b5c7272d2e7baa49b",
+    "core/execution/supervisor.mjs": "633ee92340283ecd77ca91a27f0b2cb67804faf87aec8ed9fb9c082a3c1007ed",
+    "core/execution/process_host.py": "60438000b97ded0198aa160cfdd19532faab4b4c5babc404a8634892a68acfa4",
+    "tests/outputtest.mjs": "0953f3da3922572836a5b0fce93547f0456bfaa364b76f65365d0108fe46835c",
+    "tests/supervisortest.mjs": "10cec605cf80a0e81847016d46b7e8cafc3330cc076a5cfbfb62303af2b76611",
+    "tests/dispatchtest.mjs": "4cf4c4e6a3478af8da0705ec0ddedd0c196da0b78c89ed5c9de69e297ce67fc5",
+    "package.json": "b4167cb38e8ab47ab4e830accc1aa540f7b7239970b83429abe7c263a03e4a5d",
+    ".github/workflows/ci.yml": "2b21ec1f8ac228d2a50d904c17f50603ec3cb68b8b372a27adf560d1122a07bf"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "passed": 1088,
+      "failed": 0,
+      "output_tests": 21,
+      "supervisor_tests": 14,
+      "dispatch_tests": 27
+    },
+    "final_targeted": {
+      "passed": 35,
+      "failed": 0,
+      "commands": [
+        "node tests/outputtest.mjs",
+        "node tests/supervisortest.mjs"
+      ]
+    },
+    "changes_after_full_suite": [
+      "distinct invalid-output stop classification",
+      "Python runtime hash and stderr hashed-byte count in process observations"
+    ],
+    "coverage": [
+      "three provider terminal contracts with identity, UTF8, bounds and usage checks",
+      "absolute native executable pins rechecked in Node and Python before process creation",
+      "Windows suspended creation, explicit inherited handle list, Job cleanup and host-crash termination",
+      "POSIX ordinary process group cleanup, explicitly weaker than cgroup containment",
+      "timeout, cancellation, stdin disconnect, heartbeat failure, stderr/stdout limits",
+      "Unicode paths and stdin; explicit provider environment; fixed generic error diagnostics",
+      "committed dispatch permit through real fixture OS process and native waiting/review receipt"
+    ]
+  },
+  "ci": "pending",
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "trusted primitive only; actual provider argv/config/session orchestration not yet connected",
+    "Zcode session envelopes supported but app-server RPC transport and actual usage mapping pending",
+    "lifetime management is not filesystem or hostile process isolation; Windows service-created processes may escape Job",
+    "POSIX process groups do not cover setsid descendants or guarantee cleanup after abrupt host death",
+    "binary hashes are pre-launch observations, not filesystem ACL or atomic immutable executable guarantees",
+    "supervisor metadata returned but persistent full observations and real coordinator integration pending",
+    "all model responses synthetic; no subscription/model availability claim"
+  ]
+}

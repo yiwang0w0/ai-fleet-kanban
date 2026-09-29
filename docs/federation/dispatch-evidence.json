@@ -46,7 +46,23 @@
       "local administration CLI and project-scoped dispatch visibility"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "commit": "1662945b07a247dd6605e27202492a162c5f7ccb",
+    "run_id": 36558762092,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36558762092",
+    "windows": {
+      "passed": 1052,
+      "failed": 0,
+      "job_id": 109374243591
+    },
+    "linux": {
+      "passed": 1049,
+      "failed": 0,
+      "job_id": 109374243301
+    },
+    "gitleaks": "success",
+    "additional_checks": "passed"
+  },
   "dispatch_schema_version": 1,
   "real_operations": {
     "deployment_changed": false,
@@ -68,5 +84,6 @@
     "crash between credential-file write and DB commit may leave an invalid orphan file requiring operator review",
     "source approval checks Git tree/cleanliness, not an OS atomic immutable code snapshot",
     "full G04, actual model canaries, real multi-node fault tests and independent review remain"
-  ]
+  ],
+  "tested_commit": "1662945b07a247dd6605e27202492a162c5f7ccb"
 }

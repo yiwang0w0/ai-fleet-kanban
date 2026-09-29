@@ -13,7 +13,7 @@
     "doctor": "node cli/doctor.mjs",
     "start": "node cli/start.mjs",
     "reset": "node cli/reset.mjs",
-    "test": "node tests/selftest.mjs && node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs && node tests/clitest.mjs && node tests/looptest.mjs && node tests/servertest.mjs && node tests/reviewtest.mjs && node tests/sentrytest.mjs && node tests/tltest.mjs && node tests/identitytest.mjs && node tests/backuptest.mjs && node tests/runfencetest.mjs && node tests/versiontest.mjs && node tests/peertest.mjs && node tests/synctest.mjs && node tests/snapshottest.mjs && node tests/recoverytest.mjs && node tests/epochrecoverytest.mjs && node tests/mcptest.mjs && node tests/dispatchtest.mjs",
+    "test": "node tests/selftest.mjs && node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs && node tests/clitest.mjs && node tests/looptest.mjs && node tests/servertest.mjs && node tests/reviewtest.mjs && node tests/sentrytest.mjs && node tests/tltest.mjs && node tests/identitytest.mjs && node tests/backuptest.mjs && node tests/runfencetest.mjs && node tests/versiontest.mjs && node tests/peertest.mjs && node tests/synctest.mjs && node tests/snapshottest.mjs && node tests/recoverytest.mjs && node tests/epochrecoverytest.mjs && node tests/mcptest.mjs && node tests/dispatchtest.mjs && node tests/outputtest.mjs && node tests/supervisortest.mjs",
     "node:identity": "node cli/node.mjs",
     "test:identity": "node tests/identitytest.mjs",
     "backup": "node cli/backup.mjs",
@@ -33,6 +33,8 @@
     "mcp:admin": "node cli/mcp-admin.mjs",
     "test:mcp": "node tests/mcptest.mjs",
     "dispatch": "node cli/dispatch.mjs",
-    "test:dispatch": "node tests/dispatchtest.mjs"
+    "test:dispatch": "node tests/dispatchtest.mjs",
+    "test:output": "node tests/outputtest.mjs",
+    "test:supervisor": "node tests/supervisortest.mjs"
   }
 }

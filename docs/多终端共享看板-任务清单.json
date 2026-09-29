@@ -6,7 +6,7 @@
   "created_date": "2026-09-29",
   "timezone": "Asia/Tokyo",
   "source_document": "多终端共享看板-实施与验收计划.md",
-  "source_sha256": "53da5495eeb70461339d9689aac207b9431943dfb93f4e26950b8e83298c5316",
+  "source_sha256": "87270d3c0033753252179e368b0bef98db74e952ebf46390537bb7e3cb313880",
   "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
   "status": "implementation_in_progress",
   "execution_authorized": true,
@@ -1215,8 +1215,8 @@
         "result": "local_partial_passed",
         "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation",
         "pending": [
-          "controlled executor claim and adapter contracts",
-          "OS filesystem/process containment, full tool set and independent G04 acceptance"
+          "actual executor adapters, full tool set and OS isolation",
+          "independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1289,13 +1289,27 @@
       "evidence_required": [
         "两种 adapter contract 报告"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
+        "pending": [
+          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
+          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs",
+        "tests/dispatchtest.mjs"
+      ]
     },
     {
       "id": "T04.04",
@@ -1318,13 +1332,27 @@
       "evidence_required": [
         "Zcode adapter 与桩测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
+        "pending": [
+          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
+          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs",
+        "tests/dispatchtest.mjs"
+      ]
     },
     {
       "id": "T04.05",
@@ -1348,13 +1376,27 @@
       "evidence_required": [
         "capability/containment/budget 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
+        "pending": [
+          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
+          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs",
+        "tests/dispatchtest.mjs"
+      ]
     },
     {
       "id": "T04.06",
@@ -1384,17 +1426,21 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "atomic native claim, role-bound MCP identity, reserved call quotas, one-use launch permit and terminal/late receipt lifecycle",
+        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
         "pending": [
-          "actual three-provider adapter and supervised process integration",
-          "filesystem/process containment and independent G04 acceptance"
+          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
+          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/dispatch.md",
         "docs/federation/dispatch-evidence.json",
-        "tests/dispatchtest.mjs"
+        "tests/dispatchtest.mjs",
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs"
       ]
     },
     {

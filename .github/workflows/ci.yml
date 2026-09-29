@@ -76,6 +76,10 @@ jobs:
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)
         run: bash hrun.sh node tests/dispatchtest.mjs
+      - name: outputtest (provider terminals, UTF-8, identity and bounds)
+        run: bash hrun.sh node tests/outputtest.mjs
+      - name: supervisortest (pinned processes, timeout, cancellation and descendants)
+        run: bash hrun.sh node tests/supervisortest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

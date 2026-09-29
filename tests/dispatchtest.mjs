@@ -12,6 +12,7 @@ import {migratePeers} from "../core/federation/peers.mjs";
 import {migrateSync} from "../core/federation/sync-store.mjs";
 import {migrateBroker,putRole,issuePrincipal,revokePrincipal,authenticatePrincipal} from "../core/mcp/policy.mjs";
 import {callTool} from "../core/mcp/tools.mjs";
+import {pinFile,superviseProcess} from "../core/execution/supervisor.mjs";
 import {createSourceGate} from "../core/execution/source-gate.mjs";
 import {migrateDispatch,putQuota,quotaStatus,prepareDispatch,authorizeLaunch,finishDispatch,abandonPrepared,dispatchStatus} from "../core/execution/dispatch.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js"),ROOT=fileURLToPath(new URL("../",import.meta.url));
@@ -294,4 +295,20 @@ test("the no-progress gate holds identical redispatch but a changed parent suppl
  assert.equal(store.get(f.db,t.id).attempts,1);
  f.db.prepare("UPDATE tasks SET description='new parent instruction from operator' WHERE id=?").run(root.id);
  const next=prepare(f,a);assert.notEqual(next.receipt.run_id,w.receipt.run_id);assert.equal(store.get(f.db,t.id).attempts,2);
+});
+
+test("a committed dispatch permit feeds a supervised fixture and settles its observed terminal exactly once",async()=>{
+ const pythonPath=execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c","import sys; print(sys.executable)"],{encoding:"utf8",windowsHide:true}).trim();
+ const f=fixture({limit:1}),t=card(f),w=prepare(f,assign(f,t)),file=path("supervised-fixture")+".mjs";
+ writeFileSync(file,'setTimeout(()=>{process.stdout.write(JSON.stringify({type:"system",subtype:"init",session_id:"supervised",model:"fixture-model"})+"\\n");process.stdout.write(JSON.stringify({type:"result",subtype:"success",is_error:false,session_id:"supervised",result:"observed fixture terminal"})+"\\n");},300);');
+ const permit=launch(f,w);assert.equal(permit.launch_permit,true);let beats=0;
+ const result=await superviseProcess({python:pinFile(pythonPath),command:pinFile(process.execPath),args:[file],cwd:TMP,
+  env:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase()))),
+  input:"fixture only",pins:[pinFile(file)],runtime:"claude",timeoutMs:5000,heartbeatMs:50,
+  heartbeat:()=>{beats++;return store.heartbeat(f.db,{id:t.id,worker:w.receipt.worker,runId:w.receipt.run_id}).task.status==="in_progress";}});
+ assert.equal(result.status,"success",JSON.stringify(result));assert.ok(beats>0);
+ const receipt=finish(f,w,{status:result.status,evidence:result.evidence,usage:result.usage});
+ assert.equal(receipt.phase,"settled");assert.equal(receipt.result.accepted,false);assert.equal(receipt.result.real_model_call_confirmed,false);
+ assert.equal(store.get(f.db,t.id).waiting_for,"review");assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ assert.throws(()=>launch(f,w),{code:"LAUNCH_NOT_AVAILABLE"});
 });
