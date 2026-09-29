@@ -1,0 +1,71 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-10-scoped-local-mcp",
+  "date": "2026-09-29",
+  "base_commit": "99c72caa7089c14b0b775b996d89035abb564ff6",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/store.js": "45d32e4708aa7346fff1d4345f9f13a704d8616c56d7c91d0e3fde7cc85715de",
+    "core/mcp/policy.mjs": "40cee10fd02b8490d0ef3a3896e62621086e5152f105804531e2f5fca9f01328",
+    "core/mcp/tools.mjs": "c4b0f0b1f0cb4b7626ea92f8492df28eaaac33ab7f1bc63a94e8bb8a94255b78",
+    "core/mcp/gateway.mjs": "dc7a49dd1d2a6aae757b0e25d09f5d96e65448760475f4599abf004a16973062",
+    "core/mcp/stdio.mjs": "509d72a8279cac91a75b8c336b66be2795e1486555f2f63bc24fbba9ef9328c5",
+    "cli/mcp.mjs": "899f1e4aee2d248069a1471745176b6854b517c3be19d352adb01725175130d9",
+    "cli/mcp-admin.mjs": "9929cf2abf866c6ffbebd9fd68ef798efc2be7e20b929a589ae0538bf0c3cca9",
+    "tests/mcptest.mjs": "3059b0ffb9c54cb0e4d38f25395dd9e9995f543eafd938b234f0dc41a121cea3",
+    "package.json": "d2710521648a3f6ed0f0e05879c818aebc86c8a56e53b38389d01da4bb3a8745",
+    ".github/workflows/ci.yml": "0877b0cdeb753026ae2fe4f984f0a6a867b3af8f752403ef5aa4ad3629207f4f"
+  },
+  "local_validation": {
+    "command": "npm test",
+    "result": "passed",
+    "main_suite_passed": 1025,
+    "failed": 0,
+    "skipped": 0,
+    "mcp_tests": 25,
+    "coverage": [
+      "strict role/project/run policies, version invalidation and hashed credential lifecycle",
+      "durable idempotency including two independent simultaneous processes; changed request rejected",
+      "task/event/admission/receipt and report/run/span rollback across nested store transactions",
+      "deterministic matching by complete capabilities with no runtime fallback or model launch",
+      "private unreleased tasks, scoped reads, normalized duplicate child and depth refusal",
+      "revocation during HTTP body upload, malformed/oversized input and loopback-only endpoints",
+      "MCP lifecycle, tools and errors, notifications cannot mutate, Unicode framing and JSON-only stdout",
+      "actual stdio and administration CLI subprocesses",
+      "quarantined, retired and restored node epochs reject prior MCP credentials"
+    ],
+    "fixture_corrections": [
+      "report spans are a task JSON column, not a separate table",
+      "cleanup checks signalCode as well as exitCode to avoid waiting again for an already terminated child"
+    ],
+    "product_correction": "preflight existing chain placement before add so a refused depth cannot first collide with a sibling during legacy uplift"
+  },
+  "ci": "pending",
+  "broker_schema_version": 1,
+  "mcp_protocol_versions": [
+    "2025-11-25",
+    "2025-06-18"
+  ],
+  "real_operations": {
+    "deployment_changed": false,
+    "global_mcp_config_changed": false,
+    "real_node_retired": false,
+    "real_restore_activated": false,
+    "real_executor_started": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "board-tool authorization only; filesystem/process containment is not implemented or verified",
+    "assignment receipts only, dispatch_started is always false; controlled claim and three adapters pending",
+    "legacy task depth rule retained with explicit refusal; full tree/graph and delegation pending",
+    "no cancellation, evidence-file access or acceptance tools; no automatic enrollment or sharing",
+    "internal HTTP is not MCP Streamable HTTP and must remain local",
+    "actual provider clients and current model availability not validated by fixture stdio process",
+    "independent phase acceptance, real Tailscale nodes and soak testing remain"
+  ]
+}

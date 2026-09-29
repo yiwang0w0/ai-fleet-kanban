@@ -1155,7 +1155,8 @@ function placeInChain(db, { kind, parentId, released, description }) {
  */
 function add(db, args) {
   assertLocalIdentityInput(args);
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_add");
   try {
     if (args.parentRunId !== undefined || args.parentWorker !== undefined) {
       const parent = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(args.parentId));
@@ -1170,9 +1171,9 @@ function add(db, args) {
     appendEvent(db, {
       taskId: id, kind: "add", actor: args.actor || "system", detail: eventState(t),
     });
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_add");
     return id;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_add; RELEASE store_add"); } catch {} throw e; }
 }
 
 function addInner(db, {
@@ -1792,7 +1793,8 @@ function report(db, { id, worker, outcome, evidence = "", runId }) {
   // ⭐ Span close and state transition share ONE transaction (measured concern: split
   //   in two, a crash in between leaves "in_progress but span closed" — a torn state).
   const waitingFor = outcome === "done" ? "review" : "decision";
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_report");
   try {
     spanClose(db, Number(id));
     // ⭐ The UPDATE carries its own gate (archive() pattern): the SELECT above provides
@@ -1815,8 +1817,8 @@ function report(db, { id, worker, outcome, evidence = "", runId }) {
         run_id: runId, outcome: String(outcome), waiting_for: waitingFor,
       }),
     });
-    db.exec("COMMIT");
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_report");
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_report; RELEASE store_report"); } catch {} throw e; }
   return { id: Number(id), status: "waiting", waiting_for: waitingFor };
 }
 

@@ -39,7 +39,16 @@
     ],
     "fixture_correction": "moved async default parameter into function body before first test execution"
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36551252860,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36551252860",
+    "result": "passed",
+    "windows_main_passed": 1000,
+    "linux_main_passed": 997,
+    "receiver_recovery_tests_per_platform": 18,
+    "gitleaks": "passed",
+    "extra_checks": "passed"
+  },
   "sync_schema_version": 3,
   "real_operations": {
     "deployment_changed": false,
@@ -61,5 +70,6 @@
     "credential authentication is point-in-time, not a distributed atomic lock; every later request reauthenticates",
     "historical event IDs never recorded by older clients cannot be reconstructed; available old receipts remain",
     "no full audit/files/remote dependency graph replication, final global UI or real-model acceptance yet"
-  ]
+  ],
+  "tested_commit": "99c72caa7089c14b0b775b996d89035abb564ff6"
 }

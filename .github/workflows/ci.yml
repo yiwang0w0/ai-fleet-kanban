@@ -72,6 +72,8 @@ jobs:
         run: bash hrun.sh node tests/recoverytest.mjs
       - name: epochrecoverytest (reviewed source epochs, missing results and atomic cutover)
         run: bash hrun.sh node tests/epochrecoverytest.mjs
+      - name: mcptest (scoped tools, replay, revocation and stdio)
+        run: bash hrun.sh node tests/mcptest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

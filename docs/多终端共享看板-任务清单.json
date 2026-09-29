@@ -6,7 +6,7 @@
   "created_date": "2026-09-29",
   "timezone": "Asia/Tokyo",
   "source_document": "多终端共享看板-实施与验收计划.md",
-  "source_sha256": "9f298da2a7f87a274ce0539f1f02ddf027b0d5a29a1ddfccf0b956dee184a224",
+  "source_sha256": "6ccf4e9625c4551ee0a1194787204ff81321f3091c8b8f610359b5011add6985",
   "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
   "status": "implementation_in_progress",
   "execution_authorized": true,
@@ -258,7 +258,7 @@
     {
       "id": "S04",
       "title": "本机 MCP、确定性调度与三执行器适配",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "S02",
         "S03"
@@ -1206,13 +1206,25 @@
       "evidence_required": [
         "MCP 合同与工具清单"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation",
+        "pending": [
+          "controlled executor claim and adapter contracts",
+          "OS filesystem/process containment, full tool set and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/mcp.md",
+        "docs/federation/mcp-evidence.json",
+        "tests/mcptest.mjs"
+      ]
     },
     {
       "id": "T04.02",
@@ -1234,13 +1246,25 @@
       "evidence_required": [
         "scheduler 单元与反例测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "deterministic role selection and immutable waiting assignment receipts; no executor started",
+        "pending": [
+          "controlled executor claim and adapter contracts",
+          "OS filesystem/process containment, full tool set and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/mcp.md",
+        "docs/federation/mcp-evidence.json",
+        "tests/mcptest.mjs"
+      ]
     },
     {
       "id": "T04.03",
