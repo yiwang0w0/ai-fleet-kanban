@@ -1,3 +1,4 @@
+import { fixtureVersion } from "./http-version-fixture.mjs";
 // reviewtest — the auto-reviewer measured END TO END: a real board, the real
 // loops/reviewer_loop.py, a stub CLI whose verdict the harness controls.
 //
@@ -102,6 +103,7 @@ try {
   const OP = tok("board_token"), WK = tok("worker_token"), RV = tok("review_token");
   const receipts = new Map();
   const api = async (m, p, b, t = OP) => {
+    b=await fixtureVersion(BASE,t,m,p,b);
     if (p === "/api/claim") b={worker_protocol_version:2,agent_instance_id:"11111111-1111-4111-8111-111111111111",...b};
     const mutation=p.match(/^\/api\/tasks\/(\d+)\/(report|heartbeat|attempt)$/);
     if (mutation) b={run_id:receipts.get(Number(mutation[1])),...b};

@@ -198,6 +198,7 @@ const ADDED_COLUMNS = [
   ["task_uid", "TEXT"],
   ["owner_node_id", "TEXT"],
   ["run_id", "TEXT"],
+  ["aggregate_version", "INTEGER NOT NULL DEFAULT 1 CHECK(typeof(aggregate_version)='integer' AND aggregate_version BETWEEN 1 AND 9007199254740991)"],
   ["route", `TEXT NOT NULL DEFAULT '${DEFAULT_ROUTE.replace(/'/g, "''")}'`],
   ["line", "TEXT"],
   ["heartbeat_at", "INTEGER"],
@@ -438,7 +439,7 @@ function renameNode(db, displayName) {
 
 /** Only the owner store mints identity. Copies will live outside the local queue. */
 function assertLocalIdentityInput(fields) {
-  for (const key of ["task_uid", "taskUid", "owner_node_id", "ownerNodeId", "run_id", "runId"]) {
+  for (const key of ["task_uid", "taskUid", "owner_node_id", "ownerNodeId", "run_id", "runId", "aggregate_version", "aggregateVersion"]) {
     if (Object.hasOwn(fields, key))
       throw err(ERR.BAD_INPUT, key + " 由本机生成且不可编辑");
   }
@@ -563,6 +564,39 @@ function migrateRuns(db) {
   if (invalid) throw err(ERR.CONFLICT, "执行历史与任务身份不一致，拒绝启动: #" + invalid.id);
 }
 
+/** Content versions do not move on heartbeat/lease/time-only writes. Multiple
+ * semantic SQL updates may advance a version more than once within one command. */
+function migrateTaskVersions(db) {
+  const ignored = new Set(["aggregate_version","heartbeat_at","lease_until","updated_at","work_spans"]);
+  const columns = db.prepare("PRAGMA table_info(tasks)").all().map(c=>c.name).filter(c=>!ignored.has(c));
+  const changed = columns.map(c=>'OLD."' + c + '" IS NOT NEW."' + c + '"').join(" OR ");
+  db.exec("CREATE TRIGGER IF NOT EXISTS task_content_version AFTER UPDATE ON tasks WHEN " + changed +
+    " BEGIN UPDATE tasks SET aggregate_version=aggregate_version+1 WHERE id=NEW.id; END;");
+  const bad=db.prepare("SELECT id FROM tasks WHERE typeof(aggregate_version)<>'integer' OR aggregate_version<1 OR aggregate_version>9007199254740991 LIMIT 1").get();
+  if(bad) throw err(ERR.CONFLICT,"任务版本损坏，拒绝启动: #" + bad.id);
+}
+function requireExpectedVersion(value) {
+  if(!Number.isSafeInteger(value) || value<1) throw err(ERR.BAD_INPUT,"expected_version 必须是所见任务的正整数版本；请刷新并核对内容");
+  return value;
+}
+function assertExpectedVersion(db,id,value) {
+  if(value === undefined) return; // Internal transitions may already hold a stronger run/transaction guard.
+  requireExpectedVersion(value);
+  const t=db.prepare("SELECT aggregate_version FROM tasks WHERE id=?").get(Number(id));
+  if(!t) throw err(ERR.NOT_FOUND,"任务不存在");
+  if(t.aggregate_version !== value) {
+    const e=err(ERR.CONFLICT,"任务已发生变化，请刷新并核对后重新提交；不会自动重试旧修改");
+    e.expected_version=value; e.current_version=t.aggregate_version; throw e;
+  }
+}
+function withTaskVersion(db,args,fn) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
+    const result=fn();db.exec("COMMIT");return result;
+  } catch(e) {try {db.exec("ROLLBACK");} catch {} throw e;}
+}
+
 function open(readOnly = false) {
   if (!readOnly && fs.existsSync(path.join(path.dirname(DB_PATH), ".incomplete")))
     throw err(ERR.CONFLICT, "备份或恢复目录尚未完成，禁止写入或启动执行器");
@@ -589,6 +623,7 @@ function migrate(db) {
     migrateInner(db);
     migrateNodeIdentity(db);
     migrateRuns(db);
+    migrateTaskVersions(db);
     db.exec("COMMIT TRANSACTION");
   } catch (e) {
     try { db.exec("ROLLBACK TRANSACTION"); } catch {}
@@ -1535,11 +1570,12 @@ function reapExpiredInner(db) {
  * a bare "couldn't take it" hides whether it was release, deps, or a lock.
  */
 function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null,
-                         force = false, treeRev = null, extra = null, agentInstanceId = null, runContext = null, runContextForTask = null }) {
+                         force = false, treeRev = null, extra = null, agentInstanceId = null, runContext = null, runContextForTask = null, expectedVersion }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
   leaseMin = clampLease(leaseMin);   // see claim()
   db.exec("BEGIN IMMEDIATE");
   try {
+    assertExpectedVersion(db,id,expectedVersion);
     const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
     // ⭐ Refusal reasons carry a TYPE too. claimById declines via return value, not
     //   throw, so without a code here the server could only blanket-409 (it did:
@@ -1834,9 +1870,10 @@ function cascadeClose(db, t, proofNote) {
 function resolve(db, args) {
   db.exec("BEGIN IMMEDIATE");
   try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
-    const out = resolveInner(db, args);
+    const out = resolveInner(db, {...args,...(args.prepareResolution ? args.prepareResolution() : {})});
     const t = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
     appendEvent(db, {
@@ -2065,7 +2102,10 @@ function bumpAttempt(db, { id, worker, runId }) {
  * auto_review_at < updated_at ⇒ review AGAIN — if the card moved, the evidence
  * changed too.
  */
-function markAutoReviewed(db, { id, note = "", decisionPackage = null, expectUpdatedAt = null }) {
+function markAutoReviewed(db,args) {
+  return withTaskVersion(db,args,()=>markAutoReviewedInner(db,args));
+}
+function markAutoReviewedInner(db, { id, note = "", decisionPackage = null, expectUpdatedAt = null }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   // ⭐ Status gate + CAS (v0.16.0). Auto-review is asynchronous by nature — fetch the
@@ -2409,6 +2449,7 @@ function update(db, args) {
   assertLocalIdentityInput(args);
   db.exec("BEGIN IMMEDIATE");
   try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
     const out = updateInner(db, args);
@@ -2567,7 +2608,10 @@ function updateInner(db, fields) {
 }
 
 /** Pin a goal. Its child tasks come out of claim first. Unpin with pinned=false. */
-function setPinned(db, { id, pinned }) {
+function setPinned(db,args) {
+  return withTaskVersion(db,args,()=>setPinnedInner(db,args));
+}
+function setPinnedInner(db, { id, pinned }) {
   const t = db.prepare("SELECT kind FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.kind !== "goal") throw err(ERR.BAD_INPUT, `#${id} 不是目标,只有目标能置顶`);
@@ -2578,9 +2622,10 @@ function setPinned(db, { id, pinned }) {
 
 /** Release / hold (the old "backlog"). What moves is a COLUMN, not a status — no
  *  fifth state. */
-function setReleased(db, { id, released, actor = "human" }) {
+function setReleased(db, { id, released, actor = "human", expectedVersion }) {
   db.exec("BEGIN IMMEDIATE");
   try {
+    assertExpectedVersion(db,id,expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(id));
     if (!before) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
@@ -2605,6 +2650,7 @@ function setReleased(db, { id, released, actor = "human" }) {
 function reopen(db, args) {
   db.exec("BEGIN IMMEDIATE");
   try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
     const out = reopenInner(db, args);
@@ -2648,7 +2694,10 @@ function reopenInner(db, { id, line }) {
   return { id: Number(id), status: "not_started", changed: true, from: t.status };
 }
 
-function archive(db, { id, restore = false, force = false }) {
+function archive(db,args) {
+  return withTaskVersion(db,args,()=>archiveInner(db,args));
+}
+function archiveInner(db, { id, restore = false, force = false }) {
   // ⭐ Ruling: "a completed goal must not be archived" — done goals stay on the board
   //   as the canon of what was achieved. Scope is the ruling's letter: **kind=goal
   //   AND status=done** only (done TASK cards archive as before; un-done goals are
@@ -2712,7 +2761,7 @@ function row(r) {
     } catch { return { list: [], broken: true }; }
   })();
   return {
-    id: Number(r.id), task_uid: r.task_uid, owner_node_id: r.owner_node_id, run_id: r.run_id,
+    id: Number(r.id), aggregate_version: Number(r.aggregate_version), task_uid: r.task_uid, owner_node_id: r.owner_node_id, run_id: r.run_id,
     subject: r.subject, description: r.description,
     status: r.status, waiting_for: r.waiting_for,
     worker: r.worker, line: r.line, prev_line: r.prev_line || null, route: r.route,
@@ -2912,7 +2961,7 @@ function openChildrenOnLines(db, parentId, lines) {
 }
 
 module.exports = {
-  localNode, renameNode, assertLocalIdentityInput, requireRun, runs,
+  localNode, renameNode, assertLocalIdentityInput, requireRun, runs, requireExpectedVersion, assertExpectedVersion,
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,

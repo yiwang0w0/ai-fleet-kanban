@@ -863,7 +863,9 @@
           "cross-node executor identity binding",
           "runtime authorization enforcement",
           "phase acceptance"
-        ]
+        ],
+        "tested_commit": "7cc5939643e66801a431b59df1baed8b46acc42f",
+        "ci_run_id": 36532817500
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
@@ -896,8 +898,21 @@
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "eight local task controls reject stale expected_version; transactional concurrency checks",
+        "pending": [
+          "remote replica execution restrictions",
+          "authenticated owner event authority",
+          "phase acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/versions.md",
+        "docs/federation/versions-evidence.json",
+        "tests/versiontest.mjs"
+      ]
     },
     {
       "id": "T02.05",

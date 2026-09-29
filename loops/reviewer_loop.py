@@ -747,7 +747,7 @@ def apply_verdict(t, d, vr=None):
         # ⭐联动结案的引信是**机器的绿**,不是 approve。这里递过去的只是
         #   「本次审阅实际跑过的 verify 的结果」—— 没跑过就不递
         #   (不推断成 true。推断不是测量)。
-        body = {"verdict": v, "note": note, "resolved_by": "auto"}
+        body = {"verdict": v, "note": note, "resolved_by": "auto", "expected_version": t["aggregate_version"]}
         if vr is not None and vr.get("key"):
             body["verify_ok"] = bool(vr.get("ok"))
         s, r = call("POST", f"/api/tasks/{tid}/resolve", body)
@@ -768,7 +768,7 @@ def apply_verdict(t, d, vr=None):
     # ⭐回执要带「我审的是哪一行」(expect_updated_at)并读返回码:审阅是异步的,迟到是常态 ——
     #   期间人可能已裁定、worker 可能已重交;409 = 本轮判决作废,不是故障,但必须出声。
     s, r = call("POST", f"/api/tasks/{tid}/autoreview",
-                {"note": human, "decision_package": package, "expect_updated_at": t.get("updated_at")})
+                {"note": human, "decision_package": package, "expect_updated_at": t.get("updated_at"), "expected_version": t["aggregate_version"]})
     if s != 200:
         log(f"  #{tid} 审阅回执被看板拒收 {s} {(r or {}).get('error', '')} —— 409 = 卡在审阅期间已被裁定或改变,本轮判决作废")
     n_opt = len(d.get("options") or [])
@@ -908,7 +908,7 @@ def main():
                          + chr(10) + fmt_verify(vr0))
                 s0, r0 = call("POST", f"/api/tasks/{t['id']}/resolve",
                               {"verdict": "reject", "note": note0, "resolved_by": "auto",
-                               "verify_ok": False})
+                               "verify_ok": False, "expected_version": t["aggregate_version"]})
                 log(f"  #{t['id']} → 机械打回(验证 {vr0.get('key')} rc={vr0.get('rc')})"
                     if s0 < 400 else f"  #{t['id']} 机械打回落盘失败 {s0}")
                 continue
@@ -917,7 +917,7 @@ def main():
                 # (不在坏卡上一直烧钱)。卡一动就自动回到重审对象里。
                 s2, r2 = call("POST", f"/api/tasks/{t['id']}/autoreview",
                               {"note": f"【自动审阅】本次未能出判决:{err[:400]}",
-                               "expect_updated_at": t.get("updated_at")})
+                               "expect_updated_at": t.get("updated_at"), "expected_version": t["aggregate_version"]})
                 if s2 != 200:
                     log(f"  #{t['id']} 「看过」印被拒 {s2} {(r2 or {}).get('error', '')} —— 卡已变,下轮重审")
                 log(f"  #{t['id']} 审阅失败:{err.splitlines()[0][:80]}")

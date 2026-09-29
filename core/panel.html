@@ -537,15 +537,28 @@ const verdictDraft = new Map();
 const decisionChoice = new Map();
 const receiptDraft = new Map();
 const outcomeDraft = new Map();
+const draftVersions = new Map();
+let decisionSnapshot = null;
+function taskForView(id,node){
+  return decisionSnapshot?.id === Number(id) && decisionModal.contains(node)
+    ? decisionSnapshot : byId.get(Number(id));
+}
+function captureDraftVersion(id,node){
+  id=Number(id);
+  if(!draftVersions.has(id)) draftVersions.set(id,taskForView(id,node)?.aggregate_version);
+}
 document.addEventListener("input", (e) => {
   const receiptId = e.target.dataset?.handoffReceipt;
   if (receiptId){
+    captureDraftVersion(receiptId,e.target);
     receiptDraft.set(Number(receiptId), e.target.value);
     const scope = e.target.closest("[data-decision-scope]") || e.target.closest(".card");
-    if (scope) syncDecision(scope, byId.get(Number(receiptId)));
+    if (scope) syncDecision(scope, taskForView(receiptId,scope));
     return;
   }
   const id = e.target.dataset?.vin; if (!id) return;
+  captureDraftVersion(id,e.target);
+  if(!e.target.value && !decisionChoice.has(Number(id))) draftVersions.delete(Number(id));
   verdictDraft.set(Number(id), e.target.value);
   const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
   if (scope) syncHandoff(scope);
@@ -553,15 +566,17 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   const outcomeId = e.target.dataset?.handoffOutcome;
   if (outcomeId){
+    captureDraftVersion(outcomeId,e.target);
     outcomeDraft.set(Number(outcomeId), e.target.value);
     const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
-    if (scope) syncDecision(scope, byId.get(Number(outcomeId)));
+    if (scope) syncDecision(scope, taskForView(outcomeId,scope));
     return;
   }
   const id = e.target.dataset?.choice; if (!id) return;
+  captureDraftVersion(id,e.target);
   decisionChoice.set(Number(id), e.target.value);
   const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
-  if (scope) syncDecision(scope, byId.get(Number(id)));
+  if (scope) syncDecision(scope, taskForView(id,scope));
 });
 
 const modal = document.getElementById("modal");
@@ -585,9 +600,12 @@ const closeDecisionModal = () => decisionModal.classList.remove("show");
 document.getElementById("decision-modal-x").addEventListener("click", closeDecisionModal);
 decisionModal.addEventListener("click", (e) => { if (e.target === decisionModal) closeDecisionModal(); });
 function openDecisionModal(t){
+  decisionSnapshot=structuredClone(t);
+  if(!draftVersions.has(t.id)) draftVersions.set(t.id,t.aggregate_version);
+  const staleDraft=draftVersions.get(t.id)!==t.aggregate_version;
   document.getElementById("decision-modal-t").textContent = `#${t.id} 最终裁定 — ${t.subject}`;
   const box = document.getElementById("decision-modal-b");
-  box.innerHTML = decisionPanel(t) +
+  box.innerHTML = (staleDraft ? '<p role="alert">任务已更新，旧裁定草稿不能提交。请先保留需要的文字，再重新载入页面并核对任务。</p>' : "") + decisionPanel(t) +
     `<div class="hf-receipt" data-receipt-wrap="${t.id}" hidden>` +
       `<div class="hf-outcome-title">执行结果(必选)</div>` +
       `<div class="hf-outcomes" role="radiogroup" aria-label="执行结果">` +
@@ -1037,7 +1055,7 @@ function syncHandoff(scope){
   if (!vin) return;
   const tid = Number(vin.dataset.vin);
   if (scope.querySelector("[data-decision]")){
-    syncDecision(scope, byId.get(tid));
+    syncDecision(scope, taskForView(tid,scope));
     return;
   }
   const on = vin.value.trim().length > 0;
@@ -2212,6 +2230,7 @@ const epop = document.getElementById("edit");
 function openEdit(anchor, taskId){
   const t = byId.get(Number(taskId));
   if (!t) return;
+  epop.dataset.version=String(t.aggregate_version);
   const ma = Number(t.max_attempts) || 3;
   epop.innerHTML = `
     <h4>编辑 #${t.id}</h4>
@@ -2235,16 +2254,18 @@ function openEdit(anchor, taskId){
     </div>
     <div class="note" id="edit-note">已尝试 ${Number(t.attempts) || 0} 次 —— 改上限不会清空它。</div>`;
   const r = anchor.getBoundingClientRect();
-  epop.style.left = Math.min(r.left - 90, innerWidth - 290) + "px";
-  epop.style.top = (r.bottom + 6) + "px";
+  // Measure after showing: a card near the viewport bottom must not hide errors.
   epop.classList.add("show");
+  epop.style.left = Math.max(8,Math.min(r.left - 90, innerWidth - epop.offsetWidth - 8)) + "px";
+  epop.style.top = Math.max(8,Math.min(r.bottom + 6, innerHeight - epop.offsetHeight - 8)) + "px";
 }
 
 async function saveEdit(id, k, v){
   const n = document.getElementById("edit-note");
-  const body = {}; body[k] = v;
+  const body = {expected_version:Number(epop.dataset.version)}; body[k] = v;
   try{
     const r = await post(`/api/tasks/${id}/update`, body);
+    epop.dataset.version=String(r.task.aggregate_version);
     // ⭐ Reading `changed` is this function's point. 200 ≠ saved — a wrong key name
     //   returns 200 with zero columns. "Accepted" and "applied" are shown apart.
     // A notice (today: an in-progress description append is invisible to the running
@@ -2261,6 +2282,9 @@ async function saveEdit(id, k, v){
     //   no description box, so from here in-progress always means 409; ② the domain gate
     //   is 400 ("unknown route" / "unknown line").
     if (n) n.textContent = "保存失败:" + err.message;
+  } finally {
+    // Refusal text can grow the popup after its initial measurement.
+    epop.style.top=Math.max(8,Math.min(parseFloat(epop.style.top),innerHeight-epop.offsetHeight-8))+"px";
   }
 }
 
@@ -2281,6 +2305,7 @@ const SELF_ACTING = "button, textarea, select, input, a, [data-ev], [data-pick],
 
 function openPick(anchor, taskId){
   const cur = byId.get(Number(taskId));
+  pick.dataset.version=String(cur?.aggregate_version);
   pick.innerHTML = LINES.map((l) =>
     `<button data-assign="${taskId}" data-line="${l}"${cur?.line === l ? " class=\"pri\"" : ""}>${lineLabel(l)}</button>`
   ).join("") + `<button data-assign="${taskId}" data-line="">(不指定线 · 谁都能领)</button>`;
@@ -2491,7 +2516,8 @@ document.addEventListener("click", async (e) => {
   const as = e.target.closest("button[data-assign]");
   if (as){
     pick.classList.remove("show");
-    await post(`/api/tasks/${as.dataset.assign}/update`, { line: as.dataset.line || null });
+    try { await post(`/api/tasks/${as.dataset.assign}/update`, { line: as.dataset.line || null, expected_version:Number(pick.dataset.version) }); }
+    catch(err){ alert("移线失败:" + err.message); }
     await refresh(); return;
   }
 
@@ -2528,7 +2554,7 @@ ${r.memo}`);
   // agent; "nothing further" is the only real close.
   const decide = e.target.closest("button[data-decide]");
   if (decide){
-    const id = Number(decide.dataset.decide), t = byId.get(id);
+    const id = Number(decide.dataset.decide), t = taskForView(id,decide);
     const key = decisionChoice.get(id);
     const opt = t?.decision_package?.options?.find((o) => o.key === key);
     if (!opt) return;
@@ -2546,6 +2572,7 @@ ${r.memo}`);
       return;
     }
     if (decide.dataset.armed !== "1"){
+      captureDraftVersion(id,decide);
       decide.dataset.armed = "1"; decide.dataset.orig = decide.textContent;
       decide.classList.add("armed");
       armSwap(decide, incompleteApply
@@ -2578,6 +2605,7 @@ ${r.memo}`);
   if (finalClose){
     const id = Number(finalClose.dataset.finalClose);
     if (finalClose.dataset.armed !== "1"){
+      captureDraftVersion(id,finalClose);
       finalClose.dataset.armed = "1"; finalClose.dataset.orig = finalClose.textContent;
       finalClose.classList.add("armed"); armSwap(finalClose, "再按=确认无需后续");
       setTimeout(() => { if (finalClose.dataset.armed === "1"){
@@ -2620,6 +2648,8 @@ ${r.memo}`);
   //   "confirm" into a reflex; the armed state at least demands a conscious second
   //   press, and disarming is the default direction (not pressing = nothing).
   if ((a === "approve" || a === "reject" || a === "archive") && b.dataset.armed !== "1") {
+    captureDraftVersion(id,b);
+    b.dataset.version=String(byId.get(Number(id))?.aggregate_version);
     b.dataset.armed = "1";
     b.dataset.orig = b.textContent;
     b.classList.add("armed");
@@ -2652,19 +2682,27 @@ ${r.memo}`);
     //   release" — hence this note.
     else if (a === "release") await post(`/api/tasks/${id}/release`, { released: true });
     else if (a === "hold")    await post(`/api/tasks/${id}/release`, { released: false });
-    else if (a === "archive") await post(`/api/tasks/${id}/archive`, {});
+    else if (a === "archive") await post(`/api/tasks/${id}/archive`, {expected_version:Number(b.dataset.version)});
     await refresh();
   }catch(err){ alert("操作失败:" + err.message); }
   finally{ b.disabled = false; }
 });
 async function post(url, body){
+  const mutation=url.match(/^\/api\/tasks\/(\d+)\/(claim|resolve|autoreview|update|pin|release|reopen|archive)$/);
+  if(mutation && !Object.hasOwn(body,"expected_version")) {
+    const id=Number(mutation[1]);
+    body={...body,expected_version:mutation[2]==="resolve" && draftVersions.has(id)
+      ? draftVersions.get(id) : byId.get(id)?.aggregate_version};
+  }
   const r = await fetch(url, { method:"POST", headers: WH,
                                body: JSON.stringify(body) });
   if (!r.ok){
     const b = await r.json().catch(()=>({}));
     const e = new Error(b.error || r.status); e.status = r.status; e.body = b; throw e;
   }
-  return r.json();
+  const result=await r.json();
+  if(mutation?.[2]==="resolve") draftVersions.delete(Number(mutation[1]));
+  return result;
 }
 // ⭐ v0.19 (self-audit P1-2): a restart refused because cards are in flight (409 needs_force) is a
 //   question for the human, not a dead end. Ask it here — once, same words on every button — and

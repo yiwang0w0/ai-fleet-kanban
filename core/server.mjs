@@ -2764,10 +2764,13 @@ const server = http.createServer(async (req, res) => {
       if (m !== "POST") return json(res, 405, { error: "方法不允许" });
       const b = await readBody(req);
 
+      const versioned = new Set(["claim","resolve","autoreview","update","pin","release","reopen","archive"]);
+      if(versioned.has(action)) store.requireExpectedVersion(b.expected_version);
+
       if (action === "claim") {
         // ⭐ This endpoint claims THE GIVEN id (it used to call pick-a-card and
         //   occupy a different card). Refusals come back with the reason named.
-        const r = store.claimById(db, { id, worker: b.worker, ...claimIdentity(b, boardRole),
+        const r = store.claimById(db, { id, worker: b.worker, expectedVersion:b.expected_version, ...claimIdentity(b, boardRole),
                                         leaseMin: b.lease_minutes || store.DEFAULT_LEASE_MIN,
                                         // badge purification: same allowlist and same never-400 policy as /api/claim
                                         runtime: RUNTIME_IDS.includes(b.runtime) ? b.runtime : null,
@@ -2815,6 +2818,7 @@ const server = http.createServer(async (req, res) => {
         // green) — the store links only when true; undeclared = no linkage.
         const t = store.get(db, id);
         if (!t) throw store.err(store.ERR.NOT_FOUND, `卡 #${id} 不存在`);
+        store.assertExpectedVersion(db,id,b.expected_version);
         // The handoff archive is an external side effect BEFORE the state change:
         // validate everything store.resolve would refuse FIRST, or "ruling failed"
         // can still have copied SQL = half-application.
@@ -2922,49 +2926,47 @@ const server = http.createServer(async (req, res) => {
         //     closure get the gate itself switched off.
         if (disp === "close" && b.allow_uncommitted !== true) closeGateOrThrow(t);
 
-        // ══ ④ side effects (from here on, no refusals are written) ════════════
-        let receiptBlock = null;
-        if (plan) {
-          const { opt, decisionAction, receipt, outcome } = plan;
-          const extra = said ? `\n补充指示:${said}` : "";
-          if (decisionAction === "request_completion") {
-            resolveNote = `采用方案 ${opt.key} 的方向:${opt.title}。卡内文件尚未补齐;` +
-              `请原 Agent 补齐完整、可下载、符合 handoff 目标准入名形的文件后重新送审。` + extra;
-          } else if (opt.kind === "apply") {
-            try {
-              archive = decision.archiveOptionFiles(t, opt.key, DECISION_CTX);
-            } catch (e) {
-              const msg = String(e.message || e);
-              throw store.err(msg.includes("同名异内容") ? store.ERR.CONFLICT : store.ERR.BAD_INPUT, msg);
+        const r = store.resolve(db, { id, verdict:b.verdict, expectedVersion:b.expected_version,
+          resolvedBy:b.resolved_by || "human", verifyOk:b.verify_ok, selectedOption:b.selected_option,
+          disposition:disp, prepareResolution:()=>{
+            // Version was rechecked under the write lock before any file preparation.
+            let receiptBlock = null;
+            if (plan) {
+              const { opt, decisionAction, receipt, outcome } = plan;
+              const extra = said ? `\n补充指示:${said}` : "";
+              if (decisionAction === "request_completion") {
+                resolveNote = `采用方案 ${opt.key} 的方向:${opt.title}。卡内文件尚未补齐;` +
+                  `请原 Agent 补齐完整、可下载、符合 handoff 目标准入名形的文件后重新送审。` + extra;
+              } else if (opt.kind === "apply") {
+                try {
+                  archive = decision.archiveOptionFiles(t, opt.key, DECISION_CTX);
+                } catch (e) {
+                  const msg = String(e.message || e);
+                  throw store.err(msg.includes("同名异内容") ? store.ERR.CONFLICT : store.ERR.BAD_INPUT, msg);
+                }
+                resolveNote = outcome === "failure"
+                  ? `采用方案 ${opt.key}:${opt.title}。用户已实际尝试应用,但执行失败;` +
+                    `本次不视为已应用,禁止沿成功路径继续。请原 Agent 根据下面的原始回执修正文件;` +
+                    `不要覆盖已归档的失败版本,修正版使用下一个序号并重新送审。` +
+                    `\n\n—— 执行回执(失败 · 用户填写)——\n${receipt}` + extra
+                  : `采用方案 ${opt.key}:${opt.title}。文件已由用户应用成功;` +
+                    (disp === "hold_for_review"
+                      ? `**本卡不交回原 Agent** —— 留在等待中,复核通过后方可完成(v0.1 复核由人在面板完成)。`
+                      : `请按该方案继续并根据下面的回执完成验证。`) +
+                    `\n\n—— 执行回执(成功 · 用户填写)——\n${receipt}` + extra;
+                // ⭐ The receipt survives as ONE block. The four existing carriers do
+                //   not live through a cycle (markAutoReviewed erases, the next report
+                //   overwrites) — and a silently vanished "was applied to production"
+                //   is the doorway to a re-run.
+                receiptBlock = { option: opt.key, outcome, receipt, said,
+                                 files: archive || [], at: new Date().toISOString(), consumed_at: null };
+              } else {
+                resolveNote = `采用方案 ${opt.key}:${opt.title}。请按该方案继续。` + extra;
+              }
             }
-            resolveNote = outcome === "failure"
-              ? `采用方案 ${opt.key}:${opt.title}。用户已实际尝试应用,但执行失败;` +
-                `本次不视为已应用,禁止沿成功路径继续。请原 Agent 根据下面的原始回执修正文件;` +
-                `不要覆盖已归档的失败版本,修正版使用下一个序号并重新送审。` +
-                `\n\n—— 执行回执(失败 · 用户填写)——\n${receipt}` + extra
-              : `采用方案 ${opt.key}:${opt.title}。文件已由用户应用成功;` +
-                (disp === "hold_for_review"
-                  ? `**本卡不交回原 Agent** —— 留在等待中,复核通过后方可完成(v0.1 复核由人在面板完成)。`
-                  : `请按该方案继续并根据下面的回执完成验证。`) +
-                `\n\n—— 执行回执(成功 · 用户填写)——\n${receipt}` + extra;
-            // ⭐ The receipt survives as ONE block. The four existing carriers do
-            //   not live through a cycle (markAutoReviewed erases, the next report
-            //   overwrites) — and a silently vanished "was applied to production"
-            //   is the doorway to a re-run.
-            receiptBlock = { option: opt.key, outcome, receipt, said,
-                             files: archive || [], at: new Date().toISOString(), consumed_at: null };
-          } else {
-            resolveNote = `采用方案 ${opt.key}:${opt.title}。请按该方案继续。` + extra;
-          }
-        }
 
-        // ══ ⑤ landing ═════════════════════════════════════════════════════════
-        const r = store.resolve(db, { id, verdict: b.verdict, note: resolveNote,
-                                     resolvedBy: b.resolved_by || "human",
-                                     verifyOk: b.verify_ok,
-                                     selectedOption: b.selected_option,
-                                     sqlArchive: archive,
-                                     disposition: disp, sqlReceipt: receiptBlock });
+            return {note:resolveNote,sqlArchive:archive,sqlReceipt:receiptBlock};
+          }});
         emit("task.resolved", r);
         return json(res, 200, { task: taskOut(store.get(db, id)) });
       }
@@ -2976,10 +2978,10 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, r);
       }
       if (action === "autoreview") {
-        // expect_updated_at: the row the reviewer judged. Absent = old reviewer, status
-        // gate only; present = CAS as well (store.markAutoReviewed).
+        // expected_version is mandatory; the older timestamp check is retained
+        // as an additional compatibility guard, never as a replacement.
         const r = store.markAutoReviewed(db, { id, note: b.note,
-                                               decisionPackage: b.decision_package,
+                                               decisionPackage: b.decision_package, expectedVersion:b.expected_version,
                                                expectUpdatedAt: b.expect_updated_at ?? null });
         emit("task.autoreviewed", r);
         return json(res, 200, r);
@@ -2992,17 +2994,17 @@ const server = http.createServer(async (req, res) => {
         // Domain gate at the single mandatory pass (the store does not know
         // LINES/ROUTES — layers do not cross).
         if (badRoutable(res, b)) return;
-        const r = store.update(db, { ...b, id });
+        const r = store.update(db, { ...b, id, expectedVersion:b.expected_version });
         emit("task.updated", { id });
         return json(res, 200, { task: store.get(db, id), ...r });
       }
       if (action === "pin") {
-        const r = store.setPinned(db, { id, pinned: b.pinned !== false });
+        const r = store.setPinned(db, { id, expectedVersion:b.expected_version, pinned: b.pinned !== false });
         emit("task.pinned", r);
         return json(res, 200, { task: store.get(db, id) });
       }
       if (action === "release") {
-        const r = store.setReleased(db, { id, released: b.released !== false });
+        const r = store.setReleased(db, { id, expectedVersion:b.expected_version, released: b.released !== false });
         emit("task.released", r);
         return json(res, 200, { task: store.get(db, id) });
       }
@@ -3011,13 +3013,13 @@ const server = http.createServer(async (req, res) => {
         //   verbatim) — gating only create and update still allowed ghost cards
         //   from here.
         if (badRoutable(res, b)) return;
-        const r = store.reopen(db, { id, line: b.line });
+        const r = store.reopen(db, { id, expectedVersion:b.expected_version, line: b.line });
         emit("task.reopened", r);
         return json(res, 200, { task: store.get(db, id), ...r });
       }
       if (action === "archive") {
         const r = store.archive(db, {
-          id,
+          id, expectedVersion:b.expected_version,
           restore: b.restore === true,
           force: b.force === true,
         });
@@ -3034,7 +3036,7 @@ const server = http.createServer(async (req, res) => {
     // green). The mapping table is store.httpStatusFor, ONE place; the mapping AND
     // the declaration are unified in statusFor() above — calling the raw mapping
     // here would recreate "this road silently 400s".
-    return json(res, statusFor(e, "兜底"), { error: msg });
+    return json(res, statusFor(e, "兜底"), { error: msg, ...(Number.isSafeInteger(e?.current_version) ? {expected_version:e.expected_version,current_version:e.current_version} : {}) });
   }
 });
 

@@ -46,7 +46,7 @@
 人工 CLI：
 
 ~~~text
-python cli/board.py take 12 --as alpha
+python cli/board.py take 12 --as alpha --version <aggregate_version>
 python cli/board.py done 12 --as alpha --run <领取输出中的 run_id> --file evidence.md
 python cli/board.py wait 12 --as alpha --run <领取输出中的 run_id> --file reason.md
 ~~~

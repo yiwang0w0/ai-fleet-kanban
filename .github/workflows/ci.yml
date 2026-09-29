@@ -60,6 +60,8 @@ jobs:
         run: bash hrun.sh node tests/backuptest.mjs
       - name: runfencetest (stale dispatch rejection and worker protocol)
         run: bash hrun.sh node tests/runfencetest.mjs
+      - name: versiontest (stale task commands and concurrent edits)
+        run: bash hrun.sh node tests/versiontest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

@@ -20,6 +20,9 @@
   $P bless                                   # accept THIS tree: write the gated subtree's hash to
                                              #   <data>/accepted_rev (the revision gate compares against it)
 
+Task control writes (take/edit/approve/reject/reopen/release/hold/archive) require
+--version <aggregate_version from show>; a JSON edit payload may carry expected_version.
+
 Environment:
   BOARD_URL           board base URL                       (default http://127.0.0.1:47824)
   BOARD_DATA_DIR      data dir holding board_token         (default <repo>/core/.data)
@@ -46,7 +49,7 @@ text: a bare backslash inside inline JSON is an escape error (measured — a car
 creation died on a C:\\ path), while a file passed via --file needs no escaping
 gymnastics; inside JSON strings write / or a doubled backslash.
 """
-import json, sys, io, os, urllib.request, urllib.error
+import json, sys, io, os, re, urllib.request, urllib.error
 
 # Python on Windows writes to PIPES in the locale code page (GBK, CP932, ...).
 # Card subjects legitimately contain non-ASCII — a single CJK wave dash was enough
@@ -83,6 +86,13 @@ def _board_token():
         return ""
 
 def call(method, path, body=None):
+    if method == "POST" and re.fullmatch(r"/api/tasks/\d+/(claim|resolve|autoreview|update|pin|release|reopen|archive)", path):
+        body = dict(body or {})
+        if "expected_version" not in body:
+            version = arg("--version")
+            if not version or not version.isascii() or not version.isdigit():
+                sys.exit("此操作需要 --version <所见 aggregate_version>；先用 show 核对任务，不会自动读取新版本覆盖旧内容")
+            body["expected_version"] = int(version)
     data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
     req = urllib.request.Request(BASE + path, data=data, method=method,
                                  headers={"Content-Type": "application/json; charset=utf-8",

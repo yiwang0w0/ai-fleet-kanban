@@ -1,3 +1,4 @@
+import { fixtureVersion } from "./http-version-fixture.mjs";
 // Loop-layer harness. `node tests/looptest.mjs`
 //
 // selftest.mjs = DB layer / decisiontest.mjs = ruling layer. THIS one runs
@@ -65,6 +66,7 @@ srv.on("error", (e) => { srvOut += `\n[server spawn error] ${(e && e.message) ||
 
 let TOKEN = "";
 const api = async (method, path, body) => {
+  body=await fixtureVersion(BASE,TOKEN,method,path,body);
   const r = await fetch(BASE + path, {
     method,
     headers: { "Content-Type": "application/json", "X-Board-Token": TOKEN },

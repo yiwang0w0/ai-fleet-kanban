@@ -32,7 +32,15 @@
     "base": "f97de7a",
     "same_worker_reclaim_old_report": "accepted before fix; rejected with CONFLICT after fix"
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36532817500,
+    "result": "passed",
+    "jobs": {
+      "gitleaks": 109290087526,
+      "ubuntu": 109290087749,
+      "windows": 109290087770
+    }
+  },
   "real_model_calls": {
     "claude": 0,
     "codex": 0,
@@ -45,5 +53,6 @@
     "policy enforcement is unattested",
     "old model processes and filesystem writes are not terminated by callback rejection",
     "no federation or offline reconciliation enabled"
-  ]
+  ],
+  "tested_commit": "7cc5939643e66801a431b59df1baed8b46acc42f"
 }

@@ -1,3 +1,4 @@
+import { fixtureVersion } from "./http-version-fixture.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -150,6 +151,7 @@ test("HTTP protocol rejects old workers and stale child/report/retry/heartbeat w
     assert.equal(ready,true,out);
     const op=readFileSync(join(TMP,"board_token"),"utf8").trim(), wk=readFileSync(join(TMP,"worker_token"),"utf8").trim();
     async function api(method,path,body,token=op) {
+      body=await fixtureVersion(base,token,method,path,body);
       const r=await fetch(base+path,{method,headers:{"Content-Type":"application/json","X-Board-Token":token},
         body:method==="GET"?undefined:JSON.stringify(body||{})});
       return {status:r.status,body:await r.json().catch(()=>null)};

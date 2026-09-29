@@ -1,3 +1,4 @@
+import { fixtureVersion } from "./http-version-fixture.mjs";
 // Supervisor-layer harness: WHY a line stopped, and who is allowed to restart it.
 // `node tests/servertest.mjs`
 //
@@ -135,6 +136,7 @@ async function board({ script = SERVER, env = {}, dataDir = null, files = {}, co
   // Fixture client keeps claim receipts; never fetch a replacement ID on report.
   const receipts = new Map();
   const api = async (m, p, b) => {
+    b=await fixtureVersion(BASE,TOKEN,m,p,b);
     const mutation = p.match(/^\/api\/tasks\/(\d+)\/(report|heartbeat|attempt)$/);
     if (mutation) b = {run_id:receipts.get(Number(mutation[1])),...b};
     const r = await fetch(BASE + p, { method: m,
@@ -890,6 +892,7 @@ try {
     const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
     const WK = tokOf("worker_token"), RV = tokOf("review_token");
     const apiAs = async (t, m, p, b) => {
+      b=await fixtureVersion(B.BASE,t,m,p,b);
       const r = await fetch(B.BASE + p, { method: m,
         headers: { "Content-Type": "application/json", "X-Board-Token": t },
         body: JSON.stringify(b ?? {}) });
@@ -988,6 +991,7 @@ try {
     const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
     const WK = tokOf("worker_token");
     const apiAs = async (t, m, p, b) => {
+      b=await fixtureVersion(B.BASE,t,m,p,b);
       const r = await fetch(B.BASE + p, { method: m,
         headers: { "Content-Type": "application/json", "X-Board-Token": t },
         body: JSON.stringify(b ?? {}) });
@@ -1240,6 +1244,7 @@ try {
     const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
     const WK = tokOf("worker_token");
     const apiAs = async (t, m, p, b) => {
+      b=await fixtureVersion(B.BASE,t,m,p,b);
       const r = await fetch(B.BASE + p, { method: m,
         headers: { "Content-Type": "application/json", "X-Board-Token": t },
         body: JSON.stringify(b ?? {}) });
