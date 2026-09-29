@@ -125,6 +125,7 @@ function execute(db,p,name,args){
   return {local:{node_id:local.node_id,display_name:local.display_name,sync_epoch:local.sync_epoch},sources};
  }
  case "get_sync_status":return {
+  dispatches:db.prepare("SELECT 1 FROM sqlite_master WHERE name='broker_dispatches'").get()?db.prepare("SELECT d.dispatch_id,d.task_uid,d.run_id,d.role_id,d.execution_mode,d.phase,d.reason,d.launch_at,d.finished_at FROM broker_dispatches d JOIN broker_assignments a ON d.assignment_id=a.assignment_id WHERE a.project_id IN("+marks(p)+") ORDER BY d.rowid DESC LIMIT 100").all(...p.projects):[],
   cursors:db.prepare("SELECT * FROM federation_cursors WHERE project_id IN("+marks(p)+")").all(...p.projects),
   recovery:db.prepare("SELECT * FROM federation_epoch_projects WHERE project_id IN("+marks(p)+")").all(...p.projects),
   assignments:db.prepare("SELECT assignment_id,task_uid,project_id,role_id,role_version,state,reason FROM broker_assignments WHERE project_id IN("+marks(p)+") ORDER BY rowid DESC LIMIT 100").all(...p.projects)};

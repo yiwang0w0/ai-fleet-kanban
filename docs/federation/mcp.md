@@ -98,7 +98,7 @@ request_assignment 要求当前 expected_version，且任务未开始、未归�
 
 更新角色需 --version <所见角色版本>，旧凭据随即失效。撤销使用 revoke --db <绝对路径> --principal <ID> --version <凭据版本>。已有任务登记使用 enroll --db <绝对路径> --task <数字ID> --project demo --work-kind implement --capabilities code --version <当前任务版本>；父卡应先登记同项目，不能改变已有登记。
 
-implement/review 角色必须声明 claude、codex 或 zcode 以及已核实的 model/effort；review 必须 tools=read-only。执行凭据 grant 还要求 --run <实际运行ID>。该 run 必须由可信调度器写入匹配的 broker_role_version / broker_role_digest 策略上下文。目前只有测试夹具生成该上下文，生产调度器适配未完成；不要通过手工伪造 run 绕过这一门槛。
+implement/review 角色必须声明 claude、codex 或 zcode 以及已核实的 model/effort；review 必须 tools=read-only。执行凭据 grant 还要求 --run <实际运行ID>。该 run 必须由可信调度器写入匹配的 broker_role_version / broker_role_digest 策略上下文。该上下文由受控 dispatch prepare 原子生成；其运行凭据必须等一次性启动许可提交后才能调用 MCP 工具。实际执行器监督与适配未完成；参见 [受控调度](dispatch.md)，不要手工伪造 run。
 
 ## MCP 协议与验证
 

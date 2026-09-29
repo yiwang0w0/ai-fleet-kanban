@@ -1,0 +1,72 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-11-controlled-claim",
+  "date": "2026-09-29",
+  "base_commit": "eeb6347417dfec839d3159e48efc3dea971b4538",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/store.js": "aa7baa5deaec830db073517056db1470a3d567a04beb6321c897e3b047aec602",
+    "core/mcp/policy.mjs": "13b88bfc49d11a5e916734d1f363f1f34fbf411e1bf328f71927576d6a954c7f",
+    "core/mcp/tools.mjs": "8a3df1175a228095e464bc639f7b3a961b7aae6fa5fa79116d8b4f09bd938cb8",
+    "core/execution/source-gate.mjs": "929e9d348ee1342d6ac0de249437e0fba64c48dbfcc4f6300438f0970cc8ccd2",
+    "core/execution/dispatch.mjs": "42f1c0d87ada61f5d6273133d81cd8d374465a3132bf67bf403a8b68f7f1ae68",
+    "cli/dispatch.mjs": "58bbea39db3ee0d347575b3ab2250ef721f895226fa772bf9bdf16694a4445bf",
+    "tests/dispatchtest.mjs": "08976a2b934ddb4e616b9ef4be17da0fa699b482c0020b38280d3964ec840b14",
+    "package.json": "3b11a351a22aa0f9c0fea074090cada92950af087d92685e35c2d76074a8a114",
+    ".github/workflows/ci.yml": "3a43bda1c742ece336bb0ce2368be214c238700a8da1ab02660ca6cf323e5b20"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "passed": 1050,
+      "failed": 0,
+      "dispatch_tests_at_that_point": 24
+    },
+    "final_targeted": {
+      "command": "node tests/dispatchtest.mjs",
+      "passed": 26,
+      "failed": 0
+    },
+    "changes_after_full_suite": [
+      "two additional assertions suites covering native root WIP and changed parent input",
+      "type checks for source paths and quota ID"
+    ],
+    "coverage": [
+      "atomic native claim, role/creator/epoch binding and exclusive credential issuance",
+      "source approval, clean tree and stale loaded source rejection",
+      "native human/dependency/ancestor/child/lock/WIP/no-progress gates retained",
+      "reserved and consumed call quotas; distinct fixture/provider budgets; policy CAS",
+      "single-use launch permit cannot escape an uncommitted caller transaction or be replayed",
+      "run MCP credentials blocked before launch authorization",
+      "injected preparation and settlement failures roll back task/run/span/events and receipts",
+      "old/replaced runs cannot overwrite newer results; prior MCP delivery preserved",
+      "unknown usage stays null; failures/timeouts/cancelled outcomes require decision",
+      "two independent processes racing one assignment and a separate MCP stdio delivery process",
+      "expired lease releases only unlaunched reservation, never refunds consumed launch",
+      "local administration CLI and project-scoped dispatch visibility"
+    ]
+  },
+  "ci": "pending",
+  "dispatch_schema_version": 1,
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "trusted runner interfaces only; CLI does not start provider processes",
+    "process outcome must come from a future verified adapter, not inferred from exit0",
+    "filesystem/process isolation and process tree termination not yet implemented in this path",
+    "committed permit does not prove actual provider execution; uncertain launches are retained and never auto-refunded",
+    "crash between credential-file write and DB commit may leave an invalid orphan file requiring operator review",
+    "source approval checks Git tree/cleanliness, not an OS atomic immutable code snapshot",
+    "full G04, actual model canaries, real multi-node fault tests and independent review remain"
+  ]
+}

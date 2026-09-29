@@ -49,7 +49,16 @@
       "full_suite_on_final_revision": "CI pending"
     }
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36555531029,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36555531029",
+    "result": "passed",
+    "windows_main_passed": 1026,
+    "linux_main_passed": 1023,
+    "mcp_tests_per_platform": 26,
+    "gitleaks": "passed",
+    "extra_checks": "passed"
+  },
   "broker_schema_version": 1,
   "mcp_protocol_versions": [
     "2025-11-25",
@@ -76,5 +85,6 @@
     "internal HTTP is not MCP Streamable HTTP and must remain local",
     "actual provider clients and current model availability not validated by fixture stdio process",
     "independent phase acceptance, real Tailscale nodes and soak testing remain"
-  ]
+  ],
+  "tested_commit": "eeb6347417dfec839d3159e48efc3dea971b4538"
 }

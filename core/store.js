@@ -1605,7 +1605,8 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
                          force = false, treeRev = null, extra = null, agentInstanceId = null, runContext = null, runContextForTask = null, expectedVersion }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
   leaseMin = clampLease(leaseMin);   // see claim()
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_claim_by_id");
   try {
     assertExpectedVersion(db,id,expectedVersion);
     const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
@@ -1613,7 +1614,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
     //   throw, so without a code here the server could only blanket-409 (it did:
     //   claiming a missing id was the one 409 while GET gave 404 and other write
     //   endpoints 400).
-    const no = (why, code = ERR.CONFLICT) => { db.exec("COMMIT"); return { ok: false, why, code }; };
+    const no = (why, code = ERR.CONFLICT) => { db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_claim_by_id"); return { ok: false, why, code }; };
     if (!t) return no(`卡 #${id} 不存在`, ERR.NOT_FOUND);
     if (t.kind === "goal") return no(`#${id} 是目标,目标不能被认领`);
     if (t.archived_at) return no(`#${id} 已归档`);
@@ -1701,10 +1702,10 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
         }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_claim_by_id");
     return { ok: true, task: get(db, Number(id)) };
   } catch (e) {
-    try { db.exec("ROLLBACK"); } catch {}
+    try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_claim_by_id; RELEASE store_claim_by_id"); } catch {}
     throw e;
   }
 }

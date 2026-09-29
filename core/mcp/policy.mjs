@@ -67,7 +67,7 @@ export function putRole(db,policy,expectedVersion){
   return getRole(db,policy.role_id);
  });
 }
-function boundRun(db,principal,role){
+function boundRun(db,principal,role,{requireLaunch=true}={}){
  if(!principal.run_id)return null;
  const r=db.prepare("SELECT * FROM task_runs WHERE run_id=?").get(principal.run_id);
  if(!r||r.agent_instance_id!==principal.agent_instance_id||r.role_id!==role.role_id||r.runtime!==role.policy.runtime)fail("RUN_MISMATCH","凭据未绑定该执行实例",403);
@@ -77,6 +77,11 @@ function boundRun(db,principal,role){
  if(!principal.projects.includes(project))fail("FORBIDDEN","执行实例不属于授权项目",403);
  const context=JSON.parse(r.policy_json).context;
  if(context.broker_role_version!==role.version||context.broker_role_digest!==role.policy_digest)fail("POLICY_CHANGED","执行实例策略不是当前代理角色策略",403);
+ if(requireLaunch&&context.dispatch_id){
+  const table=db.prepare("SELECT 1 FROM sqlite_master WHERE name='broker_dispatches'").get();
+  const dispatch=table?db.prepare("SELECT run_id,agent_instance_id,launch_at,phase FROM broker_dispatches WHERE dispatch_id=?").get(context.dispatch_id):null;
+  if(!dispatch||dispatch.run_id!==r.run_id||dispatch.agent_instance_id!==principal.agent_instance_id||!dispatch.launch_at||dispatch.phase==="abandoned")fail("LAUNCH_NOT_AVAILABLE","运行尚未获得已提交的启动许可",403);
+ }
  return {...r,task:t,project_id:project};
 }
 export function issuePrincipal(db,{roleId,projects,runId=null,credentialFile}){
@@ -94,7 +99,7 @@ export function issuePrincipal(db,{roleId,projects,runId=null,credentialFile}){
   const principal_id=randomUUID(),agent_instance_id=run?.agent_instance_id??randomUUID();
   uuid(agent_instance_id,"agent_instance_id");
   const principal={principal_id,agent_instance_id,run_id:runId,projects};
-  if(execution)boundRun(db,principal,role);
+  if(execution)boundRun(db,principal,role,{requireLaunch:false});
   const token=principal_id+"."+randomBytes(32).toString("base64url"),now=new Date().toISOString();
   db.prepare("INSERT INTO broker_principals VALUES(?,?,?,?,?,?,?,?,?,1,'active',?)").run(principal_id,node.node_id,node.sync_epoch,roleId,role.version,JSON.stringify(projects),agent_instance_id,runId,createHash("sha256").update(token).digest("hex"),now);
   db.prepare("INSERT INTO broker_auth_events(principal_id,role_id,action,version,at) VALUES(?,?,'issue',1,?)").run(principal_id,roleId,now);

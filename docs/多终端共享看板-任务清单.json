@@ -6,7 +6,7 @@
   "created_date": "2026-09-29",
   "timezone": "Asia/Tokyo",
   "source_document": "多终端共享看板-实施与验收计划.md",
-  "source_sha256": "6ccf4e9625c4551ee0a1194787204ff81321f3091c8b8f610359b5011add6985",
+  "source_sha256": "53da5495eeb70461339d9689aac207b9431943dfb93f4e26950b8e83298c5316",
   "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
   "status": "implementation_in_progress",
   "execution_authorized": true,
@@ -1253,17 +1253,20 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "deterministic role selection and immutable waiting assignment receipts; no executor started",
+        "scope": "atomic native claim, role-bound MCP identity, reserved call quotas, one-use launch permit and terminal/late receipt lifecycle",
         "pending": [
-          "controlled executor claim and adapter contracts",
-          "OS filesystem/process containment, full tool set and independent G04 acceptance"
+          "actual three-provider adapter and supervised process integration",
+          "filesystem/process containment and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/mcp.md",
         "docs/federation/mcp-evidence.json",
-        "tests/mcptest.mjs"
+        "tests/mcptest.mjs",
+        "docs/federation/dispatch.md",
+        "docs/federation/dispatch-evidence.json",
+        "tests/dispatchtest.mjs"
       ]
     },
     {
@@ -1374,13 +1377,25 @@
       "evidence_required": [
         "G04 回执"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "atomic native claim, role-bound MCP identity, reserved call quotas, one-use launch permit and terminal/late receipt lifecycle",
+        "pending": [
+          "actual three-provider adapter and supervised process integration",
+          "filesystem/process containment and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/dispatch.md",
+        "docs/federation/dispatch-evidence.json",
+        "tests/dispatchtest.mjs"
+      ]
     },
     {
       "id": "T05.01",
