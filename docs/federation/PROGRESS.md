@@ -202,3 +202,5 @@ peer网关增加publish/approve/withdraw/status及独立关系权限。CLI提供
 本机完整主套件1191项通过（841项经典断言、350项原生测试，其中关系测试28项）。覆盖两个独立进程竞争、混合循环、真实回环HTTP/撤权上传、回执重放、队列容量恢复、事务故障、CLI和实际备份激活。最终准确提交的双平台验证由CI回执补充。
 
 本批只证明已申报关系图的登记一致性。尚未把本地结构变更、双方实际委派合同和确认后的执行放行接成闭环；dispatch_ready=false，原委派任务仍不可执行。T06.02为本地部分实现，完整G06未通过。合同与证据见relations.md、两份图JSON schema及relations-evidence.json。上批1b9cd747的CI36573497035全绿（Windows1163/Linux1159、额外检查及gitleaks通过），已补入delegation-evidence.json。部署未变，真实调用各0/1，完整阶段通过0/12。
+
+第十六批CI复查：ca810284的Linux主套件1187项及额外检查/gitleaks通过，Windows在超大正文测试遇到提前关闭连接的ECONNRESET。测试已分别核对声明长度的413拒绝和实际chunked超限拒绝；后者允许Windows关闭未读正文导致的连接重置，同时必须已发出超限字节、完整登记状态不变且服务仍可用。产品代码未修改，最终关系专项28项通过；新的准确提交双平台CI仍待核对。

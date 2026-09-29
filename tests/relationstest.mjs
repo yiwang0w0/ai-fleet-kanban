@@ -272,8 +272,25 @@ test("gateway rechecks a credential revoked while a topology body is still uploa
 test("gateway accepts bounded large topology snapshots and refuses oversized bodies without writes",async()=>{
  const f=pair({publishNow:false}),{url}=await network(f.r),many=Array.from({length:100},()=>vertex(f.a)),s=topology(f,f.a,many),body={request_id:randomUUID(),expected_version:1,snapshot:s};
  assert.ok(Buffer.byteLength(JSON.stringify(body))>8192);assert.equal((await post(url,"publish",f.ag.auth,body)).status,200);
- const before=state(f.r.db),r=await post(url,"publish",f.ag.auth,{padding:"a".repeat(4*1024*1024+4096)});
- assert.equal(r.status,413);assert.equal(state(f.r.db),before);
+ const before=state(f.r.db),limit=4*1024*1024+4096;
+ // Check the declared-length refusal without flooding an already-closing socket.
+ const declared=await new Promise((resolve,reject)=>{
+  const req=http.request(url+"/peer/v1/relations/publish",{method:"POST",headers:{Authorization:f.ag.auth,"Content-Type":"application/json","Content-Length":limit+1}},res=>{res.resume();res.on("end",()=>resolve(res.statusCode));});
+  req.on("error",reject);req.setTimeout(10000,()=>req.destroy(Error("declared body timeout")));req.flushHeaders();
+ });assert.equal(declared,413);assert.equal(state(f.r.db),before);
+ // A peer can omit Content-Length. Closing with unread bytes can legitimately reset
+ // the Windows TCP connection before its 413 arrives; either refusal must leave
+ // the server alive and the entire registrar state unchanged.
+ const streamed=await new Promise((resolve,reject)=>{
+  let sent=0,settled=false,responseStatus=null;const chunk=Buffer.alloc(64*1024,120);
+  const req=http.request(url+"/peer/v1/relations/publish",{method:"POST",headers:{Authorization:f.ag.auth,"Content-Type":"application/json"}},res=>{responseStatus=res.statusCode;res.resume();res.on("end",()=>finish({status:res.statusCode}));res.on("error",onError);});
+  const timer=setTimeout(()=>{if(!settled){settled=true;req.destroy();reject(Error("streamed body timeout"));}},10000);
+  function finish(result){if(settled)return;settled=true;clearTimeout(timer);req.destroy();resolve({...result,sent});}
+  function onError(e){if(settled)return;if(["ECONNRESET","EPIPE"].includes(e.code))finish({status:responseStatus,closed:e.code});else{settled=true;clearTimeout(timer);req.destroy();reject(e);}}
+  function pump(){if(settled)return;while(sent<limit+1){const part=chunk.subarray(0,Math.min(chunk.length,limit+1-sent));sent+=part.length;if(!req.write(part))return;}req.end();}
+  req.on("error",onError);req.on("drain",pump);pump();
+ });assert.ok(streamed.status===413||streamed.status===null&&streamed.sent===limit+1&&["ECONNRESET","EPIPE"].includes(streamed.closed),JSON.stringify(streamed));
+ assert.equal(state(f.r.db),before);assert.equal((await post(url,"status",f.ag.auth,graphArgs(f))).status,200);
 });
 test("full pending queue permits existing confirmations and withdrawals so capacity can be recovered",()=>{
  const f=pair(),descriptors=[];f.r.db.exec("BEGIN IMMEDIATE");

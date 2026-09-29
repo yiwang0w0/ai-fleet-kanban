@@ -9,7 +9,7 @@
     "core/federation/gateway.mjs": "9ba2d945d987a5dc88d1f4425e31e92415922b16cb54d9d7300209707ea6e814",
     "core/federation/protocol.mjs": "4498af411150e76eafadafa9f1b180323f25fbcca6d08f313e0d0b0e67fa53e2",
     "cli/relations.mjs": "709c103272f1e012ba0d0f0ffea5b49183a7875900187f9e5cd33a0f3f403ced",
-    "tests/relationstest.mjs": "9698f40c3501325ce01cdcd41bbccecf5cda477706e251b688545c3db44833f2",
+    "tests/relationstest.mjs": "50446230d12c1f122fdc57179a7d8c3a0c1141e80bc6b763beb6b64ec3c0af1d",
     "docs/federation/topology.schema.json": "ecac77bc8f6edbad9c17dab7e6213e5aa79005e99983d0edbadd545b31e33129",
     "docs/federation/relation.schema.json": "30ab64d4ffed7978b792f0074c35ab386dd52499141fe2834dc5f5ad5a8d8f1e",
     "package.json": "668b850b91b432d84783aba0930aa8439264886a29345a62161402e5eccd9020",
@@ -27,9 +27,12 @@
     },
     "final_targeted": {
       "passed": 28,
-      "failed": 0
+      "failed": 0,
+      "log": ".data/relations-http-final.log"
     },
-    "changes_after_full_suite": [],
+    "changes_after_full_suite": [
+      "test-only Windows TCP portability fix: declared-length refusal checks 413 without transmitting the oversized body; chunked oversize must return 413 or close after all excess bytes are queued, preserve state, and leave the service healthy"
+    ],
     "coverage": [
       "independent-process opposite-edge final approval race: exactly one confirmation, then cycle rejection on refreshed retry",
       "combined local parent/dependency and remote edges, independent bidirectional cooperation and ten-thousand-vertex traversal",
@@ -62,5 +65,21 @@
     "no automatic relation network client, retry scheduler, MCP discovery or graph recovery coordination",
     "confirmed relationship retirement, evidence/results, cancellation and final acceptance remain pending",
     "real multi-computer Tailscale tests and independent phase acceptance remain pending"
-  ]
+  ],
+  "prior_ci_attempt": {
+    "commit": "ca810284ddefb40efd8324f88c79a3f17489b9d0",
+    "run_id": 36577897191,
+    "conclusion": "failure",
+    "linux": {
+      "job_id": 109438147779,
+      "passed": 1187,
+      "failed": 0
+    },
+    "windows": {
+      "job_id": 109438147919,
+      "failed_step": "relationstest",
+      "reason": "oversized eager upload could produce ECONNRESET before client received 413"
+    },
+    "gitleaks": "success"
+  }
 }
