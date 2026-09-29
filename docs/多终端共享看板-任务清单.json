@@ -1390,7 +1390,7 @@
         "pending": [
           "real Tailscale multi-node acceptance",
           "independent phase acceptance",
-          "snapshot/retention/epoch recovery and complete audit/relationship events"
+          "restore epoch activation and complete audit/relationship events"
         ]
       },
       "acceptance_receipt": null,
@@ -1432,7 +1432,7 @@
         "pending": [
           "real Tailscale multi-node acceptance",
           "independent phase acceptance",
-          "snapshot/retention/epoch recovery and complete audit/relationship events"
+          "restore epoch activation and complete audit/relationship events"
         ]
       },
       "acceptance_receipt": null,
@@ -1473,7 +1473,7 @@
         "pending": [
           "real Tailscale multi-node acceptance",
           "independent phase acceptance",
-          "snapshot/retention/epoch recovery and complete audit/relationship events"
+          "restore epoch activation and complete audit/relationship events"
         ]
       },
       "acceptance_receipt": null,
@@ -1515,7 +1515,7 @@
         "pending": [
           "real Tailscale multi-node acceptance",
           "independent phase acceptance",
-          "snapshot/retention/epoch recovery and complete audit/relationship events"
+          "restore epoch activation and complete audit/relationship events"
         ]
       },
       "acceptance_receipt": null,
@@ -1545,13 +1545,25 @@
       "evidence_required": [
         "snapshot/restore/epoch 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "authorized frozen snapshot pages, durable staging, atomic replica installation, explicit guarded compaction and HTTP rejoin",
+        "pending": [
+          "restore epoch activation and original node retirement",
+          "real multi-node recovery and phase acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/snapshots.md",
+        "docs/federation/snapshots-evidence.json",
+        "tests/snapshottest.mjs"
+      ]
     },
     {
       "id": "T05.06",

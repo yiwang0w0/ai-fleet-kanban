@@ -36,7 +36,16 @@
       "bidirectional HTTP convergence by authorized projection hash without queue replication"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36542280058,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36542280058",
+    "result": "passed",
+    "windows_main_passed": 945,
+    "linux_main_passed": 942,
+    "sync_tests_per_platform": 26,
+    "gitleaks": "passed",
+    "extra_checks": "passed"
+  },
   "network": {
     "scope": "temporary localhost only",
     "tailscale_configuration_changed": false,
@@ -62,5 +71,6 @@
     "json_syntax": "passed",
     "external_schema_validator": "not_run: bundled Python has no jsonschema module",
     "runtime_protocol_validation": "26 synchronization tests passed"
-  }
+  },
+  "tested_commit": "855d1dedf2fc35cd09aada154382b3e41cc0aa2b"
 }

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Fleet task-snapshot-v1 messages",
+  "description": "Syntax only; authorization, byte limits, digests, monotonic versions, ordered pages and atomic installation are runtime requirements.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/manifest"
+    },
+    {
+      "$ref": "#/$defs/page"
+    }
+  ],
+  "$defs": {
+    "manifest": {
+      "type": "object",
+      "properties": {
+        "snapshot_version": {
+          "const": 1
+        },
+        "snapshot_id": {
+          "$ref": "sync-batch.schema.json#/$defs/uuid"
+        },
+        "origin_node_id": {
+          "$ref": "sync-batch.schema.json#/$defs/uuid"
+        },
+        "origin_epoch": {
+          "$ref": "sync-batch.schema.json#/$defs/uuid"
+        },
+        "project_id": {
+          "$ref": "sync-batch.schema.json#/$defs/project"
+        },
+        "head_seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "checkpoint": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "event_digest": {
+                  "$ref": "sync-batch.schema.json#/$defs/digest"
+                }
+              },
+              "required": [
+                "seq",
+                "event_digest"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "record_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "content_digest": {
+          "$ref": "sync-batch.schema.json#/$defs/digest"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "snapshot_version",
+        "snapshot_id",
+        "origin_node_id",
+        "origin_epoch",
+        "project_id",
+        "head_seq",
+        "checkpoint",
+        "record_count",
+        "content_digest",
+        "created_at",
+        "expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "page": {
+      "type": "object",
+      "properties": {
+        "snapshot_id": {
+          "$ref": "sync-batch.schema.json#/$defs/uuid"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "next_offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "done": {
+          "type": "boolean"
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "$ref": "sync-batch.schema.json#/$defs/event"
+          }
+        },
+        "page_digest": {
+          "$ref": "sync-batch.schema.json#/$defs/digest"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "offset",
+        "next_offset",
+        "done",
+        "events",
+        "page_digest"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

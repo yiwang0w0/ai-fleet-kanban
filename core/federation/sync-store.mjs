@@ -12,8 +12,8 @@ export function canonical(x){
 export const digest=x=>createHash("sha256").update(canonical(x)).digest("hex");
 const conflict=(code,message)=>new PeerError(code,message,409);
 const project=p=>names([p],"project_id",null,1)[0];
-function integer(n,label){if(!Number.isSafeInteger(n)||n<0)throw new PeerError("BAD_INPUT",label+" 必须是非负安全整数");return n;}
-function atomic(db,fn){
+export function integer(n,label){if(!Number.isSafeInteger(n)||n<0)throw new PeerError("BAD_INPUT",label+" 必须是非负安全整数");return n;}
+export function atomic(db,fn){
  if(typeof db.isTransaction!=="boolean")throw new PeerError("RUNTIME_INCOMPATIBLE","同步功能需要支持 SQLite isTransaction 的 Node 运行时；请使用已验证的 Node 24",500);
  return db.isTransaction ? fn() : transaction(db,fn);
 }
@@ -24,7 +24,8 @@ export function migrateSync(db){
    "CREATE TABLE IF NOT EXISTS federation_sync_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL);",
    "INSERT OR IGNORE INTO federation_sync_schema VALUES(1,1);"
   ].join("\n"));
-  if(db.prepare("SELECT version FROM federation_sync_schema").get().version!==1)throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
+  const schemaVersion=db.prepare("SELECT version FROM federation_sync_schema").get().version;
+  if(![1,2].includes(schemaVersion))throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
   db.exec([
    "CREATE TABLE IF NOT EXISTS federation_shares(task_id INTEGER PRIMARY KEY,task_uid TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN(0,1)),revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991));",
    "CREATE TABLE IF NOT EXISTS federation_dirty(task_id INTEGER PRIMARY KEY);",
@@ -45,6 +46,11 @@ export function migrateSync(db){
    "CREATE TRIGGER IF NOT EXISTS federation_outbox_no_update BEFORE UPDATE ON federation_outbox BEGIN SELECT RAISE(ABORT,'published event is immutable'); END;",
    "CREATE TRIGGER IF NOT EXISTS federation_outbox_no_delete BEFORE DELETE ON federation_outbox BEGIN SELECT RAISE(ABORT,'published event retention is not enabled'); END;"
   ].join("\n"));
+  db.exec("CREATE TABLE IF NOT EXISTS federation_published(project_id TEXT NOT NULL,task_uid TEXT NOT NULL,seq INTEGER NOT NULL,event_json TEXT NOT NULL,PRIMARY KEY(project_id,task_uid));\nCREATE TABLE IF NOT EXISTS federation_retention(project_id TEXT PRIMARY KEY,floor_seq INTEGER NOT NULL DEFAULT 0);\nCREATE TABLE IF NOT EXISTS federation_snapshots(snapshot_id TEXT PRIMARY KEY,project_id TEXT NOT NULL,head_seq INTEGER NOT NULL,manifest_json TEXT NOT NULL,expires_at INTEGER NOT NULL);\nCREATE TABLE IF NOT EXISTS federation_snapshot_items(snapshot_id TEXT NOT NULL,ordinal INTEGER NOT NULL,event_json TEXT NOT NULL,PRIMARY KEY(snapshot_id,ordinal));\nCREATE TABLE IF NOT EXISTS federation_snapshot_offers(peer_node_id TEXT NOT NULL,peer_epoch TEXT NOT NULL,snapshot_id TEXT NOT NULL,PRIMARY KEY(peer_node_id,peer_epoch,snapshot_id));\nCREATE TABLE IF NOT EXISTS federation_snapshot_staging(origin_node_id TEXT NOT NULL,project_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,snapshot_id TEXT NOT NULL UNIQUE,manifest_json TEXT NOT NULL,next_offset INTEGER NOT NULL DEFAULT 0,received_bytes INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(origin_node_id,project_id));\nCREATE TABLE IF NOT EXISTS federation_snapshot_received(snapshot_id TEXT NOT NULL,ordinal INTEGER NOT NULL,task_uid TEXT NOT NULL,event_json TEXT NOT NULL,event_id TEXT NOT NULL,seq INTEGER NOT NULL,PRIMARY KEY(snapshot_id,ordinal),UNIQUE(snapshot_id,task_uid),UNIQUE(snapshot_id,event_id),UNIQUE(snapshot_id,seq));\nCREATE TABLE IF NOT EXISTS federation_snapshot_anchors(origin_node_id TEXT NOT NULL,project_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,seq INTEGER NOT NULL,event_digest TEXT,snapshot_id TEXT NOT NULL,content_digest TEXT NOT NULL,PRIMARY KEY(origin_node_id,project_id));\nCREATE TABLE IF NOT EXISTS federation_retention_events(id INTEGER PRIMARY KEY,project_id TEXT NOT NULL,floor_seq INTEGER NOT NULL,head_seq INTEGER NOT NULL,snapshot_id TEXT NOT NULL,deleted_count INTEGER NOT NULL,lagging_peer_count INTEGER NOT NULL,at TEXT NOT NULL);");
+  if(schemaVersion===1){
+   db.exec("INSERT OR REPLACE INTO federation_published SELECT o.project_id,json_extract(o.event_json,'$.aggregate_uid'),o.seq,o.event_json FROM federation_outbox o JOIN (SELECT project_id,json_extract(event_json,'$.aggregate_uid') AS uid,MAX(seq) AS seq FROM federation_outbox GROUP BY project_id,uid) latest ON o.project_id=latest.project_id AND o.seq=latest.seq");
+   db.exec("UPDATE federation_sync_schema SET version=2 WHERE singleton=1");
+  }
  });
 }
 /** Explicit opt-in. A stable project prevents accidental cross-project relocation. */
@@ -90,10 +96,11 @@ function materialize(db,projectId,limit){
   const text=canonical(event);
   if(Buffer.byteLength(text)>MAX_EVENT_BYTES)throw new PeerError("PROJECTION_TOO_LARGE","任务共享内容超过 256 KiB，待发送记录仍保留",413);
   db.prepare("INSERT INTO federation_outbox VALUES(?,?,?,?,?)").run(event.event_id,projectId,seq,eventDigest,text);
+  db.prepare("INSERT INTO federation_published VALUES(?,?,?,?) ON CONFLICT(project_id,task_uid) DO UPDATE SET seq=excluded.seq,event_json=excluded.event_json").run(projectId,s.task_uid,seq,text);
   db.prepare("DELETE FROM federation_dirty WHERE task_id=?").run(s.task_id);
  }
 }
-function allowed(peer,projectId,scope){
+export function allowed(peer,projectId,scope){
  project(projectId);
  if(!peer.scopes.includes(scope)||!peer.projects.includes(projectId))throw new PeerError("FORBIDDEN","对端不具备该项目的同步权限",403);
 }
@@ -103,6 +110,8 @@ export function exportBatch(db,peer,{project_id:projectId,after_seq:after,limit=
  return atomic(db,()=>{
   const node=localIdentity(db);
   const oldHead=db.prepare("SELECT seq FROM federation_streams WHERE project_id=?").get(projectId)?.seq??0;
+  const floor=db.prepare("SELECT floor_seq FROM federation_retention WHERE project_id=?").get(projectId)?.floor_seq??0;
+  if(after<floor)throw conflict("SNAPSHOT_REQUIRED","增量历史已压缩，请从授权快照重建");
   if(after>oldHead)throw conflict("CURSOR_AHEAD","游标超过本机流末尾；拒绝静默重置");
   materialize(db,projectId,limit);
   const head=db.prepare("SELECT seq FROM federation_streams WHERE project_id=?").get(projectId).seq;
@@ -128,7 +137,7 @@ export function acknowledge(db,peer,{project_id:projectId,seq,event_digest:event
  });
 }
 const TASK_FIELDS=["task_uid","owner_node_id","aggregate_version","subject","description","acceptance","status","waiting_for","kind","parent_uid","line","run_id","attempts","max_attempts","released","result","verdict_note","archived_at","created_at","updated_at"];
-function validateTask(t,e){
+export function validateTask(t,e){
  keys(t,TASK_FIELDS,"task");
  if(Object.keys(t).length!==TASK_FIELDS.length)throw new PeerError("BAD_INPUT","任务投影字段缺失");
  if(t.task_uid!==e.aggregate_uid||t.owner_node_id!==e.origin_node_id)throw conflict("OWNER_MISMATCH","任务所有者不匹配");
@@ -140,7 +149,7 @@ function validateTask(t,e){
  if(t.parent_uid!==null)taskUID(t.parent_uid,e.origin_node_id);
  integer(t.attempts,"attempts");version(t.max_attempts);
 }
-function taskUID(uid,owner){
+export function taskUID(uid,owner){
  if(typeof uid!=="string"||uid.slice(0,37)!==owner+"/")throw conflict("OWNER_MISMATCH","任务 UID 不属于已认证来源");
  uuid(uid.slice(37),"task UID");
 }
@@ -187,9 +196,9 @@ export function applyBatch(db,{origin,epoch,projectId},batch){
    db.prepare("INSERT INTO federation_inbox VALUES(?,?,?,?,?,?)").run(e.event_id,origin,epoch,projectId,e.seq,eventDigest);
    current=e.seq;applied++;
   }
-  const last=current?db.prepare("SELECT event_digest FROM federation_inbox WHERE origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=?").get(origin,epoch,projectId,current):null;
+  const last=current?receivedCheckpoint(db,origin,epoch,projectId,current):null;
   const end=batch.events.at(-1)?.seq??batch.after_seq;
-  const cp=end?db.prepare("SELECT event_digest FROM federation_inbox WHERE origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=?").get(origin,epoch,projectId,end):null;
+  const cp=end?receivedCheckpoint(db,origin,epoch,projectId,end):null;
   if(end ? batch.checkpoint?.seq!==end||batch.checkpoint?.event_digest!==cp?.event_digest : batch.checkpoint!==null)throw conflict("CONTENT_MISMATCH","批次末尾回执不匹配");
   db.prepare("INSERT INTO federation_cursors VALUES(?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET seq=excluded.seq,updated_at=excluded.updated_at").run(origin,projectId,epoch,current,new Date().toISOString());
   return {applied,cursor:current,checkpoint:last?{seq:current,event_digest:last.event_digest}:null,has_more:current<batch.head_seq||batch.pending_count>0};
@@ -198,6 +207,9 @@ export function applyBatch(db,{origin,epoch,projectId},batch){
   if(!db.isTransaction)db.prepare("INSERT OR IGNORE INTO federation_quarantine(origin_node_id,project_id,code,batch_digest,at) VALUES(?,?,?,?,?)").run(origin,projectId,e.code||"INTERNAL",safeDigest(batch),new Date().toISOString());
   throw e;
  }
+}
+export function receivedCheckpoint(db,origin,epoch,projectId,seq){
+ return db.prepare("SELECT event_digest FROM federation_inbox WHERE origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=? UNION ALL SELECT event_digest FROM federation_snapshot_anchors WHERE origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=? LIMIT 1").get(origin,epoch,projectId,seq,origin,epoch,projectId,seq);
 }
 export function recordSource(db,{node_id,display_name,sync_epoch}){
  return atomic(db,()=>{
@@ -220,5 +232,9 @@ export function syncStatus(db){
   deliveries:db.prepare("SELECT * FROM federation_deliveries").all(),cursors:db.prepare("SELECT * FROM federation_cursors").all(),
   sources:db.prepare("SELECT * FROM federation_sources").all(),
   attempts:db.prepare("SELECT 1 FROM sqlite_master WHERE name='federation_sync_attempts'").get()?db.prepare("SELECT * FROM federation_sync_attempts").all():[],
+  streams:db.prepare("SELECT project_id,seq AS head_seq FROM federation_streams").all(),
+  snapshots:db.prepare("SELECT snapshot_id,project_id,head_seq,expires_at FROM federation_snapshots").all(),
+  snapshot_staging:db.prepare("SELECT origin_node_id,project_id,snapshot_id,next_offset FROM federation_snapshot_staging").all(),
+  retention:db.prepare("SELECT * FROM federation_retention").all(),
   quarantined:db.prepare("SELECT count(*) AS n FROM federation_quarantine").get().n};
 }

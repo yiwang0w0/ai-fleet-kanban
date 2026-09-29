@@ -66,6 +66,8 @@ jobs:
         run: bash hrun.sh node tests/peertest.mjs
       - name: synctest (durable projections, replay, lost ACK and offline resume)
         run: bash hrun.sh node tests/synctest.mjs
+      - name: snapshottest (frozen pages, crash resume and retained-history recovery)
+        run: bash hrun.sh node tests/snapshottest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

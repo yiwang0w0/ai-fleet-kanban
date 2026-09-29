@@ -43,6 +43,8 @@ node cli/peer.mjs revoke --db <board.db绝对路径> --peer <对端node_id> --ve
 | /peer/v1/health | GET | peer:health | ok、协议版本与本机 node_id |
 | /peer/v1/pull | POST | sync:pull + 项目范围 | 授权任务投影批次 |
 | /peer/v1/ack | POST | sync:ack + 项目范围 | 持久确认序号 |
+| /peer/v1/snapshot/start | POST | sync:pull + 项目范围 | 固定状态清单 |
+| /peer/v1/snapshot/page | POST | sync:pull + 已提供的项目快照 | 有界分页 |
 
 其他路径即使有有效凭据也返回 404。未知/缺失/已撤销的凭据返回 401；权限不足或身份/epoch 不匹配返回 403；版本竞争、恢复隔离返回 409；协议或必需能力不兼容返回 426；未知字段/格式错误返回 400；超限正文返回 413；不支持的正文类型/压缩返回 415；正文超时返回 408。未分类内部错误返回不含细节的 500。
 
@@ -59,7 +61,7 @@ node cli/peer.mjs revoke --db <board.db绝对路径> --peer <对端node_id> --ve
 }
 ~~~
 
-JSON 语法合同见 peer-hello.schema.json；实际协商还验证 max >= min、版本交集、授权身份与 epoch、必需能力，以及 extensions 序列化后不超过 2 KiB。当前支持协议 1，以及 node-identity-v1、peer-health-v1、task-projection-sync-v1 三项能力，不支持任何必需扩展。顶层及 protocol 对象的未知字段拒绝；可选扩展只能放 extensions 并被忽略，不得用它暗示权限或改变执行语义。
+JSON 语法合同见 peer-hello.schema.json；实际协商还验证 max >= min、版本交集、授权身份与 epoch、必需能力，以及 extensions 序列化后不超过 2 KiB。当前支持协议 1，以及 node-identity-v1、peer-health-v1、task-projection-sync-v1、task-snapshot-v1 四项能力，不支持任何必需扩展。顶层及 protocol 对象的未知字段拒绝；可选扩展只能放 extensions 并被忽略，不得用它暗示权限或改变执行语义。
 
 | 对端声明 | 当前结果 |
 |---|---|
@@ -82,4 +84,4 @@ board_node.protocol_version 是本地身份格式；握手的协议范围是独�
 
 19 项测试使用临时数据库、真实本机 HTTP 连接和独立网关进程，覆盖登记原子性、凭据替换/撤销、版本冲突、同连接重鉴权、上传中撤销、权限拒绝、身份冒充、兼容矩阵、请求限额、恢复隔离和不泄露 UI/任务/秘密。没有调用模型，没有改动部署数据库或真实网络配置。
 
-第六批已实现项目范围内的投影读取、主动拉取、ACK 与离线补发，并加入项目数据隔离测试，见 sync.md。委派、跨端关系、证据传输和远端用户 UI 尚未实现。真实双机/三机访问矩阵、设备凭据分发及撤销传播仍需后续验收。S02/S03 全阶段尚未通过。
+第六批已实现项目范围内的投影读取、主动拉取、ACK 与离线补发；第七批接入授权快照、断点续传和显式压缩，见 sync.md / snapshots.md。委派、跨端关系、证据传输和远端用户 UI 尚未实现。真实双机/三机访问矩阵、设备凭据分发及撤销传播仍需后续验收。S02/S03 全阶段尚未通过。

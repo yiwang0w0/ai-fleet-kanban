@@ -1,4 +1,5 @@
 import http from "node:http";
+import {startSnapshot,snapshotPage} from "./snapshots.mjs";
 import {migrateSync,exportBatch,acknowledge} from "./sync-store.mjs";
 import { PeerError, negotiateHello, keys } from "./protocol.mjs";
 import { authenticate, localIdentity, transaction } from "./peers.mjs";
@@ -59,6 +60,15 @@ function createPeerServer(db) {
         const result=transaction(db,()=>{
           const peer=authenticate(db,req.headers.authorization,pull?"sync:pull":"sync:ack");
           return pull?exportBatch(db,peer,body):acknowledge(db,peer,body);
+        });
+        return send(res,200,result);
+      }
+      if (["/peer/v1/snapshot/start","/peer/v1/snapshot/page"].includes(req.url) && req.method==="POST"){
+        const body=await bodyJSON(req),start=req.url.endsWith("/start");
+        keys(body,start?["project_id","min_seq"]:["project_id","snapshot_id","offset"],"snapshot request");
+        const result=transaction(db,()=>{
+          const peer=authenticate(db,req.headers.authorization,"sync:pull");
+          return start?startSnapshot(db,peer,body):snapshotPage(db,peer,body);
         });
         return send(res,200,result);
       }
