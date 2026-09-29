@@ -112,12 +112,18 @@ function archive(db,id,table){
 }
 function stopTaskWrites(db,reason,id){
  const tasks=db.prepare("SELECT id,status,run_id FROM tasks").all(),now=at();
+ if(has(db,"result_recovery_permits")&&db.prepare("SELECT 1 FROM result_recovery_permits LIMIT 1").get())fail("RECOVERY_PERMIT_EXISTS","交付恢复许可必须为空");
  if(db.prepare("SELECT 1 FROM tasks WHERE aggregate_version>=9007199254740989 LIMIT 1").get()||
    has(db,"federation_shares")&&db.prepare("SELECT 1 FROM federation_shares WHERE revision>=9007199254740989 LIMIT 1").get())fail("VERSION_EXHAUSTED","任务或发布版本已达安全上限");
  const update=db.prepare("UPDATE tasks SET released=0,run_id=NULL,worker=CASE WHEN status='in_progress' THEN NULL ELSE worker END,lease_until=NULL,heartbeat_at=NULL,status=CASE WHEN status='in_progress' THEN 'waiting' ELSE status END,waiting_for=CASE WHEN status='in_progress' THEN 'decision' ELSE waiting_for END,updated_at=? WHERE id=?");
  const event=db.prepare("INSERT INTO task_events(at,task_id,kind,actor,detail) VALUES(?,?,'node_recovery','operator',?)");
  for(const t of tasks){
+  // Private, transaction-scoped exception for quarantining sealed result tasks.
+  // It cannot release work, manufacture a result decision or outlive rollback.
+  const sealed=has(db,"result_recovery_permits");
+  if(sealed)db.prepare("INSERT INTO result_recovery_permits VALUES(?)").run(t.id);
   update.run(now,t.id);event.run(now,t.id,canonical({operation:reason,receipt_id:id,previous_run_id:t.run_id,previous_status:t.status,release_required:true}));
+  if(sealed)db.prepare("DELETE FROM result_recovery_permits WHERE task_id=?").run(t.id);
  }
  return tasks.filter(t=>t.status==="in_progress").length;
 }

@@ -1902,7 +1902,8 @@ function cascadeClose(db, t, proofNote) {
  * APPENDED, never overwritten.
  */
 function resolve(db, args) {
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_resolve");
   try {
     assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
@@ -1929,9 +1930,9 @@ function resolve(db, args) {
         detail: eventState(ct, { from_status: null, verdict: "approve", cause_task_id: Number(args.id) }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_resolve");
     return out;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_resolve; RELEASE store_resolve"); } catch {} throw e; }
 }
 
 function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verifyOk = undefined,

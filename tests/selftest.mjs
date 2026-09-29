@@ -151,7 +151,7 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
   const src = readFileSync(join(__dirname, "..", "core", "store.js"), "utf8");
 
   // Mutants retain the real structural guard dependencies so startup errors cannot mask the race.
-  for(const dependency of ["task_tree.js","topology_guard.js","delegation_guard.js", "cancellation_guard.js"])
+  for(const dependency of ["task_tree.js","topology_guard.js","delegation_guard.js", "cancellation_guard.js", "result_guard.js"])
     writeFileSync(join(TMP,dependency),readFileSync(join(__dirname,"..","core",dependency)));
   const mkMutant = (name, fn) => {
     const f = join(TMP, name);

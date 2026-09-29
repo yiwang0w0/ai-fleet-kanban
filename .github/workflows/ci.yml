@@ -84,6 +84,8 @@ jobs:
         run: bash hrun.sh node tests/bindingtest.mjs
       - name: cancellationtest (durable cancel, subtree fences and observed stop receipts)
         run: bash hrun.sh node tests/cancellationtest.mjs
+      - name: resulttest (sealed candidates, owner rejection and durable rework)
+        run: bash hrun.sh node tests/resulttest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

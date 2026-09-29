@@ -1,0 +1,80 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-21-results",
+  "date": "2026-09-30",
+  "base_commit": "8f1c7198439cd0e0d5196db9d241ab40ff7857ab",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/delegation_guard.js": "03a7a6aaf62b9af5a692c36c521670f6db2214c46110f9f3e92086c8373ecaa9",
+    "core/federation/cancellation.mjs": "43a4f5f81b5916ecf3c1dd2fe64767c395c6662bb0ed3fc05d015cbb8fc1e975",
+    "core/federation/gateway.mjs": "00d6927f1ffd62ef2a3c01f6d830dc96df9a7849b8671493f7f3f04aff248744",
+    "core/federation/protocol.mjs": "34a707b8e9c64fc8c0b87f05dbe9eac77d32eefc84e0d741cc14f1f1d369258f",
+    "core/mcp/policy.mjs": "3d7400d4cf2e4248aca9a9a595b7d33e866c363206ad4e6482408e77211ac888",
+    "core/mcp/tools.mjs": "deaaa9cb58db69db38ccfa908913c27f7d96089118e4544b0e311ef1f75199d7",
+    "core/recovery.mjs": "5a60dfffec4cbd1abc802f67a8f7d1781a40363664ecf4a736a4c83678fee32f",
+    "core/store.js": "9bba1a3d5a341a3d0324e9a768ea99c3af64953089df29fc83233647da224da6",
+    "tests/selftest.mjs": "9f1faac68a8bc6741422ca1187ed255ee6cd01bfec1969f24a5973a031deaa0e",
+    "cli/result.mjs": "26a20b34c4b2d5565264b0de2d8375b774dbaf1d77f07c9f13faccfd8652fe49",
+    "core/execution/stop-proof.mjs": "12d11f971bec4295694c3abc1900db03c12db694c2f4a791ad8bec8a823080a7",
+    "core/federation/result-client.mjs": "39014cbf7cb1a0874c5ba14d4a8ea356dbaaa29f8610eb18117894c7e7c88f12",
+    "core/federation/results.mjs": "7ef3db40c2a2bd37c35cf16e08d8af736896ad218ea69cb5f8e34fe974ee87c0",
+    "core/result_guard.js": "87a11e46dc35d587ed2f837f677b3714b162b261097af671ca68a21976cd10a8",
+    "tests/resulttest.mjs": "243475ebce2d04bfbe869cdf0d0731abb166153090ac9727cb9ccd22a6b274a1",
+    "package.json": "5483876dc6370e901e3782adbe7421705196ec74cf0ba24046cb937f9148d2cb",
+    ".github/workflows/ci.yml": "140d3ef8c99b033fe609ee8d7bd30ca41c8a523110e47ac2614e819a2ddcb439"
+  },
+  "local_validation": {
+    "targeted": {
+      "command": "node --test tests/resulttest.mjs",
+      "passed": 18,
+      "failed": 0,
+      "log": ".data/result-targeted.log"
+    },
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1308,
+      "classic_pass": 841,
+      "native_pass": 467,
+      "failed": 0,
+      "result_tests": 18,
+      "log": ".data/result-full-suite.log"
+    },
+    "coverage": [
+      "exact observed run/dispatch/version candidate and sealed subtree; no fabricated source run",
+      "immutable candidate ACK and current source rejection; fresh-run-only next sequence",
+      "atomic native rework from waiting or locally done with original audit state",
+      "late candidate and previously rejected result under concurrent cancellation",
+      "MCP project/role/CAS/replay and tool-response rollback",
+      "actual HTTP lost ACK and target persistence failure without duplicate rework",
+      "actual HTTP credential revocation during result body upload",
+      "actual explicit-database CLI prepare/send/reject/poll/get/list",
+      "two independent processes racing candidate sealing and native review",
+      "actual backup, retirement and activation quarantine sealed old-epoch result",
+      "actual supervised synthetic process cleanup; provider label does not claim real model use",
+      "restart migrations, retained immutable history and populated receipt/decision delete guards"
+    ]
+  },
+  "ci": "pending",
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "real_operations": {
+    "deployment_changed": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "candidate contains text report and digests; artifact bytes/repository workspaces and independent verification are pending",
+    "positive source acceptance, bilateral relationship retirement and parent advancement are pending; successful candidates stay sealed",
+    "cancelled undecided candidates remain held and count toward queue capacity until a future final disposition",
+    "no automatic send/poll service or global UI yet",
+    "POSIX group_signalled does not provide strong process-tree stop proof",
+    "synthetic supervised Node process uses provider execution mode but real_model_call_confirmed remains false",
+    "two physical kanata machines and each subscription executor remain untested"
+  ]
+}

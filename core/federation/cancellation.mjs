@@ -1,3 +1,4 @@
+import {inspectStoppedRuns} from "../execution/stop-proof.mjs";
 import {createRequire} from "node:module";
 import {PeerError,keys,uuid,version,names} from "./protocol.mjs";
 import {localIdentity,transaction} from "./peers.mjs";
@@ -95,22 +96,7 @@ export function cancellationWork(db,relationId){
 }
 export function confirmCancellationStopped(db,relationId){return unit(db,()=>{
  const {c,members,runs,downstream}=cancellationWork(db,relationId);if(c.state==="stopped")return {receipt:JSON.parse(c.stopped_json),blockers:[]};
- const blockers=[],proofs=[],downproofs=[];let fixtureRuns=0;
- for(const t of members){const actual=db.prepare("SELECT status FROM tasks WHERE id=? AND task_uid=?").get(t.task_id,t.task_uid);if(!actual||actual.status==="in_progress"&&!runs.some(r=>r.task_id===t.task_id&&r.state==="running"))blockers.push({kind:"task_state_unconfirmed",task_uid:t.task_uid});}
- for(const r of runs){
-  const d=exists(db,"broker_dispatches")?db.prepare("SELECT * FROM broker_dispatches WHERE run_id=?").get(r.run_id):null;
-  if(!d){blockers.push({kind:"unmanaged_run",run_id:r.run_id});continue;}
-  if(d.node_id!==c.node_id||d.node_epoch!==c.node_epoch){blockers.push({kind:"old_epoch_run",run_id:r.run_id});continue;}
-  if(r.state!=="ended"){blockers.push({kind:"run_active",run_id:r.run_id});continue;}
-  if(!d.launch_at){if(d.phase!=="abandoned"){blockers.push({kind:"unsettled_preparation",run_id:r.run_id});continue;}proofs.push({run_id:r.run_id,kind:"never_launched"});continue;}
-  if(d.phase!=="settled"||!d.result_digest){blockers.push({kind:"outcome_missing",run_id:r.run_id});continue;}
-  if(d.execution_mode==="fixture"){proofs.push({run_id:r.run_id,kind:"fixture_terminal",result_digest:d.result_digest});fixtureRuns++;continue;}
-  const e=db.prepare("SELECT * FROM broker_execution_records WHERE dispatch_id=?").get(d.dispatch_id);
-  if(!e?.observation_json){blockers.push({kind:"observation_missing",run_id:r.run_id});continue;}
-  const o=JSON.parse(e.observation_json),p=o.process;
-  if(digest(o)!==e.observation_digest||!p||!(p.started===false&&p.cleanup==="not_started"||p.containment==="windows-job"&&p.cleanup==="job_empty")){blockers.push({kind:"process_stop_unconfirmed",run_id:r.run_id});continue;}
-  proofs.push({run_id:r.run_id,kind:p.started===false?"not_started":"windows_job_empty",observation_digest:e.observation_digest,launch_digest:e.launch_digest});
- }
+ const {blockers,proofs,fixtureRuns}=inspectStoppedRuns(db,{nodeId:c.node_id,nodeEpoch:c.node_epoch,members,runs}),downproofs=[];
  for(const b of downstream){const child=db.prepare("SELECT state,stopped_json,node_id,node_epoch FROM delegation_cancellations WHERE relation_id=? AND side='source'").get(b.relation_id);if(b.state==="prepared"||child?.state!=="stopped"||child.node_id!==c.node_id||child.node_epoch!==c.node_epoch)blockers.push({kind:"downstream_pending",relation_id:b.relation_id});else downproofs.push({relation_id:b.relation_id,receipt_digest:digest(JSON.parse(child.stopped_json))});}
  if(blockers.length)return {receipt:JSON.parse(c.received_json),blockers:blockers.slice(0,100),blocker_count:blockers.length};
  const proof={cancel_id:c.cancel_id,scope_digest:c.scope_digest,member_uids:members.map(t=>t.task_uid),runs:proofs,downstream:downproofs};

@@ -1923,19 +1923,22 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_prerequisite_passed",
-        "scope": "local leaf report/acceptance preserves parent execution gating",
+        "result": "local_partial_passed",
+        "scope": "sealed cross-node candidate report, authenticated immutable receipt and owner rejection with atomic native rework",
         "pending": [
-          "cross-node delivery identity, evidence and acceptance receipts",
-          "remote dependency release and stale/late result lifecycle",
-          "independent G06 acceptance"
+          "artifact byte transfer, repository/workspace binding and independent verification",
+          "positive source acceptance, relation retirement and parent advancement",
+          "actual physical two-node delivery and independent G06 acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/trees.md",
         "docs/federation/trees-evidence.json",
-        "tests/treetest.mjs"
+        "tests/treetest.mjs",
+        "docs/federation/results.md",
+        "docs/federation/result-evidence.json",
+        "tests/resulttest.mjs"
       ]
     },
     {

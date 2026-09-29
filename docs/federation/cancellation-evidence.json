@@ -57,7 +57,27 @@
       "unsent downstream closure versus unknown approval recovery and registrar withdrawal"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36599990511,
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109514596572,
+      "passed": 1290,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109514596280,
+      "passed": 1286,
+      "failed": 0,
+      "skipped": 1
+    },
+    "gitleaks": {
+      "job_id": 109514595922,
+      "conclusion": "success"
+    },
+    "extra_checks": "passed",
+    "receipt": ".data/cancellation-ci.json"
+  },
   "real_model_calls": {
     "claude": 0,
     "codex": 0,
@@ -77,5 +97,6 @@
     "fixture stop proofs are labelled and cannot serve as real provider acceptance",
     "unmanaged or old-epoch run history remains unresolved without actual proof",
     "physical integration is the two user-specified kanata computers; no physical test is claimed"
-  ]
+  ],
+  "tested_commit": "8f1c7198439cd0e0d5196db9d241ab40ff7857ab"
 }

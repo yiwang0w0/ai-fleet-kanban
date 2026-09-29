@@ -1,3 +1,4 @@
+import {migrateResults,prepareResult,rejectResult,resultState,listResults} from "../federation/results.mjs";
 import {migrateCancellations,listCancellations,prepareCancellation,cancellationState} from "../federation/cancellation.mjs";
 import {progressCancellation} from "../federation/cancellation-service.mjs";
 import {migrateBindings,prepareBinding,bindingState,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal,PROPOSAL_DECLINE_REASONS} from "../federation/bindings.mjs";
@@ -20,6 +21,10 @@ const object=(properties,required=Object.keys(properties))=>({type:"object",prop
 const taskInput={request_id:uuidSchema,project_id:name,subject:{...text(500),minLength:1},description:text(),acceptance:text(),work_kind:{enum:["implement","review"]},required_capabilities:caps};
 const relationInput=object({schema_version:{enum:[1]},type:{enum:["delegation"]},relation_id:uuidSchema,delegation_id:uuidSchema,project_id:name,graph_id:uuidSchema,graph_epoch:uuidSchema,source_node_id:uuidSchema,source_epoch:uuidSchema,source_task_uid:uid,target_node_id:uuidSchema,target_epoch:uuidSchema,target_task_uid:uid,offer_digest:{type:"string",pattern:"^[0-9a-f]{64}$"},source_topology_revision:positive,target_topology_revision:positive});
 const defs=[
+ ["get_result","读取候选交付、接收回执与来源决定",object({result_id:uuidSchema})],
+ ["list_results","列出授权项目候选交付",object({project_id:name,limit:{...positive,maximum:100}})],
+ ["prepare_result","封存实际运行结果和当前任务版本；不等于来源验收",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive})],
+ ["reject_result","来源要求候选交付返工；不代替取消",object({request_id:uuidSchema,result_id:uuidSchema,expected_version:positive,note:{...text(4096),minLength:1}})],
  ["get_cancellation","读取委派取消是否送达及是否已确认停止",object({relation_id:uuidSchema})],
  ["list_cancellations","列出授权项目的持久取消记录",object({project_id:name,limit:{...positive,maximum:100}})],
  ["request_cancellation","请求取消已确认的来源委派；不把未送达当成已停止",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive,reason_code:{enum:["operator_cancelled","deadline_exceeded"]}})],
@@ -148,6 +153,16 @@ function assign(db,p,args){
 }
 function execute(db,p,name,args){
  switch(name){
+ case "list_results":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_results'").get()?listResults(db,{projectId:args.project_id,limit:args.limit}):{results:[]};
+ case "get_result":
+ case "prepare_result":
+ case "reject_result":{
+  const table=name==="prepare_result"?"delegation_bindings":"delegation_results",key=name==="prepare_result"?"relation_id":"result_id";
+  const r=db.prepare("SELECT 1 FROM sqlite_master WHERE name=?").get(table)?db.prepare("SELECT project_id FROM "+table+" WHERE "+key+"=?").get(args[key]):null;
+  if(!r||!p.projects.includes(r.project_id))fail("NOT_FOUND","授权范围内未找到交付或绑定",404);
+  if(name==="get_result")return resultState(db,args.result_id);migrateResults(db);
+  return name==="prepare_result"?prepareResult(db,{resultId:args.request_id,relationId:args.relation_id,expectedTaskVersion:args.expected_version}):rejectResult(db,{resultId:args.result_id,decisionId:args.request_id,expectedSourceVersion:args.expected_version,note:args.note});
+ }
  case "list_cancellations":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_cancellations'").get()?listCancellations(db,{projectId:args.project_id,limit:args.limit}):{cancellations:[]};
  case "get_cancellation":
  case "request_cancellation":
