@@ -1213,7 +1213,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility; scoped delegation proposal/read/decision tools",
+        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility; scoped delegation proposal/read/decision tools; coordinator-only registered topology preparation and transactional managed-tree splitting with explicit pending placement",
         "pending": [
           "actual executor adapters, full tool set and OS isolation",
           "independent G04 acceptance"
@@ -1229,7 +1229,10 @@
         "tests/treetest.mjs",
         "docs/federation/delegation.md",
         "docs/federation/delegation-evidence.json",
-        "tests/delegationtest.mjs"
+        "tests/delegationtest.mjs",
+        "docs/federation/topology.md",
+        "docs/federation/topology-evidence.json",
+        "tests/topologytest.mjs"
       ]
     },
     {
@@ -1769,11 +1772,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "serialized project registrar, combined declared local/cross-node graph validation, independent authenticated approvals, stale-attempt withdrawal and durable receipts",
+        "scope": "serialized project registrar, combined declared local/cross-node graph validation, independent authenticated approvals, stale-attempt withdrawal and durable receipts; SQL/native local topology coupling, remove-before-publish/receipt-before-add transitions, durable retries, guarded claims and pending metadata reservations",
         "pending": [
-          "local topology preparation/commitment and enforcement across every structural mutation",
           "binding both endpoint contracts and releasing execution only after validated current receipts",
-          "registrar-offline execution/reconciliation and physical multi-node acceptance"
+          "automatic submission scheduling, confirmed-edge retirement and coordinated graph recovery",
+          "registrar-offline delegated execution/reconciliation and physical multi-node acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1783,7 +1786,10 @@
         "tests/treetest.mjs",
         "docs/federation/relations.md",
         "docs/federation/relations-evidence.json",
-        "tests/relationstest.mjs"
+        "tests/relationstest.mjs",
+        "docs/federation/topology.md",
+        "docs/federation/topology-evidence.json",
+        "tests/topologytest.mjs"
       ]
     },
     {

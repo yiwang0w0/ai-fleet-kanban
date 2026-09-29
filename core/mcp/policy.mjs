@@ -9,7 +9,7 @@ import {writeRecoveryJSON} from "../recovery.mjs";
 export const ROLE_KINDS=["coordinate","implement","review","observe"];
 export const READ_TOOLS=["list_nodes","list_roles","get_task","get_sync_status","get_delegation"];
 export const ROLE_TOOLS=Object.freeze({
- coordinate:[...READ_TOOLS,"create_task","split_task","request_assignment","create_delegation","decide_delegation"],
+ coordinate:[...READ_TOOLS,"create_task","split_task","request_assignment","create_delegation","decide_delegation","prepare_topology"],
  implement:["get_task","list_roles","report_result","heartbeat","split_task"],
  review:["get_task","list_roles","report_result","heartbeat"],
  observe:READ_TOOLS

@@ -21,9 +21,10 @@ MCP 客户端启动 cli/mcp.mjs，使用 stdio 通信。该进程只接收回环
 | list_nodes | coordinate、observe | 本机身份与授权项目中已观察来源 |
 | list_roles | 四类身份 | 授权项目中的角色能力、策略版本和声明运行时 |
 | get_task | 四类身份 | 本机任务或只读远端投影；执行身份仅自己的任务 |
-| get_sync_status | coordinate、observe | 项目游标、恢复状态和最近 100 个路由请求 |
+| get_sync_status | coordinate、observe | 项目游标、恢复/结构提交状态和最近 100 个路由请求 |
 | create_task | coordinate | 创建本机未放行任务或目标；不自动共享 |
 | split_task | coordinate、implement | 版本匹配的父任务下创建未放行子任务；执行身份父卡须仍在执行 |
+| prepare_topology | coordinate | 准备授权项目的父/依赖修改；持久保存待提交状态，不发起网络请求 |
 | request_assignment | coordinate | 按声明生成路由记录；不启动执行器 |
 | create_delegation | coordinate | 固定本机任务合同并提出委派；不自动发送 |
 | decide_delegation | coordinate | 接受/拒绝本项目接收意向；接受仍等待关系确认 |
@@ -35,7 +36,7 @@ MCP 客户端启动 cli/mcp.mjs，使用 stdio 通信。该进程只接收回环
 
 失败和重试也消耗调用次数；每个身份每分钟 1–300 次，保存在数据库中。角色限制项目当前未完成卡数 1–1000、创建卡最大尝试数 1–10。这些限制不构成模型 token/费用总预算，也没有启动模型。
 
-子卡必须属于父卡项目。新 MCP 根采用 hierarchical，子卡继承模式，深度最多 32 条边；超限拒绝且不改挂。历史登记任务继续遵守 legacy 两层创建规则，需要上浮时 MCP 返回 CHAIN_LIMIT。模式不可静默转换；完整语义见 [本机多层任务树](trees.md)。跨节点关系仍待实现。相同父卡下规范化同名子卡返回 CONFLICT。
+子卡必须属于父卡项目。新 MCP 根采用 hierarchical，子卡继承模式，深度最多 32 条边；超限拒绝且不改挂。历史登记任务继续遵守 legacy 两层创建规则，需要上浮时 MCP 返回 CHAIN_LIMIT。模式不可静默转换；完整语义见 [本机多层任务树](trees.md)。相同父卡下规范化同名子卡返回 CONFLICT。绑定关系登记节点的项目使用 [本地结构提交](topology.md)：split_task 原子创建孤立未放行子任务并保存 placement_pending，只有匹配登记回执提交后才出现实际 parent_uid。执行身份仍可在自己的运行父任务上提出子任务，父任务最终完成等待结构提交；prepare_topology 只向 coordinate 开放。
 
 尚未开放 delegate_task、request_cancel、get_evidence、最终验收、角色管理或 shell 工具；这些不能由客户端绕过输入合同调用。
 

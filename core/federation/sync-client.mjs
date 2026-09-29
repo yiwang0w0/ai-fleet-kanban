@@ -30,7 +30,7 @@ export function loadCredential(file,local,projectId,requiredScopes=["peer:handsh
   throw new PeerError("FORBIDDEN","凭据没有该项目所需的节点接口权限",403);
  return c;
 }
-export async function request(base,path,c,body,fetchImpl,signal){
+export async function request(base,path,c,body,fetchImpl,signal,knownErrors=[]){
  const r=await fetchImpl(base+path,{method:"POST",redirect:"error",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),
   headers:{Authorization:"Bearer "+c.token,"Content-Type":"application/json"},body:JSON.stringify(body)});
  const reader=r.body?.getReader();if(!reader)throw new PeerError("BAD_RESPONSE","对端响应为空");
@@ -41,7 +41,7 @@ export async function request(base,path,c,body,fetchImpl,signal){
  }catch(e){await reader.cancel().catch(()=>{});throw e;}finally{reader.releaseLock();}
  let data;try{data=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks)));}
  catch{throw new PeerError("BAD_RESPONSE","对端响应不是有效 JSON");}
- if(!r.ok){const code=["SNAPSHOT_REQUIRED","SNAPSHOT_EXPIRED","CURSOR_AHEAD","EPOCH_CHANGED"].includes(data?.code)?data.code:"REMOTE_"+r.status;throw new PeerError(code,"对端拒绝同步请求",r.status);}
+ if(!r.ok){const code=["SNAPSHOT_REQUIRED","SNAPSHOT_EXPIRED","CURSOR_AHEAD","EPOCH_CHANGED",...knownErrors].includes(data?.code)?data.code:"REMOTE_"+r.status;throw new PeerError(code,"对端拒绝同步请求",r.status);}
  return data;
 }
 function initAttempts(db){

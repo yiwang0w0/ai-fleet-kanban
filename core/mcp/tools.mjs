@@ -1,3 +1,4 @@
+import {prepareTopology,topologyState} from "../federation/topology.mjs";
 import {createRequire} from "node:module";
 import {migrateDelegation,createIntent,decideIncoming,incomingStatus,outgoingStatus} from "../federation/delegation.mjs";
 import {randomUUID} from "node:crypto";
@@ -15,6 +16,7 @@ const caps={type:"array",maxItems:32,uniqueItems:true,items:name};
 const object=(properties,required=Object.keys(properties))=>({type:"object",properties,required,additionalProperties:false});
 const taskInput={request_id:uuidSchema,project_id:name,subject:{...text(500),minLength:1},description:text(),acceptance:text(),work_kind:{enum:["implement","review"]},required_capabilities:caps};
 const defs=[
+ ["prepare_topology","提交授权项目的本地结构修改；等待登记回执，不发起网络请求",object({request_id:uuidSchema,project_id:name,expected_revision:{...positive,minimum:0},edits:{type:"array",maxItems:100,items:object({task_uid:uid,expected_version:positive,parent_uid:{type:["string","null"],pattern:uid.pattern},blocked_by:{type:"array",maxItems:10000,uniqueItems:true,items:uid}})}})],
  ["get_delegation","读取授权项目中的委派合同与接收决定",object({delegation_id:uuidSchema,direction:{enum:["incoming","outgoing"]}})],
  ["create_delegation","提出跨终端委派；不自动发送、接受或启动",object({request_id:uuidSchema,task_uid:uid,expected_version:positive,target_node_id:uuidSchema,target_epoch:uuidSchema})],
  ["decide_delegation","接受或拒绝接收意向；接受仍等待关系确认",object({request_id:uuidSchema,delegation_id:uuidSchema,expected_version:positive,decision:{enum:["accept","reject"]},note:text(512)})],
@@ -31,6 +33,7 @@ const defs=[
 export const TOOL_DEFINITIONS=Object.freeze(defs.map(([name,description,inputSchema])=>({name,description,inputSchema,
  annotations:{readOnlyHint:READ_TOOLS.includes(name),destructiveHint:false,idempotentHint:true,openWorldHint:false}})));
 export function validate(value,schema,path="arguments"){
+ if(Array.isArray(schema.type)){if(value===null&&schema.type.includes("null"))return;return validate(value,{...schema,type:schema.type.find(t=>t!=="null")},path);}
  if(schema.enum&&!schema.enum.includes(value))fail("BAD_INPUT",path+" 不在允许值中",400);
  if(schema.type==="object"){
   if(!value||typeof value!=="object"||Array.isArray(value))fail("BAD_INPUT",path+" 必须为对象",400);
@@ -64,7 +67,12 @@ const TASK_FIELDS=["id","task_uid","owner_node_id","subject","description","acce
 function taskOut(db,t,project){
  const out=Object.fromEntries(TASK_FIELDS.map(k=>[k,t[k]??null]));
  const parent=t.parent_id==null?null:db.prepare("SELECT task_uid FROM broker_task_projects WHERE task_id=? AND project_id=?").get(t.parent_id,project)?.task_uid??null;
- return {...out,project_id:project,parent_uid:parent,released:Boolean(t.released),read_only:false};
+ let topology=null;
+ if(db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()){
+  const b=db.prepare("SELECT b.phase,b.revision,b.owner_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current,EXISTS(SELECT 1 FROM topology_vertices v WHERE v.task_id=? AND v.task_uid=?) registered FROM topology_bindings b WHERE b.project_id=?").get(t.id,t.task_uid,project);
+  if(b){const pending=db.prepare("SELECT o.operation_id,json_extract(v.value,\'$.parent_uid\') desired_parent_uid FROM topology_operations o,json_each(o.desired_json,\'$.vertices\') v WHERE o.project_id=? AND o.state=\'prepared\' AND json_extract(v.value,\'$.task_uid\')=?").get(project,t.task_uid);topology={...b,identity_current:!!b.identity_current,registered:!!b.registered,pending:pending?{...pending}:null};}
+ }
+ return {...out,project_id:project,parent_uid:parent,released:Boolean(t.released),read_only:false,...(topology?{topology}:{})};
 }
 function newTask(db,p,args,split){
  scoped(p,args.project_id);
@@ -79,13 +87,16 @@ function newTask(db,p,args,split){
  if(open>=p.role.policy.limits.max_open_tasks)fail("BUDGET_EXHAUSTED","项目未完成任务数已达到该角色上限");
  if(split&&store.placeInChain(db,{kind:"task",parentId:parent.id,released:0,description:args.description}).uplifted)fail("CHAIN_LIMIT","当前任务树规则不允许该深度；没有悄悄改挂任务");
  if(parent&&db.prepare("SELECT 1 FROM tasks WHERE parent_id=? AND lower(replace(replace(subject, ' ', ''), '　', ''))=lower(replace(replace(?, ' ', ''), '　', '')) AND archived_at IS NULL").get(parent.id,args.subject.trim()))fail("CONFLICT","该父任务下已经存在同名子任务");
+ const managed=split&&db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()&&db.prepare("SELECT 1 FROM topology_bindings WHERE project_id=?").get(args.project_id);
  const id=store.add(db,{subject:args.subject,description:args.description,acceptance:args.acceptance,
-  kind:split?"task":args.kind,parentId:parent?.id??null,treeMode:split?undefined:"hierarchical",released:0,route:"mcp",maxAttempts:p.role.policy.limits.max_task_attempts,
-  actor:"mcp:"+p.principal_id,...(p.run?{parentRunId:p.run_id,parentWorker:p.run.worker}:{})});
+  kind:split?"task":args.kind,parentId:managed?null:parent?.id??null,treeMode:managed?parent.tree_mode:split?undefined:"hierarchical",released:0,route:"mcp",maxAttempts:p.role.policy.limits.max_task_attempts,
+  actor:"mcp:"+p.principal_id,...(p.run&&!managed?{parentRunId:p.run_id,parentWorker:p.run.worker}:{})});
  const row=db.prepare("SELECT * FROM tasks WHERE id=?").get(id);
- if(row.parent_id!==(parent?.id??null))fail("CHAIN_LIMIT","当前任务树规则不允许该深度；没有悄悄改挂任务");
+ if(row.parent_id!==(managed?null:parent?.id??null))fail("CHAIN_LIMIT","当前任务树规则不允许该深度；没有悄悄改挂任务");
  db.prepare("INSERT INTO broker_task_projects VALUES(?,?,?,?,?)").run(id,row.task_uid,args.project_id,args.work_kind,JSON.stringify([...args.required_capabilities].sort()));
- return {task:taskOut(db,row,args.project_id),dispatch_started:false};
+ let placement=null;
+ if(managed){const b=topologyState(db,args.project_id),op=prepareTopology(db,{projectId:args.project_id,operationId:args.request_id,expectedRevision:b.revision,edits:[{task_uid:row.task_uid,expected_version:row.aggregate_version,parent_uid:parent.task_uid,blocked_by:[]}]});placement={operation_id:op.operation_id,target_parent_uid:parent.task_uid,revision:op.desired.revision};}
+ return {task:taskOut(db,row,args.project_id),dispatch_started:false,...(placement?{placement_pending:placement}:{})};
 }
 /** Local operator enrollment only; no remote tool exposes this. */
 export function enrollTask(db,{id,projectId,workKind,capabilities,expectedVersion}){
@@ -129,6 +140,7 @@ function execute(db,p,name,args){
   return {local:{node_id:local.node_id,display_name:local.display_name,sync_epoch:local.sync_epoch},sources};
  }
  case "get_sync_status":return {
+  topologies:db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()?db.prepare("SELECT b.project_id,b.graph_id,b.graph_epoch,b.registrar_node_id,b.registrar_epoch,b.revision,b.phase,b.owner_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current,o.operation_id FROM topology_bindings b LEFT JOIN topology_operations o ON o.project_id=b.project_id AND o.state=\'prepared\' WHERE b.project_id IN("+marks(p)+") ORDER BY b.project_id").all(...p.projects):[],
   dispatches:db.prepare("SELECT 1 FROM sqlite_master WHERE name='broker_dispatches'").get()?db.prepare("SELECT d.dispatch_id,d.task_uid,d.run_id,d.role_id,d.execution_mode,d.phase,d.reason,d.launch_at,d.finished_at FROM broker_dispatches d JOIN broker_assignments a ON d.assignment_id=a.assignment_id WHERE a.project_id IN("+marks(p)+") ORDER BY d.rowid DESC LIMIT 100").all(...p.projects):[],
   cursors:db.prepare("SELECT * FROM federation_cursors WHERE project_id IN("+marks(p)+")").all(...p.projects),
   recovery:db.prepare("SELECT * FROM federation_epoch_projects WHERE project_id IN("+marks(p)+")").all(...p.projects),
@@ -143,6 +155,11 @@ function execute(db,p,name,args){
   if(!r||!p.projects.includes(r.project_id))fail("NOT_FOUND","授权范围内未找到该任务",404);
   const pending=db.prepare("SELECT state FROM federation_epoch_projects WHERE origin_node_id=? AND project_id=?").get(r.owner_node_id,r.project_id);
   return {task:{...JSON.parse(r.task_json),project_id:r.project_id,source_epoch:r.origin_epoch,read_only:true,recovery_state:missing?"missing_review":pending?.state==="pending"?"pending_snapshot":null}};
+ }
+ case "prepare_topology":{
+  scoped(p,args.project_id);if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get())fail("NOT_FOUND","项目尚未绑定关系登记节点",404);
+  for(const e of args.edits)for(const uid of [e.task_uid,...(e.parent_uid?[e.parent_uid]:[]),...e.blocked_by])if(localTask(db,p,uid).project_id!==args.project_id)fail("FORBIDDEN","结构端点须属于同一授权项目",403);
+  const op=prepareTopology(db,{projectId:args.project_id,operationId:args.request_id,expectedRevision:args.expected_revision,edits:args.edits});return {operation_id:op.operation_id,project_id:op.project_id,state:op.state,desired_revision:op.desired.revision,dispatch_started:false};
  }
  case "get_delegation":
  case "decide_delegation":{

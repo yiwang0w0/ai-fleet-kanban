@@ -150,8 +150,9 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
   //     and UPDATE — double issue becomes possible.
   const src = readFileSync(join(__dirname, "..", "core", "store.js"), "utf8");
 
-  // The mutated store must retain its real tree-structure dependency.
-  writeFileSync(join(TMP,"task_tree.js"),readFileSync(join(__dirname,"..","core","task_tree.js")));
+  // Mutants retain the real structural guard dependencies so startup errors cannot mask the race.
+  for(const dependency of ["task_tree.js","topology_guard.js"])
+    writeFileSync(join(TMP,dependency),readFileSync(join(__dirname,"..","core",dependency)));
   const mkMutant = (name, fn) => {
     const f = join(TMP, name);
     const out = fn(src);

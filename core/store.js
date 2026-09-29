@@ -1,4 +1,5 @@
 const taskTree = require("./task_tree.js");
+const topologyGuard = require("./topology_guard.js");
 // Pull-based task queue — storage and state machine.
 //
 // Why pull, not push: a push queue's lifetime is the few milliseconds of fan-out,
@@ -957,11 +958,11 @@ function normalizeDeps(db, selfId, raw) {
     const cap = db.prepare("SELECT COUNT(*) c FROM tasks").get().c + 1;
     let steps = 0;
     while (stack.length) {
-      if (++steps > cap) throw err(ERR.BAD_INPUT, "依赖图遍历超出表行数 —— 拒绝(fail-closed)");
       const cur = Number(stack.pop());
       if (cur === Number(selfId))
         throw err(ERR.BAD_INPUT, `会形成循环:#${selfId} 已经在 #${ids.join("/#")} 的依赖链上,拒绝`);
       if (seen.has(cur)) continue;
+      if (++steps > cap) throw err(ERR.BAD_INPUT, "依赖图遍历超出表行数 —— 拒绝(fail-closed)");
       seen.add(cur);
       const r = db.prepare("SELECT blocked_by FROM tasks WHERE id=?").get(cur);
       // ⭐ "Could not finish checking" is NOT "safe" — same polarity as the parent-side
@@ -1469,7 +1470,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
                    || a.id - b.id);
 
     const pick = cands.find((t) => {
-      if(!taskTree.claimable(db,t.id))return false;
+      if(!taskTree.claimable(db,t.id)||!topologyGuard.claimable(db,t.id))return false;
       if (t.lock_key && heldLocks.has(t.lock_key)) return false;  // lock held -> skip to next candidate
       if (unfinishedKids.has(Number(t.id))) return false;         // parent gate: children unfinished
       if (unreleasedAncestor(db, t.parent_id) != null) return false;  // ⭐ ancestor-release invariant
@@ -1612,6 +1613,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
     //   endpoints 400).
     const no = (why, code = ERR.CONFLICT) => { db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_claim_by_id"); return { ok: false, why, code }; };
     if (!t) return no(`卡 #${id} 不存在`, ERR.NOT_FOUND);
+    if(!topologyGuard.claimable(db,t.id))return no("本地任务结构尚未完成关系登记",ERR.CONFLICT);
     if(!taskTree.claimable(db,t.id))return no("任务祖先链损坏、已关闭或超过深度上限",ERR.BAD_INPUT);
     if (t.kind === "goal") return no(`#${id} 是目标,目标不能被认领`);
     if (t.archived_at) return no(`#${id} 已归档`);
@@ -2304,6 +2306,7 @@ function completeGoals(db) {
   };
   for (const g of db.prepare(
       "SELECT id FROM tasks WHERE kind='goal' AND status<>'done' AND archived_at IS NULL").all()) {
+    if(topologyGuard.finishHeld(db,g.id))continue;
     const ids = subtree(g.id);
     // Zero children = NO GROUNDS for completion (not "all complete"). `every` is
     // vacuously true on an empty array; without this line a childless goal silently
@@ -2334,6 +2337,7 @@ function completeGoals(db) {
       "SELECT id, result FROM tasks WHERE kind='goal' AND status='done' AND resolved_by='auto' AND archived_at IS NULL").all()) {
     // ⭐ This subtree also includes archived cards ⇒ "archive the unfinished child to
     //   keep the goal closed" stops working.
+    if(topologyGuard.finishHeld(db,g.id))continue;
     const open = subtree(g.id).map((i) => rowOf.get(i)).filter((r) => r.status !== "done");
     if (!open.length) continue;
     // Goal reopen is also a "back into the flow" road ⇒ drop verdict (same invariant
@@ -2380,7 +2384,7 @@ function rearmDone(db) {
         AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id
                           AND c.archived_at IS NULL AND c.status<>'done')
         AND p.auto_review_at < (SELECT MAX(c.updated_at) FROM tasks c
-                                  WHERE c.parent_id=p.id AND c.archived_at IS NULL)`).all();
+                                  WHERE c.parent_id=p.id AND c.archived_at IS NULL)`).all().filter(r=>!topologyGuard.finishHeld(db,r.id));
   for (const r of rows) {
     const kids = db.prepare(
       "SELECT id FROM tasks WHERE parent_id=? AND archived_at IS NULL").all(r.id).map((x) => Number(x.id));
@@ -2436,6 +2440,7 @@ function pendingReview(db) {
    //   criterion cost: one edited line marched the whole pile back into re-review.
    //   ⚠ A card never reviewed (review_fp NULL) always passes — this filter narrows
    //   an existing queue, it must never be the reason a card is never looked at.
+   .filter((t) => !topologyGuard.finishHeld(db,t.id))
    .filter((t) => !t.review_fp || t.review_fp !== reviewFingerprint(t))
    .map((t) => ({ ...t, pin: pinnedAncestor(db, t.parent_id) }))
    .sort((a, b) => (a.pin == null) - (b.pin == null)
@@ -2477,7 +2482,8 @@ function prevLineStamp(oldLine, newLine) {
 function update(db, args) {
   assertLocalIdentityInput(args);
   if(Object.hasOwn(args,"treeMode")||Object.hasOwn(args,"tree_mode"))throw err(ERR.BAD_INPUT,"任务树模式创建后不可更改");
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_update");
   try {
     assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
@@ -2504,9 +2510,9 @@ function update(db, args) {
         }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_update");
     return out;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_update; RELEASE store_update"); } catch {} throw e; }
 }
 
 function updateInner(db, fields) {

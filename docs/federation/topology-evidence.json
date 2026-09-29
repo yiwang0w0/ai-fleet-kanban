@@ -1,0 +1,78 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-17-local-topology",
+  "date": "2026-09-29",
+  "base_commit": "cb44e5c4ab4328fc50f17f5947b64c76a1c949a3",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/topology.mjs": "febafb6c0afdfadf655efcac26d16fe8636b0413bdeed239343e3201228d6044",
+    "core/federation/topology-client.mjs": "85aa92077214fdd2d79559398604bc00cbf1a844a1ebaa5418a1d52f8fc3396a",
+    "core/topology_guard.js": "e108859f2aa483a8fc109c9b54afbaffb2764a635a47253eedc9c0fb6a1edb2d",
+    "core/federation/sync-client.mjs": "e52e11e8c7c0b1dda16958613f03feab50d92d6b78bf6749975b30d0fd3c9bc1",
+    "core/store.js": "074cc77ceaf1f9eb73e99ca67e1cf1712d7b434f4b28afc4d977c9cac8dfd3ba",
+    "core/mcp/tools.mjs": "01d5819c66281f2e7e6ab53df09ec41384ee8bf905829cd3ac6006d84fca46c3",
+    "core/mcp/policy.mjs": "3a35419634792cb07ec86d3bedaddbb0efd032f2258a828c43cb7961bda14dba",
+    "cli/topology.mjs": "f60b9b5ac687fba980be8062d3ccd8903a8ea04001122085907b9e0cb1069273",
+    "tests/topologytest.mjs": "ab0de3683209d8eb92bbbf3b9e86b10a8716f14ffb390f15ad595f2839a8b84a",
+    "tests/selftest.mjs": "88aad506b75e251ba5a7b0fd1c4486820ccd0eb9aab7e0c5ffda6d4899b42858",
+    "package.json": "000dbf5d1b4db673d5068b4c16c0e692db820324db1ab371915c618ac50b7e76",
+    ".github/workflows/ci.yml": "63a6dc893b849f40f33c90e6b189e5acc4c532cfb3f250e1da190a578facc07c"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1225,
+      "classic_pass": 841,
+      "native_pass": 384,
+      "failed": 0,
+      "topology_tests": 34,
+      "classic_sections": 10,
+      "native_sections": 18,
+      "log": ".data/topology-full-suite.log"
+    },
+    "final_targeted": {
+      "passed": 34,
+      "failed": 0,
+      "log": ".data/topology-full-suite.log",
+      "scope": "last suite of the complete regression; no source changes afterward"
+    },
+    "prior_local_attempt": {
+      "failed_stage": "selftest mutation probe",
+      "cause": "temporary mutant copied task_tree.js but omitted new topology_guard.js, so mutated children failed before racing",
+      "resolution": "retain both actual guard dependencies; do not count startup errors as evidence of duplicate claims"
+    },
+    "coverage": [
+      "actual local graph stays a subset of old and desired registered graphs across lost responses and remote cross-edge confirmation",
+      "native/raw SQL structure, admission, deletion, claim and completion guards; existing unaffected runs heartbeat and report offline",
+      "durable immutable publish request replay after database restart, revoked authorization and local receipt write failure",
+      "definitive CAS rejection refreshes request; unknown outcome cannot cancel; authenticated old snapshot permits safe cancellation",
+      "coordinator/project-scoped MCP preparation and run-bound split with explicit pending placement and atomic task/enrollment/response rollback",
+      "independent process claim versus structural removal race, self-registrar path and explicit database CLI",
+      "real backup activation invalidates old identity and prevents reuse of old commitments",
+      "metadata edits preserved, duplicate sibling placement refused before publication, pending names reserve commit and cancel paths using exact SQLite semantics",
+      "native dense DAG traversal counts each vertex once; archived descendants retained; equivalent dependency JSON does not mutate running work"
+    ]
+  },
+  "ci": "pending",
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "bilateral endpoint contract binding and confirmation-based execution release remain pending; accepted_unconfirmed SQL hold remains active",
+    "single delivery CLI only; no automatic publisher/retry scheduler or global UI",
+    "no topology unbinding, vertex retirement, compensating applied operation or coordinated epoch recovery",
+    "native local database permissions are the trust boundary; no protection against a database administrator forging internal tables",
+    "real three-node Tailscale tests, subscription executor calls and independent phase acceptance remain pending"
+  ]
+}

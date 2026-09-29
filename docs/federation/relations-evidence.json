@@ -45,7 +45,24 @@
       "existing delegation execution hold remains even when a declared-graph receipt is confirmed"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "commit": "cb44e5c4ab4328fc50f17f5947b64c76a1c949a3",
+    "run_id": 36578684283,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36578684283",
+    "windows": {
+      "job_id": 109440837596,
+      "passed": 1191,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109440837738,
+      "passed": 1187,
+      "failed": 0,
+      "skipped_windows_only_test": 1
+    },
+    "gitleaks": "success",
+    "additional_checks": "passed"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_executor_started": false,
@@ -81,5 +98,6 @@
       "reason": "oversized eager upload could produce ECONNRESET before client received 413"
     },
     "gitleaks": "success"
-  }
+  },
+  "tested_commit": "cb44e5c4ab4328fc50f17f5947b64c76a1c949a3"
 }
