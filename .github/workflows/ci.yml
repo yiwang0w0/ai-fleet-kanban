@@ -58,6 +58,8 @@ jobs:
         run: bash hrun.sh node tests/identitytest.mjs
       - name: backuptest (WAL snapshots and quarantined restore)
         run: bash hrun.sh node tests/backuptest.mjs
+      - name: runfencetest (stale dispatch rejection and worker protocol)
+        run: bash hrun.sh node tests/runfencetest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

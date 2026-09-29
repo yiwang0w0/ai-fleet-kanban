@@ -12,7 +12,7 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync, renameSync, unlinkSync, mkdirSync, chmodSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { execFile, execFileSync, execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -2262,6 +2262,22 @@ function guardWrite(req, res, p) {
   return role;
 }
 
+const WORKER_PROTOCOL_VERSION = 2;
+function claimIdentity(body, role) {
+  if (role === "worker" && (body.worker_protocol_version !== WORKER_PROTOCOL_VERSION ||
+      typeof body.agent_instance_id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.agent_instance_id)))
+    throw store.err(store.ERR.BAD_INPUT, "执行器协议需要版本 2 和 agent_instance_id；请先升级 worker，再领取任务");
+  return { agentInstanceId:body.agent_instance_id ?? null, runContextForTask: task => {
+    const roleId = task.line || body.line || body.worker;
+    const role = LINE_ROLE[roleId] || {kind:"implement",tools:"write",charter:null,seat:null};
+    return { role_id:roleId, role_kind:role.kind, tools:role.tools,
+      charter:role.charter, charter_sha256:role.charter
+        ? createHash("sha256").update(readFileSync(resolve(CODE_ROOT,role.charter))).digest("hex") : null,
+      seat:role.seat, enforcement:"unattested", worker_protocol_version:body.worker_protocol_version ?? null };
+  }};
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
@@ -2396,7 +2412,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         // Display labels: the one copy lives in store.js; panel and CLI keep none.
         status_labels: store.STATUS_LABEL, wf_labels: store.WF_LABEL,
-        node: store.localNode(db),
+        node: store.localNode(db), worker_protocol_version: WORKER_PROTOCOL_VERSION,
         counts: store.counts(db),
         archived_count: store.list(db, { archived: "all" }).tasks.filter((t) => t.archived_at).length,
         uptime_sec: Math.floor((Date.now() - STARTED) / 1000),
@@ -2433,6 +2449,13 @@ const server = http.createServer(async (req, res) => {
       // worker re-scoping the board.
       if (boardRole === "worker" && b.parentId == null && b.parent_id == null)
         return json(res, 403, { error: "worker 令牌只能创建派生卡(必须带 parentId)—— 立根目标是 operator 的动作" });
+      if (b.parentId != null && b.parent_id != null && Number(b.parentId) !== Number(b.parent_id))
+        throw store.err(store.ERR.BAD_INPUT, "parentId 与 parent_id 不一致");
+      b.parentId = b.parentId ?? b.parent_id;
+      if (boardRole === "worker") {
+        b.parentRunId = b.parent_run_id ?? null;
+        b.parentWorker = b.worker ?? null;
+      }
       if (badRoutable(res, b)) return;   // creation entrance for route/line domains (ONE criterion)
       const id = store.add(db, b);
       emit("task.created", { id });
@@ -2680,8 +2703,9 @@ const server = http.createServer(async (req, res) => {
       // ⭐ Badge stamping: runtime is PURIFIED (outside the allowlist = "not passed"
       //   = no stamp; never 400, never a claim criterion).
       const rt = RUNTIME_IDS.includes(b.runtime) ? b.runtime : null;
+      const identity = claimIdentity(b, boardRole);
       const got = store.claim(db, b.worker, b.lease_minutes || store.DEFAULT_LEASE_MIN,
-                              { route: b.route, line: b.line, runtime: rt, ...fpContext() });
+                              { route: b.route, line: b.line, runtime: rt, ...identity, ...fpContext() });
       noteClaim(b.worker, { route: b.route, line: b.line }, !!got);
       if (!got) {
         // ⭐ Empty-handed, but WHY. Same rule the pool gate follows (503 must not wear
@@ -2724,11 +2748,15 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    const mt = p.match(/^\/api\/tasks\/(\d+)(?:\/(claim|heartbeat|attempt|report|resolve|update|autoreview|pin|release|archive|reopen))?$/);
+    const mt = p.match(/^\/api\/tasks\/(\d+)(?:\/(claim|heartbeat|attempt|report|resolve|update|autoreview|pin|release|archive|reopen|runs))?$/);
     if (mt) {
       const id = Number(mt[1]);
       const action = mt[2];
 
+      if (m === "GET" && action === "runs") {
+        if (!store.get(db,id)) return json(res,404,{error:"不存在"});
+        return json(res,200,{runs:store.runs(db,id)});
+      }
       if (m === "GET" && !action) {
         const t = store.get(db, id);
         return t ? json(res, 200, { task: taskOut(t) }) : json(res, 404, { error: "不存在" });
@@ -2739,7 +2767,7 @@ const server = http.createServer(async (req, res) => {
       if (action === "claim") {
         // ⭐ This endpoint claims THE GIVEN id (it used to call pick-a-card and
         //   occupy a different card). Refusals come back with the reason named.
-        const r = store.claimById(db, { id, worker: b.worker,
+        const r = store.claimById(db, { id, worker: b.worker, ...claimIdentity(b, boardRole),
                                         leaseMin: b.lease_minutes || store.DEFAULT_LEASE_MIN,
                                         // badge purification: same allowlist and same never-400 policy as /api/claim
                                         runtime: RUNTIME_IDS.includes(b.runtime) ? b.runtime : null,
@@ -2757,11 +2785,11 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { task: r.task });
       }
       if (action === "heartbeat") {
-        const r = store.heartbeat(db, { id, worker: b.worker, leaseMin: b.lease_minutes });
+        const r = store.heartbeat(db, { id, worker: b.worker, runId: b.run_id, leaseMin: b.lease_minutes });
         return json(res, 200, r);       // no SSE for heartbeats: freshness is client-side
       }
       if (action === "report") {
-        const r = store.report(db, { id, worker: b.worker, outcome: b.outcome, evidence: b.evidence });
+        const r = store.report(db, { id, worker: b.worker, runId: b.run_id, outcome: b.outcome, evidence: b.evidence });
         emit("task.reported", r);
         // ⭐ v0.21 (user ruling 2026-09-09): on a line configured accept:"auto" a delivery completes
         //   without a human click — the operator decided that ONCE, in the config, for the whole
@@ -2943,7 +2971,7 @@ const server = http.createServer(async (req, res) => {
       if (action === "attempt") {
         // Self-retry round n: the card stays in_progress (not released); only
         // attempts advances.
-        const r = store.bumpAttempt(db, { id, worker: b.worker });
+        const r = store.bumpAttempt(db, { id, worker: b.worker, runId: b.run_id });
         emit("task.attempt", r);
         return json(res, 200, r);
       }

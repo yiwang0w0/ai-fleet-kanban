@@ -732,12 +732,18 @@
       "evidence_required": [
         "restore-drill.json"
       ],
-      "status": "implemented_pending_validation",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
+      "verification_result": {
+        "result": "passed",
+        "scope": "isolated local restore and dual-platform CI",
+        "tested_commit": "f97de7a9bd0c1fbb8428a46f20a156ed17662ff4",
+        "ci_run_id": 36530311581,
+        "whole_phase_accepted": false
+      },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/backup.md",
@@ -845,13 +851,26 @@
       "evidence_required": [
         "schema 与角色映射样例"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_passed",
+        "scope": "local dispatch identities and immutable policy snapshots",
+        "pending": [
+          "cross-node executor identity binding",
+          "runtime authorization enforcement",
+          "phase acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/runs.md",
+        "docs/federation/runs-evidence.json",
+        "tests/runfencetest.mjs"
+      ]
     },
     {
       "id": "T02.04",

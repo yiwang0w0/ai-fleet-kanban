@@ -10,8 +10,8 @@
   $P take  <id> --as coord                   # claim a SPECIFIC id (coordinator finishing one card)
   $P edit  <id> --file payload.json          # rewrite the card face. An in-progress card accepts ONLY a
                                              #   tail-append to description, invisible to this round's worker
-  $P done  <id> --as alpha --file evidence.md   # -> waiting/review
-  $P wait  <id> --as alpha --file reason.md     # -> waiting/decision (own attempts exhausted)
+  $P done  <id> --as alpha --run <run_id> --file evidence.md   # -> waiting/review
+  $P wait  <id> --as alpha --run <run_id> --file reason.md     # -> waiting/decision (own attempts exhausted)
   $P approve|reject <id> [--file note.md] [--verify-ok]
   $P reopen <id> [--line alpha]              # done/waiting -> not_started (attempts + ruling history kept)
   $P release|hold <id>                       # release to workers / pull back into coordinator staging
@@ -182,7 +182,7 @@ def main():
         t = d["task"]
         print(f"已认领 #{t['id']}(第 {t['attempts']}/{t['max_attempts']} 次): {t['subject']}")
         print(f"  证据请写到 loop 指定的 evidence_path;手动交付用"
-              f" board.py done {t['id']} --as {who} --file <证据>")
+              f" board.py done {t['id']} --as {who} --run {t['run_id']} --file <证据>")
 
     elif cmd == "take":
         # Claim a SPECIFIC id. `claim` is pick-a-card, so a coordinator that must
@@ -199,14 +199,16 @@ def main():
         if s >= 400: die(s, d)
         t = d["task"]
         print(f"已领 #{t['id']}(第 {t['attempts']}/{t['max_attempts']} 次): {t['subject']}")
-        print(f"  → 交付: board.py done {t['id']} --as {who} --file <证据>")
+        print(f"  → 交付: board.py done {t['id']} --as {who} --run {t['run_id']} --file <证据>")
 
     elif cmd in ("done", "wait"):
+        run_id = arg("--run")
+        if not run_id: sys.exit("交付必须带领取回执的 --run <run_id>，不能自动查找当前执行 ID")
         if not tid or not who: sys.exit(f"{cmd} <id> --as <线名> --file <证据/原因>")
         ev = readfile(fp)
         if not ev.strip(): sys.exit("必须用 --file 附证据(改了什么/跑了什么/输出是什么)")
         s, d = call("POST", f"/api/tasks/{tid}/report",
-                    {"worker": who, "outcome": cmd, "evidence": ev})
+                    {"worker": who, "run_id": run_id, "outcome": cmd, "evidence": ev})
         if s >= 400: die(s, d)
         t = d["task"]
         print(f"#{tid} → {LABEL_of(t['status'])}/{WF_of(t['waiting_for'])}")

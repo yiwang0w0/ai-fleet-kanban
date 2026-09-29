@@ -197,6 +197,7 @@ const STATUS_REMAP = {
 const ADDED_COLUMNS = [
   ["task_uid", "TEXT"],
   ["owner_node_id", "TEXT"],
+  ["run_id", "TEXT"],
   ["route", `TEXT NOT NULL DEFAULT '${DEFAULT_ROUTE.replace(/'/g, "''")}'`],
   ["line", "TEXT"],
   ["heartbeat_at", "INTEGER"],
@@ -437,7 +438,7 @@ function renameNode(db, displayName) {
 
 /** Only the owner store mints identity. Copies will live outside the local queue. */
 function assertLocalIdentityInput(fields) {
-  for (const key of ["task_uid", "taskUid", "owner_node_id", "ownerNodeId"]) {
+  for (const key of ["task_uid", "taskUid", "owner_node_id", "ownerNodeId", "run_id", "runId"]) {
     if (Object.hasOwn(fields, key))
       throw err(ERR.BAD_INPUT, key + " 由本机生成且不可编辑");
   }
@@ -493,6 +494,75 @@ function migrateNodeIdentity(db) {
   ].join("\n"));
 }
 
+
+/** A run is one claimed dispatch. Its retries use the existing attempt counter.
+ * A fresh claim always creates a fresh run and a fresh authorization snapshot. */
+function startRun(db, taskId, worker, { runtime = null, agentInstanceId = null, runContext = null, runContextForTask = null, imported = false } = {}) {
+  if (agentInstanceId != null && !UUID_RE.test(String(agentInstanceId)))
+    throw err(ERR.BAD_INPUT, "agent_instance_id 必须是 UUID");
+  if (runContext != null && (typeof runContext !== "object" || Array.isArray(runContext)))
+    throw err(ERR.BAD_INPUT, "执行策略快照必须是对象");
+  const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(taskId));
+  const node = localNode(db);
+  const context = (runContextForTask ? runContextForTask(t) : runContext) || { role_id: String(t.line || worker), role_kind: "unattested", tools: "unattested" };
+  const snapshot = JSON.stringify({
+    version: 1, context,
+    task_limits: {max_attempts:t.max_attempts, needs_bash:t.needs_bash, verify_cmd:t.verify_cmd, weight:t.weight}
+  });
+  if (Buffer.byteLength(snapshot) > 16384) throw err(ERR.BAD_INPUT, "执行策略快照超过 16 KiB");
+  const runId = crypto.randomUUID(), at = now();
+  db.prepare("INSERT INTO task_runs (run_id,task_id,task_uid,owner_node_id,executor_node_id,worker,role_id,runtime,agent_instance_id,policy_json,policy_sha256,started_at,first_attempt,last_attempt,imported) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(runId, Number(taskId), t.task_uid, t.owner_node_id, node.node_id, String(worker),
+      String(context.role_id || t.line || worker), runtime ? String(runtime) : null,
+      agentInstanceId == null ? null : String(agentInstanceId), snapshot,
+      crypto.createHash("sha256").update(snapshot).digest("hex"), at, t.attempts, t.attempts, imported ? 1 : 0);
+  db.prepare("UPDATE tasks SET run_id=? WHERE id=?").run(runId, Number(taskId));
+  return runId;
+}
+
+function requireRun(t, runId) {
+  if (typeof runId !== "string" || !UUID_RE.test(runId))
+    throw err(ERR.BAD_INPUT, "必须携带领取回执中的 run_id，禁止自动查找并替换为当前执行 ID");
+  if (t.run_id !== runId) throw err(ERR.CONFLICT, "执行实例已失效，本次心跳、重试或结果不属于当前 run");
+  return runId;
+}
+
+function runs(db, taskId) {
+  return db.prepare("SELECT * FROM task_runs WHERE task_id=? ORDER BY started_at, rowid")
+    .all(Number(taskId)).map(r => ({...r, policy:JSON.parse(r.policy_json)}));
+}
+
+function migrateRuns(db) {
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS task_runs (",
+    "run_id TEXT PRIMARY KEY, task_id INTEGER NOT NULL, task_uid TEXT NOT NULL,",
+    "owner_node_id TEXT NOT NULL, executor_node_id TEXT NOT NULL, worker TEXT NOT NULL,",
+    "role_id TEXT NOT NULL, runtime TEXT, agent_instance_id TEXT,",
+    "policy_json TEXT NOT NULL, policy_sha256 TEXT NOT NULL, started_at TEXT NOT NULL,",
+    "first_attempt INTEGER NOT NULL, last_attempt INTEGER NOT NULL, imported INTEGER NOT NULL DEFAULT 0,",
+    "state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','ended')), ended_at TEXT, terminal_task_status TEXT);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_task_runs_active ON task_runs(task_id) WHERE state='running';",
+    "CREATE INDEX IF NOT EXISTS ix_task_runs_task ON task_runs(task_id,started_at);",
+    "CREATE TRIGGER IF NOT EXISTS run_metadata_immutable BEFORE UPDATE OF",
+    "run_id,task_id,task_uid,owner_node_id,executor_node_id,worker,role_id,runtime,agent_instance_id,policy_json,policy_sha256,started_at,first_attempt,imported ON task_runs",
+    "BEGIN SELECT RAISE(ABORT,'run identity and policy are immutable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS run_no_delete BEFORE DELETE ON task_runs",
+    "BEGIN SELECT RAISE(ABORT,'run history is append-only'); END;",
+    "CREATE TRIGGER IF NOT EXISTS run_end_with_task AFTER UPDATE ON tasks",
+    "WHEN OLD.status='in_progress' AND (NEW.status<>'in_progress' OR NEW.worker IS NOT OLD.worker OR NEW.run_id IS NOT OLD.run_id OR NEW.archived_at IS NOT NULL)",
+    "BEGIN UPDATE task_runs SET state='ended',ended_at=NEW.updated_at,terminal_task_status=NEW.status",
+    "WHERE run_id=OLD.run_id AND state='running'; END;",
+    "CREATE TRIGGER IF NOT EXISTS run_attempt_with_task AFTER UPDATE OF attempts ON tasks",
+    "BEGIN UPDATE task_runs SET last_attempt=NEW.attempts WHERE run_id=NEW.run_id AND state='running'; END;"
+  ].join("\n"));
+  // Existing workers cannot know these imported IDs. Upgrade with workers stopped;
+  // the records preserve in-flight history without inventing an observed agent.
+  for (const t of db.prepare("SELECT * FROM tasks WHERE status='in_progress' AND archived_at IS NULL AND run_id IS NULL").all())
+    startRun(db, t.id, t.worker || "migration", { runtime:t.last_runtime, imported:true });
+  const invalid = db.prepare("SELECT t.id FROM tasks t LEFT JOIN task_runs r ON r.run_id=t.run_id WHERE t.run_id IS NOT NULL AND (r.run_id IS NULL OR r.task_id<>t.id OR r.task_uid<>t.task_uid OR r.owner_node_id<>t.owner_node_id OR (t.status='in_progress' AND t.archived_at IS NULL AND (r.state<>'running' OR r.worker IS NOT t.worker))) LIMIT 1").get();
+  if (invalid) throw err(ERR.CONFLICT, "执行历史与任务身份不一致，拒绝启动: #" + invalid.id);
+}
+
 function open(readOnly = false) {
   if (!readOnly && fs.existsSync(path.join(path.dirname(DB_PATH), ".incomplete")))
     throw err(ERR.CONFLICT, "备份或恢复目录尚未完成，禁止写入或启动执行器");
@@ -518,6 +588,7 @@ function migrate(db) {
   try {
     migrateInner(db);
     migrateNodeIdentity(db);
+    migrateRuns(db);
     db.exec("COMMIT TRANSACTION");
   } catch (e) {
     try { db.exec("ROLLBACK TRANSACTION"); } catch {}
@@ -1020,6 +1091,13 @@ function add(db, args) {
   assertLocalIdentityInput(args);
   db.exec("BEGIN IMMEDIATE");
   try {
+    if (args.parentRunId !== undefined || args.parentWorker !== undefined) {
+      const parent = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(args.parentId));
+      if (!parent) throw err(ERR.NOT_FOUND, "父卡不存在");
+      if (parent.status !== "in_progress" || parent.archived_at || parent.worker !== args.parentWorker)
+        throw err(ERR.CONFLICT, "父卡已不属于本执行器");
+      requireRun(parent, args.parentRunId);
+    }
     const id = addInner(db, args);
     const t = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(id);
@@ -1368,6 +1446,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
                         last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
     ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
           opts.runtime ? String(opts.runtime) : null, now(), pick.id);
+    const runId = startRun(db, pick.id, worker, opts);
     spanOpen(db, pick.id, worker);
     {
       const claimed = db.prepare(
@@ -1378,6 +1457,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
           // A line-less card is claimed BY a line; record which one actually took it,
           // or the history shows a card that belonged to nobody being worked on.
           line: claimed.line == null ? String(line) : String(claimed.line),
+          run_id: runId,
           runtime: opts.runtime ? String(opts.runtime) : null,
           // Which fingerprint components differ from the previous dispatch. Absent on
           // a first dispatch — "nothing to compare" and "nothing changed" must not
@@ -1455,7 +1535,7 @@ function reapExpiredInner(db) {
  * a bare "couldn't take it" hides whether it was release, deps, or a lock.
  */
 function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null,
-                         force = false, treeRev = null, extra = null }) {
+                         force = false, treeRev = null, extra = null, agentInstanceId = null, runContext = null, runContextForTask = null }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
   leaseMin = clampLease(leaseMin);   // see claim()
   db.exec("BEGIN IMMEDIATE");
@@ -1535,6 +1615,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
                         last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
     ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
           runtime ? String(runtime) : null, now(), Number(id));
+    const runId = startRun(db, Number(id), worker, {runtime, agentInstanceId, runContext, runContextForTask});
     spanOpen(db, Number(id), worker);
     {
       const claimed = db.prepare(
@@ -1543,6 +1624,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
         taskId: Number(id), kind: "claim", actor: worker,
         detail: eventState(claimed, {
           line: claimed.line == null ? String(worker) : String(claimed.line),
+          run_id: runId,
           runtime: runtime ? String(runtime) : null,
           // Same record as the queue door, plus the one thing only this door can
           // say: that a person overrode the brake. "Ran anyway, on purpose" has to
@@ -1593,11 +1675,12 @@ function releaseHeldBy(db, worker) {
 
 /** Heartbeat = liveness report + lease renewal. Without it the panel cannot tell
  *  "working" from "dead but lease not yet expired". */
-function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
+function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runId }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress`);
   if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  requireRun(t, runId);
   // ⭐ Leases only move FORWARD. Default parameters only kick in on `undefined`, so a
   //   raw `lease_minutes: 0` (or negative, or NaN) passing through would set
   //   `lease_until = now` — and the next reaper sweep takes the card away from a
@@ -1613,8 +1696,8 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
   //   this card between the SELECT and here must not get a not_started row stamped with
   //   a fresh heartbeat and a live lease.
   const r = db.prepare(
-    "UPDATE tasks SET heartbeat_at=?, lease_until=?, updated_at=? WHERE id=? AND status='in_progress' AND worker=?")
-    .run(ts, ts + mins * 60000, now(), Number(id), String(worker));
+    "UPDATE tasks SET heartbeat_at=?, lease_until=?, updated_at=? WHERE id=? AND status='in_progress' AND worker=? AND run_id=?")
+    .run(ts, ts + mins * 60000, now(), Number(id), String(worker), runId);
   if (!r.changes) throw err(ERR.CONFLICT, `卡 #${id} 在续租期间被回收或改手,未续租`);
   // ⭐ Return the card itself. Of the five write endpoints this was the only
   //   projection, with neither `status` nor `lease_until` ⇒ callers had to re-GET
@@ -1632,12 +1715,13 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
  *   outcome='wait' -> waiting/decision (own attempts exhausted; the reason goes in
  *                                       evidence)
  */
-function report(db, { id, worker, outcome, evidence = "" }) {
+function report(db, { id, worker, outcome, evidence = "", runId }) {
   if (!["done", "wait"].includes(outcome)) throw err(ERR.BAD_INPUT, "outcome 必须是 done 或 wait");
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress,不能交付`);
   if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  requireRun(t, runId);
   // ⭐ Span close and state transition share ONE transaction (measured concern: split
   //   in two, a crash in between leaves "in_progress but span closed" — a torn state).
   const waitingFor = outcome === "done" ? "review" : "decision";
@@ -1654,14 +1738,14 @@ function report(db, { id, worker, outcome, evidence = "" }) {
     //   here so the invariant stops depending on that topology.
     const r = db.prepare(
       `UPDATE tasks SET status='waiting', waiting_for=?, result=?, lease_until=NULL, updated_at=?
-        WHERE id=? AND status='in_progress' AND worker=?`
-    ).run(waitingFor, String(evidence), now(), Number(id), String(worker));
+        WHERE id=? AND status='in_progress' AND worker=? AND run_id=?`
+    ).run(waitingFor, String(evidence), now(), Number(id), String(worker), runId);
     if (!r.changes)
       throw err(ERR.CONFLICT, `卡 #${id} 在交付期间被回收或改手,本次交付未落盘`);
     appendEvent(db, {
       taskId: Number(id), kind: "report", actor: worker,
       detail: eventState({ ...t, status: "waiting" }, {
-        outcome: String(outcome), waiting_for: waitingFor,
+        run_id: runId, outcome: String(outcome), waiting_for: waitingFor,
       }),
     });
     db.exec("COMMIT");
@@ -1952,17 +2036,18 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
  *      consumes them today so no red would ever show — until someone wires one in
  *      and ① happens.
  */
-function bumpAttempt(db, { id, worker }) {
+function bumpAttempt(db, { id, worker, runId }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress`);
   if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  requireRun(t, runId);
   // ⭐ Gate folded into the UPDATE and the new value read back from the row (RETURNING),
   //   instead of a bare WHERE id=? plus `t.attempts + 1` computed from the pre-read — the
   //   one attempts write path that still trusted a stale row (two reviews flagged it).
   const row = db.prepare(`UPDATE tasks SET attempts=attempts+1, updated_at=?
-                            WHERE id=? AND status='in_progress' AND worker=? RETURNING attempts`)
-    .get(now(), Number(id), String(worker));
+                            WHERE id=? AND status='in_progress' AND worker=? AND run_id=? RETURNING attempts`)
+    .get(now(), Number(id), String(worker), runId);
   if (!row) throw err(ERR.CONFLICT, `卡 #${id} 在累加尝试时被回收或改手,未累加`);
   const n = Number(row.attempts);
   // The anchor (attempts_base) does NOT move — this is round 2 or 3 of the SAME
@@ -2627,7 +2712,7 @@ function row(r) {
     } catch { return { list: [], broken: true }; }
   })();
   return {
-    id: Number(r.id), task_uid: r.task_uid, owner_node_id: r.owner_node_id,
+    id: Number(r.id), task_uid: r.task_uid, owner_node_id: r.owner_node_id, run_id: r.run_id,
     subject: r.subject, description: r.description,
     status: r.status, waiting_for: r.waiting_for,
     worker: r.worker, line: r.line, prev_line: r.prev_line || null, route: r.route,
@@ -2827,7 +2912,7 @@ function openChildrenOnLines(db, parentId, lines) {
 }
 
 module.exports = {
-  localNode, renameNode, assertLocalIdentityInput,
+  localNode, renameNode, assertLocalIdentityInput, requireRun, runs,
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,

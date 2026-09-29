@@ -73,7 +73,13 @@
     "restored_execution_disabled": true,
     "artifacts": "private ignored .data/restore-drill directory; no production data committed"
   },
-  "ci": "pending",
+  "ci": {
+    "result": "passed",
+    "run_id": 36530311581,
+    "windows": "success",
+    "ubuntu": "success",
+    "gitleaks": "success"
+  },
   "gates_completed": 0,
   "model_calls": {
     "claude": 0,
@@ -85,5 +91,6 @@
     "Evidence file set is checked before/after SQLite snapshot; not a cross-resource transaction",
     "Node authentication and signed backup provenance are separate",
     "Deployment workspace and credential isolation still pending"
-  ]
+  ],
+  "tested_commit": "f97de7a9bd0c1fbb8428a46f20a156ed17662ff4"
 }

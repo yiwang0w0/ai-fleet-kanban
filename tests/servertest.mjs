@@ -132,11 +132,16 @@ async function board({ script = SERVER, env = {}, dataDir = null, files = {}, co
     await sleep(250);
   }
   try { TOKEN = readFileSync(join(DATA, "board_token"), "utf8").trim(); } catch {}
+  // Fixture client keeps claim receipts; never fetch a replacement ID on report.
+  const receipts = new Map();
   const api = async (m, p, b) => {
+    const mutation = p.match(/^\/api\/tasks\/(\d+)\/(report|heartbeat|attempt)$/);
+    if (mutation) b = {run_id:receipts.get(Number(mutation[1])),...b};
     const r = await fetch(BASE + p, { method: m,
       headers: { "Content-Type": "application/json", "X-Board-Token": TOKEN },
       body: m === "GET" ? undefined : JSON.stringify(b ?? {}) });
     let j = null; try { j = await r.json(); } catch {}
+    if (r.status < 400 && /\/claim$/.test(p) && j?.task) receipts.set(j.task.id,j.task.run_id);
     return { status: r.status, body: j };
   };
   const worker = async (line) =>
@@ -908,7 +913,7 @@ try {
                            { verdict: "approve", note: "", resolved_by: "auto" });
     ok("O3 operator 令牌以 auto 裁定 → 400(auto 专属审阅线)", oa.status === 400, `HTTP ${oa.status}`);
     // ④ worker token: execution face works, ruling/editing face 403s.
-    const wc = await apiAs(WK, "POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
+    const wc = await apiAs(WK, "POST", "/api/claim", { worker_protocol_version:2, agent_instance_id:"11111111-1111-4111-8111-111111111111", worker: "alpha", line: LINE, route: "default" });
     ok("O4 worker 令牌可以认领(执行面放行)", wc.status === 200, `HTTP ${wc.status}`);
     const wr = await apiAs(WK, "POST", `/api/tasks/${card}/resolve`,
                            { verdict: "approve", note: "", resolved_by: "auto" });
@@ -919,7 +924,7 @@ try {
     ok("O7 worker 令牌立根卡(无 parentId)→ 403;派生卡照常",
        wroot.status === 403 &&
        (await apiAs(WK, "POST", "/api/tasks",
-                    { subject: "derived", line: LINE, parentId: card })).status === 201,
+                    { subject: "derived", line: LINE, parentId: card, parent_run_id:wc.body.task.run_id, worker:"alpha" })).status === 201,
        `HTTP ${wroot.status}`);
     // ⑤ review token: ruling face only.
     const rvc = await apiAs(RV, "POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
@@ -1555,7 +1560,7 @@ try {
     const wf = await asWorker("POST", `/api/tasks/${id}/claim`, { worker: LINE, force: true });
     ok("U4 ⭐worker 令牌连点名领取都没有(403)—— force 参数根本到不了判断处",
        wf.status === 403, `HTTP ${wf.status} ${(wf.body?.error || "").slice(0, 40)}`);
-    const wq = await asWorker("POST", "/api/claim", { worker: LINE, line: LINE, force: true });
+    const wq = await asWorker("POST", "/api/claim", { worker_protocol_version:2, agent_instance_id:"11111111-1111-4111-8111-111111111111", worker: LINE, line: LINE, force: true });
     ok("U4b ⭐worker 走队列口带 force 也没用(队列口不认这个字段,照样空手而归)",
        wq.status === 204 || !wq.body?.task, `HTTP ${wq.status}`);
     // A queue emptied by the brake must not read like an empty queue — the same rule

@@ -407,7 +407,10 @@ def charter_block():
             info["text"].strip()]
 
 
-def deliver(tid, worker, outcome, evidence, what="交付", _call=None, _log=None):
+AGENT_INSTANCE_ID = str(uuid.uuid4())
+
+
+def deliver(tid, worker, outcome, evidence, *, run_id, what="交付", _call=None, _log=None):
     """report 的着弹判定 —— 看板的**拒收必须被读**。
     409 = 卡已不在我手上(租约到期被 reaper 回收 / 被 releaseHeldBy 打回 / 改手);404 = 卡没了。
     此前六处调用把返回码整个丢掉:日志照打「→ 等待中/待验收」,handle 照样 return "done",
@@ -417,7 +420,7 @@ def deliver(tid, worker, outcome, evidence, what="交付", _call=None, _log=None
     _call/_log 可注入,给自测用(照 pool_state.report_exhausted 的形)。"""
     c, lg = (_call or call), (_log or log)
     s, r = c("POST", f"/api/tasks/{tid}/report",
-             {"worker": worker, "outcome": outcome, "evidence": evidence})
+             {"worker": worker, "run_id": run_id, "outcome": outcome, "evidence": evidence})
     if s == 200:
         return True
     lg(f"  ⚠ #{tid} {what}被看板拒收 {s} {(r or {}).get('error', '')} —— 这张卡已不在本 worker 手上,"
@@ -427,16 +430,17 @@ def deliver(tid, worker, outcome, evidence, what="交付", _call=None, _log=None
 
 class Heartbeat(threading.Thread):
     """CLI 跑着的时候由这条线程续命。主线程被 subprocess 堵住,自己打不了心跳。"""
-    def __init__(self, task_id, worker):
+    def __init__(self, task_id, worker, run_id):
         super().__init__(daemon=True)
         self.task_id, self.worker, self.stop = task_id, worker, threading.Event()
+        self.run_id = run_id
         self.beats = 0
 
     def run(self):
         while not self.stop.wait(HB_SEC):
             try:
                 s, _ = call("POST", f"/api/tasks/{self.task_id}/heartbeat",
-                            {"worker": self.worker, "lease_minutes": LEASE})
+                            {"worker": self.worker, "lease_minutes": LEASE, "run_id": self.run_id})
                 if s == 200: self.beats += 1
                 else: log(f"  心跳被拒 {s}(卡可能已被回收),停止续命"); return
             except Exception as e:
@@ -525,6 +529,7 @@ def harvest_spawned(t, worker):
             "acceptance": str(it.get("acceptance") or ""),
             "line": it.get("line") if it.get("line") not in (None, "null") else t.get("line"),
             "needsBash": False,
+            "parent_run_id": t["run_id"], "worker": worker,
             "parentId": t["id"],          # 深度判定归服务端(store.placeInChain)
             # 自动放行**只有第一案**。第 2 案进候选池(released 0)。
             # ⚠上浮的卡也会是未放行,但那由**服务端**决定(此处判断不了)。
@@ -843,13 +848,13 @@ def prompt_selftest():
         sent.append((m, p, body)); return 409, {"error": "卡 #7 状态是 not_started,不是 in_progress,不能交付"}
     def fake200(m, p, body=None, timeout=20):
         sent.append((m, p, body)); return 200, {"id": 7}
-    ok("⭐拒收(409)→ deliver 返回 False", deliver(7, "alpha", "done", "证据", _call=fake409, _log=seen.append) is False)
+    ok("⭐拒收(409)→ deliver 返回 False", deliver(7, "alpha", "done", "证据", run_id=AGENT_INSTANCE_ID, _call=fake409, _log=seen.append) is False)
     ok("⭐拒收被显式记录,且说清了「没有着床」", any("拒收" in x and "没有" in x for x in seen), str(seen)[:160])
     ok("拒收文案带上了服务端的原话", any("not_started" in x for x in seen))
     ok("发的是 report 端点,outcome / evidence 原样",
-       sent[-1][1] == "/api/tasks/7/report" and sent[-1][2]["outcome"] == "done" and sent[-1][2]["evidence"] == "证据")
+       sent[-1][1] == "/api/tasks/7/report" and sent[-1][2]["outcome"] == "done" and sent[-1][2]["evidence"] == "证据" and sent[-1][2]["run_id"] == AGENT_INSTANCE_ID)
     seen.clear()
-    ok("着床(200)→ True 且不吵", deliver(7, "alpha", "wait", "x", _call=fake200, _log=seen.append) is True and not seen)
+    ok("着床(200)→ True 且不吵", deliver(7, "alpha", "wait", "x", run_id=AGENT_INSTANCE_ID, _call=fake200, _log=seen.append) is True and not seen)
 
     # ── 登记簿锚在看板代码根,不跟 BOARD_REPO 走(P1-3)─────────────────────────
     # verify_lib 在本进程已带真实 env import 过,所以用子进程量;两种 env 都该指到同一个文件。
@@ -1280,6 +1285,7 @@ def acct_attempt(t, worker, attempt, model, effort):
     u = LAST_ACCT.get("usage") or usage_of(LAST_ACCT["sid"], LAST_ACCT["t0"])
     row = {"ts": datetime.datetime.now().isoformat(timespec="seconds"),
            "card": t["id"], "attempt": attempt, "worker": worker,
+           "run_id": t["run_id"], "agent_instance_id": AGENT_INSTANCE_ID,
            "model": model, "effort": effort,
            "sid": (LAST_ACCT["sid"] or "")[:8], **u}
     try:
@@ -1595,6 +1601,11 @@ def handle(t, worker):
     # 两个模块级信号的写权在这里,主循环只读:最近失败指纹 → 线级熔断;最近卡号 → 链边界判定。
     global LAST_FAIL_FP, LAST_CARD_ID
     tid = t["id"]
+    run_id = t.get("run_id")
+    if not isinstance(run_id, str) or str(uuid.UUID(run_id)) != run_id:
+        raise RuntimeError("领取回执缺少有效 run_id；未调用模型")
+    def deliver_run(*args, **kwargs):
+        return deliver(*args, run_id=run_id, **kwargs)
     os.makedirs(EVID, exist_ok=True)
     attempt = int(t.get("attempts", 1))
     # ⭐判定上限**只在这里**。看板只返回次数,不说"已经用尽"。
@@ -1606,7 +1617,7 @@ def handle(t, worker):
     used = int(t.get("attempts_this_claim") or attempt)
     # 起点预判来自**卡的列**。板旧没这列就落到 standard(正中间)。
     weight = str(t.get("weight") or "standard")
-    hb = Heartbeat(tid, worker); hb.start()
+    hb = Heartbeat(tid, worker, run_id); hb.start()
     tails = []
     fps = []           # 失败指纹的履历(本 handle 内=没有新输入的连续尝试)
     acct = []          # 本卡的用量行(证据里并记总计)
@@ -1658,7 +1669,7 @@ def handle(t, worker):
                 rate_waits += 1
                 if rate_waits > RATE_MAX_WAITS:
                     log(f"  ⚠限流等待超过 {RATE_MAX_WAITS} 次 —— 不再等,转等待中")
-                    deliver(tid, worker, "wait",
+                    deliver_run(tid, worker, "wait",
                             "**额度耗尽**: 限流导致长时间跑不动。"
                             "不是本卡内容的问题 —— 额度恢复后重新放行即可。"
                             + chr(10) + chr(10) + (tail or "")[-1200:], what="转等待")
@@ -1693,7 +1704,7 @@ def handle(t, worker):
                 if memo:
                     ev += chr(10) + chr(10) + memo
                 ev += chr(10) + chr(10) + fmt_acct(acct)
-                if not deliver(tid, worker, "done", ev):
+                if not deliver_run(tid, worker, "done", ev):
                     # ⭐不能 return "done":主循环会据此清零线级熔断。被拒收是一种失败 ——
                     #   而且若它反复发生(租约太短 / 心跳线程死了),正该由熔断把线停下来。
                     LAST_FAIL_FP = "report-rejected"
@@ -1739,7 +1750,7 @@ def handle(t, worker):
                        "(**提权已经用尽,不再是新前提**)。"
                        + chr(10) + chr(10) + (chr(10) + chr(10)).join(tails)
                        + ((chr(10) + chr(10) + st_memo) if st_memo else ""))
-                deliver(tid, worker, "wait", why + chr(10) + chr(10) + fmt_acct(acct), what="转待裁定")
+                deliver_run(tid, worker, "wait", why + chr(10) + chr(10) + fmt_acct(acct), what="转待裁定")
                 log(f"  #{tid} → 等待中/待裁定(指纹刹车 fp={fp})")
                 return "wait"
             if used >= max_att:      # ⭐比的是**本轮**,不是生涯累计(attempt)
@@ -1752,13 +1763,13 @@ def handle(t, worker):
                        "(验证由循环执行,不是 worker 自己说的)。" + chr(10) +
                        "需要人看的是:任务是否可执行 / 说明是否缺前提 / 验证的期望是否本就不对。"
                        + chr(10) + chr(10) + (chr(10) + chr(10)).join(tails))
-                deliver(tid, worker, "wait", why + chr(10) + chr(10) + fmt_acct(acct), what="转待裁定")
+                deliver_run(tid, worker, "wait", why + chr(10) + chr(10) + fmt_acct(acct), what="转待裁定")
                 log(f"  #{tid} → 等待中/待裁定(尝试已用尽)")
                 return "wait"
-            s, r = call("POST", f"/api/tasks/{tid}/attempt", {"worker": worker})
+            s, r = call("POST", f"/api/tasks/{tid}/attempt", {"worker": worker, "run_id": run_id})
             if s != 200:
                 log(f"  attempt 累加被拒 {s} {r.get('error','')},转等待中")
-                deliver(tid, worker, "wait", "\n\n".join(tails), what="转等待")
+                deliver_run(tid, worker, "wait", "\n\n".join(tails), what="转等待")
                 return "wait"
             attempt = int(r["attempts"])
             # 本轮的次数也从板拿(自己 +1 的话,板和 loop 就有了两套口径)。
@@ -2009,7 +2020,8 @@ def main():
             s, r = call("POST", "/api/claim",
                         {"worker": worker, "line": line, "route": route, "lease_minutes": LEASE,
                          # ⭐认领时自报运行时,面板据此显示实际运行方
-                         "runtime": RUNTIME})
+                         "runtime": RUNTIME, "worker_protocol_version": 2,
+                         "agent_instance_id": AGENT_INSTANCE_ID})
         except RuntimeError as e:
             log(str(e)); time.sleep(min(interval, 30)); continue
 
@@ -2050,7 +2062,7 @@ def main():
         except Exception as e:
             # handle 自己崩了也不把卡留在 in_progress
             log(f"  处置异常:{e}")
-            deliver(t['id'], worker, "wait", f"loop 自身异常:{e}", what="异常兜底")
+            deliver(t['id'], worker, "wait", f"loop 自身异常:{e}", run_id=t.get("run_id"), what="异常兜底")
             outcome = "wait"
         # ⭐无论哪种结局都继续下一张。waiting 停的是那条任务链,不是这个 worker。
         if once: return

@@ -28,7 +28,13 @@ writeFileSync(join(TMP, "verify_registry.json"),
 process.env.BOARD_VERIFY_REGISTRY = join(TMP, "verify_registry.json");
 
 const require_ = createRequire(import.meta.url);
-const store = require_("../core/store.js");
+const rawStore = require_("../core/store.js");
+// These legacy state-machine fixtures build reports from current DB rows (some
+// claims come from child processes). Protocol refusal tests use rawStore directly
+// in runfencetest.mjs; production callers must retain their original receipt.
+const store = {...rawStore};
+for (const op of ["heartbeat","report","bumpAttempt"])
+  store[op] = (db,args) => rawStore[op](db,{runId:rawStore.get(db,args.id)?.run_id,...args});
 
 let pass = 0, fail = 0;
 const ok = (name, cond, detail = "") => {
@@ -128,6 +134,7 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
   ok("card lands in_progress with attempts=1 (not multiply counted)", after.status === "in_progress" && after.attempts === 1,
      `status=${after.status} attempts=${after.attempts}`);
   ok("heartbeat initialized at claim", after.heartbeat_at !== null);
+  ok("one successful claim commits exactly one matching run", store.runs(db,id).length === 1 && store.runs(db,id)[0].run_id === after.run_id);
   store.report(db, { id, worker: "engine", outcome: "done", evidence: "ok" });
   store.resolve(db, { id, verdict: "approve" });
 
@@ -159,7 +166,7 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
     const t = store.get(db, mid);
     if (t.status === "in_progress") store.report(db, { id: mid, worker: t.worker, outcome: "done", evidence: "x" });
     store.archive(db, { id: mid, force: true });
-    return { win, err, late, rr };
+    return { win, err, late, rr, attempts:t.attempts };
   };
 
   const mDef = mkMutant("m_deferred.js", (x) =>
@@ -205,19 +212,15 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
   let broke = false;
   for (let i = 0; i < K && !broke; i++) {
     const r = await raceMutant(mNoTx, `NO-TX#${i + 1}`);
-    rounds.push(`${r.win}w/${r.err}err/${r.late}late`);
-    // ⭐ The criterion is "DOUBLE ISSUE happened" = win > 1. Two things it must NOT
-    //   be: win !== 1 (that counts win===0 — nobody got it — as "detected"), and
-    //   win>1 && err===0. The error-free clause looked prudent but was wrong on both
-    //   ends: winners are counted ONLY from successful claim reports, so an error in
-    //   a THIRD process cannot mint a false winner — and on the slower CI runner the
-    //   mutant's real double issues consistently arrived alongside one SQLITE_BUSY,
-    //   so the probe rejected its own proof and went red on a healthy tree
-    //   (measured: rounds showed "2w/1err" and the assertion still failed).
-    if (r.win > 1) broke = true;
+    rounds.push([r.win+"w",r.err+"err",r.late+"late",r.attempts+"attempts"].join("/"));
+    // A run uniqueness constraint now also prevents a second successful receipt.
+    // Without the transaction, losing writers still change attempts/worker before
+    // their run insert fails. Count only observed double receipts or committed
+    // attempts in excess of receipts; an error alone is not proof of corruption.
+    if (r.win > 1 || (r.win > 0 && r.attempts > r.win)) broke = true;
   }
-  ok(`⭐ breaking atomicity double-issues the same card (within ${K} rounds)`, broke,
-     `NO-TX mutant rounds: [${rounds.join(" ")}]${broke ? " <- double issue caught = detection ability proven" : " <- no double issue = this probe cannot measure atomicity"}`);
+  ok("breaking atomicity produces double receipts or partial task writes", broke,
+     "NO-TX mutant rounds: [" + rounds.join(" ") + "]");
 }
 
 // ───────────────────────────────────────────────────────────────
