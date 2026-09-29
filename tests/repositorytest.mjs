@@ -4,7 +4,7 @@ import {DatabaseSync} from "node:sqlite";
 import {createRequire} from "node:module";
 import {createHash,randomUUID} from "node:crypto";
 import {execFileSync,spawn} from "node:child_process";
-import {existsSync,mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,realpathSync,chmodSync} from "node:fs";
+import {existsSync,mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,realpathSync,chmodSync,symlinkSync} from "node:fs";
 import {join,dirname} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
@@ -125,4 +125,11 @@ test("selected files reject directory-prefix case aliases even when individual f
 
 test("aggregate capture size and file counts are bounded even for deduplicated Git blobs",()=>{
  const r=repo(),b=board();register(b,r);const paths=[];for(let i=0;i<5;i++){const name="src/block"+i;paths.push(name);writeFileSync(join(r.root,name),Buffer.alloc(MAX_FILE_BYTES));}g(r.root,["add","src/"]);g(r.root,["commit","-m","bounded bundle"]);r.commit=text(r.root,["rev-parse","HEAD"]);assert.throws(()=>capture(b,r,{paths}),{code:"CAPTURE_LIMIT"});assert.throws(()=>capture(b,r,{paths:Array(257).fill("src/demo.txt")}),{code:"CAPTURE_LIMIT"});
+});
+
+test("filesystem identity accepts native/alias paths but still rejects a child directory as repository root",()=>{
+ const r=repo(),b=board();let alias;
+ if(process.platform==="win32"){const script="[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); (New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:AFK_TEST_LONG_ROOT).ShortPath";alias=execFileSync(join(process.env.SystemRoot,"System32/WindowsPowerShell/v1.0/powershell.exe"),["-NoProfile","-NonInteractive","-Command",script],{encoding:"utf8",windowsHide:true,timeout:10000,env:{...process.env,AFK_TEST_LONG_ROOT:r.root}}).trim();assert.notEqual(alias,realpathSync.native(r.root),"Windows fixture must exercise an actual short-path alias");}
+ else{alias=fresh("repository-alias");symlinkSync(r.root,alias,"dir");}
+ const x=register(b,{...r,root:alias});assert.equal(repositoryReader({root:alias,git}).info.root,realpathSync.native(r.root));assert.deepEqual(registerRepository(b.db,x.config),x.state);assert.deepEqual(capture(b,r).files.find(f=>f.path==="src/demo.txt").bytes,r.original);assert.throws(()=>repositoryReader({root:join(alias,"src"),git}),{code:"REPOSITORY_ROOT_REQUIRED"});
 });

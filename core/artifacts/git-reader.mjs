@@ -24,14 +24,14 @@ export function allowedPaths(values){
 }
 export function gitPin(pin){
  if(!pin||Object.keys(pin).sort().join(",")!=="path,sha256"||typeof pin.path!=="string"||!isAbsolute(pin.path)||!/^[a-f0-9]{64}$/.test(pin.sha256))fail("BAD_GIT_PIN","需要固定 Git 程序绝对路径与 SHA-256");
- let path,bytes;try{path=realpathSync(pin.path);if(!statSync(path).isFile()||statSync(path).size>64*1024*1024)throw Error();bytes=readFileSync(path);}catch{fail("GIT_UNAVAILABLE","无法读取已登记 Git 程序");}
+ let path,bytes;try{path=realpathSync.native(pin.path);if(!statSync(path).isFile()||statSync(path).size>64*1024*1024)throw Error();bytes=readFileSync(path);}catch{fail("GIT_UNAVAILABLE","无法读取已登记 Git 程序");}
  if(process.platform==="win32"&&basename(dirname(path)).toLowerCase()==="cmd")fail("GIT_LAUNCHER_UNSUPPORTED","请固定 Git 的实际 bin/git.exe，不能使用 cmd 启动器");
  if(createHash("sha256").update(bytes).digest("hex")!==pin.sha256)fail("GIT_CHANGED","Git 程序与已登记摘要不一致");
  return {path,sha256:pin.sha256};
 }
 function directory(path){
  if(typeof path!=="string"||!isAbsolute(path))fail("ABSOLUTE_PATH_REQUIRED","仓库路径须由本机管理者指定为绝对路径");
- try{const real=realpathSync(path);if(!statSync(real).isDirectory())throw Error();return real;}catch{fail("REPOSITORY_MISSING","本机仓库目录不可用");}
+ try{const real=realpathSync.native(path);if(!statSync(real).isDirectory())throw Error();return real;}catch{fail("REPOSITORY_MISSING","本机仓库目录不可用");}
 }
 function environment(executable){
  const env={PATH:dirname(executable),LANG:"C",LC_ALL:"C",GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:process.platform==="win32"?"NUL":"/dev/null",GIT_CONFIG_SYSTEM:process.platform==="win32"?"NUL":"/dev/null",GIT_ATTR_NOSYSTEM:"1",GIT_TERMINAL_PROMPT:"0",GCM_INTERACTIVE:"Never",GIT_NO_LAZY_FETCH:"1",GIT_NO_REPLACE_OBJECTS:"1",GIT_OPTIONAL_LOCKS:"0"};
@@ -41,7 +41,8 @@ function environment(executable){
 }
 /** Local administrator-selected repository only. No checkout, filters, network or shell. */
 export function repositoryReader({root,git}){
- const deadline=performance.now()+30000,path=directory(root),pin=gitPin(git),env=environment(pin.path);
+ const deadline=performance.now()+30000,path=directory(root),pin=gitPin(git),env=environment(pin.path),rootIdentity=statSync(path,{bigint:true});
+ const sameRoot=value=>{try{const s=statSync(value,{bigint:true});return s.isDirectory()&&s.ino!==0n&&s.ino===rootIdentity.ino&&s.dev===rootIdentity.dev;}catch{return false;}};
  function run(args,limit=1024*1024){
   const remaining=Math.floor(deadline-performance.now());if(remaining<=0)fail("REPOSITORY_READ_TIMEOUT","仓库读取超过 30 秒总期限");
   try{return execFileSync(pin.path,["--no-pager","--no-lazy-fetch","--no-replace-objects","--no-optional-locks","-c","protocol.allow=never","-c","core.fsmonitor=false","-c","core.untrackedCache=false",...args],{cwd:path,env,windowsHide:true,timeout:Math.min(10000,remaining),maxBuffer:limit,stdio:["ignore","pipe","pipe"]});}
@@ -49,7 +50,7 @@ export function repositoryReader({root,git}){
  }
  const text=(args,limit)=>new TextDecoder("utf-8",{fatal:true}).decode(run(args,limit)).trim();
  if(text(["rev-parse","--is-bare-repository"])!=="false")fail("REPOSITORY_REQUIRED","需登记非裸仓库的实际工作根目录");
- if(directory(text(["rev-parse","--show-toplevel"]))!==path)fail("REPOSITORY_ROOT_REQUIRED","不能把仓库内的子目录登记为仓库根");
+ if(!sameRoot(directory(text(["rev-parse","--show-toplevel"]))))fail("REPOSITORY_ROOT_REQUIRED","不能把仓库内的子目录登记为仓库根");
  const common=directory(text(["rev-parse","--path-format=absolute","--git-common-dir"])),format=text(["rev-parse","--show-object-format=storage"]);
  if(!["sha1","sha256"].includes(format))fail("OBJECT_FORMAT_UNSUPPORTED","Git 对象格式不受支持");
  const info={root:path,common_dir:common,object_format:format,git:pin};
@@ -79,7 +80,7 @@ export function repositoryReader({root,git}){
   }
   fail("BASE_NOT_ANCESTOR","交付提交不继承已批准基础版本");
  }
- return {info,verify(){gitPin(pin);if(directory(root)!==path)fail("REPOSITORY_CHANGED","仓库路径已改变");},commit,
+ return {info,verify(){gitPin(pin);if(directory(root)!==path||!sameRoot(path))fail("REPOSITORY_CHANGED","仓库路径已改变");},commit,
   capture({baseCommit,commit:oid,paths,allowed}){
    const base=commit(baseCommit),head=commit(oid);
    ancestry(baseCommit,oid);

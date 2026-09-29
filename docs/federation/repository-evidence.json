@@ -1,14 +1,14 @@
 {
   "plan_id": "AFK-FED-001",
-  "batch": "foundation-22-repositories",
+  "batch": "foundation-22-repositories-path-fix",
   "date": "2026-09-30",
-  "base_commit": "edfb9e097e05ffc5c8f131c6b10c7d201c064ba3",
+  "base_commit": "455b71098626cd96d9cc583a6a9c12326da368f1",
   "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
   "code_sha256": {
-    "core/artifacts/git-reader.mjs": "fe04ff6a827d057f8228166d8215a4f4ebe07c71d46f9b862090736ce545d4bc",
+    "core/artifacts/git-reader.mjs": "26ad198be3b8a50daac3d98fbf75c843e05d2dbe13898a8c1652b3b7884569a1",
     "core/artifacts/repositories.mjs": "49911d5eaabf79826eb694b41caf06ff45c3bc9500e6f5ab7772e2f8fbe71042",
     "cli/repository.mjs": "38289a66875a3464b8adaabbbd71db1c505cca68bfce8669a2d603d1055df77a",
-    "tests/repositorytest.mjs": "fc9d43ba35cbd1b1fe6afe32ecc7ff1fc0abf1162fa0e562fce0e478f3147c29",
+    "tests/repositorytest.mjs": "47e127d3ac7b0607b8d1e22c6f4ed6bfa02b286dd8dab2fc4052445bf02fa08a",
     "core/mcp/policy.mjs": "b2b65dd0a3a851155f41de6da83762f9cf5bb4e763a31f1f2ae58bb37574a4a0",
     "core/mcp/tools.mjs": "0343376f2bd98120b055e3e365f418dcdf8a8bcf7b0e388d0489b57fcaa345df",
     "package.json": "f6f4aeec5b779718f68bd5c3dca73e2d0d8b38bc382e33d02d126e9fcf597ea2",
@@ -16,10 +16,10 @@
   },
   "local_validation": {
     "repository_tests": {
-      "command": "node tests/repositorytest.mjs (within npm test)",
-      "passed": 21,
+      "command": "node --test tests/repositorytest.mjs",
+      "passed": 22,
       "failed": 0,
-      "log": ".data/repository-full-suite.log"
+      "log": ".data/repository-path-fix-targeted.log"
     },
     "full_suite": {
       "command": "npm test",
@@ -29,7 +29,9 @@
       "native_pass": 488,
       "failed": 0,
       "repository_tests": 21,
-      "log": ".data/repository-full-suite.log"
+      "log": ".data/repository-full-suite.log",
+      "tested_commit": "455b71098626cd96d9cc583a6a9c12326da368f1",
+      "source_status": "prior revision before Windows path fix; current full regression to be verified by CI"
     },
     "git": {
       "version": "2.54.0.windows.1",
@@ -47,7 +49,8 @@
       "empty/executable files and exact CRLF/Unicode bytes; individual/aggregate/count bounds",
       "actual explicit-database CLI and scoped MCP metadata without private paths or file-read/mutation tools",
       "actual backup/retirement/activation invalidates old map and requires fresh explicit registration",
-      "idempotent migration, immutable history and unknown-schema rejection"
+      "idempotent migration, immutable history and unknown-schema rejection",
+      "actual Windows short-path alias versus native path registration, exact replay and capture; POSIX symlink alias; child root still rejected"
     ]
   },
   "ci": "pending",
@@ -72,5 +75,32 @@
     "fixed Git executable and read-only commands are not an OS sandbox for malicious native programs",
     "LFS payloads, uncommitted/generated files, symlinks and submodules are not supported deliverables in this capture contract",
     "source acceptance, graph retirement, parent advancement, global UI and actual two-PC/provider acceptance remain pending"
-  ]
+  ],
+  "previous_ci_failure": {
+    "tested_commit": "455b71098626cd96d9cc583a6a9c12326da368f1",
+    "run_id": 36609429738,
+    "windows": {
+      "id": 109546753159,
+      "conclusion": "failure",
+      "failed_step": "repositorytest",
+      "repository_passed": 1,
+      "repository_failed": 20,
+      "failure_code": "REPOSITORY_ROOT_REQUIRED",
+      "observed_cause": "realpathSync preserved Windows short alias while Git reported expanded native path; reproduced locally before fix"
+    },
+    "linux": {
+      "id": 109546753234,
+      "name": "harness (ubuntu-latest)",
+      "classic": 928,
+      "native": 487,
+      "failed": 0,
+      "skip": 1,
+      "main_pass": 1325
+    },
+    "gitleaks": {
+      "id": 109546753189,
+      "conclusion": "success"
+    },
+    "receipt": ".data/repository-ci-failed.json"
+  }
 }

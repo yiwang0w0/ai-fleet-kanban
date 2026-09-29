@@ -69,3 +69,5 @@ coordinate / observe 只能使用 get_repository(project_id, repo_id) 和 list_r
 下一步是独立任务工作区、将捕获字节绑定实际 result/task/run 并持久保存、分块续传与接收复核，以及隔离环境中的独立验证。工作区不是 OS 沙箱，Git 固定摘要也不代替恶意程序隔离。来源正向验收、关系退役与父任务推进须等这些证据接通后实施。当前没有声称跨电脑传输了文件或完成 G07。
 
 Git 行为参考官方 [git 通用选项](https://git-scm.com/docs/git) 与 [git-cat-file 原始对象读取](https://git-scm.com/docs/git-cat-file)。本机验证 Git 2.54.0.windows.1；其他安装须实际支持并通过上述读取合同，不能沿用未核验的版本结论。
+
+Windows 路径核验使用原生长路径解析与文件系统设备/目录标识。同一目录的 8.3 短路径和长路径可以登记、精确重放及读取；真实子目录仍拒绝。该修正已由本机实际短路径夹具验证，准确提交的跨平台结果见证据记录。
