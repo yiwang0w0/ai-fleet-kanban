@@ -165,8 +165,10 @@ test("HTTP requires versions, rejects stale controls and returns current version
  try{
   let ready=false;for(let i=0;i<100;i++){try{ready=(await fetch(base+"/health")).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,100));}
   assert.ok(ready,out);const token=readFileSync(join(TMP,"board_token"),"utf8").trim();
+  // Synchronous CLI probes can outlive the server idle timeout while this
+  // client event loop is blocked. Do not reuse that idle socket for writes.
   async function api(method,path,body){
-   const r=await fetch(base+path,{method,headers:{"Content-Type":"application/json","X-Board-Token":token},body:method==="GET"?undefined:JSON.stringify(body||{})});
+   const r=await fetch(base+path,{method,headers:{"Connection":"close","Content-Type":"application/json","X-Board-Token":token},body:method==="GET"?undefined:JSON.stringify(body||{})});
    return {status:r.status,body:await r.json()};
   }
   const made=await api("POST","/api/tasks",{subject:"HTTP version",line:"alpha"}),id=made.body.task.id;

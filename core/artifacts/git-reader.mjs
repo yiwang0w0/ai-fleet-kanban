@@ -33,7 +33,7 @@ function directory(path){
  if(typeof path!=="string"||!isAbsolute(path))fail("ABSOLUTE_PATH_REQUIRED","仓库路径须由本机管理者指定为绝对路径");
  try{const real=realpathSync.native(path);if(!statSync(real).isDirectory())throw Error();return real;}catch{fail("REPOSITORY_MISSING","本机仓库目录不可用");}
 }
-function environment(executable){
+export function gitEnvironment(executable){
  const env={PATH:dirname(executable),LANG:"C",LC_ALL:"C",GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:process.platform==="win32"?"NUL":"/dev/null",GIT_CONFIG_SYSTEM:process.platform==="win32"?"NUL":"/dev/null",GIT_ATTR_NOSYSTEM:"1",GIT_TERMINAL_PROMPT:"0",GCM_INTERACTIVE:"Never",GIT_NO_LAZY_FETCH:"1",GIT_NO_REPLACE_OBJECTS:"1",GIT_OPTIONAL_LOCKS:"0"};
  for(const k of ["SystemRoot","WINDIR","SystemDrive","TEMP","TMP"])if(process.env[k])env[k]=process.env[k];
  if(process.platform==="win32"&&process.env.SystemRoot)env.PATH+=";"+join(process.env.SystemRoot,"System32");
@@ -41,7 +41,7 @@ function environment(executable){
 }
 /** Local administrator-selected repository only. No checkout, filters, network or shell. */
 export function repositoryReader({root,git}){
- const deadline=performance.now()+30000,path=directory(root),pin=gitPin(git),env=environment(pin.path),rootIdentity=statSync(path,{bigint:true});
+ const deadline=performance.now()+30000,path=directory(root),pin=gitPin(git),env=gitEnvironment(pin.path),rootIdentity=statSync(path,{bigint:true});
  const sameRoot=value=>{try{const s=statSync(value,{bigint:true});return s.isDirectory()&&s.ino!==0n&&s.ino===rootIdentity.ino&&s.dev===rootIdentity.dev;}catch{return false;}};
  function run(args,limit=1024*1024){
   const remaining=Math.floor(deadline-performance.now());if(remaining<=0)fail("REPOSITORY_READ_TIMEOUT","仓库读取超过 30 秒总期限");
@@ -80,21 +80,7 @@ export function repositoryReader({root,git}){
   }
   fail("BASE_NOT_ANCESTOR","交付提交不继承已批准基础版本");
  }
- return {info,verify(){gitPin(pin);if(directory(root)!==path||!sameRoot(path))fail("REPOSITORY_CHANGED","仓库路径已改变");},commit,
-  capture({baseCommit,commit:oid,paths,allowed}){
-   const base=commit(baseCommit),head=commit(oid);
-   ancestry(baseCommit,oid);
-   if(!Array.isArray(paths)||!paths.length||paths.length>MAX_CAPTURE_FILES)fail("CAPTURE_LIMIT","每次需指定 1 至 256 个产物文件");
-   const wanted=paths.map(artifactPath).sort(),policy=allowedPaths(allowed);
-   if(new Set(wanted.map(p=>p.toUpperCase())).size!==wanted.length)fail("PATH_COLLISION","文件路径重复或大小写冲突");
-   const prefixes=new Map();
-   for(const path of wanted){let prefix="";const parts=path.split("/");for(let i=0;i<parts.length;i++){
-    prefix+=(i?"/":"")+parts[i];const key=prefix.toUpperCase(),file=i===parts.length-1,old=prefixes.get(key);
-    if(old&&(old.path!==prefix||old.file!==file))fail("PATH_COLLISION","路径前缀存在大小写或文件/目录冲突");prefixes.set(key,{path:prefix,file});
-   }}
-   if(wanted.some(p=>!policy.some(a=>a.endsWith("/")?p.startsWith(a):p===a)))fail("PATH_NOT_ALLOWED","产物不在本机批准的路径范围内");
-   // Verify every tree object along selected paths ourselves. ls-tree alone
-   // would trust a corrupt child object stored under another object's filename.
+ function treeReader(){
    const trees=new Map();let visitedEntries=0;
    function entries(tree){
     if(trees.has(tree))return trees.get(tree);
@@ -110,6 +96,48 @@ export function repositoryReader({root,git}){
     }
     trees.set(tree,out);return out;
    }
+   return entries;
+ }
+ return {info,verify(){gitPin(pin);if(directory(root)!==path||!sameRoot(path))fail("REPOSITORY_CHANGED","仓库路径已改变");},commit,
+  /** Full baseline export requires a separately approved local workspace pool. */
+  snapshot({commit:oid,consume}){
+   if(typeof consume!=="function")fail("BAD_INPUT","需要本机基线内容接收器");
+   const head=commit(oid),entries=treeReader(),selected=[],prefixes=new Map(),queue=[{tree:head.tree,prefix:""}];
+   for(let i=0;i<queue.length;i++)for(const [name,e] of entries(queue[i].tree)){
+    const path=artifactPath(queue[i].prefix+name),key=path.toUpperCase();
+    if(prefixes.has(key))fail("PATH_COLLISION","基线存在大小写路径冲突");prefixes.set(key,path);if(prefixes.size>10000)fail("TREE_LIMIT","基线展开路径超过 10000 项");
+    if(e.mode==="40000"){queue.push({tree:e.oid,prefix:path+"/"});continue;}
+    if(!["100644","100755"].includes(e.mode))fail("FILE_TYPE_UNSUPPORTED","任务基线不支持符号链接或子模块");
+    if(selected.length>=4096)fail("WORKSPACE_CONTENT_LIMIT","任务基线超过 4096 文件");selected.push({path,...e});
+   }
+   const files=[];let total=0;
+   for(const e of selected.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0)){
+    const sizeText=text(["cat-file","-s",e.oid],128),size=Number(sizeText);
+    if(!/^(?:0|[1-9][0-9]*)$/.test(sizeText)||!Number.isSafeInteger(size))fail("OBJECT_CORRUPT","对象长度无效");
+    if(size>MAX_FILE_BYTES||total+size>256*1024*1024)fail("WORKSPACE_CONTENT_LIMIT","任务基线单文件超过 8 MiB 或总计超过 256 MiB");
+    const bytes=object("blob",e.oid,MAX_FILE_BYTES);
+    if(bytes.length!==size)fail("OBJECT_CORRUPT","对象长度改变");
+    if(/^version https:\/\/git-lfs\.github\.com\/spec\/v1\r?\n/.test(bytes.subarray(0,80).toString("utf8")))fail("LFS_CONTENT_REQUIRED","基线需要实际 LFS 内容");
+    const metadata={path:e.path,mode:e.mode,blob_oid:e.oid,size,sha256:createHash("sha256").update(bytes).digest("hex")};
+    consume(metadata,bytes);total+=size;files.push(metadata);
+   }
+   gitPin(pin);return {object_format:format,commit:head.commit,tree:head.tree,total_bytes:total,files};
+  },
+  capture({baseCommit,commit:oid,paths,allowed}){
+   const base=commit(baseCommit),head=commit(oid);
+   ancestry(baseCommit,oid);
+   if(!Array.isArray(paths)||!paths.length||paths.length>MAX_CAPTURE_FILES)fail("CAPTURE_LIMIT","每次需指定 1 至 256 个产物文件");
+   const wanted=paths.map(artifactPath).sort(),policy=allowedPaths(allowed);
+   if(new Set(wanted.map(p=>p.toUpperCase())).size!==wanted.length)fail("PATH_COLLISION","文件路径重复或大小写冲突");
+   const prefixes=new Map();
+   for(const path of wanted){let prefix="";const parts=path.split("/");for(let i=0;i<parts.length;i++){
+    prefix+=(i?"/":"")+parts[i];const key=prefix.toUpperCase(),file=i===parts.length-1,old=prefixes.get(key);
+    if(old&&(old.path!==prefix||old.file!==file))fail("PATH_COLLISION","路径前缀存在大小写或文件/目录冲突");prefixes.set(key,{path:prefix,file});
+   }}
+   if(wanted.some(p=>!policy.some(a=>a.endsWith("/")?p.startsWith(a):p===a)))fail("PATH_NOT_ALLOWED","产物不在本机批准的路径范围内");
+   // Verify every tree object along selected paths ourselves. ls-tree alone
+   // would trust a corrupt child object stored under another object's filename.
+   const entries=treeReader();
    const files=[];let total=0;
    for(const name of wanted){
     let tree=head.tree,e;const parts=name.split("/");

@@ -88,6 +88,8 @@ jobs:
         run: bash hrun.sh node tests/resulttest.mjs
       - name: repositorytest (local repo mapping, verified committed bytes and portable paths)
         run: bash hrun.sh node tests/repositorytest.mjs
+      - name: workspacetest (independent task repos, declared conflicts and retained files)
+        run: bash hrun.sh node tests/workspacetest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

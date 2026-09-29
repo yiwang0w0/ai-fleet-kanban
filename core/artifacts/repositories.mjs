@@ -66,3 +66,12 @@ export function captureRepositoryFiles(db,{projectId,repoId,baseCommit,commit,pa
  const manifest={schema_version:1,kind:"repository_content_snapshot",project_id:projectId,repo_id:repoId,object_format:captured.object_format,base_commit:captured.base_commit,base_tree:captured.base_tree,commit:captured.commit,tree:captured.tree,total_bytes:captured.total_bytes,files:captured.files.map(({bytes,...metadata})=>metadata)};
  return {mapping_id:r.mapping_id,manifest,manifest_digest:digest(manifest),files:captured.files.map(f=>({path:f.path,bytes:f.bytes})),accepted:false};
 }
+
+/** Trusted workspace administration; full-history copying needs a separate pool grant. */
+export function workspaceRepositorySource(db,{mappingId,baseCommit}){
+ const r=row(db,{mappingId}),approved=db.prepare("SELECT tree_oid FROM repository_bases WHERE mapping_id=? AND commit_oid=?").get(mappingId,objectId(baseCommit));
+ if(!approved)fail("BASE_NOT_APPROVED","任务工作区需要本机已批准基线");
+ const {g,d}=reader(r),base=g.commit(baseCommit);g.verify();
+ if(base.tree!==approved.tree_oid)fail("OBJECT_CORRUPT","批准基线内容已变化");
+ return {...d,base_tree:base.tree};
+}

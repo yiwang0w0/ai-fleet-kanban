@@ -53,7 +53,47 @@
       "actual Windows short-path alias versus native path registration, exact replay and capture; POSIX symlink alias; child root still rejected"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "tested_commit": "4360abbe766af5e29a9d3ce0d741ad719a89aae2",
+    "run_id": 36612117994,
+    "conclusion": "failure",
+    "jobs": [
+      {
+        "id": 109555887552,
+        "name": "gitleaks",
+        "conclusion": "success",
+        "failed_steps": []
+      },
+      {
+        "id": 109555888053,
+        "name": "harness (ubuntu-latest)",
+        "conclusion": "success",
+        "failed_steps": []
+      },
+      {
+        "id": 109555888054,
+        "name": "harness (windows-latest)",
+        "conclusion": "failure",
+        "failed_steps": [
+          "versiontest (stale task commands and concurrent edits)"
+        ]
+      }
+    ],
+    "linux": {
+      "classic": 928,
+      "native": 488,
+      "extra_classic_checks": 90,
+      "main_suite_passed": 1326,
+      "failed": 0
+    },
+    "windows": {
+      "failed_step": "versiontest",
+      "passed": 17,
+      "failed": 1,
+      "code": "ECONNRESET",
+      "cause": "Unresolved connection reset in existing HTTP version integration; repository alias test not reached"
+    }
+  },
   "real_model_calls": {
     "claude": 0,
     "codex": 0,

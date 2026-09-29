@@ -2003,7 +2003,7 @@
         "result": "local_partial_passed",
         "scope": "explicit local repository/base registration, same stable repo ID at different paths, verified committed bytes and current-epoch authorization",
         "pending": [
-          "task workspace integration and immutable task/run/repository binding",
+          "execution adapter binding and real use of the prepared task workspace",
           "physical two-node repository registration and independent G07 acceptance"
         ]
       },
@@ -2035,13 +2035,26 @@
       "evidence_required": [
         "workspace-isolation 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "independent local Git copies bound to actual prepared task/run, declared write conflicts, durable preparation and stopped-run retention without file deletion",
+        "pending": [
+          "verified code execution adapter and actual workspace use by executor",
+          "crashed provisioning recovery and reviewed physical reclamation",
+          "bound deliverables, independent merge verification and two-PC G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/workspaces.md",
+        "docs/federation/workspace-evidence.json",
+        "tests/workspacetest.mjs"
+      ]
     },
     {
       "id": "T07.03",

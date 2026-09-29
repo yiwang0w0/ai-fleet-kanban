@@ -1,3 +1,4 @@
+import {assertWorkspaceLaunchSupported} from "../artifacts/workspaces.mjs";
 import {createRequire} from "node:module";
 import {randomUUID} from "node:crypto";
 import {basename,dirname,isAbsolute,relative,resolve,sep} from "node:path";
@@ -150,6 +151,7 @@ export function authorizeLaunch(db,{dispatchId,sourceGate,execution=null}){
  return atomic(db,()=>{
   const d=fresh(db,dispatchId);
   if(d.phase!=="prepared")fail("LAUNCH_NOT_AVAILABLE","启动许可已经消费或运行已结束；不能自动重启");
+  assertWorkspaceLaunchSupported(db,dispatchId);
   const source=sourceGate.check();
   if(canonical(source)!==d.source_json)fail("SOURCE_CHANGED","领取后治理代码身份已变化");
   const node=localIdentity(db),t=task(db,d.task_uid),a=db.prepare("SELECT * FROM broker_assignments WHERE assignment_id=?").get(d.assignment_id);
