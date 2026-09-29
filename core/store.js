@@ -566,6 +566,14 @@ function migrateRuns(db) {
 
 /** Content versions do not move on heartbeat/lease/time-only writes. Multiple
  * semantic SQL updates may advance a version more than once within one command. */
+function migrateLifecycle(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS board_lifecycle(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('active','retired')),updated_at TEXT NOT NULL)");
+  db.prepare("INSERT OR IGNORE INTO board_lifecycle VALUES(1,'active',?)").run(now());
+  for (const table of ["tasks", "task_events", "task_runs"]) for (const action of ["INSERT", "UPDATE", "DELETE"]) {
+    db.exec("CREATE TRIGGER IF NOT EXISTS retired_" + table + "_" + action.toLowerCase() + " BEFORE " + action + " ON " + table +
+      " WHEN (SELECT state FROM board_lifecycle WHERE singleton=1)='retired' BEGIN SELECT RAISE(ABORT,'NODE_RETIRED: task writes are disabled'); END");
+  }
+}
 function migrateTaskVersions(db) {
   const ignored = new Set(["aggregate_version","heartbeat_at","lease_until","updated_at","work_spans"]);
   const columns = db.prepare("PRAGMA table_info(tasks)").all().map(c=>c.name).filter(c=>!ignored.has(c));
@@ -608,6 +616,9 @@ function open(readOnly = false) {
       db.close();
       throw err(ERR.CONFLICT, "恢复副本处于隔离状态，禁止写入或启动执行器；先完成恢复核验与身份恢复流程");
     }
+    if(db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_lifecycle'").get() && db.prepare("SELECT state FROM board_lifecycle WHERE singleton=1").get()?.state==="retired") {
+      db.close();throw err(ERR.CONFLICT,"节点已退役，禁止重新启动写入者");
+    }
     db.exec("PRAGMA journal_mode=WAL");
     try { migrate(db); }
     catch (e) { db.close(); throw e; }
@@ -624,6 +635,7 @@ function migrate(db) {
     migrateNodeIdentity(db);
     migrateRuns(db);
     migrateTaskVersions(db);
+    migrateLifecycle(db);
     db.exec("COMMIT TRANSACTION");
   } catch (e) {
     try { db.exec("ROLLBACK TRANSACTION"); } catch {}
@@ -2959,6 +2971,7 @@ function openChildrenOnLines(db, parentId, lines) {
 }
 
 module.exports = {
+  migrateLifecycle,
   localNode, renameNode, assertLocalIdentityInput, requireRun, runs, requireExpectedVersion, assertExpectedVersion,
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,

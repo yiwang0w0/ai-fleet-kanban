@@ -68,6 +68,8 @@ jobs:
         run: bash hrun.sh node tests/synctest.mjs
       - name: snapshottest (frozen pages, crash resume and retained-history recovery)
         run: bash hrun.sh node tests/snapshottest.mjs
+      - name: recoverytest (retirement, reviewed activation and crash rollback)
+        run: bash hrun.sh node tests/recoverytest.mjs
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

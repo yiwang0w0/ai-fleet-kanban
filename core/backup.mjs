@@ -279,8 +279,11 @@ export function restoreBackup({ backupDirectory, destination }) {
     db.exec("CREATE TABLE IF NOT EXISTS board_restore_hold (backup_id TEXT NOT NULL, restored_at TEXT NOT NULL)");
     db.exec("DELETE FROM board_restore_hold");
     db.prepare("INSERT INTO board_restore_hold VALUES (?,?)").run(manifest.backup_id, new Date().toISOString());
+    const wasRetired=db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_lifecycle'").get() && db.prepare("SELECT state FROM board_lifecycle").get()?.state==="retired";
+    if(wasRetired)db.exec("UPDATE board_lifecycle SET state='active' WHERE singleton=1");
     for (const ref of manifest.evidence_references)
       db.prepare("UPDATE tasks SET evidence_path=? WHERE id=?").run(join(dest, ref.path), ref.task_id);
+    if(wasRetired)db.exec("UPDATE board_lifecycle SET state='retired' WHERE singleton=1");
     db.exec("COMMIT");
     databaseSummary(db);
   } catch (e) {
@@ -291,9 +294,38 @@ export function restoreBackup({ backupDirectory, destination }) {
     backup_id: manifest.backup_id, restored_at: new Date().toISOString(),
     quarantined: true, database: manifest.database,
     restored_database_sha256: stableFile(join(dest, "board.db")).sha256,
-    evidence_files: manifest.files.length - 1
+    evidence_files: manifest.files.length - 1,
+    evidence_manifest: manifest.files.filter(f=>f.path!=="board.db").map(f=>({path:f.path,bytes:f.bytes,sha256:f.sha256}))
   };
   writeNew(join(dest, "restore-receipt.json"), JSON.stringify(receipt, null, 2) + "\n");
   finishDirectory(dest);
   return { destination: dest, ...receipt };
+}
+
+/** Read-only validation of an untouched restored directory before recovery preparation. */
+export function inspectRestore(directory) {
+  const root=canonicalDirectory(directory);
+  if(present(join(root,".incomplete")))fail("恢复目录尚未完成");
+  const file=stableFile(join(root,"restore-receipt.json"),null,{limit:MAX_MANIFEST,contents:true});
+  const receipt=JSON.parse(file.data.toString("utf8"));
+  if(receipt.quarantined!==true || !Array.isArray(receipt.evidence_manifest) || receipt.evidence_manifest.length!==receipt.evidence_files || receipt.evidence_files>MAX_FILES)
+    fail("恢复回执缺少证据清单；请从已校验备份重新恢复");
+  const dbPath=join(root,"board.db"),database=stableFile(dbPath);
+  if(database.sha256!==receipt.restored_database_sha256)fail("恢复数据库与原回执不一致");
+  const seen=new Set();
+  for(const item of receipt.evidence_manifest){
+    portablePath(item.path);
+    if(!item.path.startsWith("evidence/") || seen.has(item.path.toLowerCase()))fail("恢复证据路径冲突");
+    seen.add(item.path.toLowerCase());
+    let current=root;for(const part of item.path.split("/")){current=join(current,part);noLink(current);}
+    const actual=stableFile(current);
+    if(actual.sha256!==item.sha256 || actual.bytes!==item.bytes)fail("恢复证据摘要不匹配");
+  }
+  const db=openReadOnly(dbPath);
+  try {
+    const summary=databaseSummary(db),hold=db.prepare("SELECT backup_id FROM board_restore_hold").all();
+    if(hold.length!==1 || hold[0].backup_id!==receipt.backup_id || summary.node_id!==receipt.database?.node_id || summary.sync_epoch!==receipt.database?.sync_epoch)
+      fail("恢复隔离与节点身份不匹配");
+    return {root,dbPath,receipt,receipt_sha256:file.sha256,summary};
+  } finally {db.close();}
 }

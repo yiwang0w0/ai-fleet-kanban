@@ -7,6 +7,8 @@ import { PeerError, SCOPES, uuid, names, version } from "./protocol.mjs";
 const hash = token => createHash("sha256").update(token).digest();
 const at = () => new Date().toISOString();
 export function localIdentity(db) {
+  if(db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_lifecycle'").get() && db.prepare("SELECT state FROM board_lifecycle WHERE singleton=1").get()?.state==="retired")
+    throw new PeerError("NODE_RETIRED","节点已退役，不能参与通信或写入",409);
   if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_restore_hold'").get())
     throw new PeerError("RESTORE_HOLD", "恢复副本尚未激活，不能参与节点通信", 409);
   const local = db.prepare("SELECT node_id,display_name,sync_epoch,protocol_version FROM board_node WHERE singleton=1").get();

@@ -39,7 +39,16 @@
       "independent prune CLI and immutable outside-transaction delete guard"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36544730710,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36544730710",
+    "result": "passed",
+    "windows_main_passed": 965,
+    "linux_main_passed": 962,
+    "snapshot_tests_per_platform": 20,
+    "gitleaks": "passed",
+    "extra_checks": "passed"
+  },
   "schema_validation": {
     "json_syntax": "passed",
     "runtime_semantics": "20 snapshot tests passed",
@@ -63,5 +72,6 @@
     "32 MiB/10000 record snapshot limit; larger projects require future partitioning or limit design",
     "physical device/Windows ACL and real multi-node disaster acceptance pending",
     "global UI, MCP/three adapters and delegation still pending"
-  ]
+  ],
+  "tested_commit": "cf78b11570172bfe24c28a1c041558834871ffe1"
 }
