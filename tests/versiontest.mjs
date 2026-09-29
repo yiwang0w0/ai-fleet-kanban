@@ -75,22 +75,49 @@ test("version and business mutation roll back together when event writing fails"
  assert.deepEqual(store.get(db,id),before);
 });
 test("two independent processes editing the same observed version have one winner",async()=>{
- const path=join(TMP,"concurrent.db"),{db,id}=fixture(path), worker=join(TMP,"writer.cjs");
+ const path=join(TMP,"concurrent.db"),{db,id}=fixture(path),worker=join(TMP,"writer.cjs");
+ // Production databases already use WAL. This test races commands, not journal-mode conversion.
+ db.exec("PRAGMA journal_mode=WAL");
  writeFileSync(worker,[
   "const store=require(process.argv[2]);const db=store.open();",
-  "const start=Number(process.argv[3]);setTimeout(()=>{",
-  "try{store.update(db,{id:Number(process.argv[4]),description:process.argv[5],expectedVersion:1});console.log('ok');}",
-  "catch(e){console.log(e.code);}finally{db.close();}},Math.max(0,start-Date.now()));"
+  "const id=Number(process.argv[3]),version=store.get(db,id).aggregate_version;",
+  "process.on('message',()=>{try{store.update(db,{id,description:process.argv[4],expectedVersion:version});console.log('ok');}",
+  "catch(e){console.log(e.code);}finally{db.close();process.disconnect();}});",
+  "process.send({version});"
  ].join("\n"));
- const start=Date.now()+600;
- const launch=name=>new Promise((resolve,reject)=>{
-  const p=spawn(process.execPath,[worker,join(ROOT,"core/store.js"),String(start),String(id),name],
-   {env:{...process.env,BOARD_DB:path,BOARD_DATA_DIR:TMP},windowsHide:true,stdio:["ignore","pipe","pipe"]});
-  let out="";p.stdout.on("data",b=>out+=b);p.on("error",reject);p.on("exit",code=>code?reject(Error("child exit "+code)):resolve(out.trim()));
- });
- const results=await Promise.all([launch("first"),launch("second")]);
- assert.deepEqual(results.sort(),["CONFLICT","ok"]);assert.equal(store.get(db,id).aggregate_version,2);
+ const children=[];
+ const launch=name=>{
+  const p=spawn(process.execPath,[worker,join(ROOT,"core/store.js"),String(id),name],
+   {env:{...process.env,BOARD_DB:path,BOARD_DATA_DIR:TMP},windowsHide:true,stdio:["ignore","pipe","pipe","ipc"]});
+  let out="",stderr="",readyResolve,readyReject;
+  const ready=new Promise((resolve,reject)=>{readyResolve=resolve;readyReject=reject;});
+  const done=new Promise((resolve,reject)=>{
+   p.stdout.on("data",b=>out+=b);p.stderr.on("data",b=>stderr+=b);
+   p.on("message",readyResolve);p.on("error",e=>{readyReject(e);reject(e);});
+   p.on("close",code=>{const e=Error("child exit "+code+"\n"+stderr);
+    readyReject(e);code?reject(e):resolve(out.trim());});
+  });
+  // Attach the outcome handler immediately, including while waiting for readiness.
+  const outcome=done.then(value=>({value}),error=>({error}));
+  const child={p,ready,outcome};children.push(child);return child;
+ };
+ let timeout;
+ try{
+  const writers=[launch("first"),launch("second")];
+  const snapshots=await Promise.race([Promise.all(writers.map(c=>c.ready)),
+   new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error("writer readiness timed out")),10000);})]);
+  assert.deepEqual(snapshots.map(x=>x.version),[1,1]);
+  for(const c of writers)c.p.send("write");
+  const outcomes=await Promise.all(writers.map(c=>c.outcome));
+  for(const o of outcomes)if(o.error)throw o.error;
+  assert.deepEqual(outcomes.map(o=>o.value).sort(),["CONFLICT","ok"]);
+  assert.equal(store.get(db,id).aggregate_version,2);
+ }finally{
+  clearTimeout(timeout);for(const c of children)if(c.p.exitCode===null)c.p.kill();
+  await Promise.all(children.map(c=>c.outcome));
+ }
 });
+
 test("panel sends original draft/edit version and never retries a 409 with a newer one",async()=>{
  const source=readFileSync(join(ROOT,"core/panel.html"),"utf8");
  const a=source.indexOf("async function post(url, body){"),b=source.indexOf("// ⭐ v0.19",a);

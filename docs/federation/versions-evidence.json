@@ -5,12 +5,12 @@
   "base_commit": "7cc5939643e66801a431b59df1baed8b46acc42f",
   "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
   "code_sha256": {
-    "core/store.js": "c28329fefeabf3ee552e5566cb4278f5aa2b0635833e5ab53ad2d407881aafd5",
+    "core/store.js": "90e6d733d7978d0bfa3750139352ade66e2f4e8a083f8885597e8a8ad5a3f124",
     "core/server.mjs": "8958d5fe2b0cb1a200e2a82daf41cf709d7872a06c61137183ced0f51beafa1e",
     "core/panel.html": "cef7ed87565cdc45fdd687a407c93b772ae4c6d82b9daf21d2d2e332d7d031e5",
     "cli/board.py": "cabc2c527a5ccacf36ba564841cf4ec265be781ac785ae9103a9a65e4b8050a3",
     "loops/reviewer_loop.py": "569ee2ed1bdad98f5603918ba0247434cbad08659075d73a5c24c0cef3aad1ab",
-    "tests/versiontest.mjs": "deb61dec0f9d5fc5f73cb8857ff0b2bafd1b72c3fe3cbf72d86ce003ea055e1b",
+    "tests/versiontest.mjs": "cff07ca7ad5d5c3adcaeb5bcbae8c5c4d119447328eda289a3f77f6b474e81bb",
     "tests/http-version-fixture.mjs": "5278b2e399bd531e96c7056057ac64fa63be5b012a672aade3391cd86b4e0af8",
     "tests/servertest.mjs": "ab50638598939a9cb6350bab27412f4b7f25254506462e0556203b707ba30f5b",
     "tests/looptest.mjs": "091a26598af58f1f97f9a2168e31caf1ffae34b989f7f415d1cf8dee528457e9",
@@ -62,5 +62,16 @@
     "no node authentication, event authority or replica protocol yet",
     "version and run identifiers are not credentials",
     "filesystem archive is not a SQLite transaction"
+  ],
+  "ci_history": [
+    {
+      "commit": "7149e2276abb394dfb2a0761325835b590f03547",
+      "run_id": 36535843417,
+      "gitleaks": "passed",
+      "ubuntu": "passed",
+      "windows": "failed",
+      "failure": "Concurrency fixture child exited during startup before commands; original stderr was missing. Thirty local repetitions did not reproduce.",
+      "followup": "Use WAL before spawning; IPC barrier proves both processes observed version 1 before writing; retain stderr, wait for both exits and bound readiness. All 18 targeted tests passed."
+    }
   ]
 }
