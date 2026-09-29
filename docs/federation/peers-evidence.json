@@ -33,7 +33,16 @@
       "independent CLI gateway process; no operator token minted"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36538423361,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36538423361",
+    "result": "passed",
+    "windows_main_passed": 919,
+    "linux_main_passed": 916,
+    "peer_tests_per_platform": 19,
+    "gitleaks": "passed",
+    "extra_checks": "passed"
+  },
   "network": {
     "scope": "temporary localhost only",
     "tailscale_configuration_changed": false,
@@ -52,5 +61,6 @@
     "copied full credentials cannot be distinguished by application alone",
     "Windows directory ACL isolation not verified",
     "restore activation and epoch/credential/cursor reset not implemented"
-  ]
+  ],
+  "tested_commit": "77438eb316185d736fec3164d9b1e39edc650e19"
 }

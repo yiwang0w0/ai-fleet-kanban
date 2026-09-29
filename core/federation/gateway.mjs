@@ -1,5 +1,6 @@
 import http from "node:http";
-import { PeerError, negotiateHello } from "./protocol.mjs";
+import {migrateSync,exportBatch,acknowledge} from "./sync-store.mjs";
+import { PeerError, negotiateHello, keys } from "./protocol.mjs";
 import { authenticate, localIdentity, transaction } from "./peers.mjs";
 
 function send(res, status, body, close = false) {
@@ -34,9 +35,9 @@ async function bodyJSON(req) {
   try { return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks))); }
   catch { throw new PeerError("BAD_INPUT","请求不是有效 UTF-8 JSON",400); }
 }
-/** Separate surface: never serves the operator panel, tasks, tokens, files or model tools. */
+/** Separate surface: serves only explicitly shared projections; never operator UI, tokens, files or model tools. */
 function createPeerServer(db) {
-  localIdentity(db);
+  localIdentity(db);migrateSync(db);
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
@@ -51,6 +52,15 @@ function createPeerServer(db) {
           return negotiateHello(body,peer,localIdentity(db));
         });
         return send(res,200,hello);
+      }
+      if (["/peer/v1/pull","/peer/v1/ack"].includes(req.url) && req.method === "POST") {
+        const body=await bodyJSON(req),pull=req.url.endsWith("/pull");
+        keys(body,pull?["project_id","after_seq","limit"]:["project_id","seq","event_digest"],pull?"pull":"ack");
+        const result=transaction(db,()=>{
+          const peer=authenticate(db,req.headers.authorization,pull?"sync:pull":"sync:ack");
+          return pull?exportBatch(db,peer,body):acknowledge(db,peer,body);
+        });
+        return send(res,200,result);
       }
       if (req.url === "/peer/v1/health" && req.method === "GET") {
         const health = transaction(db,()=>{

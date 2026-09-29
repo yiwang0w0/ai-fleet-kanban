@@ -283,7 +283,7 @@
     {
       "id": "S05",
       "title": "离线持久化、事件同步与状态副本",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "S02",
         "S03"
@@ -900,18 +900,20 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "eight local task controls reject stale expected_version; transactional concurrency checks",
+        "scope": "local version gates plus authenticated owner projections and isolated non-executable replicas",
         "pending": [
-          "remote replica execution restrictions",
-          "authenticated owner event authority",
-          "phase acceptance"
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/versions.md",
         "docs/federation/versions-evidence.json",
-        "tests/versiontest.mjs"
+        "tests/versiontest.mjs",
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
       ]
     },
     {
@@ -941,9 +943,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "peer hello v1 protocol range, required capabilities/extensions and syntax schema",
+        "scope": "hello v1 capability negotiation plus strict task-projection-sync-v1 batch syntax and semantics",
         "pending": [
-          "task/event protocol negotiation",
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
           "cross-version real-node upgrade acceptance"
         ]
       },
@@ -951,7 +954,10 @@
       "implementation_evidence": [
         "docs/federation/peers.md",
         "docs/federation/peers-evidence.json",
-        "tests/peertest.mjs"
+        "tests/peertest.mjs",
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
       ]
     },
     {
@@ -1373,13 +1379,26 @@
       "evidence_required": [
         "transaction-crash 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "transactional dirty outbox markers and atomic coalesced immutable projection materialization; process-crash tests",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "snapshot/retention/epoch recovery and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
     },
     {
       "id": "T05.02",
@@ -1402,13 +1421,26 @@
       "evidence_required": [
         "replay/ack-loss 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "durable inbox/cursor before ACK; bounded pagination, duplicate/lost ACK replay and persisted backoff",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "snapshot/retention/epoch recovery and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
     },
     {
       "id": "T05.03",
@@ -1430,13 +1462,26 @@
       "evidence_required": [
         "reorder/conflict/clock 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "per-origin/epoch/project ordering, digest conflict quarantine, version and clock rollback refusal",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "snapshot/retention/epoch recovery and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
     },
     {
       "id": "T05.04",
@@ -1459,13 +1504,26 @@
       "evidence_required": [
         "offline-resume 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "source execution while local HTTP gateway unavailable; result sync on reconnect without remote re-claim",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "snapshot/retention/epoch recovery and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
     },
     {
       "id": "T05.05",
