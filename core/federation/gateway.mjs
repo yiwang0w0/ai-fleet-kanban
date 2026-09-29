@@ -1,4 +1,5 @@
 import http from "node:http";
+import {migrateRelations,publishTopology,approveRelation,withdrawRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
 import {migrateDelegation,receiveOffer,peerDelegationStatus} from "./delegation.mjs";
 import {sourceRecoveryMarker} from "./epoch-state.mjs";
 import {startSnapshot,snapshotPage} from "./snapshots.mjs";
@@ -40,7 +41,7 @@ async function bodyJSON(req,limit=8192) {
 }
 /** Separate authenticated node surface: explicit projections and delegation proposals; no operator UI, secrets or model execution. */
 function createPeerServer(db) {
-  localIdentity(db);migrateSync(db);migrateDelegation(db);
+  localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
@@ -82,6 +83,14 @@ function createPeerServer(db) {
         const result=transaction(db,()=>{
           const peer=authenticate(db,req.headers.authorization,offering?"delegation:offer":"delegation:status");
           return offering?receiveOffer(db,peer,body.offer):peerDelegationStatus(db,peer,body);
+        });
+        return send(res,200,result);
+      }
+      if (["/peer/v1/relations/publish","/peer/v1/relations/approve","/peer/v1/relations/status","/peer/v1/relations/withdraw"].includes(req.url) && req.method==="POST") {
+        const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="publish"?MAX_TOPOLOGY_BYTES+4096:8192);
+        const result=transaction(db,()=>{
+          const peer=authenticate(db,req.headers.authorization,action==="status"?"relations:read":action==="withdraw"?"relations:approve":"relations:"+action);
+          return action==="publish"?publishTopology(db,peer,body):action==="approve"?approveRelation(db,peer,body):action==="withdraw"?withdrawRelation(db,peer,body):relationStatus(db,peer,body);
         });
         return send(res,200,result);
       }

@@ -1731,7 +1731,7 @@
         "result": "local_partial_passed",
         "scope": "durable bilateral intents, authenticated HTTP delivery/poll, explicit receiver decisions, atomic target-owned creation and lost-ACK retries",
         "pending": [
-          "relation registrar, global cycle checks and confirmed execution",
+          "local topology coupling, endpoint contract verification and confirmed execution",
           "cancellation and result acceptance lifecycle",
           "actual multiple-device Tailscale validation and independent G06 acceptance"
         ]
@@ -1768,19 +1768,22 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_prerequisite_passed",
-        "scope": "local bounded task ancestry, atomic subtree placement and independent-process cycle race",
+        "result": "local_partial_passed",
+        "scope": "serialized project registrar, combined declared local/cross-node graph validation, independent authenticated approvals, stale-attempt withdrawal and durable receipts",
         "pending": [
-          "cross-node relation registrar and project graph versions",
-          "authenticated confirmation receipts and registrar-offline behavior",
-          "real multi-node partition acceptance"
+          "local topology preparation/commitment and enforcement across every structural mutation",
+          "binding both endpoint contracts and releasing execution only after validated current receipts",
+          "registrar-offline execution/reconciliation and physical multi-node acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/trees.md",
         "docs/federation/trees-evidence.json",
-        "tests/treetest.mjs"
+        "tests/treetest.mjs",
+        "docs/federation/relations.md",
+        "docs/federation/relations-evidence.json",
+        "tests/relationstest.mjs"
       ]
     },
     {
@@ -1812,7 +1815,7 @@
         "result": "local_partial_passed",
         "scope": "target-owned unconfirmed tasks, no remote task entering the source queue, epoch-bound decisions and database execution hold",
         "pending": [
-          "relation registrar, global cycle checks and confirmed execution",
+          "local topology coupling, endpoint contract verification and confirmed execution",
           "cancellation and result acceptance lifecycle",
           "actual multiple-device Tailscale validation and independent G06 acceptance"
         ]

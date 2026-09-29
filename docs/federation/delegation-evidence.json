@@ -49,7 +49,24 @@
       "bounded project queues, rollback of tasks/enrollment/decisions/tool receipts and sanitized credential errors"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "commit": "1b9cd747506c8252ff9236389dab9981e9176762",
+    "run_id": 36573497035,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36573497035",
+    "windows": {
+      "job_id": 109423073347,
+      "passed": 1163,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109423075035,
+      "passed": 1159,
+      "failed": 0,
+      "skipped_windows_only_test": 1
+    },
+    "gitleaks": "success",
+    "additional_checks": "passed"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_executor_started": false,
@@ -69,5 +86,6 @@
     "cancellation, candidate results, evidence transfer and final acceptance remain pending",
     "CLI send/poll performs one operation; automatic retry scheduling and retention remain pending",
     "real multiple-computer Tailscale and independent phase acceptance remain pending"
-  ]
+  ],
+  "tested_commit": "1b9cd747506c8252ff9236389dab9981e9176762"
 }

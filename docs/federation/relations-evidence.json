@@ -1,0 +1,66 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-16-project-relations",
+  "date": "2026-09-29",
+  "base_commit": "1b9cd747506c8252ff9236389dab9981e9176762",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/relations.mjs": "806d043689a208aadc8636daf6a9e19e8bb3e654b44645bda16b093cf3bdd200",
+    "core/federation/gateway.mjs": "9ba2d945d987a5dc88d1f4425e31e92415922b16cb54d9d7300209707ea6e814",
+    "core/federation/protocol.mjs": "4498af411150e76eafadafa9f1b180323f25fbcca6d08f313e0d0b0e67fa53e2",
+    "cli/relations.mjs": "709c103272f1e012ba0d0f0ffea5b49183a7875900187f9e5cd33a0f3f403ced",
+    "tests/relationstest.mjs": "9698f40c3501325ce01cdcd41bbccecf5cda477706e251b688545c3db44833f2",
+    "docs/federation/topology.schema.json": "ecac77bc8f6edbad9c17dab7e6213e5aa79005e99983d0edbadd545b31e33129",
+    "docs/federation/relation.schema.json": "30ab64d4ffed7978b792f0074c35ab386dd52499141fe2834dc5f5ad5a8d8f1e",
+    "package.json": "668b850b91b432d84783aba0930aa8439264886a29345a62161402e5eccd9020",
+    ".github/workflows/ci.yml": "a5976a492851bbeb323634051eac841c812182ba5ff5b62f3164d6dd2a0316f4"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1191,
+      "classic_pass": 841,
+      "native_pass": 350,
+      "failed": 0,
+      "relation_tests": 28
+    },
+    "final_targeted": {
+      "passed": 28,
+      "failed": 0
+    },
+    "changes_after_full_suite": [],
+    "coverage": [
+      "independent-process opposite-edge final approval race: exactly one confirmation, then cycle rejection on refreshed retry",
+      "combined local parent/dependency and remote edges, independent bidirectional cooperation and ten-thousand-vertex traversal",
+      "bilateral credential/project/epoch binding, revoked or rotated pending approvals, non-endpoint member refusal",
+      "stale topology attempts can be withdrawn and replaced; one confirmed relationship per delegation",
+      "real loopback HTTP, lost-response replay, database restart and revocation during upload",
+      "rollback of topology/ownership/approvals/graph version/events/requests, including nested calls",
+      "actual quarantined backup activation invalidates registrar epoch; old history retained",
+      "explicit CLI, topology data minimization, request bounds and recoverable pending queue capacity",
+      "existing delegation execution hold remains even when a declared-graph receipt is confirmed"
+    ]
+  },
+  "ci": "pending",
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "registry validates declared snapshots; live local topology is not yet frozen or transactionally coupled",
+    "confirmed receipts do not authorize dispatch; endpoint contract verification and local execution integration remain pending",
+    "no automatic relation network client, retry scheduler, MCP discovery or graph recovery coordination",
+    "confirmed relationship retirement, evidence/results, cancellation and final acceptance remain pending",
+    "real multi-computer Tailscale tests and independent phase acceptance remain pending"
+  ]
+}
