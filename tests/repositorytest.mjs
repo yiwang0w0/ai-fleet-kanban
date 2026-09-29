@@ -129,7 +129,12 @@ test("aggregate capture size and file counts are bounded even for deduplicated G
 
 test("filesystem identity accepts native/alias paths but still rejects a child directory as repository root",()=>{
  const r=repo(),b=board();let alias;
- if(process.platform==="win32"){const script="[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); (New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:AFK_TEST_LONG_ROOT).ShortPath";alias=execFileSync(join(process.env.SystemRoot,"System32/WindowsPowerShell/v1.0/powershell.exe"),["-NoProfile","-NonInteractive","-Command",script],{encoding:"utf8",windowsHide:true,timeout:10000,env:{...process.env,AFK_TEST_LONG_ROOT:r.root}}).trim();assert.notEqual(alias,realpathSync.native(r.root),"Windows fixture must exercise an actual short-path alias");}
+ if(process.platform==="win32"){
+  // Invoke the native API through the existing test Python; avoid cold
+  // PowerShell/COM startup becoming the subject of this filesystem test.
+  const script="import ctypes, os; f=ctypes.WinDLL('kernel32', use_last_error=True).GetShortPathNameW; f.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p,ctypes.c_uint32]; f.restype=ctypes.c_uint32; p=os.environ['AFK_TEST_LONG_ROOT']; n=f(p,None,0); assert n, ctypes.get_last_error(); b=ctypes.create_unicode_buffer(n); count=f(p,b,n); assert 0<count<n, ctypes.get_last_error(); print(b.value)";
+  alias=execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c",script],{encoding:"utf8",windowsHide:true,timeout:10000,env:{...process.env,AFK_TEST_LONG_ROOT:r.root}}).trim();assert.notEqual(alias,realpathSync.native(r.root),"Windows fixture must exercise an actual short-path alias");
+ }
  else{alias=fresh("repository-alias");symlinkSync(r.root,alias,"dir");}
  const x=register(b,{...r,root:alias});assert.equal(repositoryReader({root:alias,git}).info.root,realpathSync.native(r.root));assert.deepEqual(registerRepository(b.db,x.config),x.state);assert.deepEqual(capture(b,r).files.find(f=>f.path==="src/demo.txt").bytes,r.original);assert.throws(()=>repositoryReader({root:join(alias,"src"),git}),{code:"REPOSITORY_ROOT_REQUIRED"});
 });

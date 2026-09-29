@@ -1,14 +1,14 @@
 {
   "plan_id": "AFK-FED-001",
-  "batch": "foundation-22-repositories-path-fix",
+  "batch": "foundation-22-repositories-native-alias-test",
   "date": "2026-09-30",
-  "base_commit": "455b71098626cd96d9cc583a6a9c12326da368f1",
+  "base_commit": "5dae78f4946232d6f762bcf60240491ab53d09f8",
   "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
   "code_sha256": {
     "core/artifacts/git-reader.mjs": "26ad198be3b8a50daac3d98fbf75c843e05d2dbe13898a8c1652b3b7884569a1",
     "core/artifacts/repositories.mjs": "49911d5eaabf79826eb694b41caf06ff45c3bc9500e6f5ab7772e2f8fbe71042",
     "cli/repository.mjs": "38289a66875a3464b8adaabbbd71db1c505cca68bfce8669a2d603d1055df77a",
-    "tests/repositorytest.mjs": "47e127d3ac7b0607b8d1e22c6f4ed6bfa02b286dd8dab2fc4052445bf02fa08a",
+    "tests/repositorytest.mjs": "92e8b8a5cf80cfa442c8c22b60cc29fd62d504947938eac85e07a2112c5f8808",
     "core/mcp/policy.mjs": "b2b65dd0a3a851155f41de6da83762f9cf5bb4e763a31f1f2ae58bb37574a4a0",
     "core/mcp/tools.mjs": "0343376f2bd98120b055e3e365f418dcdf8a8bcf7b0e388d0489b57fcaa345df",
     "package.json": "f6f4aeec5b779718f68bd5c3dca73e2d0d8b38bc382e33d02d126e9fcf597ea2",
@@ -19,7 +19,7 @@
       "command": "node --test tests/repositorytest.mjs",
       "passed": 22,
       "failed": 0,
-      "log": ".data/repository-path-fix-targeted.log"
+      "log": ".data/repository-native-alias-targeted.log"
     },
     "full_suite": {
       "command": "npm test",
@@ -102,5 +102,45 @@
       "conclusion": "success"
     },
     "receipt": ".data/repository-ci-failed.json"
+  },
+  "alias_fixture_ci_failure": {
+    "tested_commit": "5dae78f4946232d6f762bcf60240491ab53d09f8",
+    "run_id": 36610855599,
+    "conclusion": "failure",
+    "jobs": [
+      {
+        "id": 109551584068,
+        "name": "gitleaks",
+        "conclusion": "success",
+        "failed_steps": []
+      },
+      {
+        "id": 109551584278,
+        "name": "harness (ubuntu-latest)",
+        "conclusion": "success",
+        "failed_steps": [],
+        "classic": 928,
+        "native": 488,
+        "failed": 0,
+        "main_suite_passed": 1326,
+        "skipped": 1,
+        "extra_classic_checks": 90
+      },
+      {
+        "id": 109551584479,
+        "name": "harness (windows-latest)",
+        "conclusion": "failure",
+        "failed_steps": [
+          "repositorytest (local repo mapping, verified committed bytes and portable paths)"
+        ],
+        "classic": 402,
+        "native": 369,
+        "failed": 1,
+        "repository_passed": 21,
+        "repository_failed": 1,
+        "failure_code": "ETIMEDOUT",
+        "failure_cause": "Cold PowerShell/COM startup exceeded 10 seconds before the native alias regression assertions"
+      }
+    ]
   }
 }
