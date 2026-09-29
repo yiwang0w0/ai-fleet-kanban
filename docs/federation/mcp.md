@@ -124,3 +124,5 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 已确认委派取消新增 get_cancellation / list_cancellations（coordinate、observe），request_cancellation / progress_cancellation（coordinate）。接收回执不等于停止证明，写入与审计和工具回执原子提交；恢复后的历史带 identity_current。完整合同与未决限制见 [取消与停止证明](cancellation.md)。
 
 候选报告新增 get_result / list_results（coordinate、observe）及 prepare_result / reject_result（coordinate）。返工决定绑定来源当前版本和精确候选；执行端持久接收决定后才原子重开任务，工具不启动模型、不提供最终通过验收。见 [候选结果与返工](results.md)。
+
+仓库元数据新增 get_repository(project_id, repo_id) / list_repositories(project_id, limit)，仅 coordinate / observe 可按项目读取已登记仓库、批准基线及当前代次标识。不会返回本机路径、Git 程序或文件内容，也不提供登记/批准入口。见 [仓库映射与内容读取](repositories.md)。

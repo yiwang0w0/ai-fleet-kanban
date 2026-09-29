@@ -86,6 +86,8 @@ jobs:
         run: bash hrun.sh node tests/cancellationtest.mjs
       - name: resulttest (sealed candidates, owner rejection and durable rework)
         run: bash hrun.sh node tests/resulttest.mjs
+      - name: repositorytest (local repo mapping, verified committed bytes and portable paths)
+        run: bash hrun.sh node tests/repositorytest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

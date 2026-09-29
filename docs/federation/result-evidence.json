@@ -55,7 +55,27 @@
       "restart migrations, retained immutable history and populated receipt/decision delete guards"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36605330521,
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109532775240,
+      "passed": 1308,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109532775017,
+      "passed": 1304,
+      "failed": 0,
+      "skipped": 1
+    },
+    "gitleaks": {
+      "job_id": 109532775366,
+      "conclusion": "success"
+    },
+    "extra_checks": "passed",
+    "receipt": ".data/result-ci.json"
+  },
   "real_model_calls": {
     "claude": 0,
     "codex": 0,
@@ -76,5 +96,6 @@
     "POSIX group_signalled does not provide strong process-tree stop proof",
     "synthetic supervised Node process uses provider execution mode but real_model_call_confirmed remains false",
     "two physical kanata machines and each subscription executor remain untested"
-  ]
+  ],
+  "tested_commit": "edfb9e097e05ffc5c8f131c6b10c7d201c064ba3"
 }

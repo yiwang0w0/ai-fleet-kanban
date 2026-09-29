@@ -341,7 +341,7 @@
     {
       "id": "S07",
       "title": "代码、文件与验证证据跨端交付",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "S02",
         "S03",
@@ -1994,13 +1994,25 @@
       "evidence_required": [
         "repo-map 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "explicit local repository/base registration, same stable repo ID at different paths, verified committed bytes and current-epoch authorization",
+        "pending": [
+          "task workspace integration and immutable task/run/repository binding",
+          "physical two-node repository registration and independent G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/repositories.md",
+        "docs/federation/repository-evidence.json",
+        "tests/repositorytest.mjs"
+      ]
     },
     {
       "id": "T07.02",
@@ -2052,13 +2064,26 @@
       "evidence_required": [
         "artifact-admission 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_prerequisite_passed",
+        "scope": "bounded actual committed-byte capture and portable content snapshot with per-file SHA-256",
+        "pending": [
+          "persistent result/task/run-bound artifact manifest",
+          "authenticated file transport and receiving storage",
+          "independent artifact admission and G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/repositories.md",
+        "docs/federation/repository-evidence.json",
+        "tests/repositorytest.mjs"
+      ]
     },
     {
       "id": "T07.04",

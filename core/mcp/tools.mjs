@@ -1,3 +1,4 @@
+import {repositoryState,listRepositories} from "../artifacts/repositories.mjs";
 import {migrateResults,prepareResult,rejectResult,resultState,listResults} from "../federation/results.mjs";
 import {migrateCancellations,listCancellations,prepareCancellation,cancellationState} from "../federation/cancellation.mjs";
 import {progressCancellation} from "../federation/cancellation-service.mjs";
@@ -21,6 +22,8 @@ const object=(properties,required=Object.keys(properties))=>({type:"object",prop
 const taskInput={request_id:uuidSchema,project_id:name,subject:{...text(500),minLength:1},description:text(),acceptance:text(),work_kind:{enum:["implement","review"]},required_capabilities:caps};
 const relationInput=object({schema_version:{enum:[1]},type:{enum:["delegation"]},relation_id:uuidSchema,delegation_id:uuidSchema,project_id:name,graph_id:uuidSchema,graph_epoch:uuidSchema,source_node_id:uuidSchema,source_epoch:uuidSchema,source_task_uid:uid,target_node_id:uuidSchema,target_epoch:uuidSchema,target_task_uid:uid,offer_digest:{type:"string",pattern:"^[0-9a-f]{64}$"},source_topology_revision:positive,target_topology_revision:positive});
 const defs=[
+ ["get_repository","读取本项目已登记仓库与批准基线，不返回本机路径",object({project_id:name,repo_id:name})],
+ ["list_repositories","列出本项目仓库映射与身份是否为当前代次",object({project_id:name,limit:{...positive,maximum:100}})],
  ["get_result","读取候选交付、接收回执与来源决定",object({result_id:uuidSchema})],
  ["list_results","列出授权项目候选交付",object({project_id:name,limit:{...positive,maximum:100}})],
  ["prepare_result","封存实际运行结果和当前任务版本；不等于来源验收",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive})],
@@ -153,6 +156,8 @@ function assign(db,p,args){
 }
 function execute(db,p,name,args){
  switch(name){
+ case "get_repository":scoped(p,args.project_id);return repositoryState(db,{projectId:args.project_id,repoId:args.repo_id});
+ case "list_repositories":scoped(p,args.project_id);return listRepositories(db,{projectId:args.project_id,limit:args.limit});
  case "list_results":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_results'").get()?listResults(db,{projectId:args.project_id,limit:args.limit}):{results:[]};
  case "get_result":
  case "prepare_result":

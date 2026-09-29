@@ -1,0 +1,76 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-22-repositories",
+  "date": "2026-09-30",
+  "base_commit": "edfb9e097e05ffc5c8f131c6b10c7d201c064ba3",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/artifacts/git-reader.mjs": "fe04ff6a827d057f8228166d8215a4f4ebe07c71d46f9b862090736ce545d4bc",
+    "core/artifacts/repositories.mjs": "49911d5eaabf79826eb694b41caf06ff45c3bc9500e6f5ab7772e2f8fbe71042",
+    "cli/repository.mjs": "38289a66875a3464b8adaabbbd71db1c505cca68bfce8669a2d603d1055df77a",
+    "tests/repositorytest.mjs": "fc9d43ba35cbd1b1fe6afe32ecc7ff1fc0abf1162fa0e562fce0e478f3147c29",
+    "core/mcp/policy.mjs": "b2b65dd0a3a851155f41de6da83762f9cf5bb4e763a31f1f2ae58bb37574a4a0",
+    "core/mcp/tools.mjs": "0343376f2bd98120b055e3e365f418dcdf8a8bcf7b0e388d0489b57fcaa345df",
+    "package.json": "f6f4aeec5b779718f68bd5c3dca73e2d0d8b38bc382e33d02d126e9fcf597ea2",
+    ".github/workflows/ci.yml": "eec91921579656a9ecf7eea92034bc430bc94ea1b7e7b304da6fa998ac06e52e"
+  },
+  "local_validation": {
+    "repository_tests": {
+      "command": "node tests/repositorytest.mjs (within npm test)",
+      "passed": 21,
+      "failed": 0,
+      "log": ".data/repository-full-suite.log"
+    },
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1329,
+      "classic_pass": 841,
+      "native_pass": 488,
+      "failed": 0,
+      "repository_tests": 21,
+      "log": ".data/repository-full-suite.log"
+    },
+    "git": {
+      "version": "2.54.0.windows.1",
+      "kind": "actual mingw64/bin/git.exe, not cmd launcher"
+    },
+    "coverage": [
+      "two nodes with separate local repository paths capture identical committed bytes and portable manifests",
+      "immutable registration/base admission, nested audit rollback and independent-process registration race",
+      "missing or unapproved base, arbitrary revision expression, unrelated commit and subdirectory root refusal",
+      "actual SHA1/SHA256 commit/tree/blob digest verification including selected child trees and ancestry",
+      "corrupted loose objects and high-bit commit header parent impersonation rejected",
+      "portable path/type/allowlist rules, case-prefix aliases, symlinks, submodules and LFS pointers",
+      "no worktree dirty/untracked reads, replacement refs, smudge execution or inherited Git configuration",
+      "missing promisor object fails without implicit fetch",
+      "empty/executable files and exact CRLF/Unicode bytes; individual/aggregate/count bounds",
+      "actual explicit-database CLI and scoped MCP metadata without private paths or file-read/mutation tools",
+      "actual backup/retirement/activation invalidates old map and requires fresh explicit registration",
+      "idempotent migration, immutable history and unknown-schema rejection"
+    ]
+  },
+  "ci": "pending",
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "real_operations": {
+    "deployment_changed": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false,
+    "actual_user_repository_registered": false
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "snapshot has verified committed bytes but is not yet persisted or bound to a task/run/result artifact manifest",
+    "task workspaces, authenticated resumable byte transfer and independent verification are pending",
+    "public metadata is registration history, not a fresh repository availability claim",
+    "local mapping relocation and historical capacity reclamation are not implemented",
+    "fixed Git executable and read-only commands are not an OS sandbox for malicious native programs",
+    "LFS payloads, uncommitted/generated files, symlinks and submodules are not supported deliverables in this capture contract",
+    "source acceptance, graph retirement, parent advancement, global UI and actual two-PC/provider acceptance remain pending"
+  ]
+}
