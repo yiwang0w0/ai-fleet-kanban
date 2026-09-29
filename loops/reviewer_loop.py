@@ -61,6 +61,11 @@ REVIEWER_BUDGET = os.environ.get("REVIEWER_MAX_BUDGET_USD", "0")
 # 超长证据的头部逐字保留段。origin 在此接过本地小模型做溢出段摘要;开源版不携带
 # 那套私有基建 —— 超长走响亮截断,截断本身写明原文字数(沉默截断曾是实害)。
 VERBATIM = int(os.environ.get("REVIEWER_VERBATIM", "12000"))
+# 反亲和(v0.23,fleet.config `review.anti_affinity`,server 经 slotEnv 告知)。判据在 server 侧
+#   (/api/review/pending 按 ?runtime= 把同家族交付的卡列为 held);这里只负责**出声**:被留住的卡
+#   每张说一次,之后每轮只报计数 —— 哨的退避原则,不刷屏、也不静默。
+ANTI = os.environ.get("REVIEWER_ANTI_AFFINITY") or ""
+_HELD_SAID = set()
 
 
 def result_for_prompt(t):
@@ -786,6 +791,7 @@ def digest_selftest():
 
 
 def main():
+    global ANTI
     if "--digest-selftest" in sys.argv:
         digest_selftest()
     if RUNTIME not in ("claude", "codex"):
@@ -823,7 +829,8 @@ def main():
             until = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
             if until <= now: until += _dt.timedelta(days=1)
     log(f"自动审阅 runtime={RUNTIME} model={MODEL} effort={EFFORT} interval={interval}s base={BASE} dry={dry}"
-        + (f" 截止={until:%m-%d %H:%M}" if until else " 截止=无"))
+        + (f" 截止={until:%m-%d %H:%M}" if until else " 截止=无")
+        + (f" 反亲和={ANTI}(同家族交付的卡留给人或另一家族)" if ANTI else ""))
     while True:
         cgate = context_lib.context_gate(REPO, None, RUNTIME)
         sgate = gates_lib.source_gate(CODE_ROOT, DATA, log=log, loaded_tree=LOADED_TREE)
@@ -836,7 +843,8 @@ def main():
                 log(f"已过截止 {until:%H:%M} —— 审阅结束(未审的卡只是留着,不会坏)")
                 return
         try:
-            st, r = call("GET", "/api/review/pending")
+            # ⭐ 自报运行时:反亲和的判据要知道「审的是谁」;旧 server 忽略这个参数,行为不变。
+            st, r = call("GET", f"/api/review/pending?runtime={RUNTIME}")
         except RuntimeError as e:
             log(str(e)); time.sleep(min(interval, 30)); continue
         if st != 200:
@@ -846,8 +854,21 @@ def main():
             if once or dry: return
             time.sleep(min(interval, 30)); continue
         todo = r.get("tasks", [])
+        held = r.get("held") or []
+        # 策略的真相在 server(配置);这里第一次从应答里看到就说一次 —— 手动起的审阅没有 slotEnv,
+        #   不能靠 env 才知道自己在按反亲和工作。
+        if r.get("anti_affinity") and not ANTI:
+            ANTI = str(r["anti_affinity"])
+            log(f"反亲和={ANTI}(server 配置 review.anti_affinity):同家族交付的卡留给人或另一家族")
+        for h in held:
+            if h.get("id") not in _HELD_SAID:
+                _HELD_SAID.add(h.get("id"))
+                log(f"⏸ 跳过 #{h.get('id')}:交付它的座席与本审阅同家族({h.get('last_runtime')})"
+                    "—— 反亲和(review.anti_affinity),留给人或另一家族的审阅;卡仍在待验收,面板标「待异族审阅」")
         if not todo:
-            log("没有待验收的等待中卡" + ("(退出)" if once or dry else f",睡 {interval}s"))
+            log(("没有待验收的等待中卡" if not held else
+                 f"没有可审的卡(反亲和留住 {len(held)} 张:#{' #'.join(str(h.get('id')) for h in held)})")
+                + ("(退出)" if once or dry else f",睡 {interval}s"))
             if once or dry: return
             time.sleep(interval); continue
         if dry:

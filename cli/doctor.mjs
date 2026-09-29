@@ -257,6 +257,34 @@ await new Promise((resolve) => {
   }
 }
 
+// ── ⑤e the family pairing (v0.23). Measured evidence (docs/方案-身份分配.md §1.3): Claude
+//    reviewing Codex raised the pass rate 71.6→89.7; Codex reviewing Claude LOWERED it
+//    91.4→82.8. So a codex auto-review seat over claude implement lines is the one pairing
+//    known to cost accuracy. Warn, never refuse — the operator may know better.
+{
+  try {
+    const DATA = resolve(process.env.BOARD_DATA_DIR || join(ROOT, "core", ".data"));
+    let ws = {}; try { ws = JSON.parse(readFileSync(join(DATA, "worker_settings.json"), "utf8")); } catch {}
+    const defRt = CFG0.default_agent?.runtime || "claude";
+    const rtOf = (line, role) => ws[line]?.agents?.[0]?.runtime || role?.seat?.runtime || defRt;
+    const lines = Array.isArray(CFG0.lines) ? CFG0.lines : [];
+    const hasReview = (CFG0.roles || []).includes("review");
+    const reviewRt = ws.review?.agents?.[0]?.runtime || defRt;
+    const implLines = lines.filter((l) => (l.role?.kind || "implement") === "implement");
+    const impl = implLines.map((l) => `${l.id}=${rtOf(l.id, l.role)}`);
+    if (hasReview && reviewRt === "codex" && implLines.some((l) => rtOf(l.id, l.role) === "claude"))
+      wr(`自动审阅座席是 codex,而实现线在 claude(${impl.join(", ")})`,
+         "实测这是唯一会降准确率的配对(Codex 审 Claude:91.4→82.8;Claude 审 Codex:71.6→89.7)。把另一家族放到方案评审线(lines[].role.kind=review),代码阶段的审阅座席留 Claude");
+    else if (hasReview) ok(`审阅配对:审阅=${reviewRt},实现线 ${impl.join(", ") || "(无)"}`);
+    const anti = CFG0.review?.anti_affinity;
+    if (anti != null && anti !== "" && anti !== false && anti !== "runtime")
+      no(`review.anti_affinity 只接受 "runtime"(收到 ${JSON.stringify(anti)})`, "server 会拒绝启动");
+    else if (anti === "runtime" && hasReview && implLines.length && implLines.every((l) => rtOf(l.id, l.role) === reviewRt))
+      wr(`反亲和已开,但所有实现线都和审阅座席同家族(${reviewRt})`,
+         "每一张交付都会被留给人 —— 要么把实现线换家族,要么关掉 review.anti_affinity");
+  } catch (e) { wr(`配对检查没跑成(${String(e.message).slice(0, 60)})`, "不是通过,是没测"); }
+}
+
 // ── ⑥b browser (optional) — only front-end verification needs it ────────────
 // Not a failure when absent: most fleets never verify a page. But when a card
 // DOES touch the UI, this is the difference between machine evidence and "I

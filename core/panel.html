@@ -495,6 +495,7 @@ const lineColor = (l) => {
 };
 let LINE_LABELS = {};   // id → display name (fleet.config lines[].label); the id stays the machine's
 let LINE_ROLES = {};    // id → identity {kind, tools, charter, seat} or null (v0.22, lines[].role)
+let REVIEW_LINES = [];  // the review-kind lines (v0.23): a goal can hang a plan-review card on one
 /* The identity badge on the rig: only what differs from a plain line, in the operator's
    words (实现 is the default and stays silent). seat_drift comes from the server — the
    panel never decides it. */
@@ -823,6 +824,11 @@ function cardParts(t){
   //   as "queued, waiting its turn" while the queue will in fact never hand it out —
   //   a stop that cannot state its reason is the failure mode this board keeps
   //   naming. The criterion comes from the server (same function claim uses).
+  // v0.23: held by the auto-review anti-affinity — the server decides (review_hold), the
+  // panel only shows it; the card is waiting for YOU or for another family's reviewer.
+  if (t.review_hold === "same_family") {
+    meta2.push(`<span class="tag" title="自动审阅座席与交付这张卡的座席是同一家族(review.anti_affinity):不由它审。留给你,或另一家族的审阅座席">待异族审阅</span>`);
+  }
   if (t.no_progress) {
     const since = String(t.no_progress.since || "").replace("T", " ").slice(0, 16);
     meta2.push(`<span class="tag nopro" title="自上次派发(${esc(since)})以来,这张卡的卡面、依赖、裁定意见、工作树都没有变化 —— 再派一次模型会看到一模一样的世界,得出一模一样的结论。给它新输入(补充卡面 / 写裁定意见 / 推进依赖 / 更新工作树)它就会自己恢复;确实要照跑,用点名认领的强制选项">⏸ 无进展</span>`);
@@ -870,6 +876,10 @@ function cardParts(t){
     // A goal whose decomposition came up empty must be re-runnable from here.
     if (!tasks.some((x) => x.parent_id === t.id) && t.status !== "done")
       acts += `<button data-dec="${t.id}">重新拆解</button>`;
+    // v0.23: the pipeline's first station — a plan-review card on a review line. Offered
+    // only when such a line exists; the server refuses a second one while one is open.
+    if (REVIEW_LINES.length && t.status !== "done")
+      acts += `<button data-rev="${t.id}" title="在评审线(${esc(REVIEW_LINES.map(lineLabel).join("/"))})下建一张对抗评审卡:只指出方案会在哪里崩、哪些假设没验证;它通过之前,这个目标的拆解会被拦住">起评审卡</button>`;
   }
   if (t.status === "waiting"){
     // A place to write your own words BEFORE ruling; the same box serves both roads.
@@ -2379,7 +2389,7 @@ async function refresh(){
     ctxLines = cres.lines;
     claimMisses = wres.claim_misses || [];
     workers = wres.workers; LINES = wres.lines; MODELS = wres.models; EFFORTS = wres.efforts;
-    LINE_HINTS = wres.line_hints || {}; LINE_LABELS = wres.line_labels || {}; LINE_ROLES = wres.line_roles || {}; ROUTES = wres.routes || [];
+    LINE_HINTS = wres.line_hints || {}; LINE_LABELS = wres.line_labels || {}; LINE_ROLES = wres.line_roles || {}; REVIEW_LINES = wres.review_lines || []; ROUTES = wres.routes || [];
     RUNTIMES = wres.runtimes || []; MAXP = wres.max_parallel || 0;
     DECOMP = wres.decompose_models || [];
     if (r.server_now) skew = r.server_now - Date.now();
@@ -2408,10 +2418,10 @@ document.addEventListener("click", async (e) => {
       const g = await post("/api/goals", { subject, description: rest.join(String.fromCharCode(10)) , parentId: document.getElementById("goal-prev")?.value || null });
       ta.value = "";
       btn.textContent = "拆解中…";
-      const r = await post(`/api/goals/${g.task.id}/decompose`,
-                           { model: document.getElementById("goal-model").value });
+      const r = await postDecompose(`/api/goals/${g.task.id}/decompose`,
+                                    { model: document.getElementById("goal-model").value });
       await refresh();
-      alert(`目标 #${g.task.id} 拆出 ${r.count} 张子任务卡(${r.model})
+      if (r) alert(`目标 #${g.task.id} 拆出 ${r.count} 张子任务卡(${r.model})
 ` + HOLD_HINT);
     }catch(err){ alert("失败:" + err.message); }
     finally{ btn.disabled = false; btn.textContent = lab; }
@@ -2430,13 +2440,24 @@ document.addEventListener("click", async (e) => {
   if (dec){
     dec.disabled = true; const lab = dec.textContent; dec.textContent = "拆解中…";
     try{
-      const r = await post(`/api/goals/${dec.dataset.dec}/decompose`,
-                           { model: (DECOMP[0] || {}).id });
+      const r = await postDecompose(`/api/goals/${dec.dataset.dec}/decompose`,
+                                    { model: (DECOMP[0] || {}).id });
       await refresh();
-      alert(`拆出 ${r.count} 张子任务卡(${r.model})
+      if (r) alert(`拆出 ${r.count} 张子任务卡(${r.model})${r.forced ? "(强制:评审卡未完成,正史已记)" : ""}
 ` + HOLD_HINT);
     }catch(err){ alert("拆解失败:" + err.message); }
     finally{ dec.disabled = false; dec.textContent = lab; }
+    return;
+  }
+  const rev = e.target.closest("button[data-rev]");
+  if (rev){
+    rev.disabled = true; const lab = rev.textContent; rev.textContent = "建卡中…";
+    try{
+      const r = await post(`/api/goals/${rev.dataset.rev}/pipeline`, {});
+      await refresh();
+      alert(`评审卡 #${r.task.id} 已挂在目标 #${r.goal} 下(线「${lineLabel(r.line)}」)。它通过之前,这个目标的拆解会被拦住。`);
+    }catch(err){ alert("起评审卡失败:" + err.message); }
+    finally{ rev.disabled = false; rev.textContent = lab; }
     return;
   }
 
@@ -2654,6 +2675,17 @@ async function postWithForce(url, body){
     if (!err.body?.needs_force) throw err;
     const n = err.body.in_progress;
     if (!confirm(`有 ${n} 张卡正在跑。现在重启会打断它们:卡回到「未开始」由线重领,这一轮的活白做。\n\n想等它们交付再更新,就按「取消」。\n\n仍要现在重启?`)) return null;
+    return post(url, { ...body, force: true });
+  }
+}
+// v0.23: the decompose gate (409 needs_force while a review card under the goal is still open)
+//   is a question for the human — asked once, in the gate's own words, then force. null = no.
+async function postDecompose(url, body){
+  try { return await post(url, body); }
+  catch (err){
+    if (!err.body?.needs_force || !Array.isArray(err.body?.pending_review)) throw err;
+    const ids = err.body.pending_review.map((i) => "#" + i).join(" ");
+    if (!confirm(`目标下的评审卡 ${ids} 还没通过。现在拆解 = 实现一个没人接受的方案。\n\n等评审通过再拆,就按「取消」。\n\n仍要现在拆?(正史会记下这次是强制的)`)) return null;
     return post(url, { ...body, force: true });
   }
 }

@@ -1124,6 +1124,96 @@ try {
     try { rmSync(DQ2, { recursive: true, force: true }); } catch {}
   }
 
+  // ══ §S the pipeline (v0.23): review-card template, decompose gate, anti-affinity ═══
+  {
+    console.log(NL + "[§S 流水线(v0.23):评审卡模板 · 拆解闸(409 needs_force / force 进正史)· 审阅反亲和]");
+    const DS = mkdtempSync(join(tmpdir(), "servertest-s-"));
+    const CFGS = join(DS, "fleet.config.json");
+    writeFileSync(CFGS, JSON.stringify({ lines: [
+      { id: "engine", label: "引擎" },
+      { id: "astra", label: "架构", role: { kind: "review" } },
+    ], roles: ["review"], review: { anti_affinity: "runtime" } }), "utf8");
+    // `node -p <prompt>` chokes on the prompt text: a decompose that PASSES the gate reaches
+    // the CLI and comes back 500 (result file never written) — distinguishable from the 409,
+    // and no real model is ever spawned by this harness.
+    const B = await mk({ env: { BOARD_CONFIG: CFGS, WORKER_CLAUDE_CLI: process.execPath } });
+    const g = (await B.api("POST", "/api/goals", { subject: "s-goal", description: "方案正文" })).body.task;
+    const p1 = await B.api("POST", `/api/goals/${g.id}/pipeline`, {});
+    const rc = p1.body?.task;
+    ok("S1 ⭐起评审卡 201:挂在目标下、落在评审线、标题带「对抗评审」、验收要求引证、不是人工闸",
+       p1.status === 201 && rc?.parent_id === g.id && rc?.line === "astra" && /^对抗评审:/.test(rc?.subject || "") &&
+       /引用方案原句/.test(rc?.acceptance || "") && Number(rc?.human_gate) === 0 && p1.body?.line === "astra",
+       `HTTP ${p1.status} ${JSON.stringify({ line: rc?.line, parent: rc?.parent_id, subject: rc?.subject, hg: rc?.human_gate })}`);
+    const p2 = await B.api("POST", `/api/goals/${g.id}/pipeline`, {});
+    ok("S2 同一目标已有未完成评审卡 → 409(不重复建)", p2.status === 409, `HTTP ${p2.status}`);
+    const pbad = await B.api("POST", `/api/goals/${g.id}/pipeline`, { line: "engine" });
+    ok("S2b 点名一条非评审线 → 400", pbad.status === 400, `HTTP ${pbad.status} ${pbad.body?.error}`);
+    const d1 = await B.api("POST", `/api/goals/${g.id}/decompose`, {});
+    ok("S3 ⭐评审卡未完成 → 拆解 409 needs_force,列出评审卡,带 hint(闸在 CLI 之前:模型一次都没被调)",
+       d1.status === 409 && d1.body?.needs_force === true && JSON.stringify(d1.body?.pending_review) === JSON.stringify([rc?.id]) && !!d1.body?.hint,
+       `HTTP ${d1.status} ${JSON.stringify(d1.body).slice(0, 160)}`);
+    const d2 = await B.api("POST", `/api/goals/${g.id}/decompose`, { force: true });
+    ok("S4 ⭐带 force 过闸(到达 CLI:桩 CLI 失败 → 500,不再是 409),控制台记下强制",
+       d2.status === 500 && /强制拆解/.test(B.out()), `HTTP ${d2.status} ${(d2.body?.error || "").slice(0, 60)}`);
+    // Close the review card: release the goal (its children are claimable only under a
+    // released ancestor), claim as codex, deliver, approve → the gate lifts by itself.
+    await B.api("POST", `/api/tasks/${g.id}/release`, { released: true });
+    const cl = await B.api("POST", `/api/tasks/${rc.id}/claim`, { worker: "astra", runtime: "codex" });
+    await B.api("POST", `/api/tasks/${rc.id}/report`, { worker: "astra", outcome: "done", evidence: "核对过:方案第 3 段" });
+    const rv = await B.api("POST", `/api/tasks/${rc.id}/resolve`, { verdict: "approve", note: "", resolved_by: "human" });
+    const d3 = await B.api("POST", `/api/goals/${g.id}/decompose`, {});
+    ok("S5 ⭐评审卡通过后闸自动抬起(不再 409;到达 CLI)",
+       cl.status === 200 && rv.status === 200 && d3.status === 500, `claim ${cl.status} resolve ${rv.status} decompose ${d3.status}`);
+    // Anti-affinity: a delivery made by the reviewer's own family is held — visibly.
+    const a = (await B.api("POST", "/api/tasks", { subject: "s-claude", line: "engine", humanGate: false })).body.task.id;
+    const b2 = (await B.api("POST", "/api/tasks", { subject: "s-codex", line: "engine", humanGate: false })).body.task.id;
+    await B.api("POST", `/api/tasks/${a}/claim`, { worker: "engine", runtime: "claude" });
+    await B.api("POST", `/api/tasks/${a}/report`, { worker: "engine", outcome: "done", evidence: "x" });
+    await B.api("POST", `/api/tasks/${b2}/claim`, { worker: "engine", runtime: "codex" });
+    await B.api("POST", `/api/tasks/${b2}/report`, { worker: "engine", outcome: "done", evidence: "y" });
+    const qc = (await B.api("GET", "/api/review/pending?runtime=claude")).body;
+    const qx = (await B.api("GET", "/api/review/pending?runtime=codex")).body;
+    ok("S6 ⭐/api/review/pending?runtime=claude:claude 交付的卡在 held,codex 交付的在 tasks",
+       (qc.held || []).some((h) => h.id === a) && !(qc.tasks || []).some((t) => t.id === a) &&
+       (qc.tasks || []).some((t) => t.id === b2) && qc.anti_affinity === "runtime" && qc.reviewer_runtime === "claude",
+       JSON.stringify({ held: qc.held, tasks: (qc.tasks || []).map((t) => t.id) }));
+    ok("S6b 换成 codex 审阅:正好反过来",
+       (qx.held || []).some((h) => h.id === b2) && (qx.tasks || []).some((t) => t.id === a) && !(qx.tasks || []).some((t) => t.id === b2),
+       JSON.stringify({ held: qx.held }));
+    const ta = (await B.api("GET", `/api/tasks/${a}`)).body.task, tb = (await B.api("GET", `/api/tasks/${b2}`)).body.task;
+    ok("S7 ⭐卡面带 review_hold=same_family(按已保存的审阅座席 claude 判),另一家族的卡为 null",
+       ta?.review_hold === "same_family" && tb?.review_hold === null, `${ta?.review_hold}/${tb?.review_hold}`);
+    ok("S7b (对照)不带 ?runtime 时按已保存的审阅座席(claude)判 —— 旧版审阅照常工作",
+       ((await B.api("GET", "/api/review/pending")).body.held || []).some((h) => h.id === a));
+    const ws = (await B.api("GET", "/api/workers")).body;
+    ok("S8 /api/workers 带 review_lines 与 review_anti_affinity",
+       JSON.stringify(ws.review_lines) === JSON.stringify(["astra"]) && ws.review_anti_affinity === "runtime",
+       JSON.stringify({ rl: ws.review_lines, aa: ws.review_anti_affinity }));
+    // The children of a forced decompose would carry actor decompose(forced); the stub CLI
+    // never produces children, so pin the source shape (the same style as Q2-8 / P4).
+    const srvSrc = readFileSync(join(ROOT, "core", "server.mjs"), "utf8");
+    ok("S8b 强制拆解写进子卡正史(源码形:actor decompose(forced) 随 forced 进 store.add)",
+       /forced \? \{ actor: "decompose\(forced\)" \}/.test(srvSrc));
+    B.kill(); await sleep(300);
+    // No review line configured: the pipeline refuses (and says how to add one); the gate
+    // is a no-op, so decompose goes straight to the CLI.
+    const B0 = await mk({ env: { WORKER_CLAUDE_CLI: process.execPath } });
+    const g0 = (await B0.api("POST", "/api/goals", { subject: "s0" })).body.task;
+    const p0 = await B0.api("POST", `/api/goals/${g0.id}/pipeline`, {});
+    const d0 = await B0.api("POST", `/api/goals/${g0.id}/decompose`, {});
+    ok("S9 没有评审线:起评审卡 409(说明怎么加线);拆解不被闸拦(直达 CLI → 500)",
+       p0.status === 409 && /评审线/.test(p0.body?.error || "") && d0.status === 500, `pipeline ${p0.status} decompose ${d0.status}`);
+    const w0 = (await B0.api("GET", "/api/workers")).body;
+    ok("S9b 反亲和未配置:/api/workers 报 null,卡面 review_hold 为 null(与 v0.22 一字不差)",
+       w0.review_anti_affinity === null && JSON.stringify(w0.review_lines) === "[]");
+    B0.kill(); await sleep(300);
+    writeFileSync(CFGS, JSON.stringify({ lines: [{ id: "engine" }], review: { anti_affinity: "bogus" } }), "utf8");
+    const R = await mk({ env: { BOARD_CONFIG: CFGS } });
+    const dead = await Promise.race([R.dead(), sleep(8000).then(() => "timeout")]);
+    ok("S10 review.anti_affinity 取值不在域内 → 拒绝启动(exit 1,说出键名)", dead === 1 && /anti_affinity/.test(R.out()), `exit=${dead}`);
+    try { rmSync(DS, { recursive: true, force: true }); } catch {}
+  }
+
   // ══ §R operator requests: a panel button wakes the seat and the loop closes ══
   {
     console.log(NL + "[§R 快捷指令(面板→哨→协调席→ack/done)]");

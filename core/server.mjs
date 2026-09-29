@@ -295,6 +295,11 @@ const taskOut = (t) => t ? {
   //   have been dispatched before; every other row skips it (list loops hundreds).
   no_progress: (t.status === "not_started" && t.dispatch_fp)
     ? store.noProgressHold(db, t, fpContext()) : null,
+  // ⭐ v0.23: the anti-affinity hold, from the SAME criterion /api/review/pending applies —
+  //   a panel deciding this for itself would be a second copy. Only for delivered cards;
+  //   an author of unknown family (no last_runtime) is never held.
+  review_hold: (REVIEW_ANTI_AFFINITY && t.status === "waiting" && t.waiting_for === "review"
+                && t.last_runtime && t.last_runtime === reviewSeatRuntime()) ? "same_family" : null,
 } : t;
 
 const HOST = process.env.BOARD_HOST || "127.0.0.1";
@@ -391,6 +396,21 @@ const db = store.open();
 // but NOT LINES (= the claim routing/context unit): they claim no cards and hold no
 // persistent session. Gated on config AND on their loop scripts existing.
 const ROLES = (CFG.roles || []).filter((r) => ["review"].includes(r));
+// ── Auto-review anti-affinity (v0.23, docs/方案-身份分配.md §3.2). `review.anti_affinity`:
+//    "runtime" = the auto-reviewer never judges a delivery made by its own runtime family.
+//    Such cards stay in 待验收 for a human or another family's reviewer, VISIBLY: the panel
+//    marks them 待异族审阅 and /api/review/pending lists them as `held` — never a silent
+//    drop. Absent = exactly today's behaviour. Closed domain: anything else refuses startup.
+//    Why a policy and not a default: the measured asymmetry (Claude reviewing Codex helps,
+//    Codex reviewing Claude hurts) means the operator must place the families; this knob
+//    only guarantees the reviewer is not the author's own family.
+const REVIEW_ANTI_AFFINITY = (() => {
+  const v = CFG.review?.anti_affinity;
+  if (v == null || v === "" || v === false) return null;
+  if (v === "runtime") return "runtime";
+  console.error(`拒绝启动:${CONFIG_FILE} 的 review.anti_affinity 只接受 "runtime" —— 收到 ${JSON.stringify(v)}`);
+  process.exit(1);
+})();
 
 // ⭐ The line menu is BUILT from config (never copied into prose). A hand-copied
 //   list once dropped one line in two places at once — the decomposition model
@@ -463,7 +483,7 @@ function normalizeRole(raw, lineId) {
   }
   return { kind, tools, charter, seat };
 }
-let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT, LINE_ROLE, IMPL_LINES;
+let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT, LINE_ROLE, IMPL_LINES, REVIEW_LINES;
 function rebuildLines() {
   LINES = CFG.lines.map((l) => String(l.id));
   SUPERVISED = [...LINES, ...ROLES];
@@ -477,6 +497,7 @@ function rebuildLines() {
   // v0.22: identity (null = a plain line, exactly as before this version).
   LINE_ROLE = Object.fromEntries(CFG.lines.map((l) => [l.id, normalizeRole(l.role, l.id)]));
   IMPL_LINES = LINES.filter((id) => (LINE_ROLE[id]?.kind || "implement") === "implement");
+  REVIEW_LINES = LINES.filter((id) => LINE_ROLE[id]?.kind === "review");
 }
 try { rebuildLines(); }
 catch (e) {   // a PRESENT-but-broken identity refuses startup, like any other config error
@@ -1100,6 +1121,10 @@ function roleSeatDefault(line) {
   }
   return DEFAULT_AGENT;
 }
+/** v0.23: which runtime family the auto-review seat is SAVED to run on — the anti-affinity
+ *  criterion the panel and /api/review/pending share. The live reviewer names its own
+ *  runtime on the query (`?runtime=`), which wins when given (pool failover can move it). */
+const reviewSeatRuntime = () => settingsOf("review").agents?.[0]?.runtime || RUNTIME_IDS[0];
 /** Does the line's effective agents[0] differ from the seat its identity names? */
 const seatDrift = (line, st) => {
   const seat = LINE_ROLE?.[line]?.seat;
@@ -1289,7 +1314,7 @@ const runCli = (args, timeout = 600000) => new Promise((resolve) => {
  * The LLM only WRITES A JSON FILE — the server creates the cards. Letting the
  * decomposer hit the board API makes failure and partial application inseparable.
  */
-async function decomposeGoal(goalId, model) {
+async function decomposeGoal(goalId, model, forced = false) {
   const g = store.get(db, goalId);
   // Missing-id checks are classified too — untyped, this would fall to 400 and
   // punch a hole in the "missing ids are 404" ruling (found by grep once).
@@ -1364,6 +1389,9 @@ async function decomposeGoal(goalId, model) {
       // are claimable from birth; "not yet" is expressed by not starting that
       // line's worker.
       released: 1,
+      // v0.23: a decompose that overrode the review gate says so on every child's `add`
+      // event — "ran because the human forced it" must not read like a plain decompose.
+      ...(forced ? { actor: "decompose(forced)" } : {}),
     });
   });
   emit("goal.decomposed", { id: goalId, made });
@@ -1371,7 +1399,42 @@ async function decomposeGoal(goalId, model) {
   // machine-readable mouth for "the model misspelled a line" — the card face has it
   // too, but that is for humans.
   return { goal: goalId, model: model || DECOMPOSE_MODELS[0].id, made, count: made.length,
-           demoted };
+           demoted, forced: !!forced };
+}
+
+/**
+ * v0.23: the plan-review card — the first station of the pipeline (方案 → 对抗评审 → 拆解 →
+ * 实现 → 自动审阅 → 人), built from primitives the board already has: one child card on a
+ * review-kind line, under the goal. Its evidence IS the review (no file protocol beside the
+ * board — operator ruling 2026-09-28). The decompose gate holds until it is done. One
+ * pending review card per goal: a second request is a CONFLICT, not a duplicate.
+ */
+function pipelineReview(goalId, lineRaw) {
+  const g = store.get(db, goalId);
+  if (!g) throw store.err(store.ERR.NOT_FOUND, `目标 ${goalId} 不存在`);
+  if (g.kind !== "goal") throw store.err(store.ERR.BAD_INPUT, `#${goalId} 不是目标`);
+  let line = lineRaw == null || lineRaw === "" ? null : String(lineRaw);
+  if (line && !REVIEW_LINES.includes(line))
+    throw store.err(store.ERR.BAD_INPUT, `线 ${line} 不是评审线(role.kind=review)—— 评审线有: ${REVIEW_LINES.join("/") || "(无)"}`);
+  if (!line) line = REVIEW_LINES[0] || null;
+  if (!line)
+    throw store.err(store.ERR.CONFLICT, "没有配置评审线(lines[].role.kind=review)—— 先加一条:面板加线框选「评审」,或 python cli/board.py lines add <线> --kind review");
+  const pending = store.openChildrenOnLines(db, goalId, REVIEW_LINES);
+  if (pending.length)
+    throw store.err(store.ERR.CONFLICT, `目标 #${goalId} 下已有未完成的评审卡 #${pending.join(" #")}`);
+  const NL = String.fromCharCode(10);
+  const description = [
+    `评审对象:目标 #${goalId}「${g.subject}」的方案。方案正文在目标卡上(python cli/board.py show ${goalId});`,
+    "若方案是仓库里的文件(docs/方案-<slug>.md),按目标卡写的路径与提交读它。",
+    "",
+    "只输出:会在哪里崩、哪些假设没有验证、哪些数字是拍的。按严重度排序,每条引方案原句或 文件:行。",
+    "不夸,不给替代方案,不改任何文件。逐条核对过而没有问题的也写「核对过:…」。",
+  ].join(NL);
+  const acceptance = "证据逐条引用方案原句(或 文件:行),列出会崩的点与未验证的假设并按严重度排序;没有改动任何文件;核对过而无问题的项也写明。";
+  const id = store.add(db, { subject: `对抗评审:${g.subject}`.slice(0, 200), description, acceptance,
+                             line, parentId: goalId, humanGate: false, released: 1, kind: "task" });
+  console.log(`目标 #${goalId} 起评审卡 #${id} → 线 ${line}`);
+  return { goal: goalId, line, task: taskOut(store.get(db, id)) };
 }
 
 /**
@@ -1608,6 +1671,9 @@ function slotEnv(line, k, ag, isReview) {
              WORKER_TOOL_PROFILE: LINE_ROLE[line].tools,
              ...(LINE_ROLE[line].charter ? { WORKER_CHARTER: LINE_ROLE[line].charter } : {}),
            } : {}),
+           // v0.23: the reviewer is told the policy so its startup line can say it; the
+           // criterion itself lives in the server (/api/review/pending decides what is held).
+           ...(isReview && REVIEW_ANTI_AFFINITY ? { REVIEWER_ANTI_AFFINITY: REVIEW_ANTI_AFFINITY } : {}),
            ...(isReview ? {} : k === 1 ? {
              WORKER_SESSION: sessionOf(line),
              // Not yet forked → the first run forks from the desktop conversation
@@ -2386,7 +2452,26 @@ const server = http.createServer(async (req, res) => {
     const mg = p.match(/^\/api\/goals\/(\d+)\/decompose$/);
     if (mg && m === "POST") {
       const b = await readBody(req);
-      return json(res, 200, await decomposeGoal(Number(mg[1]), b.model));
+      // ⭐ v0.23 decompose gate: an unfinished review card under this goal means the plan is
+      //   still being contested — decomposing now implements a plan nobody accepted yet. The
+      //   human may override (`force`); the override is written on the children's history
+      //   (actor), distinct from a plain decompose. 409 = passes once the review card closes
+      //   — the same shape as the restart refusals (needs_force + hint). Without a review
+      //   line configured there is nothing to wait for, and this is a no-op.
+      const pending = store.openChildrenOnLines(db, Number(mg[1]), REVIEW_LINES);
+      if (pending.length && !b.force)
+        return json(res, 409, { error: `目标 #${mg[1]} 下还有未完成的评审卡 #${pending.join(" #")} —— 方案还没审完就拆解 = 实现一个没人接受的方案`,
+                                needs_force: true, pending_review: pending,
+                                hint: "等评审卡通过、改好方案再拆;确实要现在拆,带 force 重发(正史会记下这次是强制的)" });
+      if (pending.length) console.log(`目标 #${mg[1]} 强制拆解:评审卡 #${pending.join(" #")} 未完成(操作者 force)`);
+      return json(res, 200, await decomposeGoal(Number(mg[1]), b.model, pending.length > 0));
+    }
+    const mpl = p.match(/^\/api\/goals\/(\d+)\/pipeline$/);
+    if (mpl && m === "POST") {
+      const b = await readBody(req);
+      const r = pipelineReview(Number(mpl[1]), b.line);
+      emit("task.created", { id: r.task.id });
+      return json(res, 201, r);
     }
     const mr = p.match(/^\/api\/tasks\/(\d+)\/related$/);
     if (mr && m === "GET") {
@@ -2413,8 +2498,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Auto-review targets (waiting, unreviewed or moved-since-review)
-    if (m === "GET" && p === "/api/review/pending")
-      return json(res, 200, { tasks: store.pendingReview(db) });
+    if (m === "GET" && p === "/api/review/pending") {
+      // v0.23: the reviewer says which runtime it IS (`?runtime=`); with anti-affinity on, the
+      // cards its own family delivered come back as `held`, never silently dropped. No
+      // runtime given = the saved review seat's (an older reviewer keeps working as before).
+      const rt = url.searchParams.get("runtime") || reviewSeatRuntime();
+      const all = store.pendingReview(db);
+      const isHeld = (t) => !!REVIEW_ANTI_AFFINITY && !!t.last_runtime && t.last_runtime === rt;
+      return json(res, 200, { tasks: all.filter((t) => !isHeld(t)),
+                              held: all.filter(isHeld).map((t) => ({ id: t.id, last_runtime: t.last_runtime })),
+                              anti_affinity: REVIEW_ANTI_AFFINITY, reviewer_runtime: rt });
+    }
 
     // Pool rate-limit reporting. `until` is recomputed from the server's own hold
     // constant — the caller's value is never authoritative. The response returns
@@ -2483,6 +2577,8 @@ const server = http.createServer(async (req, res) => {
                               line_hints: LINE_HINT, line_labels: LINE_LABEL, line_accept: LINE_ACCEPT, routes: ROUTES,
                               // v0.22: id → identity (null = plain line); the implement subset the decomposer sees.
                               line_roles: LINE_ROLE, impl_lines: IMPL_LINES,
+                              // v0.23: the review lines (pipeline targets) and the anti-affinity policy.
+                              review_lines: REVIEW_LINES, review_anti_affinity: REVIEW_ANTI_AFFINITY,
                               models: MODELS, efforts: EFFORTS, weights: WEIGHTS,
                               max_parallel: MAX_PARALLEL, runtimes: RUNTIMES,
                               decompose_models: DECOMPOSE_MODELS,
@@ -2974,6 +3070,7 @@ server.listen(PORT, HOST, () => {
   console.log(`状态四值: ${store.STATUS.join(" / ")}`);
   console.log(`配置: ${existsSync(CONFIG_FILE) ? CONFIG_FILE : "(内置缺省)"}  线=${LINES.map((l) =>
       l + (LINE_ROLE[l] ? `[${LINE_ROLE[l].kind}${LINE_ROLE[l].tools === "read-only" ? "·只读" : ""}${LINE_ROLE[l].charter ? "·章程" : ""}]` : "")).join(",")}  路由=${ROUTES.join(",")}`
+    + (REVIEW_ANTI_AFFINITY ? `  审阅反亲和=${REVIEW_ANTI_AFFINITY}` : "")
     // A knob that silently does nothing is worse than no knob: say it out loud when set.
     + (LANGUAGE ? `  生成语言=${LANGUAGE}` : ""));
   console.log(HANDOFF_TARGETS.length
