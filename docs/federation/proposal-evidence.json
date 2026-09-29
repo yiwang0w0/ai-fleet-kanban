@@ -41,7 +41,27 @@
       "decline committed during actual HTTP upload is checked before receipt"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "run_id": 36593578615,
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109492633455,
+      "passed": 1266,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109492633608,
+      "passed": 1262,
+      "failed": 0,
+      "skipped": 1
+    },
+    "gitleaks": {
+      "job_id": 109492633105,
+      "conclusion": "success"
+    },
+    "extra_checks": "passed",
+    "receipt": ".data/proposal-ci.json"
+  },
   "real_model_calls": {
     "claude": 0,
     "codex": 0,
@@ -59,5 +79,6 @@
     "confirmed execution cancellation, late outcomes, graph retirement, evidence transfer and source acceptance remain pending",
     "immutable history remains retained; no automatic historical data deletion",
     "physical Tailscale multi-computer and subscription executor acceptance remain pending"
-  ]
+  ],
+  "tested_commit": "acbf94c979f534913d34101ead136ede891ebcc5"
 }

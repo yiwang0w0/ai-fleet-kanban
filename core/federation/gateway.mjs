@@ -1,3 +1,5 @@
+import {migrateCancellations,receiveCancellation,peerCancellationState} from "./cancellation.mjs";
+import {progressCancellation} from "./cancellation-service.mjs";
 import {migrateBindings,receiveBindingMessage} from "./bindings.mjs";
 import http from "node:http";
 import {migrateRelations,publishTopology,approveRelation,withdrawRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
@@ -42,7 +44,7 @@ async function bodyJSON(req,limit=8192) {
 }
 /** Separate authenticated node surface: explicit projections and delegation proposals; no operator UI, secrets or model execution. */
 function createPeerServer(db) {
-  localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateBindings(db);
+  localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateCancellations(db);
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
@@ -86,6 +88,14 @@ function createPeerServer(db) {
           return offering?receiveOffer(db,peer,body.offer):peerDelegationStatus(db,peer,body);
         });
         return send(res,200,result);
+      }
+      if(["/peer/v1/delegation/cancel","/peer/v1/delegation/cancel-status"].includes(req.url)&&req.method==="POST"){
+        const body=await bodyJSON(req,16384),receiving=req.url.endsWith("/cancel");
+        if(!receiving)keys(body,["relation_id","project_id","cancel_id"],"cancellation status");
+        const result=transaction(db,()=>{const peer=authenticate(db,req.headers.authorization,"delegation:control");
+          if(receiving)return receiveCancellation(db,peer,body);
+          peerCancellationState(db,peer,body);progressCancellation(db,body.relation_id);return peerCancellationState(db,peer,body);
+        });return send(res,200,result);
       }
       if(req.url==="/peer/v1/delegation/binding"&&req.method==="POST"){
         const body=await bodyJSON(req,16384);

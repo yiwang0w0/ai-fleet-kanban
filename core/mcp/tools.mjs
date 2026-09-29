@@ -1,3 +1,5 @@
+import {migrateCancellations,listCancellations,prepareCancellation,cancellationState} from "../federation/cancellation.mjs";
+import {progressCancellation} from "../federation/cancellation-service.mjs";
 import {migrateBindings,prepareBinding,bindingState,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal,PROPOSAL_DECLINE_REASONS} from "../federation/bindings.mjs";
 import {prepareTopology,topologyState} from "../federation/topology.mjs";
 import {createRequire} from "node:module";
@@ -18,6 +20,10 @@ const object=(properties,required=Object.keys(properties))=>({type:"object",prop
 const taskInput={request_id:uuidSchema,project_id:name,subject:{...text(500),minLength:1},description:text(),acceptance:text(),work_kind:{enum:["implement","review"]},required_capabilities:caps};
 const relationInput=object({schema_version:{enum:[1]},type:{enum:["delegation"]},relation_id:uuidSchema,delegation_id:uuidSchema,project_id:name,graph_id:uuidSchema,graph_epoch:uuidSchema,source_node_id:uuidSchema,source_epoch:uuidSchema,source_task_uid:uid,target_node_id:uuidSchema,target_epoch:uuidSchema,target_task_uid:uid,offer_digest:{type:"string",pattern:"^[0-9a-f]{64}$"},source_topology_revision:positive,target_topology_revision:positive});
 const defs=[
+ ["get_cancellation","读取委派取消是否送达及是否已确认停止",object({relation_id:uuidSchema})],
+ ["list_cancellations","列出授权项目的持久取消记录",object({project_id:name,limit:{...positive,maximum:100}})],
+ ["request_cancellation","请求取消已确认的来源委派；不把未送达当成已停止",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive,reason_code:{enum:["operator_cancelled","deadline_exceeded"]}})],
+ ["progress_cancellation","处理本机未启动分派和下游取消意向，核对实际停止证明",object({request_id:uuidSchema,relation_id:uuidSchema})],
  ["list_bindings","列出授权项目的端点绑定和待处理提案",object({project_id:name,limit:{...positive,maximum:100}})],
  ["get_binding","读取授权项目的端点确认与放行条件",object({relation_id:uuidSchema})],
  ["get_binding_proposal","读取授权项目的认证提案及其本方决定",object({relation_id:uuidSchema})],
@@ -142,6 +148,16 @@ function assign(db,p,args){
 }
 function execute(db,p,name,args){
  switch(name){
+ case "list_cancellations":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_cancellations'").get()?listCancellations(db,{projectId:args.project_id,limit:args.limit}):{cancellations:[]};
+ case "get_cancellation":
+ case "request_cancellation":
+ case "progress_cancellation":{
+  const b=db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'delegation_bindings\'").get()?db.prepare("SELECT project_id FROM delegation_bindings WHERE relation_id=?").get(args.relation_id):null;
+  if(!b||!p.projects.includes(b.project_id))fail("NOT_FOUND","授权范围内未找到委派绑定",404);
+  if(name==="get_cancellation"){if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'delegation_cancellations\'").get())fail("NOT_FOUND","未找到取消记录",404);return cancellationState(db,args.relation_id);}
+  migrateCancellations(db);
+  return name==="request_cancellation"?prepareCancellation(db,{relationId:args.relation_id,cancelId:args.request_id,expectedTaskVersion:args.expected_version,reasonCode:args.reason_code}):progressCancellation(db,args.relation_id);
+ }
  case "list_bindings":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?listBindings(db,{projectId:args.project_id,limit:args.limit}):{bindings:[],proposals:[],pending_proposals:[],pending_count:0};
  case "get_binding_proposal":
  case "decline_binding_proposal":{

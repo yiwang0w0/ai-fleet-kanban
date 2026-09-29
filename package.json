@@ -13,7 +13,7 @@
     "doctor": "node cli/doctor.mjs",
     "start": "node cli/start.mjs",
     "reset": "node cli/reset.mjs",
-    "test": "node tests/selftest.mjs && node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs && node tests/clitest.mjs && node tests/looptest.mjs && node tests/servertest.mjs && node tests/reviewtest.mjs && node tests/sentrytest.mjs && node tests/tltest.mjs && node tests/identitytest.mjs && node tests/backuptest.mjs && node tests/runfencetest.mjs && node tests/versiontest.mjs && node tests/peertest.mjs && node tests/synctest.mjs && node tests/snapshottest.mjs && node tests/recoverytest.mjs && node tests/epochrecoverytest.mjs && node tests/mcptest.mjs && node tests/dispatchtest.mjs && node tests/outputtest.mjs && node tests/supervisortest.mjs && node tests/adaptertest.mjs && node tests/treetest.mjs && node tests/delegationtest.mjs && node tests/relationstest.mjs && node tests/topologytest.mjs && node tests/bindingtest.mjs",
+    "test": "node tests/selftest.mjs && node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs && node tests/clitest.mjs && node tests/looptest.mjs && node tests/servertest.mjs && node tests/reviewtest.mjs && node tests/sentrytest.mjs && node tests/tltest.mjs && node tests/identitytest.mjs && node tests/backuptest.mjs && node tests/runfencetest.mjs && node tests/versiontest.mjs && node tests/peertest.mjs && node tests/synctest.mjs && node tests/snapshottest.mjs && node tests/recoverytest.mjs && node tests/epochrecoverytest.mjs && node tests/mcptest.mjs && node tests/dispatchtest.mjs && node tests/outputtest.mjs && node tests/supervisortest.mjs && node tests/adaptertest.mjs && node tests/treetest.mjs && node tests/delegationtest.mjs && node tests/relationstest.mjs && node tests/topologytest.mjs && node tests/bindingtest.mjs && node tests/cancellationtest.mjs",
     "node:identity": "node cli/node.mjs",
     "test:identity": "node tests/identitytest.mjs",
     "backup": "node cli/backup.mjs",
@@ -45,6 +45,8 @@
     "test:topology": "node tests/topologytest.mjs",
     "topology": "node cli/topology.mjs",
     "test:bindings": "node tests/bindingtest.mjs",
-    "binding": "node cli/binding.mjs"
+    "binding": "node cli/binding.mjs",
+    "test:cancellation": "node tests/cancellationtest.mjs",
+    "cancellation": "node cli/cancellation.mjs"
   }
 }

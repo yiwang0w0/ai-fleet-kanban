@@ -120,3 +120,5 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 端点绑定及放行的完整顺序、旧接受回执与当前条件的区分见 [双方端点绑定](bindings.md)。网络投递不向 agent 开放任意 URL 或凭据文件。
 
 未准备绑定提案提供 get_binding_proposal（coordinate/observe）及 decline_binding_proposal（coordinate）。拒绝要求审核的精确摘要和固定原因码，与审计、MCP 回执同事务提交；不能代替来源登记撤回。list_bindings 将当前待办与最近历史分别返回。见 [提案拒绝与保留](proposal-decisions.md)。
+
+已确认委派取消新增 get_cancellation / list_cancellations（coordinate、observe），request_cancellation / progress_cancellation（coordinate）。接收回执不等于停止证明，写入与审计和工具回执原子提交；恢复后的历史带 identity_current。完整合同与未决限制见 [取消与停止证明](cancellation.md)。

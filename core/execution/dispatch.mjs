@@ -8,7 +8,7 @@ import {uuid,names,version} from "../federation/protocol.mjs";
 import {exact,fail,getRole,issuePrincipal,migrateBroker} from "../mcp/policy.mjs";
 import {launchReceipt,processObservation} from "./receipts.mjs";
 import {chooseRole} from "../mcp/tools.mjs";
-const require=createRequire(import.meta.url),store=require("../store.js");
+const require=createRequire(import.meta.url),store=require("../store.js"),cancellation=require("../cancellation_guard.js");
 const at=()=>new Date().toISOString();
 const MODES=["fixture","provider"];
 const table=db=>db.prepare("SELECT * FROM broker_dispatches WHERE dispatch_id=?");
@@ -41,6 +41,7 @@ export function migrateDispatch(db){
    "CREATE TRIGGER IF NOT EXISTS broker_execution_observation_once BEFORE UPDATE OF observation_digest,observation_json,observed_at ON broker_execution_records WHEN OLD.observation_digest IS NOT NULL BEGIN SELECT RAISE(ABORT,'execution observation is immutable'); END;",
    "CREATE TRIGGER IF NOT EXISTS broker_execution_no_delete BEFORE DELETE ON broker_execution_records BEGIN SELECT RAISE(ABORT,'execution history is append-only'); END;"
   ].join("\n"));
+  if(db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'cancellation_members\'").get())db.exec("CREATE TRIGGER IF NOT EXISTS cancellation_launch_hold BEFORE UPDATE OF launch_at ON broker_dispatches WHEN NEW.launch_at IS NOT NULL AND OLD.launch_at IS NULL AND "+cancellation.heldSQL("NEW.task_id")+" BEGIN SELECT RAISE(ABORT,\'CANCELLATION_PENDING: launch refused\'); END");
   if(schema===1)db.prepare("UPDATE broker_dispatch_schema SET version=2").run();
  });
 }
@@ -153,6 +154,7 @@ export function authorizeLaunch(db,{dispatchId,sourceGate,execution=null}){
   if(canonical(source)!==d.source_json)fail("SOURCE_CHANGED","领取后治理代码身份已变化");
   const node=localIdentity(db),t=task(db,d.task_uid),a=db.prepare("SELECT * FROM broker_assignments WHERE assignment_id=?").get(d.assignment_id);
   if(!t||t.run_id!==d.run_id||t.status!=="in_progress"||t.archived_at||t.aggregate_version!==d.claimed_version)fail("CONFLICT","领取后的任务或运行状态已变化");
+  if(cancellation.held(db,t.id))fail("CANCELLATION_PENDING","所属委派正在取消，不能启动执行器");
   if(!t.released||t.human_gate||t.lease_until<=Date.now())fail("CONFLICT","任务未放行、被人工闸锁定或租约已过期");
   const deps=store.depsSatisfied(db,t);
   if(deps.broken||!deps.ok||store.unreleasedAncestor(db,t.parent_id)!==null||db.prepare("SELECT 1 FROM tasks WHERE parent_id=? AND archived_at IS NULL AND status<>'done' LIMIT 1").get(t.id))fail("CONFLICT","依赖、祖先放行或子任务已改变");
@@ -183,7 +185,7 @@ function revokeRunPrincipals(db,runId,action="dispatch_abandoned"){
 export function abandonPrepared(db,{dispatchId,reason}){
  if(typeof reason!=="string"||!reason.trim()||reason.length>1000)fail("BAD_INPUT","需要简短放弃原因",400);
  return atomic(db,()=>{
-  const d=fresh(db,dispatchId);if(d.phase!=="prepared")fail("CONFLICT","仅能直接放弃尚未消费启动许可的运行");
+  const d=fresh(db,dispatchId);if(!["prepared","interrupted"].includes(d.phase)||d.launch_at)fail("CONFLICT","仅能直接放弃尚未消费启动许可的运行");
   const t=task(db,d.task_uid);
   if(t?.run_id===d.run_id&&t.status==="in_progress")store.report(db,{id:t.id,worker:d.worker,runId:d.run_id,outcome:"wait",evidence:"执行器未启动："+reason});
   revokeRunPrincipals(db,d.run_id);
@@ -219,8 +221,8 @@ export function finishDispatch(db,{dispatchId,result,observation=null}){
   if(!d.launch_at)fail("LAUNCH_NOT_AVAILABLE","尚未消费启动许可，不能记录执行成功");
   const t=task(db,d.task_uid);let delivery="stale_run_retained";
   if(t?.run_id===d.run_id&&t.status==="in_progress"&&!t.archived_at){
-   store.report(db,{id:t.id,worker:d.worker,runId:d.run_id,outcome:result.status==="success"?"done":"wait",
-    evidence:(d.execution_mode==="fixture"?"[fixture; no real model call]\n":"")+result.evidence});delivery="reported";
+   store.report(db,{id:t.id,worker:d.worker,runId:d.run_id,outcome:result.status==="success"&&!cancellation.held(db,t.id)?"done":"wait",
+    evidence:(d.execution_mode==="fixture"?"[fixture; no real model call]\n":"")+result.evidence});delivery=cancellation.held(db,t.id)?"cancelled_work_result_retained":"reported";
   }else if(t?.run_id===d.run_id&&t.status==="waiting"&&!t.archived_at){
    const reported=db.prepare("SELECT 1 FROM broker_requests r JOIN broker_principals p ON r.principal_id=p.principal_id WHERE p.run_id=? AND r.tool_name='report_result' LIMIT 1").get(d.run_id);
    if(reported)delivery="existing_mcp_report_preserved";

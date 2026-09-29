@@ -2,11 +2,11 @@
   "schema_version": "1.0",
   "artifact_type": "planning_manifest",
   "plan_id": "AFK-FED-001",
-  "plan_version": "1.0",
+  "plan_version": "1.1",
   "created_date": "2026-09-29",
   "timezone": "Asia/Tokyo",
   "source_document": "多终端共享看板-实施与验收计划.md",
-  "source_sha256": "87270d3c0033753252179e368b0bef98db74e952ebf46390537bb7e3cb313880",
+  "source_sha256": "3d1392e98a88b13eed56445058713d20c341b0adf4a022667ae8047adbe5847b",
   "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
   "status": "implementation_in_progress",
   "execution_authorized": true,
@@ -98,8 +98,16 @@
     },
     {
       "id": "D05",
-      "status": "proposed_pending_G00",
-      "decision_record": null
+      "status": "user_confirmed_scope_pending_device_acceptance",
+      "decision_record": {
+        "date": "2026-09-30",
+        "physical_node_count": 2,
+        "selection": "the two kanata computers on Tailscale",
+        "both_windows_observed": true,
+        "both_online_observed": true,
+        "board_access_and_paths": "pending remote verification",
+        "extended_three_node_tests": "isolated protocol simulation, not physical acceptance"
+      }
     },
     {
       "id": "D06",
@@ -484,20 +492,20 @@
     {
       "id": "T00.02",
       "phase_id": "S00",
-      "subject": "登记三台候选终端",
+      "subject": "登记两台 kanata 实体终端",
       "lead_role": "OPS",
       "depends_on": [
         "T00.01"
       ],
       "requires_gates": [],
       "acceptance_criteria": [
-        "A/B/C 的名称、系统、资源、工作仓、维护者代号完整",
-        "未知项明确标注"
+        "A/B 的稳定身份、名称、系统、资源、工作仓、维护者代号完整",
+        "未知项明确标注；不依赖显示名大小写区分身份"
       ],
       "evidence_required": [
         "node-inventory.json"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
@@ -1832,7 +1840,7 @@
         "result": "local_partial_passed",
         "scope": "target-owned unconfirmed tasks, no remote task entering the source queue, epoch-bound decisions and database execution hold; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
         "pending": [
-          "execution cancellation, late outcomes, evidence and source acceptance lifecycle",
+          "source acceptance and cancellation completion lifecycle, result and evidence transfer",
           "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
           "physical multi-node Tailscale validation and independent G06 acceptance"
         ]
@@ -1867,13 +1875,26 @@
       "evidence_required": [
         "cancel-race/late-result 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "durable source cancellation, target subtree fence, received versus stopped proof, controlled process cancellation and late outcome retention",
+        "pending": [
+          "automatic delivery/deadline scheduling",
+          "source final acceptance versus cancellation ordering and relation retirement",
+          "physical two-computer cancellation and independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/cancellation.md",
+        "docs/federation/cancellation-evidence.json",
+        "tests/cancellationtest.mjs"
+      ]
     },
     {
       "id": "T06.05",
@@ -2335,7 +2356,7 @@
     {
       "id": "T09.02",
       "phase_id": "S09",
-      "subject": "执行三机分区与依赖场景",
+      "subject": "执行双机分区与补充三节点协议场景",
       "lead_role": "TEST",
       "depends_on": [
         "T09.01"
@@ -2346,11 +2367,11 @@
         "G08"
       ],
       "acceptance_criteria": [
-        "AT09–AT12 通过",
-        "A/B/C 分区和非同时恢复不重复派发、不形成依赖环"
+        "AT09–AT12 在两台 kanata 实体电脑通过",
+        "另以三个隔离节点实例验证分区和非同时恢复，不把模拟记为实体结果"
       ],
       "evidence_required": [
-        "three-node-partition.json"
+        "partition-acceptance.json"
       ],
       "status": "planned",
       "count_weight": 1,
@@ -2887,7 +2908,7 @@
     },
     {
       "id": "AT09",
-      "scenario": "三台独立设备间双向委派并形成多层任务链",
+      "scenario": "两台 kanata 实体设备间双向委派并形成多层任务链",
       "expected_result": "每卡 owner 明确；本地树无多父；跨端结果使正确依赖推进",
       "acceptance_phases": [
         "S09"
@@ -2897,7 +2918,7 @@
     },
     {
       "id": "AT10",
-      "scenario": "网络分成 A 与 B/C 两部分，再以不同顺序恢复",
+      "scenario": "两台实体 A/B 断开隧道后分步恢复；补充三个隔离实例 A 与 B/C 的协议分区测试",
       "expected_result": "各自继续已领取本地工作；无所有权争抢；恢复后授权投影一致",
       "acceptance_phases": [
         "S09"
@@ -3063,7 +3084,18 @@
         "codex": 0,
         "zcode": 0
       }
+    },
+    {
+      "date": "2026-09-30",
+      "kind": "user_scope_clarification",
+      "physical_nodes": 2,
+      "physical_selection": "the two kanata computers already on Tailscale",
+      "zcode_subscription": "Chinese Coding Plan",
+      "quota_statement": "user reports ample quota",
+      "extra_physical_node_required": false,
+      "real_model_call_limit_changed": false
     }
   ],
-  "progress_record": "federation/PROGRESS.md"
+  "progress_record": "federation/PROGRESS.md",
+  "updated_date": "2026-09-30"
 }
