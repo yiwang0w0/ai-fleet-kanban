@@ -72,7 +72,37 @@
       "full_suite_test_file_change": "versiontest fixture patched before its Node process began in current full suite"
     }
   },
-  "ci": "pending",
+  "ci": {
+    "tested_commit": "4d87e28531756d0e2b9bd688e13ba89d2adcccc2",
+    "run_id": 36614986810,
+    "run_number": 82,
+    "status": "completed",
+    "conclusion": "success",
+    "windows": {
+      "id": 109565591545,
+      "name": "harness (windows-latest)",
+      "classic": 931,
+      "native": 510,
+      "main_suite_passed": 1351,
+      "failed": 0,
+      "skipped": 0,
+      "extra_classic_checks": 90
+    },
+    "linux": {
+      "id": 109565591468,
+      "name": "harness (ubuntu-latest)",
+      "classic": 928,
+      "native": 509,
+      "main_suite_passed": 1347,
+      "failed": 0,
+      "skipped": 1,
+      "extra_classic_checks": 90
+    },
+    "gitleaks": {
+      "id": 109565591310,
+      "conclusion": "success"
+    }
+  },
   "prior_ci": {
     "tested_commit": "4360abbe766af5e29a9d3ce0d741ad719a89aae2",
     "run_id": 36612117994,

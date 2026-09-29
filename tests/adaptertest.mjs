@@ -6,7 +6,7 @@ import {join} from "node:path";
 import {randomUUID} from "node:crypto";
 import {prepareAdapter,validatePreparedAdapter,ADAPTER_CONTRACTS} from "../core/execution/adapters.mjs";
 import {pinFile} from "../core/execution/supervisor.mjs";
-import {ROLE_TOOLS} from "../core/mcp/policy.mjs";
+import {ROLE_TOOLS,WORKSPACE_READ_TOOLS,WORKSPACE_WRITE_TOOLS} from "../core/mcp/policy.mjs";
 const TMP=mkdtempSync(join(tmpdir(),"fleet adapters 中文 "));
 after(()=>rmSync(TMP,{recursive:true,force:true}));
 function fixture(runtime="claude"){
@@ -143,4 +143,29 @@ test("bad input, environment NUL and mismatched executable hash fail without sta
  const f=fixture();f.input.prompt="x".repeat(131073);assert.throws(()=>prepareAdapter(f.input),{code:"BAD_INPUT"});
  const g=fixture();g.input.environment.PATH="bad\0path";assert.throws(()=>prepareAdapter(g.input),{code:"BAD_INPUT"});
  const h=fixture();h.input.installation.program.sha256="0".repeat(64);assert.throws(()=>prepareAdapter(h.input),{code:"RUNTIME_CHANGED"});
+});
+const fileBinding=()=>({workspace_id:randomUUID(),descriptor_digest:"a".repeat(64),base_commit:"b".repeat(40),baseline_digest:"c".repeat(64),access:"mcp-files-v1"});
+test("Claude and Codex workspace profiles bind the descriptor and expose only mediated file tools",()=>{
+ for(const runtime of ["claude","codex"]){
+  const f=fixture(runtime);f.input.role.capabilities=["workspace-files"];f.input.workspaceBinding=fileBinding();
+  const p=prepareAdapter(f.input);assert.equal(validatePreparedAdapter(p),true);assert.equal(p.plan.contract,"ai-fleet-adapter/workspace-files-v1");assert.equal(p.plan.scope,"workspace-files");assert.deepEqual(p.manifest.workspace,f.input.workspaceBinding);
+  assert.deepEqual(p.plan.mcpTools,[...ROLE_TOOLS.implement,...WORKSPACE_READ_TOOLS,...WORKSPACE_WRITE_TOOLS]);assert.equal(p.plan.cwd,f.dirs.work);assert.equal(p.plan.containment.filesystem,"not_claimed");
+  if(runtime==="claude"){assert.equal(arg(p.plan.args,"--tools"),"");assert.deepEqual(p.plan.decoder.expectedTools,p.plan.mcpTools.map(n=>"mcp__fleet__"+n));}
+  else{assert.ok(p.plan.args.includes("features.shell_tool=false"));assert.equal(arg(p.plan.args,"--sandbox"),"read-only");assert.ok(p.plan.args.find(a=>a.startsWith("mcp_servers=")).includes('"edit_workspace_file"'));}
+  f.input.workspaceBinding.descriptor_digest="d".repeat(64);assert.equal(validatePreparedAdapter(p),true);
+  p.plan.workspaceBinding.descriptor_digest="e".repeat(64);assert.throws(()=>validatePreparedAdapter(p),{code:"ADAPTER_PLAN_CHANGED"});
+ }
+});
+test("workspace review and read-only policies never gain write tools",()=>{
+ for(const runtime of ["claude","codex"])for(const kind of ["implement","review"]){
+  const f=fixture(runtime);Object.assign(f.input.role,{kind,tools:"read-only",capabilities:["workspace-files"]});f.input.workspaceBinding=fileBinding();
+  const p=prepareAdapter(f.input);for(const t of WORKSPACE_READ_TOOLS)assert.ok(p.plan.mcpTools.includes(t));for(const t of WORKSPACE_WRITE_TOOLS)assert.equal(p.plan.mcpTools.includes(t),false);assert.equal(validatePreparedAdapter(p),true);
+ }
+});
+test("missing or malformed workspace bindings and board profile upgrades fail before config creation",()=>{
+ for(const binding of [null,{...fileBinding(),access:"native-files"},{...fileBinding(),base_commit:"HEAD"},{...fileBinding(),descriptor_digest:"bad"},{...fileBinding(),extra:true}]){
+  const f=fixture();f.input.role.capabilities=["workspace-files"];f.input.workspaceBinding=binding;
+  assert.throws(()=>prepareAdapter(f.input));assert.equal(existsSync(join(f.dirs.private,"claude-settings.json")),false);
+ }
+ const f=fixture();f.input.workspaceBinding=fileBinding();assert.throws(()=>prepareAdapter(f.input),{code:"WORKSPACE_ADAPTER_REQUIRED"});
 });

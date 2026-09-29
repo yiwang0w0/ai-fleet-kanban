@@ -29,7 +29,7 @@ export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared
  if(!credential||privateDirectory!==plan.privateDirectory)fail("UNSAFE_CREDENTIAL_PATH","执行回执必须写入本次已绑定的私有运行目录");
  const journalFile=join(privateDirectory,"execution-observation.json");
  if(existsSync(journalFile))fail("JOURNAL_EXISTS","该私有目录已有执行回执，不能用于新调用");
- const execution=launchReceipt({format:"ai-fleet-process/v1",adapter_contract:plan.contract,adapter_digest:prepared.manifestDigest,
+ const execution=launchReceipt({format:plan.workspaceBinding?"ai-fleet-process/v2":"ai-fleet-process/v1",...(plan.workspaceBinding?{workspace:plan.workspaceBinding}:{}),adapter_contract:plan.contract,adapter_digest:prepared.manifestDigest,
   runtime:plan.runtime,model:plan.model,effort:plan.effort,run_id:plan.runId,agent_instance_id:plan.agentInstanceId,principal_id:plan.principalId,
   command_sha256:plan.command.sha256,python_sha256:python.sha256,files_digest:digest(plan.pins),prompt_sha256:plan.promptHash,
   environment_sha256:prepared.manifest.environment_sha256,timeout_ms:timeoutMs,heartbeat_ms:heartbeatMs,stderr_limit:stderrLimit});

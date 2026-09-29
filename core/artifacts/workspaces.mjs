@@ -10,9 +10,9 @@ const fail=(code,message)=>{throw new PeerError(code,message,409);};
 const at=()=>new Date().toISOString();
 const exists=(db,t)=>!!db.prepare("SELECT 1 FROM sqlite_master WHERE name=?").get(t);
 function unit(db,work){if(!db.isTransaction)return transaction(db,work);db.exec("SAVEPOINT workspace_unit");try{const r=work();db.exec("RELEASE workspace_unit");return r;}catch(e){db.exec("ROLLBACK TO workspace_unit; RELEASE workspace_unit");throw e;}}
-function schema(db){if(exists(db,"workspace_schema")&&db.prepare("SELECT version FROM workspace_schema").get()?.version!==1)fail("SCHEMA_INCOMPATIBLE","工作区存储版本不兼容");}
+function schema(db){if(exists(db,"workspace_schema")&&db.prepare("SELECT version FROM workspace_schema").get()?.version!==2)fail("SCHEMA_INCOMPATIBLE","工作区存储版本不兼容");}
 export function migrateWorkspaces(db){return unit(db,()=>{
- localIdentity(db);schema(db);
+ localIdentity(db);if(exists(db,"workspace_schema")&&![1,2].includes(db.prepare("SELECT version FROM workspace_schema").get()?.version))fail("SCHEMA_INCOMPATIBLE","工作区存储版本不兼容");
  if(!exists(db,"broker_dispatches"))fail("DISPATCH_SCHEMA_REQUIRED","请先初始化受管执行调度");
  db.exec([
   "CREATE TABLE IF NOT EXISTS workspace_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL); INSERT OR IGNORE INTO workspace_schema VALUES(1,1);",
@@ -23,11 +23,19 @@ export function migrateWorkspaces(db){return unit(db,()=>{
   "CREATE TRIGGER IF NOT EXISTS workspace_receipt_once BEFORE UPDATE OF receipt_json,receipt_digest ON task_workspaces WHEN OLD.receipt_json IS NOT NULL BEGIN SELECT RAISE(ABORT,'workspace baseline receipt is immutable'); END;",
   "CREATE TRIGGER IF NOT EXISTS workspace_state_transitions BEFORE UPDATE OF state ON task_workspaces WHEN NOT(OLD.state='provisioning' AND NEW.state IN('ready','failed') OR OLD.state IN('ready','failed') AND NEW.state='retained') BEGIN SELECT RAISE(ABORT,'workspace state transition refused'); END;",
   "CREATE TRIGGER IF NOT EXISTS workspace_retained_immutable BEFORE UPDATE ON task_workspaces WHEN OLD.state='retained' BEGIN SELECT RAISE(ABORT,'retained workspace is immutable'); END;",
-  // Existing adapters are board-only and cannot certify use of a task checkout.
-  "CREATE TRIGGER IF NOT EXISTS workspace_unbound_launch BEFORE UPDATE OF launch_at ON broker_dispatches WHEN OLD.launch_at IS NULL AND NEW.launch_at IS NOT NULL AND EXISTS(SELECT 1 FROM task_workspaces WHERE dispatch_id=NEW.dispatch_id) BEGIN SELECT RAISE(ABORT,'WORKSPACE_ADAPTER_REQUIRED: board-only launch cannot consume task workspace'); END;"
+  "CREATE TABLE IF NOT EXISTS workspace_sessions(workspace_id TEXT PRIMARY KEY,dispatch_id TEXT NOT NULL UNIQUE,descriptor_json TEXT NOT NULL,descriptor_digest TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,written_bytes INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS workspace_files(workspace_id TEXT NOT NULL,path TEXT NOT NULL,version INTEGER NOT NULL,mode TEXT NOT NULL,content BLOB,sha256 TEXT,deleted INTEGER NOT NULL DEFAULT 0,base_sha256 TEXT,PRIMARY KEY(workspace_id,path));",
+  "CREATE TABLE IF NOT EXISTS workspace_file_events(workspace_id TEXT NOT NULL,revision INTEGER NOT NULL,path TEXT NOT NULL,version INTEGER NOT NULL,operation TEXT NOT NULL,sha256 TEXT,byte_length INTEGER NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(workspace_id,revision));",
+  "CREATE TABLE IF NOT EXISTS workspace_launches(workspace_id TEXT PRIMARY KEY,dispatch_id TEXT NOT NULL UNIQUE,launch_digest TEXT NOT NULL,created_at TEXT NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS workspace_commits(workspace_id TEXT PRIMARY KEY,descriptor_json TEXT NOT NULL,descriptor_digest TEXT NOT NULL,created_at TEXT NOT NULL);",
+  "DROP TRIGGER IF EXISTS workspace_unbound_launch;",
+  "CREATE TRIGGER workspace_unbound_launch BEFORE UPDATE OF launch_at ON broker_dispatches WHEN OLD.launch_at IS NULL AND NEW.launch_at IS NOT NULL AND EXISTS(SELECT 1 FROM task_workspaces WHERE dispatch_id=NEW.dispatch_id) AND NOT EXISTS(SELECT 1 FROM workspace_launches l JOIN workspace_sessions s USING(workspace_id) JOIN broker_execution_records e ON e.dispatch_id=l.dispatch_id WHERE l.dispatch_id=NEW.dispatch_id AND e.launch_digest=l.launch_digest AND json_extract(e.launch_json,'$.workspace.workspace_id')=l.workspace_id AND json_extract(e.launch_json,'$.workspace.descriptor_digest')=s.descriptor_digest) BEGIN SELECT RAISE(ABORT,'WORKSPACE_ADAPTER_REQUIRED: verified workspace launch required'); END;"
  ].join("\n"));
- for(const t of ["workspace_pools","task_workspaces","workspace_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_retained BEFORE DELETE ON "+t+" BEGIN SELECT RAISE(ABORT,'workspace history must be retained'); END");
- for(const t of ["workspace_pools","workspace_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_immutable BEFORE UPDATE ON "+t+" BEGIN SELECT RAISE(ABORT,'workspace history is immutable'); END");
+ db.exec("CREATE TRIGGER IF NOT EXISTS workspace_session_identity_immutable BEFORE UPDATE OF workspace_id,dispatch_id,descriptor_json,descriptor_digest,created_at ON workspace_sessions BEGIN SELECT RAISE(ABORT,'workspace session identity is immutable'); END");
+ db.exec("CREATE TRIGGER IF NOT EXISTS workspace_file_identity_immutable BEFORE UPDATE OF workspace_id,path,base_sha256 ON workspace_files BEGIN SELECT RAISE(ABORT,'workspace file identity is immutable'); END");
+ db.exec("UPDATE workspace_schema SET version=2");
+ for(const t of ["workspace_pools","task_workspaces","workspace_events","workspace_sessions","workspace_files","workspace_file_events","workspace_launches","workspace_commits"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_retained BEFORE DELETE ON "+t+" BEGIN SELECT RAISE(ABORT,'workspace history must be retained'); END");
+ for(const t of ["workspace_pools","workspace_events","workspace_file_events","workspace_launches","workspace_commits"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_immutable BEFORE UPDATE ON "+t+" BEGIN SELECT RAISE(ABORT,'workspace history is immutable'); END");
 });}
 function event(db,poolId,workspaceId,kind,detail){db.prepare("INSERT INTO workspace_events(pool_id,workspace_id,kind,detail_json,created_at) VALUES(?,?,?,?,?)").run(poolId,workspaceId,kind,canonical(detail),at());}
 function current(db,r){const n=localIdentity(db);if(!r)fail("WORKSPACE_NOT_FOUND","本机登记不存在");if(r.node_id!==n.node_id||r.node_epoch!==n.sync_epoch)fail("WORKSPACE_RECOVERY_REQUIRED","旧代次工作区不可续用");return r;}
@@ -42,7 +50,7 @@ function dispatch(db,id,{prepared=false}={}){
 }
 const within=(path,policy)=>policy.some(p=>p.endsWith("/")?path.startsWith(p):path===p);
 function pathOverlap(a,b){const x=a.toUpperCase(),y=b.toUpperCase();return x===y||y.startsWith(x.endsWith("/")?x:x+"/")||x.startsWith(y.endsWith("/")?y:y+"/");}
-function publicRow(r){const b=JSON.parse(r.binding_json),receipt=r.receipt_json?JSON.parse(r.receipt_json):null;return {workspace_id:r.workspace_id,pool_id:r.pool_id,dispatch_id:r.dispatch_id,run_id:r.run_id,node_id:r.node_id,node_epoch:r.node_epoch,state:r.state,binding:b,binding_digest:r.binding_digest,baseline:receipt?{commit:receipt.manifest.commit,tree:receipt.manifest.tree,file_count:receipt.manifest.files.length,total_bytes:receipt.manifest.total_bytes,manifest_digest:digest(receipt.manifest)}:null,failure_code:r.failure_code,stop_proof:r.stop_json?JSON.parse(r.stop_json):null,filesystem_sandbox:false,executor_bound:false,accepted:false};}
+function publicRow(db,r){const b=JSON.parse(r.binding_json),receipt=r.receipt_json?JSON.parse(r.receipt_json):null;return {workspace_id:r.workspace_id,pool_id:r.pool_id,dispatch_id:r.dispatch_id,run_id:r.run_id,node_id:r.node_id,node_epoch:r.node_epoch,state:r.state,binding:b,binding_digest:r.binding_digest,baseline:receipt?{commit:receipt.manifest.commit,tree:receipt.manifest.tree,file_count:receipt.manifest.files.length,total_bytes:receipt.manifest.total_bytes,manifest_digest:digest(receipt.manifest)}:null,failure_code:r.failure_code,stop_proof:r.stop_json?JSON.parse(r.stop_json):null,filesystem_sandbox:false,executor_bound:!!db.prepare("SELECT 1 FROM workspace_launches WHERE workspace_id=?").get(r.workspace_id),accepted:false};}
 /** Separate local authority for a complete history copy, not implied by artifact allowlists. */
 export function registerWorkspacePool(db,{poolId,mappingId,root,allowFullHistoryCopy}){
  uuid(poolId,"pool_id");uuid(mappingId,"mapping_id");if(allowFullHistoryCopy!==true)fail("FULL_HISTORY_PERMISSION_REQUIRED","独立仓库副本需显式允许复制全部本机 Git 历史");
@@ -57,7 +65,7 @@ export function registerWorkspacePool(db,{poolId,mappingId,root,allowFullHistory
   db.prepare("INSERT INTO workspace_pools VALUES(?,?,?,?,?,?)").run(poolId,node.node_id,node.sync_epoch,mappingId,canonical(descriptor),at());event(db,poolId,null,"pool_registered",{mapping_id:mappingId,full_history_copy_authorized:true});return {pool_id:poolId,mapping_id:mappingId,full_history_copy_authorized:true};
  });
 }
-export function workspaceState(db,{workspaceId}){return publicRow(row(db,workspaceId));}
+export function workspaceState(db,{workspaceId}){return publicRow(db,row(db,workspaceId));}
 export function workspaceConflicts(db,{workspaceId}){
  const r=row(db,workspaceId),binding=JSON.parse(r.binding_json),conflicts=[];
  for(const other of db.prepare("SELECT * FROM task_workspaces WHERE pool_id=? AND workspace_id<>? AND state IN('provisioning','ready') ORDER BY created_at,workspace_id").all(r.pool_id,workspaceId)){
@@ -73,7 +81,7 @@ export function createTaskWorkspace(db,{workspaceId,poolId,dispatchId,baseCommit
  if(writes.some(w=>!within(w,mapping.allowed_paths)))fail("PATH_NOT_ALLOWED","写入声明超出本机允许的产物范围");
  const request={pool_id:poolId,dispatch_id:dispatchId,base_commit:baseCommit,write_paths:writes};
  const old=exists(db,"task_workspaces")?db.prepare("SELECT * FROM task_workspaces WHERE workspace_id=?").get(workspaceId):null;
- if(old){current(db,old);const b=JSON.parse(old.binding_json);if(canonical(request)!==canonical({pool_id:old.pool_id,dispatch_id:old.dispatch_id,base_commit:b.base_commit,write_paths:b.write_paths}))fail("REQUEST_CONFLICT","工作区 ID 不能复用不同配置");return publicRow(old);}
+ if(old){current(db,old);const b=JSON.parse(old.binding_json);if(canonical(request)!==canonical({pool_id:old.pool_id,dispatch_id:old.dispatch_id,base_commit:b.base_commit,write_paths:b.write_paths}))fail("REQUEST_CONFLICT","工作区 ID 不能复用不同配置");return publicRow(db,old);}
  const source=workspaceRepositorySource(db,{mappingId:p.mapping_id,baseCommit}),identity=JSON.parse(p.descriptor_json).identity,container=join(identity.root,workspaceId);
  verifyDirectory(identity);
  transaction(db,()=>{
@@ -108,12 +116,15 @@ export function taskWorkspaceDirectory(db,{workspaceId}){
 export function retainTaskWorkspace(db,{workspaceId,reason}){
  if(typeof reason!=="string"||!reason.trim()||reason.length>1000)fail("BAD_INPUT","需要保留原因");
  return unit(db,()=>{
-  const r=row(db,workspaceId);if(r.state==="retained")return publicRow(r);if(!["ready","failed"].includes(r.state))fail("WORKSPACE_PROVISIONING","准备尚未结束，不能声明保留完成");
+  const r=row(db,workspaceId);if(r.state==="retained")return publicRow(db,r);if(!["ready","failed"].includes(r.state))fail("WORKSPACE_PROVISIONING","准备尚未结束，不能声明保留完成");
   const run=db.prepare("SELECT * FROM task_runs WHERE run_id=?").get(r.run_id);if(!run)fail("WORKSPACE_RUN_MISSING","运行记录缺失");
   const stopped=inspectStoppedRuns(db,{nodeId:r.node_id,nodeEpoch:r.node_epoch,members:[],runs:[run]});
   if(stopped.blockers.length)fail("WORKSPACE_RUN_NOT_STOPPED","运行尚无已核验的停止证明");
   const receipt={reason,proofs:stopped.proofs,fixture_runs:stopped.fixtureRuns,physical_files_deleted:false};
-  db.prepare("UPDATE task_workspaces SET state='retained',stop_json=?,updated_at=? WHERE workspace_id=?").run(canonical(receipt),at(),workspaceId);event(db,r.pool_id,workspaceId,"retained",receipt);return publicRow(row(db,workspaceId));
+  db.prepare("UPDATE task_workspaces SET state='retained',stop_json=?,updated_at=? WHERE workspace_id=?").run(canonical(receipt),at(),workspaceId);event(db,r.pool_id,workspaceId,"retained",receipt);return publicRow(db,row(db,workspaceId));
  });
 }
-export function assertWorkspaceLaunchSupported(db,dispatchId){schema(db);if(exists(db,"task_workspaces")&&db.prepare("SELECT 1 FROM task_workspaces WHERE dispatch_id=?").get(dispatchId))fail("WORKSPACE_ADAPTER_REQUIRED","任务工作区执行合同尚未接通；board-only 配置不能消费本次启动许可");}
+export function workspaceExecutionRecord(db,dispatchId){
+ schema(db);if(!exists(db,"task_workspaces"))return null;
+ const r=db.prepare("SELECT * FROM task_workspaces WHERE dispatch_id=?").get(dispatchId);if(!r)return null;current(db,r);return r;
+}

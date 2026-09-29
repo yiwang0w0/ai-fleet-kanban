@@ -126,3 +126,5 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 候选报告新增 get_result / list_results（coordinate、observe）及 prepare_result / reject_result（coordinate）。返工决定绑定来源当前版本和精确候选；执行端持久接收决定后才原子重开任务，工具不启动模型、不提供最终通过验收。见 [候选结果与返工](results.md)。
 
 仓库元数据新增 get_repository(project_id, repo_id) / list_repositories(project_id, limit)，仅 coordinate / observe 可按项目读取已登记仓库、批准基线及当前代次标识。不会返回本机路径、Git 程序或文件内容，也不提供登记/批准入口。见 [仓库映射与内容读取](repositories.md)。
+
+专用 workspace-files 执行身份新增 get_workspace / list_workspace_files / read_workspace_file；implement 且 tools=write 另有 edit_workspace_file / delete_workspace_file。版本和字节写入与 MCP 回执原子提交，不开放本机路径或 shell。详见 [文件会话合同](workspace-files.md)。

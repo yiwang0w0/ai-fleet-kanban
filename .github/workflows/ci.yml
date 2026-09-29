@@ -90,6 +90,8 @@ jobs:
         run: bash hrun.sh node tests/repositorytest.mjs
       - name: workspacetest (independent task repos, declared conflicts and retained files)
         run: bash hrun.sh node tests/workspacetest.mjs
+      - name: workspacefiletest (transactional MCP edits, bound launches and actual Git commits)
+        run: bash hrun.sh node tests/workspacefiletest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

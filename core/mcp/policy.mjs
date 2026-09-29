@@ -14,6 +14,10 @@ export const ROLE_TOOLS=Object.freeze({
  review:["get_task","list_roles","report_result","heartbeat"],
  observe:READ_TOOLS
 });
+export const WORKSPACE_READ_TOOLS=["get_workspace","list_workspace_files","read_workspace_file"];
+export const WORKSPACE_WRITE_TOOLS=["edit_workspace_file","delete_workspace_file"];
+export const isReadTool=name=>READ_TOOLS.includes(name)||WORKSPACE_READ_TOOLS.includes(name);
+export function roleTools(policy){return [...ROLE_TOOLS[policy.kind],...(["implement","review"].includes(policy.kind)&&policy.capabilities.includes("workspace-files")?[...WORKSPACE_READ_TOOLS,...(policy.kind==="implement"&&policy.tools==="write"?WORKSPACE_WRITE_TOOLS:[])]:[])];}
 export const fail=(code,message,status=409)=>{throw new PeerError(code,message,status);};
 export function exact(x,fields,label){keys(x,fields,label);if(Object.keys(x).length!==fields.length)fail("BAD_INPUT",label+" 字段缺失",400);}
 function integer(x,label,min,max){if(!Number.isSafeInteger(x)||x<min||x>max)fail("BAD_INPUT",label+" 超出范围",400);return x;}

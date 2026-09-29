@@ -1,4 +1,4 @@
-import {assertWorkspaceLaunchSupported} from "../artifacts/workspaces.mjs";
+import {validateWorkspaceLaunch,bindWorkspaceLaunch} from "../artifacts/workspace-session.mjs";
 import {createRequire} from "node:module";
 import {randomUUID} from "node:crypto";
 import {basename,dirname,isAbsolute,relative,resolve,sep} from "node:path";
@@ -134,7 +134,7 @@ export function prepareDispatch(db,{assignmentId,quotaId,executionMode,credentia
    treeRev:source.tree,extra:{broker_role_digest:role.policy_digest,ancestor_context_digest:ancestorDigest(db,t)},
    runContext:{role_id:role.role_id,role_kind:role.policy.kind,tools:role.policy.tools,model:role.policy.model,effort:role.policy.effort,
     broker_role_version:role.version,broker_role_digest:role.policy_digest,dispatch_id:dispatchId,execution_mode:executionMode,
-    source_tree:source.tree,ancestor_context_digest:ancestorDigest(db,t),enforcement:"board_tool_scope_only"}});
+    source_tree:source.tree,ancestor_context_digest:ancestorDigest(db,t),enforcement:role.policy.capabilities.includes("workspace-files")?"mcp_workspace_files_only":"board_tool_scope_only"}});
   if(!claim.ok)fail(claim.code??"CONFLICT",claim.why);
   const principal=issuePrincipal(db,{roleId:role.role_id,projects:[a.project_id],runId:claim.task.run_id,credentialFile});issued=true;
   db.prepare("INSERT INTO broker_dispatches(dispatch_id,assignment_id,node_id,node_epoch,task_id,task_uid,run_id,agent_instance_id,worker,role_id,role_version,policy_digest,quota_id,quota_version,execution_mode,source_json,claimed_version,principal_id,phase,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'prepared',?)")
@@ -151,7 +151,6 @@ export function authorizeLaunch(db,{dispatchId,sourceGate,execution=null}){
  return atomic(db,()=>{
   const d=fresh(db,dispatchId);
   if(d.phase!=="prepared")fail("LAUNCH_NOT_AVAILABLE","启动许可已经消费或运行已结束；不能自动重启");
-  assertWorkspaceLaunchSupported(db,dispatchId);
   const source=sourceGate.check();
   if(canonical(source)!==d.source_json)fail("SOURCE_CHANGED","领取后治理代码身份已变化");
   const node=localIdentity(db),t=task(db,d.task_uid),a=db.prepare("SELECT * FROM broker_assignments WHERE assignment_id=?").get(d.assignment_id);
@@ -167,10 +166,12 @@ export function authorizeLaunch(db,{dispatchId,sourceGate,execution=null}){
   if(!principal||principal.status!=="active"||principal.role_version!==role.version)fail("AUTHORIZATION_CHANGED","运行凭据已撤销或失效",403);
   const q=quotaFor(db,d.quota_id,{node,runtime:role.policy.runtime,project:a.project_id,mode:d.execution_mode,expectedVersion:d.quota_version});
   if(q.used>=q.limit_total)fail("BUDGET_EXHAUSTED","调用预算已耗尽");
+  const workspaceId=validateWorkspaceLaunch(db,{dispatchId,execution,policy:role.policy});
   if(execution){
    if(execution.runtime!==role.policy.runtime||execution.model!==role.policy.model||execution.effort!==role.policy.effort||execution.run_id!==d.run_id||execution.agent_instance_id!==d.agent_instance_id||execution.principal_id!==d.principal_id)fail("EXECUTION_MISMATCH","启动配置与领取的身份或策略不一致");
    db.prepare("INSERT INTO broker_execution_records(dispatch_id,launch_digest,launch_json,created_at) VALUES(?,?,?,?)").run(dispatchId,digest(execution),canonical(execution),at());
   }
+  bindWorkspaceLaunch(db,{workspaceId,dispatchId,execution});
   db.prepare("UPDATE broker_call_quotas SET used=used+1 WHERE quota_id=?").run(d.quota_id);
   db.prepare("UPDATE broker_dispatches SET phase='launch_committed',launch_at=?,reason='single-use launch permit committed; process result not yet known' WHERE dispatch_id=?").run(at(),dispatchId);
   audit(db,{dispatchId,quotaId:d.quota_id,kind:"launch_committed",detail:{execution_mode:d.execution_mode}});

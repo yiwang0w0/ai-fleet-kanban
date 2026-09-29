@@ -1,3 +1,4 @@
+import {workspaceFileInfo,listWorkspaceFiles,readWorkspaceFile,editWorkspaceFile,deleteWorkspaceFile} from "../artifacts/workspace-session.mjs";
 import {repositoryState,listRepositories} from "../artifacts/repositories.mjs";
 import {migrateResults,prepareResult,rejectResult,resultState,listResults} from "../federation/results.mjs";
 import {migrateCancellations,listCancellations,prepareCancellation,cancellationState} from "../federation/cancellation.mjs";
@@ -10,7 +11,7 @@ import {randomUUID} from "node:crypto";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {localIdentity} from "../federation/peers.mjs";
 import {uuid,names,version} from "../federation/protocol.mjs";
-import {ROLE_TOOLS,READ_TOOLS,authenticatePrincipal,getRole,fail} from "./policy.mjs";
+import {ROLE_TOOLS,READ_TOOLS,roleTools,isReadTool,authenticatePrincipal,getRole,fail} from "./policy.mjs";
 const require=createRequire(import.meta.url),store=require("../store.js");
 const text=(max=16384)=>({type:"string",maxLength:max});
 const uuidSchema={type:"string",pattern:"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"};
@@ -22,6 +23,11 @@ const object=(properties,required=Object.keys(properties))=>({type:"object",prop
 const taskInput={request_id:uuidSchema,project_id:name,subject:{...text(500),minLength:1},description:text(),acceptance:text(),work_kind:{enum:["implement","review"]},required_capabilities:caps};
 const relationInput=object({schema_version:{enum:[1]},type:{enum:["delegation"]},relation_id:uuidSchema,delegation_id:uuidSchema,project_id:name,graph_id:uuidSchema,graph_epoch:uuidSchema,source_node_id:uuidSchema,source_epoch:uuidSchema,source_task_uid:uid,target_node_id:uuidSchema,target_epoch:uuidSchema,target_task_uid:uid,offer_digest:{type:"string",pattern:"^[0-9a-f]{64}$"},source_topology_revision:positive,target_topology_revision:positive});
 const defs=[
+ ["get_workspace","读取本次运行的文件会话和允许范围",object({task_uid:uid})],
+ ["list_workspace_files","按会话版本分页列出任务文件",object({task_uid:uid,expected_revision:{...positive,minimum:0},after_path:text(1024),limit:{...positive,maximum:100}})],
+ ["read_workspace_file","读取当前文件版本的 UTF-8 字节范围",object({task_uid:uid,path:text(1024),expected_version:positive,offset:{...positive,minimum:0},limit:{...positive,minimum:4,maximum:65536}})],
+ ["edit_workspace_file","按文件版本替换 UTF-8 字节范围；修改与调用回执原子保存",object({request_id:uuidSchema,task_uid:uid,path:text(1024),expected_version:{...positive,minimum:0},offset:{...positive,minimum:0},delete_bytes:{...positive,minimum:0},content:text(65536),executable:{type:"boolean"}})],
+ ["delete_workspace_file","按版本标记删除本次运行允许修改的文件",object({request_id:uuidSchema,task_uid:uid,path:text(1024),expected_version:positive})],
  ["get_repository","读取本项目已登记仓库与批准基线，不返回本机路径",object({project_id:name,repo_id:name})],
  ["list_repositories","列出本项目仓库映射与身份是否为当前代次",object({project_id:name,limit:{...positive,maximum:100}})],
  ["get_result","读取候选交付、接收回执与来源决定",object({result_id:uuidSchema})],
@@ -53,7 +59,7 @@ const defs=[
  ["report_result","交付本运行实例的结果，仍需验收",object({request_id:uuidSchema,task_uid:uid,run_id:uuidSchema,outcome:{enum:["done","wait"]},evidence:text(65536)})]
 ];
 export const TOOL_DEFINITIONS=Object.freeze(defs.map(([name,description,inputSchema])=>({name,description,inputSchema,
- annotations:{readOnlyHint:READ_TOOLS.includes(name),destructiveHint:false,idempotentHint:true,openWorldHint:false}})));
+ annotations:{readOnlyHint:isReadTool(name),destructiveHint:false,idempotentHint:true,openWorldHint:false}})));
 export function validate(value,schema,path="arguments"){
  if(Array.isArray(schema.type)){if(value===null&&schema.type.includes("null"))return;return validate(value,{...schema,type:schema.type.find(t=>t!=="null")},path);}
  if(schema.enum&&!schema.enum.includes(value))fail("BAD_INPUT",path+" 不在允许值中",400);
@@ -76,7 +82,7 @@ function tickRate(db,p){
  if(!reset&&row.count>=p.role.policy.limits.requests_per_minute)fail("RATE_LIMITED","本身份本分钟调用数已达上限",429);
  db.prepare("INSERT INTO broker_rate VALUES(?,?,?) ON CONFLICT(principal_id) DO UPDATE SET window_start=excluded.window_start,count=excluded.count").run(p.principal_id,reset?now:row.window_start,reset?1:row.count+1);
 }
-function permitted(p,tool){if(!ROLE_TOOLS[p.role.policy.kind].includes(tool))fail("FORBIDDEN","角色无权使用该工具",403);}
+function permitted(p,tool){if(!roleTools(p.role.policy).includes(tool))fail("FORBIDDEN","角色无权使用该工具",403);}
 function scoped(p,project){if(!p.projects.includes(project))fail("FORBIDDEN","项目未授权",403);}
 const marks=p=>p.projects.map(()=>"?").join(",");
 function localTask(db,p,taskUid){
@@ -156,6 +162,11 @@ function assign(db,p,args){
 }
 function execute(db,p,name,args){
  switch(name){
+ case "get_workspace":return workspaceFileInfo(db,p,args);
+ case "list_workspace_files":return listWorkspaceFiles(db,p,args);
+ case "read_workspace_file":return readWorkspaceFile(db,p,args);
+ case "edit_workspace_file":return editWorkspaceFile(db,p,args);
+ case "delete_workspace_file":return deleteWorkspaceFile(db,p,args);
  case "get_repository":scoped(p,args.project_id);return repositoryState(db,{projectId:args.project_id,repoId:args.repo_id});
  case "list_repositories":scoped(p,args.project_id);return listRepositories(db,{projectId:args.project_id,limit:args.limit});
  case "list_results":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_results'").get()?listResults(db,{projectId:args.project_id,limit:args.limit}):{results:[]};
@@ -193,7 +204,7 @@ function execute(db,p,name,args){
   return name==="get_binding"?bindingState(db,args.relation_id):releaseBoundTask(db,{relationId:args.relation_id,expectedTaskVersion:args.expected_version});
  }
  case "prepare_binding":{scoped(p,args.relation.project_id);migrateBindings(db);const b=prepareBinding(db,{relation:args.relation,expectedTaskVersion:args.expected_version});return {relation_id:b.relation_id,side:b.side,state:b.state,execution_authorized:b.execution_authorized,dispatch_started:false};}
- case "list_roles":return {roles:db.prepare("SELECT role_id FROM broker_roles ORDER BY role_id").all().map(x=>getRole(db,x.role_id)).filter(r=>r.policy.projects.some(x=>p.projects.includes(x))).map(r=>({...r,policy:{...r.policy,projects:r.policy.projects.filter(x=>p.projects.includes(x))},enforcement:"board_tool_scope_only"}))};
+ case "list_roles":return {roles:db.prepare("SELECT role_id FROM broker_roles ORDER BY role_id").all().map(x=>getRole(db,x.role_id)).filter(r=>r.policy.projects.some(x=>p.projects.includes(x))).map(r=>({...r,policy:{...r.policy,projects:r.policy.projects.filter(x=>p.projects.includes(x))},enforcement:r.policy.capabilities.includes("workspace-files")?"mcp_workspace_files_only":"board_tool_scope_only"}))};
  case "list_nodes":{
   const local=localIdentity(db),sources=db.prepare("SELECT DISTINCT s.* FROM federation_sources s JOIN federation_cursors c ON s.origin_node_id=c.origin_node_id WHERE c.project_id IN("+marks(p)+") ORDER BY s.origin_node_id").all(...p.projects);
   return {local:{node_id:local.node_id,display_name:local.display_name,sync_epoch:local.sync_epoch},sources};
@@ -255,7 +266,7 @@ function execute(db,p,name,args){
 }
 function responseLimit(result){if(Buffer.byteLength(canonical(result))>512*1024)fail("RESPONSE_TOO_LARGE","结果超过响应限额",413);return result;}
 export function listTools(db,authorization){
- return atomic(db,()=>{const p=authenticatePrincipal(db,authorization);tickRate(db,p);return {tools:TOOL_DEFINITIONS.filter(t=>ROLE_TOOLS[p.role.policy.kind].includes(t.name))};});
+ return atomic(db,()=>{const p=authenticatePrincipal(db,authorization);tickRate(db,p);return {tools:TOOL_DEFINITIONS.filter(t=>roleTools(p.role.policy).includes(t.name))};});
 }
 export function callTool(db,authorization,name,args){
  let principal;
@@ -265,7 +276,7 @@ export function callTool(db,authorization,name,args){
  try{return atomic(db,()=>{
   const p=authenticatePrincipal(db,authorization),definition=TOOL_DEFINITIONS.find(t=>t.name===name);
   if(!definition)fail("UNKNOWN_TOOL","工具不存在",404);permitted(p,name);validate(args,definition.inputSchema);
-  const mutation=!READ_TOOLS.includes(name),prior=mutation?db.prepare("SELECT * FROM broker_requests WHERE principal_id=? AND request_id=?").get(p.principal_id,args.request_id):null;
+  const mutation=!isReadTool(name),prior=mutation?db.prepare("SELECT * FROM broker_requests WHERE principal_id=? AND request_id=?").get(p.principal_id,args.request_id):null;
   if(prior){
    if(prior.tool_name!==name||prior.args_digest!==argDigest)fail("REQUEST_CONFLICT","同一请求号不能对应不同操作或内容");
    db.prepare("INSERT INTO broker_audit(principal_id,tool_name,request_id,args_digest,outcome,at) VALUES(?,?,?,?,?,?)").run(p.principal_id,name,args.request_id,argDigest,"replayed",new Date().toISOString());

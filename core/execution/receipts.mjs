@@ -6,11 +6,16 @@ const text=x=>typeof x==="string"&&x.length>0&&x.length<=200&&!/[\u0000-\u001f\u
 const count=x=>Number.isSafeInteger(x)&&x>=0;
 const bad=()=>fail("BAD_EXECUTION_RECEIPT","执行审计回执无效",400);
 export function launchReceipt(value){
- exact(value,["format","adapter_contract","adapter_digest","runtime","model","effort","run_id","agent_instance_id","principal_id","command_sha256","python_sha256","files_digest","prompt_sha256","environment_sha256","timeout_ms","heartbeat_ms","stderr_limit"],"execution_launch");
- if(value.format!=="ai-fleet-process/v1"||!text(value.adapter_contract)||!["claude","codex","zcode"].includes(value.runtime)||!text(value.model)||!text(value.effort))bad();
+ const workspace=value?.format==="ai-fleet-process/v2";
+ exact(value,[...(workspace?["workspace"]:[]),"format","adapter_contract","adapter_digest","runtime","model","effort","run_id","agent_instance_id","principal_id","command_sha256","python_sha256","files_digest","prompt_sha256","environment_sha256","timeout_ms","heartbeat_ms","stderr_limit"],"execution_launch");
+ if(!["ai-fleet-process/v1","ai-fleet-process/v2"].includes(value.format)||!text(value.adapter_contract)||!["claude","codex","zcode"].includes(value.runtime)||!text(value.model)||!text(value.effort))bad();
  for(const k of ["adapter_digest","command_sha256","python_sha256","files_digest","prompt_sha256","environment_sha256"])if(!hash(value[k]))bad();
  for(const k of ["run_id","agent_instance_id","principal_id"])uuid(value[k],k);
  for(const [k,min,max] of [["timeout_ms",50,86400000],["heartbeat_ms",50,60000],["stderr_limit",1,1048576]])if(!Number.isSafeInteger(value[k])||value[k]<min||value[k]>max)bad();
+ if(workspace){
+  exact(value.workspace,["workspace_id","descriptor_digest","base_commit","baseline_digest","access"],"workspace_launch");uuid(value.workspace.workspace_id,"workspace_id");
+  if(!hash(value.workspace.descriptor_digest)||!hash(value.workspace.baseline_digest)||!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.workspace.base_commit)||value.workspace.access!=="mcp-files-v1"||value.adapter_contract!=="ai-fleet-adapter/workspace-files-v1")bad();
+ }else if(value.adapter_contract==="ai-fleet-adapter/workspace-files-v1")bad();
  return structuredClone(value);
 }
 /** Only structured supervisor metadata; never raw stdout, stderr, prompts or secrets. */

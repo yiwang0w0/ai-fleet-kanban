@@ -1,3 +1,4 @@
+import {workspaceLaunchDescriptor} from "../core/artifacts/workspace-session.mjs";
 import {readFileSync,statSync} from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -44,7 +45,7 @@ try{
    if(!opts["prompt-file"]||statSync(opts["prompt-file"]).size>131072)throw Error("需要 128 KiB 内的提示文件");
    const dispatch=dispatchStatus(db,opts.dispatch),role=getRole(db,dispatch.role_id);
    if(!role)throw Error("执行角色不存在");
-   const prepared=prepareAdapter({installation:config.installation,role:role.policy,dispatch,codeRoot,workspace:config.workspace,privateDirectory:config.private_directory,
+   const prepared=prepareAdapter({workspaceBinding:role.policy.capabilities.includes("workspace-files")?workspaceLaunchDescriptor(db,opts.dispatch):null,installation:config.installation,role:role.policy,dispatch,codeRoot,workspace:config.workspace,privateDirectory:config.private_directory,
     mcp:{node:config.node,bridge:pinFile(join(codeRoot,"cli/mcp.mjs")),url:config.mcp_url,credentialFile:config.credential_file},prompt:readFileSync(opts["prompt-file"],"utf8")});
    const cancel=new AbortController(),stop=()=>cancel.abort();process.once("SIGINT",stop);process.once("SIGTERM",stop);
    try{result=await executePreparedDispatch(db,{dispatchId:opts.dispatch,sourceGate,prepared,python:config.python,privateDirectory:prepared.plan.privateDirectory,timeoutMs:config.timeout_ms,signal:cancel.signal});}
