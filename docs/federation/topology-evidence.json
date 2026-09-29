@@ -5,7 +5,7 @@
   "base_commit": "cb44e5c4ab4328fc50f17f5947b64c76a1c949a3",
   "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
   "code_sha256": {
-    "core/federation/topology.mjs": "febafb6c0afdfadf655efcac26d16fe8636b0413bdeed239343e3201228d6044",
+    "core/federation/topology.mjs": "d37537436e346ac0cd4ab0258cd7346c263e06f5e5aa0e18af089cac8f0f344f",
     "core/federation/topology-client.mjs": "85aa92077214fdd2d79559398604bc00cbf1a844a1ebaa5418a1d52f8fc3396a",
     "core/topology_guard.js": "e108859f2aa483a8fc109c9b54afbaffb2764a635a47253eedc9c0fb6a1edb2d",
     "core/federation/sync-client.mjs": "e52e11e8c7c0b1dda16958613f03feab50d92d6b78bf6749975b30d0fd3c9bc1",
@@ -13,7 +13,7 @@
     "core/mcp/tools.mjs": "01d5819c66281f2e7e6ab53df09ec41384ee8bf905829cd3ac6006d84fca46c3",
     "core/mcp/policy.mjs": "3a35419634792cb07ec86d3bedaddbb0efd032f2258a828c43cb7961bda14dba",
     "cli/topology.mjs": "f60b9b5ac687fba980be8062d3ccd8903a8ea04001122085907b9e0cb1069273",
-    "tests/topologytest.mjs": "ab0de3683209d8eb92bbbf3b9e86b10a8716f14ffb390f15ad595f2839a8b84a",
+    "tests/topologytest.mjs": "8af17512851bef4598d6b3c6eded2fb7d266a4b633bdcc062a89b84c86cf8779",
     "tests/selftest.mjs": "88aad506b75e251ba5a7b0fd1c4486820ccd0eb9aab7e0c5ffda6d4899b42858",
     "package.json": "000dbf5d1b4db673d5068b4c16c0e692db820324db1ab371915c618ac50b7e76",
     ".github/workflows/ci.yml": "63a6dc893b849f40f33c90e6b189e5acc4c532cfb3f250e1da190a578facc07c"
@@ -29,13 +29,13 @@
       "topology_tests": 34,
       "classic_sections": 10,
       "native_sections": 18,
-      "log": ".data/topology-full-suite.log"
+      "log": ".data/topology-full-suite.log",
+      "tested_implementation_commit": "958affc2c75168f2ad61eda65af748381b20668f"
     },
     "final_targeted": {
-      "passed": 34,
+      "passed": 35,
       "failed": 0,
-      "log": ".data/topology-full-suite.log",
-      "scope": "last suite of the complete regression; no source changes afterward"
+      "log": ".data/topology-cancel-targeted.log"
     },
     "prior_local_attempt": {
       "failed_stage": "selftest mutation probe",
@@ -51,7 +51,11 @@
       "independent process claim versus structural removal race, self-registrar path and explicit database CLI",
       "real backup activation invalidates old identity and prevents reuse of old commitments",
       "metadata edits preserved, duplicate sibling placement refused before publication, pending names reserve commit and cancel paths using exact SQLite semantics",
-      "native dense DAG traversal counts each vertex once; archived descendants retained; equivalent dependency JSON does not mutate running work"
+      "native dense DAG traversal counts each vertex once; archived descendants retained; equivalent dependency JSON does not mutate running work",
+      "native cancellation is trialed before staging commits; closed old parent and archived prerequisite cause atomic refusal instead of an unrecoverable cancellation"
+    ],
+    "changes_after_full_suite": [
+      "Preparation additionally trials restoration of the old structure under a rollback savepoint; closed old ancestors or archived old prerequisites cannot leave an uncancellable staged operation. Final 35 targeted tests pass; exact final full-suite verification is delegated to both CI lanes."
     ]
   },
   "ci": "pending",

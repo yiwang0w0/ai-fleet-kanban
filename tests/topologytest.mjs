@@ -324,3 +324,13 @@ test("SQLite sibling normalization is exact and archived title reservations cann
  assert.throws(()=>f.a.db.prepare("UPDATE tasks SET archived_at=NULL WHERE id=?").run(archived.id),/TOPOLOGY_PENDING/);
  commit(f,op);assert.equal(store.get(f.a.db,a.id).parent_id,root.id);assert.equal(store.get(f.a.db,b.id).parent_id,root.id);
 });
+
+test("preparation refuses a transition whose native cancellation could not restore the old structure",()=>{
+ for(const closed of ["done","archived"]){
+  const f=setup(),parent=card(f.a),child=card(f.a,{parentId:parent.id});init(f);
+  f.a.db.prepare("UPDATE tasks SET "+(closed==="done"?"status='done'":"archived_at='2026-09-01T00:00:00.000Z'")+" WHERE id=?").run(parent.id);
+  const before=state(f.a.db);assert.throws(()=>stage(f,[edit(f,child)]),/closed_parent|已归档/);assert.equal(state(f.a.db),before);
+ }
+ const f=setup(),dependency=card(f.a),task=card(f.a,{blockedBy:[dependency.id]});init(f);store.archive(f.a.db,{id:dependency.id});
+ const before=state(f.a.db);assert.throws(()=>stage(f,[edit(f,task)]),/归档/);assert.equal(state(f.a.db),before);
+});

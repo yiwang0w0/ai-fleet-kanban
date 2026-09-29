@@ -132,8 +132,8 @@ export function prepareTopology(db,{projectId,operationId,expectedRevision,edits
   for(const [uid,finish] of held)db.prepare("INSERT INTO topology_holds VALUES(?,?,?)").run(operationId,map.get(uid).id,finish);
   db.prepare("UPDATE topology_bindings SET phase='pending' WHERE project_id=?").run(projectId);
   apply(db,b,operationId,intersection);
-  // Exercise native constraints before publication, without retaining desired edges or audit writes.
-  db.exec("SAVEPOINT topology_preview");try{apply(db,b,operationId,desired);}finally{db.exec("ROLLBACK TO topology_preview; RELEASE topology_preview");}
+  // Both roll-forward and cancellation must satisfy native constraints before publication.
+  for(const snapshot of [before,desired]){db.exec("SAVEPOINT topology_preview");try{apply(db,b,operationId,snapshot);}finally{db.exec("ROLLBACK TO topology_preview; RELEASE topology_preview");}}
   event(db,b,operationId,"prepared",{before_digest:digest(before),intersection_digest:digest(intersection),desired_digest:digest(desired)});
   return topologyOperation(db,operationId);
  });
