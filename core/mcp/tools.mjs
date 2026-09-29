@@ -56,7 +56,7 @@ function localTask(db,p,taskUid){
  if(p.run&&t.run_id!==p.run_id||p.run&&t.task_uid!==p.run.task_uid)fail("FORBIDDEN","执行身份只能操作自己的运行实例",403);
  return t;
 }
-const TASK_FIELDS=["id","task_uid","owner_node_id","subject","description","acceptance","status","waiting_for","kind","run_id","attempts","max_attempts","aggregate_version","result","created_at","updated_at"];
+const TASK_FIELDS=["id","task_uid","owner_node_id","subject","description","acceptance","status","waiting_for","kind","tree_mode","run_id","attempts","max_attempts","aggregate_version","result","created_at","updated_at"];
 function taskOut(db,t,project){
  const out=Object.fromEntries(TASK_FIELDS.map(k=>[k,t[k]??null]));
  const parent=t.parent_id==null?null:db.prepare("SELECT task_uid FROM broker_task_projects WHERE task_id=? AND project_id=?").get(t.parent_id,project)?.task_uid??null;
@@ -76,7 +76,7 @@ function newTask(db,p,args,split){
  if(split&&store.placeInChain(db,{kind:"task",parentId:parent.id,released:0,description:args.description}).uplifted)fail("CHAIN_LIMIT","当前任务树规则不允许该深度；没有悄悄改挂任务");
  if(parent&&db.prepare("SELECT 1 FROM tasks WHERE parent_id=? AND lower(replace(replace(subject, ' ', ''), '　', ''))=lower(replace(replace(?, ' ', ''), '　', '')) AND archived_at IS NULL").get(parent.id,args.subject.trim()))fail("CONFLICT","该父任务下已经存在同名子任务");
  const id=store.add(db,{subject:args.subject,description:args.description,acceptance:args.acceptance,
-  kind:split?"task":args.kind,parentId:parent?.id??null,released:0,route:"mcp",maxAttempts:p.role.policy.limits.max_task_attempts,
+  kind:split?"task":args.kind,parentId:parent?.id??null,treeMode:split?undefined:"hierarchical",released:0,route:"mcp",maxAttempts:p.role.policy.limits.max_task_attempts,
   actor:"mcp:"+p.principal_id,...(p.run?{parentRunId:p.run_id,parentWorker:p.run.worker}:{})});
  const row=db.prepare("SELECT * FROM tasks WHERE id=?").get(id);
  if(row.parent_id!==(parent?.id??null))fail("CHAIN_LIMIT","当前任务树规则不允许该深度；没有悄悄改挂任务");

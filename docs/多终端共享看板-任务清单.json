@@ -308,7 +308,7 @@
     {
       "id": "S06",
       "title": "跨终端委派、依赖图、取消与验收回传",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "S04",
         "S05"
@@ -1213,7 +1213,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation",
+        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility",
         "pending": [
           "actual executor adapters, full tool set and OS isolation",
           "independent G04 acceptance"
@@ -1223,7 +1223,10 @@
       "implementation_evidence": [
         "docs/federation/mcp.md",
         "docs/federation/mcp-evidence.json",
-        "tests/mcptest.mjs"
+        "tests/mcptest.mjs",
+        "docs/federation/trees.md",
+        "docs/federation/trees-evidence.json",
+        "tests/treetest.mjs"
       ]
     },
     {
@@ -1743,13 +1746,26 @@
       "evidence_required": [
         "cycle-race/registrar-offline 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_prerequisite_passed",
+        "scope": "local bounded task ancestry, atomic subtree placement and independent-process cycle race",
+        "pending": [
+          "cross-node relation registrar and project graph versions",
+          "authenticated confirmation receipts and registrar-offline behavior",
+          "real multi-node partition acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/trees.md",
+        "docs/federation/trees-evidence.json",
+        "tests/treetest.mjs"
+      ]
     },
     {
       "id": "T06.03",
@@ -1828,13 +1844,26 @@
       "evidence_required": [
         "parent-cascade/receipt 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_prerequisite_passed",
+        "scope": "local leaf report/acceptance preserves parent execution gating",
+        "pending": [
+          "cross-node delivery identity, evidence and acceptance receipts",
+          "remote dependency release and stale/late result lifecycle",
+          "independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/trees.md",
+        "docs/federation/trees-evidence.json",
+        "tests/treetest.mjs"
+      ]
     },
     {
       "id": "T06.06",

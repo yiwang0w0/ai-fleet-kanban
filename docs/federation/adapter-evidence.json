@@ -50,7 +50,24 @@
       "atomically revoke finished executor principals with settlement"
     ]
   },
-  "ci": "pending",
+  "ci": {
+    "commit": "2e520e99512d9968d70b296f78ecbab81cb76680",
+    "run_id": 36566532084,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36566532084",
+    "windows": {
+      "job_id": 109399712092,
+      "passed": 1117,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109399712078,
+      "passed": 1113,
+      "failed": 0,
+      "skipped_windows_only_test": 1
+    },
+    "gitleaks": "success",
+    "additional_checks": "passed"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_executor_started": false,
@@ -71,5 +88,6 @@
     "no automatic queue or retry; pre-receipt crashes and journal write failures remain spent unknown outcomes",
     "POSIX process-group limits from execution.md still apply",
     "independent G04, actual multi-computer Tailscale tests and full project acceptance remain pending"
-  ]
+  ],
+  "tested_commit": "2e520e99512d9968d70b296f78ecbab81cb76680"
 }

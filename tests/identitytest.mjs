@@ -74,6 +74,8 @@ test("legacy migration preserves IDs, dependencies, states and preexisting event
   store.migrate(db);
   const first = store.get(db, 12);
   assert.equal(first.parent_id, 7);
+  assert.equal(first.tree_mode,"legacy");
+  assert.equal(store.get(db,7).tree_mode,"legacy");
   assert.deepEqual(first.blocked_by, [7]);
   assert.equal(first.status, "waiting");
   assert.equal(first.created_at, "child-created");

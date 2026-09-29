@@ -1,3 +1,4 @@
+const taskTree = require("./task_tree.js");
 // Pull-based task queue — storage and state machine.
 //
 // Why pull, not push: a push queue's lifetime is the few milliseconds of fan-out,
@@ -231,6 +232,7 @@ const ADDED_COLUMNS = [
   //   claim" (ruling).
   ["prev_line", "TEXT"],
   ["pinned_at", "TEXT"],                      // goal pin time; its children get claim priority
+  ["tree_mode", "TEXT NOT NULL DEFAULT 'legacy' CHECK(tree_mode IN ('legacy','hierarchical'))"],
   ["parent_id", "INTEGER"],                   // the goal (or card) this child belongs to
   ["resolved_by", "TEXT"],        // human / auto / cascade — how the done pile is sorted
   // ── Linked closure (ruling: "one path through means the rest are no longer needed").
@@ -478,6 +480,7 @@ function migrateNodeIdentity(db) {
   }
   db.exec([
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_task_uid ON tasks(task_uid);",
+    "CREATE TRIGGER IF NOT EXISTS task_tree_mode_immutable BEFORE UPDATE OF tree_mode ON tasks WHEN NEW.tree_mode IS NOT OLD.tree_mode BEGIN SELECT RAISE(ABORT,'task tree mode is immutable'); END;",
     "CREATE TRIGGER IF NOT EXISTS task_identity_immutable",
     "BEFORE UPDATE OF task_uid, owner_node_id ON tasks",
     "WHEN NEW.task_uid IS NOT OLD.task_uid OR NEW.owner_node_id IS NOT OLD.owner_node_id",
@@ -715,6 +718,8 @@ function migrateInner(db) {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_lock_inflight
              ON tasks(lock_key) WHERE lock_key IS NOT NULL AND status='in_progress'`);
   db.exec("CREATE INDEX IF NOT EXISTS ix_status_released ON tasks(status, released)");
+  // Structural moves include archived descendants; the active-child unique index is insufficient.
+  db.exec("CREATE INDEX IF NOT EXISTS ix_tasks_parent_all ON tasks(parent_id)");
   // ⭐ The lineage graph's SOURCE OF TRUTH. Append-only: the sole write path is
   //   appendEvent()'s INSERT — events are never corrected and never deleted.
   //   `detail` holds a SNAPSHOT of the moment (line / parent_id / status / kind /
@@ -890,20 +895,12 @@ const WIP_PER_ROOT = (() => {
   return Math.max(1, n);
 })();
 
-/** Walk parent_id to the chain root. ⚠ Depth cutoff 32: measured deepest chain is 7,
- *  32 is anti-cycle insurance (cycles are prevented by placeInChain; on hitting the
- *  ceiling return the current node, don't throw — an unwalkable chain simply counts
- *  under that root at the claim site). */
+/** Structural ancestry has one bounded implementation; invalid chains have no
+ * usable root and cannot be claimed. Read-only callers can still inspect rows. */
 function rootOf(db, id) {
-  let cur = Number(id), hops = 0;
-  while (hops++ < 32) {
-    const r = db.prepare("SELECT parent_id FROM tasks WHERE id=?").get(cur);
-    if (!r || r.parent_id == null) return cur;
-    cur = Number(r.parent_id);
-  }
-  return cur;
+  const chain=taskTree.ancestry(db,id);
+  return chain.valid?Number(chain.root.id):null;
 }
-
 /** ⭐ THE single dependency judgment (dep-judgment consolidation). **Fail-closed.**
  *
  *  ⚠ Before the fix, three call sites each did `try { deps = JSON.parse(...) } catch {}`
@@ -1074,7 +1071,7 @@ function spanClose(db, id) {
 }
 
 /**
- * Chain-depth ruling ("goal → execution card → necessary follow-up, TWO layers max")
+ * Legacy chain-depth ruling ("goal → execution card → necessary follow-up, TWO layers max")
  * — **the single implementation point in the whole repo**.
  *
  * ⚠ Measured: the gate used to exist only at the worker loop's harvest site, seeing
@@ -1087,50 +1084,48 @@ function spanClose(db, id) {
  *   the POST result (with two copies, only one gets fixed, and "the loop blocks
  *   depth 3 but the CLI lets it through" comes back).
  */
-const MAX_CHAIN_DEPTH = 2;          // goal(0) → execution card(1) → follow-up(2). No third layer.
+const MAX_CHAIN_DEPTH = 2; // Legacy worker policy. New MCP trees use the persisted hierarchical profile.
 
 /**
  * Hop count to the chain root, plus the root row. The root itself = 0.
  * ⚠ On hitting the 32-level cutoff, set `exhausted: true` and LET THE CALLER REFUSE —
  *   "could not finish checking" must not turn into "safe" (same ruling as the cycle
  *   guard on update).
- * ⚠ A parent id pointing at a vanished row (ghost parent) is treated as the root:
- *   legacy data can contain it, and throwing here would drag read-only callers down
- *   and freeze the whole board.
+ * Broken ancestry returns a null root and exhausted=true without changing data.
+ * Read-only callers can inspect the row; claim and placement reject that chain.
  */
 function chainDepth(db, id) {
-  const q = db.prepare("SELECT id, kind, parent_id, archived_at FROM tasks WHERE id=?");
-  let cur = q.get(Number(id));
-  if (!cur) return { depth: 0, root: null, exhausted: false };
-  let depth = 0, guard = 0;
-  while (cur.parent_id != null) {
-    if (++guard > 32) return { depth, root: cur, exhausted: true };
-    const p = q.get(Number(cur.parent_id));
-    if (!p) break;
-    cur = p; depth++;
-  }
-  return { depth, root: cur, exhausted: false };
+  const chain=taskTree.ancestry(db,id);
+  return {depth:chain.depth,root:chain.root,exhausted:!chain.valid,reason:chain.reason};
 }
-
 /**
  * Decide where a new card goes. Returns the VALUES TO WRITE
- * ({ parentId, released, description, uplifted }). Judgment and write are separated
+ * ({ parentId, released, description, treeMode, uplifted }). Judgment and write are separated
  * so the same rule can be fired from tests and audits alike.
  */
-function placeInChain(db, { kind, parentId, released, description }) {
+function placeInChain(db, { kind, parentId, released, description, treeMode }) {
+  const parentMode=parentId==null?null:db.prepare("SELECT tree_mode FROM tasks WHERE id=?").get(Number(parentId))?.tree_mode;
+  const mode=treeMode??parentMode??"legacy";
+  if(!taskTree.TREE_MODES.includes(mode)||parentMode&&mode!==parentMode)throw err(ERR.BAD_INPUT,"任务树模式无效或与父任务不一致");
   // Goals are chain roots. Hanging a goal under anything breaks the board-wide
   // premise "root = goal" (family highlight, completion checks and orphan detection
   // all read it).
   if (kind === "goal" && parentId != null)
     throw err(ERR.BAD_INPUT, `目标卡必须是链根 —— 不能把 kind='goal' 挂到 #${parentId} 下面`);
-  if (parentId == null) return { parentId: null, released, description, uplifted: null };
+  if (parentId == null) return { parentId: null, released, description, treeMode:mode, uplifted: null };
 
-  const { depth: pdepth, root, exhausted } = chainDepth(db, parentId);
+  const checked=taskTree.ancestry(db,parentId);
+  const { depth: pdepth, root }=checked,exhausted=!checked.valid;
+  if(mode==="hierarchical"&&checked.closed?.length)throw err(ERR.BAD_INPUT,"已完成或归档的祖先不能继续新增子任务，请先明确重开");
   if (exhausted)
-    throw err(ERR.BAD_INPUT, `#${parentId} 的先祖链超过 32 层,无法判定链深 —— 拒绝(fail-closed)`);
+    throw err(ERR.BAD_INPUT, `#${parentId} 的先祖链无法通过结构检查 (${checked.reason})`);
   const newDepth = pdepth + 1;
+  if(mode==="hierarchical"){
+    if(newDepth>taskTree.HIERARCHICAL_MAX_DEPTH)throw err(ERR.BAD_INPUT,"多层任务树不能超过 "+taskTree.HIERARCHICAL_MAX_DEPTH+" 层");
+    return {parentId,released,description,treeMode:mode,uplifted:null};
+  }
   if (newDepth <= MAX_CHAIN_DEPTH)
-    return { parentId, released, description, uplifted: null };
+    return { parentId, released, description, treeMode:mode, uplifted: null };
 
   // The uplift target is the chain-root goal. If the root is not a goal / is
   // archived, place it rootless (layer 1) — hanging it under an archived card would
@@ -1141,7 +1136,7 @@ function placeInChain(db, { kind, parentId, released, description }) {
     `按裁定『目标→执行卡→必要后续 两层为限』,` +
     (toRoot ? `改挂到链根目标 #${toRoot} 直下` : `改为无父卡(链根)`) + `且**未放行**。`;
   return {
-    parentId: toRoot, released: 0,
+    parentId: toRoot, released: 0, treeMode:mode,
     description: note + "\n\n" + String(description || ""),
     uplifted: { from: Number(parentId), to: toRoot, wouldBeDepth: newDepth },
   };
@@ -1180,7 +1175,7 @@ function addInner(db, {
   subject, description = "", acceptance = "", blockedBy = [],
   route = DEFAULT_ROUTE, line = null, lockKey = null, needsBash = 0,
   released = 1, maxAttempts = 3, evidencePath = null,
-  kind = "task", parentId = null, verifyCmd = null, weight = "standard",
+  kind = "task", parentId = null, treeMode, verifyCmd = null, weight = "standard",
   oneofKey = null, provesParent = false, humanGate = null,
 }) {
   if (!["goal", "task"].includes(kind)) throw err(ERR.BAD_INPUT, "kind 必须是 goal 或 task");
@@ -1207,18 +1202,18 @@ function addInner(db, {
   }
   // Chain depth is ruled HERE. Every creation path (worker loop / CLI / panel / any
   // future automation) goes through add(), so placing the rule here cannot regress
-  // to "plugged one entrance". ⭐ Uplift, not refusal, is the ruling itself — the
-  // discovery is kept, the queue is not hijacked.
-  ({ parentId, released, description } = placeInChain(db, { kind, parentId, released, description }));
+  // to "plugged one entrance". Legacy trees keep the historical uplift rule;
+  // hierarchical trees preserve the requested parent or reject the creation.
+  ({ parentId, released, description, treeMode } = placeInChain(db, { kind, parentId, released, description, treeMode }));
   const vk = assertVerify(verifyCmd);
   const ownerNodeId = localNode(db).node_id;
   const taskUid = ownerNodeId + "/" + crypto.randomUUID();
   const r = db.prepare(
     `INSERT INTO tasks (subject, description, acceptance, blocked_by, created_at, updated_at,
                         route, line, lock_key, needs_bash, released, max_attempts, evidence_path,
-                        kind, parent_id, verify_cmd, weight, oneof_key, proves_parent,
+                        kind, parent_id, tree_mode, verify_cmd, weight, oneof_key, proves_parent,
                         human_gate, human_gate_src, task_uid, owner_node_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(String(subject), String(description), String(acceptance),
         // Dep edges go through the SAME single validator as update (plugging only
         // one entrance is the classic hole — goal decomposition pours model-emitted
@@ -1233,7 +1228,7 @@ function addInner(db, {
         String(route || DEFAULT_ROUTE), line ? String(line) : null, lockKey ? String(lockKey) : null,
         needsBash ? 1 : 0, released ? 1 : 0, assertMaxAttempts(maxAttempts),
         evidencePath ? String(evidencePath) : null,
-        String(kind), parentId == null ? null : Number(parentId), vk,
+        String(kind), parentId == null ? null : Number(parentId), treeMode, vk,
         // Same expression as route (`String(weight)` would let weight:null enter as
         // the string "null", never reaching NOT NULL DEFAULT — same trap shape).
         // Value-set gate is server-side.
@@ -1474,6 +1469,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
                    || a.id - b.id);
 
     const pick = cands.find((t) => {
+      if(!taskTree.claimable(db,t.id))return false;
       if (t.lock_key && heldLocks.has(t.lock_key)) return false;  // lock held -> skip to next candidate
       if (unfinishedKids.has(Number(t.id))) return false;         // parent gate: children unfinished
       if (unreleasedAncestor(db, t.parent_id) != null) return false;  // ⭐ ancestor-release invariant
@@ -1616,6 +1612,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
     //   endpoints 400).
     const no = (why, code = ERR.CONFLICT) => { db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_claim_by_id"); return { ok: false, why, code }; };
     if (!t) return no(`卡 #${id} 不存在`, ERR.NOT_FOUND);
+    if(!taskTree.claimable(db,t.id))return no("任务祖先链损坏、已关闭或超过深度上限",ERR.BAD_INPUT);
     if (t.kind === "goal") return no(`#${id} 是目标,目标不能被认领`);
     if (t.archived_at) return no(`#${id} 已归档`);
     if (t.status !== "not_started") return no(`#${id} 现在是 ${t.status}(持有者 ${t.worker || "-"}),不是未开始`);
@@ -2479,6 +2476,7 @@ function prevLineStamp(oldLine, newLine) {
  *  (state transitions are report/resolve's sole responsibility). */
 function update(db, args) {
   assertLocalIdentityInput(args);
+  if(Object.hasOwn(args,"treeMode")||Object.hasOwn(args,"tree_mode"))throw err(ERR.BAD_INPUT,"任务树模式创建后不可更改");
   db.exec("BEGIN IMMEDIATE");
   try {
     assertExpectedVersion(db,args.id,args.expectedVersion);
@@ -2592,31 +2590,23 @@ function updateInner(db, fields) {
   //   had eliminated. ⇒ typed now, same mapping as add() (missing=NOT_FOUND /
   //   archived=BAD_INPUT).
   if (parentId !== undefined) {
-    if (parentId === null) { sets.push("parent_id=?"); args.push(null); }
-    else {
-      const pid = Number(parentId);
-      if (pid === Number(id)) throw err(ERR.BAD_INPUT, "不能把卡挂到它自己下面");
-      const tgt = db.prepare("SELECT id, archived_at FROM tasks WHERE id=?").get(pid);
-      if (!tgt) throw err(ERR.NOT_FOUND, `父卡 ${pid} 不存在`);
-      // Never hang under an archived card — the whole family drops out of the
-      // default view; the card silently disappears.
-      if (tgt.archived_at) throw err(ERR.BAD_INPUT, `#${pid} 已归档,不能把卡挂到它下面`);
-      // Cycle guard. ⚠ Past 32 levels: NOT "stop searching and allow" but REFUSE
-      //   (fail-closed). "Could not finish checking" is not "safe" (ruling).
-      let cur = pid, g = 0, cycled = false, exhausted = true;
-      while (cur != null) {
-        if (++g > 32) { exhausted = false; break; }
-        const r = db.prepare("SELECT parent_id FROM tasks WHERE id=?").get(cur);
-        if (r && Number(r.parent_id) === Number(id)) { cycled = true; break; }
-        cur = r ? r.parent_id : null;
-      }
-      if (cycled) throw err(ERR.BAD_INPUT, `会形成循环(#${cur} 的先祖里有 #${id}),拒绝`);
-      // The fail-closed refusal is also BAD_INPUT (not 500): nothing of OURS is
-      // broken; the request "point at that parent" just cannot be honored — point at
-      // another parent and it passes ⇒ the ball is in the caller's hands.
-      if (!exhausted) throw err(ERR.BAD_INPUT, `先祖链超过 32 层,无法证明无循环 —— 拒绝(fail-closed)`);
-      sets.push("parent_id=?"); args.push(pid);
+    const pid=parentId===null?null:Number(parentId);
+    if(pid!==null&&(!Number.isSafeInteger(pid)||pid<1))throw err(ERR.BAD_INPUT,"父任务 ID 无效");
+    if(t.kind==="goal"&&pid!==null)throw err(ERR.BAD_INPUT,"目标卡必须保持为树根");
+    if(pid===Number(id))throw err(ERR.BAD_INPUT,"不能把卡挂到它自己下面");
+    if(pid!==null){
+      const target=db.prepare("SELECT archived_at FROM tasks WHERE id=?").get(pid);
+      if(!target)throw err(ERR.NOT_FOUND,"父卡 "+pid+" 不存在");
+      if(target.archived_at)throw err(ERR.BAD_INPUT,"父卡已归档");
     }
+    if(pid!==t.parent_id){
+      const move=taskTree.placement(db,{id:Number(id),parentId:pid});
+      if(!move.valid){
+        const reason=move.reason.includes("depth")?"超过 32 层深度上限":move.reason==="cycle"?"会形成循环":move.reason;
+        throw err(move.reason==="active_subtree"?ERR.CONFLICT:ERR.BAD_INPUT,"无法重新挂接任务子树: "+reason);
+      }
+    }
+    sets.push("parent_id=?");args.push(pid);
   }
   if (!sets.length) return { id: Number(id), changed: 0 };
   // ★ The "columns changed" count is FIXED here. The provenance stamp and updated_at
@@ -2842,6 +2832,7 @@ function row(r) {
     verify_ok: r.verify_ok == null ? null : Number(r.verify_ok) === 1,
     verify_at: r.verify_at || null,
     kind: r.kind || "task", parent_id: r.parent_id == null ? null : Number(r.parent_id),
+    tree_mode: r.tree_mode || "legacy",
     pinned_at: r.pinned_at || null,
     resolved_by: r.resolved_by, auto_review_at: r.auto_review_at,
     decision_package: (() => {
@@ -3008,7 +2999,7 @@ module.exports = {
   legacyDisposition, DISPOSITIONS, confirmDestination,
   // Chain depth: **judgment is these three only**. Counting depth anywhere else is a
   // second implementation the moment it is written.
-  chainDepth, placeInChain, MAX_CHAIN_DEPTH,
+  chainDepth, placeInChain, MAX_CHAIN_DEPTH, HIERARCHICAL_MAX_DEPTH:taskTree.HIERARCHICAL_MAX_DEPTH,
   // Budget calibers: the lifetime-ceiling constant and the one-shot catch-up (tests
   // fire it directly).
   LIFETIME_DISPATCH_CAP, backfillAttemptsBase,

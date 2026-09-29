@@ -241,9 +241,9 @@ test("coordinator and bound worker split only their current parent without depth
  assert.equal(child.parent_uid,root.task_uid);assert.equal(child.released,false);
  assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",{...args(root),subject:"t e s t t a s k"}),{code:"CONFLICT"});
  const follow=callTool(f.db,f.coord.auth,"split_task",args(child)).task;
- const before=count(f,"tasks");
- assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",args(follow)),{code:"CHAIN_LIMIT"});
- assert.equal(count(f,"tasks"),before);
+ const deeper=callTool(f.db,f.coord.auth,"split_task",args(follow)).task;
+ assert.equal(deeper.parent_uid,follow.task_uid);assert.equal(deeper.tree_mode,"hierarchical");
+ assert.equal(store.chainDepth(f.db,deeper.id).depth,3);
  f.db.prepare("UPDATE tasks SET description='edited' WHERE id=?").run(root.id);
  assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",args(root)),{code:"CONFLICT"});
  const w=worker(f),own=callTool(f.db,w.identity.auth,"split_task",args(w.task)).task;
@@ -335,4 +335,29 @@ test("malformed credential files never echo secret fragments through stdio start
  const r=spawnSync(process.execPath,[join(ROOT,"cli/mcp.mjs"),"--url","http://127.0.0.1:1","--credential-file",bad],{windowsHide:true,encoding:"utf8",timeout:10000});
  assert.equal(r.status,1);assert.equal(r.stdout,"");assert.match(r.stderr,/BAD_CREDENTIAL/);
  assert.ok(!r.stderr.includes(f.coord.credential.token.slice(0,16)));
+});
+
+
+test("MCP splitting reaches depth 32, replays once and refuses the next level atomically",()=>{
+ const f=fixture();let parent=create(f,{kind:"goal"});
+ const split=p=>{const a=createArgs();delete a.kind;return {...a,parent_uid:p.task_uid,expected_version:p.aggregate_version};};
+ for(let depth=1;depth<=32;depth++){
+  const args=split(parent),result=callTool(f.db,f.coord.auth,"split_task",args);
+  assert.equal(result.task.parent_uid,parent.task_uid);assert.deepEqual(callTool(f.db,f.coord.auth,"split_task",args),result);
+  parent=result.task;
+ }
+ const before={tasks:count(f,"tasks"),requests:count(f,"broker_requests"),events:count(f,"task_events"),projects:count(f,"broker_task_projects")};
+ assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",split(parent)),{code:"BAD_INPUT"});
+ assert.deepEqual({tasks:count(f,"tasks"),requests:count(f,"broker_requests"),events:count(f,"task_events"),projects:count(f,"broker_task_projects")},before);
+ assert.equal(store.chainDepth(f.db,parent.id).depth,32);assert.equal(count(f,"task_runs"),0);
+});
+test("MCP enrollment keeps a legacy tree and refuses legacy uplift instead of changing its parent",()=>{
+ const f=fixture();let parent;
+ for(let depth=0;depth<=2;depth++){
+  const id=store.add(f.db,{subject:"legacy "+depth,parentId:parent?.id??null,kind:depth?"task":"goal"});
+  parent=store.get(f.db,id);enrollTask(f.db,{id,projectId:"demo",workKind:"implement",capabilities:["code"],expectedVersion:parent.aggregate_version});
+ }
+ const args=createArgs();delete args.kind;const before=count(f,"tasks");
+ assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",{...args,parent_uid:parent.task_uid,expected_version:parent.aggregate_version}),{code:"CHAIN_LIMIT"});
+ assert.equal(count(f,"tasks"),before);assert.equal(store.get(f.db,parent.id).tree_mode,"legacy");
 });
