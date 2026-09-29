@@ -1,4 +1,5 @@
 // Durable task projections. All sequence numbers are scoped by origin epoch + project.
+import {migrateEpochState,assertSourceEpoch,pendingRecovery,bindReplicaLocation,resolveRecoveryMissing} from "./epoch-state.mjs";
 import {createHash,randomUUID} from "node:crypto";
 import {PeerError,uuid,names,keys,version} from "./protocol.mjs";
 import {localIdentity,transaction} from "./peers.mjs";
@@ -25,7 +26,7 @@ export function migrateSync(db){
    "INSERT OR IGNORE INTO federation_sync_schema VALUES(1,1);"
   ].join("\n"));
   const schemaVersion=db.prepare("SELECT version FROM federation_sync_schema").get().version;
-  if(![1,2].includes(schemaVersion))throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
+  if(![1,2,3].includes(schemaVersion))throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
   db.exec([
    "CREATE TABLE IF NOT EXISTS federation_shares(task_id INTEGER PRIMARY KEY,task_uid TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN(0,1)),revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991));",
    "CREATE TABLE IF NOT EXISTS federation_dirty(task_id INTEGER PRIMARY KEY);",
@@ -49,8 +50,9 @@ export function migrateSync(db){
   db.exec("CREATE TABLE IF NOT EXISTS federation_published(project_id TEXT NOT NULL,task_uid TEXT NOT NULL,seq INTEGER NOT NULL,event_json TEXT NOT NULL,PRIMARY KEY(project_id,task_uid));\nCREATE TABLE IF NOT EXISTS federation_retention(project_id TEXT PRIMARY KEY,floor_seq INTEGER NOT NULL DEFAULT 0);\nCREATE TABLE IF NOT EXISTS federation_snapshots(snapshot_id TEXT PRIMARY KEY,project_id TEXT NOT NULL,head_seq INTEGER NOT NULL,manifest_json TEXT NOT NULL,expires_at INTEGER NOT NULL);\nCREATE TABLE IF NOT EXISTS federation_snapshot_items(snapshot_id TEXT NOT NULL,ordinal INTEGER NOT NULL,event_json TEXT NOT NULL,PRIMARY KEY(snapshot_id,ordinal));\nCREATE TABLE IF NOT EXISTS federation_snapshot_offers(peer_node_id TEXT NOT NULL,peer_epoch TEXT NOT NULL,snapshot_id TEXT NOT NULL,PRIMARY KEY(peer_node_id,peer_epoch,snapshot_id));\nCREATE TABLE IF NOT EXISTS federation_snapshot_staging(origin_node_id TEXT NOT NULL,project_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,snapshot_id TEXT NOT NULL UNIQUE,manifest_json TEXT NOT NULL,next_offset INTEGER NOT NULL DEFAULT 0,received_bytes INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(origin_node_id,project_id));\nCREATE TABLE IF NOT EXISTS federation_snapshot_received(snapshot_id TEXT NOT NULL,ordinal INTEGER NOT NULL,task_uid TEXT NOT NULL,event_json TEXT NOT NULL,event_id TEXT NOT NULL,seq INTEGER NOT NULL,PRIMARY KEY(snapshot_id,ordinal),UNIQUE(snapshot_id,task_uid),UNIQUE(snapshot_id,event_id),UNIQUE(snapshot_id,seq));\nCREATE TABLE IF NOT EXISTS federation_snapshot_anchors(origin_node_id TEXT NOT NULL,project_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,seq INTEGER NOT NULL,event_digest TEXT,snapshot_id TEXT NOT NULL,content_digest TEXT NOT NULL,PRIMARY KEY(origin_node_id,project_id));\nCREATE TABLE IF NOT EXISTS federation_retention_events(id INTEGER PRIMARY KEY,project_id TEXT NOT NULL,floor_seq INTEGER NOT NULL,head_seq INTEGER NOT NULL,snapshot_id TEXT NOT NULL,deleted_count INTEGER NOT NULL,lagging_peer_count INTEGER NOT NULL,at TEXT NOT NULL);");
   if(schemaVersion===1){
    db.exec("INSERT OR REPLACE INTO federation_published SELECT o.project_id,json_extract(o.event_json,'$.aggregate_uid'),o.seq,o.event_json FROM federation_outbox o JOIN (SELECT project_id,json_extract(event_json,'$.aggregate_uid') AS uid,MAX(seq) AS seq FROM federation_outbox GROUP BY project_id,uid) latest ON o.project_id=latest.project_id AND o.seq=latest.seq");
-   db.exec("UPDATE federation_sync_schema SET version=2 WHERE singleton=1");
   }
+  migrateEpochState(db);
+  if(schemaVersion<3)db.exec("UPDATE federation_sync_schema SET version=3 WHERE singleton=1");
  });
 }
 /** Explicit opt-in. A stable project prevents accidental cross-project relocation. */
@@ -154,6 +156,7 @@ export function taskUID(uid,owner){
  uuid(uid.slice(37),"task UID");
 }
 export function cursor(db,origin,epoch,projectId){
+ assertSourceEpoch(db,origin,epoch);
  const c=db.prepare("SELECT * FROM federation_cursors WHERE origin_node_id=? AND project_id=?").get(origin,projectId);
  if(c && c.origin_epoch!==epoch)throw conflict("EPOCH_CHANGED","来源 epoch 已变化，需要显式快照恢复");
  return c?.seq??0;
@@ -169,6 +172,8 @@ export function applyBatch(db,{origin,epoch,projectId},batch){
   if(batch.checkpoint!==null){keys(batch.checkpoint,["seq","event_digest"],"checkpoint");version(batch.checkpoint.seq);}
   if(batch.head_seq<batch.after_seq)throw conflict("CURSOR_AHEAD","对端流末尾落后于请求游标，拒绝假报同步完成");
   if(!Array.isArray(batch.events)||batch.events.length>25||Buffer.byteLength(canonical(batch))>MAX_BATCH_BYTES)throw new PeerError("BAD_INPUT","批次超出限额");
+  assertSourceEpoch(db,origin,epoch);
+  if(pendingRecovery(db,{origin,epoch,projectId}))throw conflict("SNAPSHOT_REQUIRED","已批准新代次，但必须先完成项目快照");
   let current=cursor(db,origin,epoch,projectId),expected=batch.after_seq+1,applied=0;
   if(batch.after_seq>current)throw conflict("SEQUENCE_GAP","事件流存在缺口");
   for(const e of batch.events){
@@ -183,6 +188,7 @@ export function applyBatch(db,{origin,epoch,projectId},batch){
    if(prior.length){if(prior.length!==1||prior[0].event_digest!==eventDigest)throw conflict("CONTENT_MISMATCH","相同事件身份出现不同内容");
     if(e.seq>current)throw conflict("SEQUENCE_GAP","本机游标与收件箱不一致");continue;}
    if(e.seq!==current+1)throw conflict("SEQUENCE_GAP","不能跳过未确认事件");
+   bindReplicaLocation(db,e.aggregate_uid,origin,projectId);
    const prev=db.prepare("SELECT * FROM federation_replicas WHERE task_uid=?").get(e.aggregate_uid);
    if(prev&&(prev.owner_node_id!==origin||prev.origin_epoch!==epoch||prev.project_id!==projectId||e.aggregate_version<=prev.projection_version))throw conflict("VERSION_REGRESSION","副本身份或版本回退");
    let task=null;
@@ -194,6 +200,7 @@ export function applyBatch(db,{origin,epoch,projectId},batch){
    db.prepare("INSERT INTO federation_replicas VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(task_uid) DO UPDATE SET projection_version=excluded.projection_version,task_version=excluded.task_version,withdrawn=excluded.withdrawn,task_json=excluded.task_json,last_seq=excluded.last_seq,received_at=excluded.received_at")
     .run(e.aggregate_uid,origin,epoch,projectId,e.aggregate_version,task?.aggregate_version??prev?.task_version??0,Number(!task),task?canonical(task):null,e.seq,now);
    db.prepare("INSERT INTO federation_inbox VALUES(?,?,?,?,?,?)").run(e.event_id,origin,epoch,projectId,e.seq,eventDigest);
+   resolveRecoveryMissing(db,e.aggregate_uid);
    current=e.seq;applied++;
   }
   const last=current?receivedCheckpoint(db,origin,epoch,projectId,current):null;
@@ -214,6 +221,7 @@ export function receivedCheckpoint(db,origin,epoch,projectId,seq){
 export function recordSource(db,{node_id,display_name,sync_epoch}){
  return atomic(db,()=>{
  uuid(node_id,"node_id");uuid(sync_epoch,"sync_epoch");
+ assertSourceEpoch(db,node_id,sync_epoch);
  if(typeof display_name!=="string"||!display_name.trim()||display_name.length>80||/[\u0000-\u001f\u007f]/.test(display_name))throw new PeerError("BAD_INPUT","来源终端名无效");
  const prior=db.prepare("SELECT origin_epoch FROM federation_sources WHERE origin_node_id=?").get(node_id);
  if(prior&&prior.origin_epoch!==sync_epoch)throw conflict("EPOCH_CHANGED","已登记来源 epoch 改变，需要恢复流程");
@@ -222,13 +230,23 @@ export function recordSource(db,{node_id,display_name,sync_epoch}){
 }
 export function listReplicas(db,{projectId}={}){
  if(projectId)project(projectId);
- return db.prepare("SELECT * FROM federation_replicas WHERE withdrawn=0"+(projectId?" AND project_id=?":"")+" ORDER BY owner_node_id,task_uid").all(...(projectId?[projectId]:[])).map(r=>({...JSON.parse(r.task_json),project_id:r.project_id,
-  source_epoch:r.origin_epoch,source_seq:r.last_seq,received_at:r.received_at,read_only:true,
-  owner_name:db.prepare("SELECT display_name FROM federation_sources WHERE origin_node_id=?").get(r.owner_node_id)?.display_name??r.owner_node_id,
-  last_sync_at:db.prepare("SELECT updated_at FROM federation_cursors WHERE origin_node_id=? AND project_id=?").get(r.owner_node_id,r.project_id)?.updated_at??null}));
+ const params=projectId?[projectId]:[];
+ const rows=db.prepare("SELECT * FROM federation_replicas WHERE withdrawn=0"+(projectId?" AND project_id=?":"")+" ORDER BY owner_node_id,task_uid").all(...params);
+ const missing=db.prepare("SELECT * FROM federation_recovery_missing WHERE resolved_at IS NULL"+(projectId?" AND project_id=?":"")).all(...params);
+ return [...rows.map(r=>({r,missing:false})),...missing.map(x=>({r:JSON.parse(x.replica_json),missing:true}))].map(({r,missing})=>{
+  const state=db.prepare("SELECT * FROM federation_epoch_projects WHERE origin_node_id=? AND project_id=?").get(r.owner_node_id,r.project_id);
+  return {...JSON.parse(r.task_json),project_id:r.project_id,source_epoch:r.origin_epoch,source_seq:r.last_seq,received_at:r.received_at,read_only:true,
+   recovery_state:missing?"missing_review":state?.state==="pending"?"pending_snapshot":null,
+   accepted_source_epoch:db.prepare("SELECT origin_epoch FROM federation_sources WHERE origin_node_id=?").get(r.owner_node_id)?.origin_epoch??r.origin_epoch,
+   owner_name:db.prepare("SELECT display_name FROM federation_sources WHERE origin_node_id=?").get(r.owner_node_id)?.display_name??r.owner_node_id,
+   last_sync_at:db.prepare("SELECT updated_at FROM federation_cursors WHERE origin_node_id=? AND project_id=?").get(r.owner_node_id,r.project_id)?.updated_at??null};
+ });
 }
 export function syncStatus(db){
- return {pending:db.prepare("SELECT s.project_id,count(*) AS tasks FROM federation_dirty d JOIN federation_shares s ON s.task_id=d.task_id GROUP BY s.project_id").all(),
+ return {epoch_projects:db.prepare("SELECT * FROM federation_epoch_projects").all(),
+  retired_epochs:db.prepare("SELECT * FROM federation_retired_epochs").all(),
+  recovery_missing:db.prepare("SELECT task_uid,owner_node_id,origin_epoch,project_id,acceptance_id,resolved_at FROM federation_recovery_missing").all(),
+  pending:db.prepare("SELECT s.project_id,count(*) AS tasks FROM federation_dirty d JOIN federation_shares s ON s.task_id=d.task_id GROUP BY s.project_id").all(),
   deliveries:db.prepare("SELECT * FROM federation_deliveries").all(),cursors:db.prepare("SELECT * FROM federation_cursors").all(),
   sources:db.prepare("SELECT * FROM federation_sources").all(),
   attempts:db.prepare("SELECT 1 FROM sqlite_master WHERE name='federation_sync_attempts'").get()?db.prepare("SELECT * FROM federation_sync_attempts").all():[],

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Fleet authenticated source recovery marker v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "node_id",
+    "recovery_id",
+    "retired_epoch",
+    "backup_epoch",
+    "new_epoch",
+    "activated_at",
+    "receipt_digest"
+  ],
+  "properties": {
+    "format": {
+      "const": "ai-fleet-source-recovery/v1"
+    },
+    "node_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "recovery_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "retired_epoch": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "backup_epoch": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "new_epoch": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "activated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "receipt_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "description": "Authenticated hello.extensions.source_recovery. Runtime also pins node/new epoch to the credential and retired epoch to the reviewed prior source; this marker is not physical retirement proof."
+}

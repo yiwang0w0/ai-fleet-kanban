@@ -1,0 +1,65 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-09-receiver-epoch-acceptance",
+  "date": "2026-09-29",
+  "base_commit": "14b7427a4646d2a5db411874b77b5c94b3e8e845",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/epoch-state.mjs": "f4b54d4d5bcfd6f277f4ace6d4a5c5a727b6575e93732fe07c551b7991931fe4",
+    "core/federation/epoch-recovery.mjs": "dcb66b6789df690e12a6ad22ff6f2898570434a5d04bb4450267fde79d96b311",
+    "core/federation/peers.mjs": "a43b8da78f51ab0ab7e22b7747efb27b079b0eafb07a493ab4344c94c8bc8fa2",
+    "core/federation/sync-store.mjs": "ddc617c7de9a28e728b92d28e802e7cffc8701c6337fba84fcad745b1a604b28",
+    "core/federation/sync-client.mjs": "f5313978f658c68da57ce6b55ae469170229284f11585c79e83b0aba870cc70e",
+    "core/federation/snapshots.mjs": "c1698c870dfb04a84003a9c6ce099fe922729c10405e49ffc39ed71705963164",
+    "core/federation/gateway.mjs": "ba5b674b473c2240354b389e2ee213b5d7bf4c0825259cbc938ffea2f14085df",
+    "core/federation/protocol.mjs": "2ab190159b965b7ff42db3270e61b05573639597f550e989bf4f0fbb38d6e5a3",
+    "cli/source-recovery.mjs": "a2a09d036cb7a390eb29661b37320381019db737c125a08103d5b2c92ab592ce",
+    "tests/epochrecoverytest.mjs": "d0bca66ec30a5d33dc71950d1ec8a4ad639a75f5b4d550723fecb4002062d139",
+    "tests/snapshottest.mjs": "4d40f2638241f2b2d4aab6f51f2a56e14afbbb298b272b3ecfe70bd3aa0b95f8",
+    "package.json": "383666b0af0f3bd791b5d22af1411096bd72ab94794067bfa9fe2af83531d961",
+    ".github/workflows/ci.yml": "3a6818cea6e2f0144e5395f7e68002c0f1244187304fc050495a762e98cb084b"
+  },
+  "local_validation": {
+    "command": "npm test",
+    "result": "passed",
+    "main_suite_passed": 1000,
+    "failed": 0,
+    "skipped": 0,
+    "receiver_recovery_tests": 18,
+    "snapshot_tests": 20,
+    "coverage": [
+      "authenticated source marker, reviewable plan with state/path/credential bindings and explicit digest",
+      "new credential alone does not authorize epoch transition; old epoch refused before network I/O",
+      "61-card staging keeps previous visible results; atomic cutover retains regressed and missing evidence",
+      "cross-process abrupt exit before commit and SQL failure rollback, then resumable install",
+      "per-project cutover, narrower credentials and superseding unfinished recovery",
+      "credential revocation before acceptance and during download; reverse old credential revoked and cannot be re-granted",
+      "lost post-install ACK; missing task reappearance; empty snapshot; immutable task ownership/project; event receipt reuse rejection",
+      "independent CLI prepare/accept/history against an actual local HTTP source"
+    ],
+    "fixture_correction": "moved async default parameter into function body before first test execution"
+  },
+  "ci": "pending",
+  "sync_schema_version": 3,
+  "real_operations": {
+    "deployment_changed": false,
+    "real_peer_epoch_accepted": false,
+    "real_node_retired": false,
+    "real_restore_activated": false,
+    "real_tailscale_cutover": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "local fixtures do not prove physical unique writer or real Tailscale disaster RPO/RTO",
+    "missing results are retained for review; no automatic owner-side reconstruction or merge of old artifacts",
+    "current source marker must connect the receiver accepted epoch directly; missing multi-recovery lineage refuses automatically",
+    "credential authentication is point-in-time, not a distributed atomic lock; every later request reauthenticates",
+    "historical event IDs never recorded by older clients cannot be reconstructed; available old receipts remain",
+    "no full audit/files/remote dependency graph replication, final global UI or real-model acceptance yet"
+  ]
+}

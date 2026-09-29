@@ -56,6 +56,10 @@ export function openPeerDatabase(dbPath) {
     return db;
   } catch (e) { db.close(); throw e; }
 }
+function rejectRetiredPeer(db,node,epoch) {
+  if(db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'federation_retired_epochs\'").get() && db.prepare("SELECT 1 FROM federation_retired_epochs WHERE origin_node_id=? AND origin_epoch=?").get(node,epoch))
+    throw new PeerError("RETIRED_EPOCH","对端代次已退役，不能重新授权或访问节点",403);
+}
 function publicPeer(p) {
   return {peer_node_id:p.peer_node_id,peer_epoch:p.peer_epoch,key_id:p.key_id,
     credential_version:p.credential_version,status:p.status,
@@ -87,6 +91,7 @@ export function issueCredential(db, {peerNodeId, peerEpoch, scopes, projects, ex
   try {
     return transaction(db, () => {
       const local = localIdentity(db);
+      rejectRetiredPeer(db,peerNodeId,peerEpoch);
       if (peerNodeId === local.node_id) throw new PeerError("IDENTITY_CONFLICT", "不能登记本机为对端；检查克隆身份", 409);
       const previous = db.prepare("SELECT * FROM federation_peers WHERE peer_node_id=?").get(peerNodeId);
       checkRevision(previous, expectedVersion);
@@ -134,6 +139,7 @@ export function authenticate(db, authorization, scope) {
   const expected = p?.status === "active" && /^[0-9a-f]{64}$/.test(p.secret_hash) ? Buffer.from(p.secret_hash,"hex") : Buffer.alloc(32);
   const equal = timingSafeEqual(hash(token),expected);
   if (!m || !p || p.status !== "active" || !equal) throw new PeerError("UNAUTHENTICATED","需要有效的独立对端凭据",401);
+  rejectRetiredPeer(db,p.peer_node_id,p.peer_epoch);
   const peer = publicPeer(p);
   if (scope && !peer.scopes.includes(scope)) throw new PeerError("FORBIDDEN","对端凭据不包含所需权限",403);
   return peer;

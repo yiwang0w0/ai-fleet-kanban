@@ -1,4 +1,5 @@
 import http from "node:http";
+import {sourceRecoveryMarker} from "./epoch-state.mjs";
 import {startSnapshot,snapshotPage} from "./snapshots.mjs";
 import {migrateSync,exportBatch,acknowledge} from "./sync-store.mjs";
 import { PeerError, negotiateHello, keys } from "./protocol.mjs";
@@ -50,7 +51,9 @@ function createPeerServer(db) {
         const hello = transaction(db,()=>{
           // Upload may span credential rotation/revocation. Recheck inside the write lock.
           const peer = authenticate(db,req.headers.authorization,"peer:handshake");
-          return negotiateHello(body,peer,localIdentity(db));
+          const result=negotiateHello(body,peer,localIdentity(db));
+          const marker=sourceRecoveryMarker(db);if(marker)result.extensions.source_recovery=marker;
+          return result;
         });
         return send(res,200,hello);
       }

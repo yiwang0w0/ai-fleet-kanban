@@ -2,7 +2,7 @@
 
 本批提供源端恢复工具：检查隔离副本、生成可核对计划、停用原数据库写入身份，以及在明确的退役声明下轮换恢复副本 epoch。激活不启动服务、执行器或自动放行任务。
 
-对端接受新 epoch 的登记与新快照切换属于下一批。当前对端遇到 epoch 变化仍拒绝同步，不能通过手工清游标绕过。真实设备唯一写者、旧进程停止和跨机恢复验收也尚未完成。
+对端接纳新 epoch 的显式计划与项目快照切换见 source-recovery.md。普通同步仍拒绝未经接纳的 epoch 变化。真实设备唯一写者、旧进程停止和跨机恢复验收尚未完成。
 
 ## 先明确两种证据
 
@@ -77,7 +77,7 @@ activate 再次检查证据与回执，在写事务内重新计算状态摘要�
 
 任一步异常或提交前进程退出都会回滚；恢复副本保持隔离。成功后 services_started=false、tasks_released=0。人工决定后续重新执行时仍须通过现有状态、版本、无进展及预算规则，恢复命令不会静默使用 force。
 
-旧 peer 凭据不能继续用，旧结果即使来自同名 worker 也不能写入新 run。双向通信需重新签发各方向凭据。对端的新 epoch 接受流程尚待接入，当前批次不能完成跨端重新入网。回执的 peer_reauthorization_required 与 peer_epoch_acceptance_required 均为 true。
+旧 peer 凭据不能继续用，旧结果即使来自同名 worker 也不能写入新 run。双向通信需重新签发各方向凭据。对端需按 source-recovery.md 完成新 epoch 的显式接纳与授权快照切换。回执的 peer_reauthorization_required 与 peer_epoch_acceptance_required 均为 true。
 
 ## 验证与运维边界
 

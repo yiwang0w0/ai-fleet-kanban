@@ -66,3 +66,5 @@ node cli/sync.mjs prune --db <数据库绝对路径> --project demo --through-se
 status 增加源端快照清单摘要、接收暂存进度和保留边界。副本的 last_sync_at 仍表示最后完成接收的时间；部分下载不能被展示为全量同步完成。synced/pending/error 语义见 sync.md；结果中的 snapshot_pages 是本轮下载页数，rebuilt 是本轮安装的投影记录数，applied 是普通增量事件数。
 
 本批 20 项测试覆盖迁移原子性、并发写入后的增量衔接、分页重复/乱序/篡改、最终摘要与游标、真实子进程退出、项目/凭据拒绝、清理回滚、HTTP 断点续传、过期重启、丢 ACK 以及独立 prune CLI。证据见 snapshots-evidence.json。本机与 CI 测试不替代真实 Tailscale 多机、恢复激活和完整 G05 验收。
+
+接收端跨恢复代次的显式计划、逐项目安装与旧结果保留见 source-recovery.md；同步存储当前为版本3，旧版进程必须停止后升级。

@@ -40,7 +40,15 @@
     ],
     "identity_tests": 13
   },
-  "ci": "pending for repaired commit",
+  "ci": {
+    "run_id": 36548686097,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36548686097",
+    "conclusion": "success",
+    "windows_main_passed": 982,
+    "linux_main_passed": 979,
+    "extra_checks": "passed",
+    "gitleaks": "passed"
+  },
   "real_operations": {
     "deployment_changed": false,
     "real_node_retired": false,
@@ -70,5 +78,6 @@
     "gitleaks": "success",
     "windows": "failed in simultaneous initial database open: PRAGMA journal_mode=WAL returned SQLITE_BUSY; later suites skipped",
     "repair": "retry only WAL initialization within five seconds for numeric SQLITE_BUSY; close failed connections; three added regression tests"
-  }
+  },
+  "tested_commit": "14b7427a4646d2a5db411874b77b5c94b3e8e845"
 }

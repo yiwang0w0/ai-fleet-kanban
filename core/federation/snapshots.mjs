@@ -1,8 +1,9 @@
 // Authorized, frozen snapshots. Only a complete verified staging set can replace visible replicas.
+import {assertSourceEpoch,replicationCursor,pendingRecovery,archiveRecoveryProject,bindReplicaLocation,resolveRecoveryMissing} from "./epoch-state.mjs";
 import {randomUUID} from "node:crypto";
 import {PeerError,uuid,names,keys,version} from "./protocol.mjs";
 import {localIdentity} from "./peers.mjs";
-import {atomic,integer,allowed,canonical,digest,validateTask,taskUID,cursor,receivedCheckpoint,MAX_EVENT_BYTES,MAX_BATCH_BYTES} from "./sync-store.mjs";
+import {atomic,integer,allowed,canonical,digest,validateTask,taskUID,receivedCheckpoint,MAX_EVENT_BYTES,MAX_BATCH_BYTES} from "./sync-store.mjs";
 
 export const MAX_SNAPSHOT_RECORDS=10000,MAX_SNAPSHOT_BYTES=32*1024*1024,SNAPSHOT_TTL_MS=15*60*1000;
 const fail=(code,message,status=409)=>{throw new PeerError(code,message,status);};
@@ -102,7 +103,7 @@ export function beginSnapshot(db,source,manifest){
  validateManifest(manifest,source);
  return atomic(db,()=>{
   if(localIdentity(db).node_id===source.origin)fail("OWNER_MISMATCH","远端快照不能覆盖本机");
-  const current=cursor(db,source.origin,source.epoch,source.projectId);
+  const current=replicationCursor(db,source.origin,source.epoch,source.projectId);
   const known=db.prepare("SELECT origin_epoch FROM federation_sources WHERE origin_node_id=?").get(source.origin);
   if(known&&known.origin_epoch!==source.epoch)fail("EPOCH_CHANGED","来源恢复需要显式重新绑定");
   if(manifest.head_seq<current)fail("VERSION_REGRESSION","快照游标落后于本机已接收状态");
@@ -119,34 +120,40 @@ export function beginSnapshot(db,source,manifest){
 function installSnapshot(db,m,events){
  const boundary=events.find(e=>e.seq===m.head_seq);
  if(m.head_seq&&boundary?.event_digest!==m.checkpoint.event_digest)fail("CONTENT_MISMATCH","快照必须包含与末尾摘要一致的最终事件");
- const current=cursor(db,m.origin_node_id,m.origin_epoch,m.project_id);
+ const current=replicationCursor(db,m.origin_node_id,m.origin_epoch,m.project_id);
  if(current>m.head_seq)fail("VERSION_REGRESSION","下载期间副本已前进，拒绝旧快照");
  const priorAnchor=receivedCheckpoint(db,m.origin_node_id,m.origin_epoch,m.project_id,m.head_seq);
  if(priorAnchor&&priorAnchor.event_digest!==m.checkpoint?.event_digest)fail("CONTENT_MISMATCH","相同游标的快照摘要冲突");
- const existing=db.prepare("SELECT * FROM federation_replicas WHERE owner_node_id=? AND project_id=?").all(m.origin_node_id,m.project_id),byId=new Map(events.map(e=>[e.aggregate_uid,e]));
+ const source={origin:m.origin_node_id,epoch:m.origin_epoch,projectId:m.project_id};
+ const recovering=pendingRecovery(db,source);
+ for(const e of events)bindReplicaLocation(db,e.aggregate_uid,m.origin_node_id,m.project_id);
+ const existing=recovering?[]:db.prepare("SELECT * FROM federation_replicas WHERE owner_node_id=? AND project_id=?").all(m.origin_node_id,m.project_id),byId=new Map(events.map(e=>[e.aggregate_uid,e]));
  for(const prev of existing){
   const e=byId.get(prev.task_uid);
   if(!e||prev.origin_epoch!==m.origin_epoch||e.aggregate_version<prev.projection_version||
     (e.kind==="task.snapshot"&&e.payload.task.aggregate_version<prev.task_version))fail("VERSION_REGRESSION","快照缺少已接收任务或回退任务版本");
   if(e.aggregate_version===prev.projection_version&&((e.kind==="task.withdrawn")!==Boolean(prev.withdrawn)||e.kind==="task.snapshot"&&canonical(e.payload.task)!==prev.task_json))fail("CONTENT_MISMATCH","同一发布版本的快照内容不同");
  }
+ archiveRecoveryProject(db,source,events);
  const now=new Date().toISOString(),insert=db.prepare("INSERT INTO federation_replicas VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(task_uid) DO UPDATE SET projection_version=excluded.projection_version,task_version=excluded.task_version,withdrawn=excluded.withdrawn,task_json=excluded.task_json,last_seq=excluded.last_seq,received_at=excluded.received_at");
  for(const e of events){
   const seen=db.prepare("SELECT event_digest FROM federation_inbox WHERE event_id=? OR (origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=?)").all(e.event_id,m.origin_node_id,m.origin_epoch,m.project_id,e.seq);
   if(seen.some(r=>r.event_digest!==e.event_digest))fail("CONTENT_MISMATCH","快照与已经接收的事件身份冲突");
   const prev=db.prepare("SELECT * FROM federation_replicas WHERE task_uid=?").get(e.aggregate_uid),t=e.payload.task??null;
   if(prev&&(prev.owner_node_id!==m.origin_node_id||prev.origin_epoch!==m.origin_epoch||prev.project_id!==m.project_id))fail("OWNER_MISMATCH","快照任务与其他来源冲突");
+  db.prepare("INSERT OR IGNORE INTO federation_inbox VALUES(?,?,?,?,?,?)").run(e.event_id,m.origin_node_id,m.origin_epoch,m.project_id,e.seq,e.event_digest);
+  resolveRecoveryMissing(db,e.aggregate_uid);
   insert.run(e.aggregate_uid,m.origin_node_id,m.origin_epoch,m.project_id,e.aggregate_version,t?.aggregate_version??prev?.task_version??0,Number(!t),t?canonical(t):null,e.seq,now);
  }
- db.prepare("INSERT INTO federation_snapshot_anchors VALUES(?,?,?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET seq=excluded.seq,event_digest=excluded.event_digest,snapshot_id=excluded.snapshot_id,content_digest=excluded.content_digest")
+ db.prepare("INSERT INTO federation_snapshot_anchors VALUES(?,?,?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET origin_epoch=excluded.origin_epoch,seq=excluded.seq,event_digest=excluded.event_digest,snapshot_id=excluded.snapshot_id,content_digest=excluded.content_digest")
   .run(m.origin_node_id,m.project_id,m.origin_epoch,m.head_seq,m.checkpoint?.event_digest??null,m.snapshot_id,m.content_digest);
- db.prepare("INSERT INTO federation_cursors VALUES(?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET seq=excluded.seq,updated_at=excluded.updated_at").run(m.origin_node_id,m.project_id,m.origin_epoch,m.head_seq,now);
+ db.prepare("INSERT INTO federation_cursors VALUES(?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET origin_epoch=excluded.origin_epoch,seq=excluded.seq,updated_at=excluded.updated_at").run(m.origin_node_id,m.project_id,m.origin_epoch,m.head_seq,now);
  discardSnapshotStage(db,{origin:m.origin_node_id,projectId:m.project_id});
  return {installed:true,records:events.length,cursor:m.head_seq,checkpoint:m.checkpoint};
 }
 export function receiveSnapshotPage(db,source,page){
  try{return atomic(db,()=>{
-  localIdentity(db);
+  localIdentity(db);assertSourceEpoch(db,source.origin,source.epoch);
   const staged=snapshotStage(db,source);if(!staged)fail("SNAPSHOT_MISSING","没有待下载快照");
   const m=staged.manifest;validateManifest(m,source);
   exact(page,["snapshot_id","offset","next_offset","done","events","page_digest"],"page");

@@ -1552,10 +1552,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "frozen snapshot rebuild plus reviewed source recovery: retirement task-write fencing, new epoch, credential/run invalidation and guarded activation",
+        "scope": "reviewed source activation and receiver epoch acceptance, atomic per-project snapshot cutover, prior/missing result retention and old-epoch credential fencing",
         "pending": [
-          "receiver acceptance of changed source epochs while preserving prior/missing replicas",
-          "real single-writer retirement, network reauthorization and multi-node disaster acceptance"
+          "real single-writer retirement, Tailscale reauthorization, multi-node disaster RPO/RTO and independent acceptance",
+          "owner-side reconciliation of preserved missing task results and final global UI"
         ]
       },
       "acceptance_receipt": null,
@@ -1565,7 +1565,10 @@
         "tests/snapshottest.mjs",
         "docs/federation/recovery.md",
         "docs/federation/recovery-evidence.json",
-        "tests/recoverytest.mjs"
+        "tests/recoverytest.mjs",
+        "docs/federation/source-recovery.md",
+        "docs/federation/source-recovery-evidence.json",
+        "tests/epochrecoverytest.mjs"
       ]
     },
     {

@@ -57,7 +57,7 @@ test("v1 migration rebuilds published state from the latest immutable event and 
  f.a.db.exec("DROP TABLE federation_published; UPDATE federation_sync_schema SET version=1");
  migrateSync(f.a.db);migrateSync(f.a.db);
  assert.equal(count(f.a.db,"federation_published"),1);assert.equal(start(f).head_seq,2);
- assert.equal(f.a.db.prepare("SELECT version FROM federation_sync_schema").get().version,2);
+ assert.equal(f.a.db.prepare("SELECT version FROM federation_sync_schema").get().version,3);
  assert.equal(install(f).records,1);assert.equal(listReplicas(f.b.db)[0].description,"newer");
 });
 

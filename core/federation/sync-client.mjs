@@ -1,8 +1,9 @@
+import {replicationCursor,pendingRecovery} from "./epoch-state.mjs";
 import {readFileSync,statSync} from "node:fs";
 import {beginSnapshot,snapshotStage,receiveSnapshotPage,discardSnapshotStage} from "./snapshots.mjs";
 import {PeerError,uuid,names,SCOPES} from "./protocol.mjs";
 import {localIdentity} from "./peers.mjs";
-import {migrateSync,cursor,applyBatch,recordSource,MAX_BATCH_BYTES} from "./sync-store.mjs";
+import {migrateSync,applyBatch,recordSource,MAX_BATCH_BYTES} from "./sync-store.mjs";
 
 export function endpoint(value){
  let url;try{url=new URL(value);}catch{throw new PeerError("BAD_ENDPOINT","同步地址无效");}
@@ -20,13 +21,14 @@ export function loadCredential(file,local,projectId){
    typeof c.token!=="string"||!new RegExp("^"+c.key_id+"\\.[A-Za-z0-9_-]{43}$").test(c.token))
   throw new PeerError("BAD_CREDENTIAL","凭据格式无效");
  names(c.scopes,"scopes",SCOPES,1);names(c.projects,"projects",null,1);
+ projectId??=c.projects[0];
  if(c.peer_node_id!==local.node_id||c.peer_epoch!==local.sync_epoch||c.server_node_id===local.node_id)
   throw new PeerError("IDENTITY_MISMATCH","凭据未绑定本机身份与 epoch",403);
  if(!c.projects.includes(projectId)||["peer:handshake","sync:pull","sync:ack"].some(s=>!c.scopes.includes(s)))
   throw new PeerError("FORBIDDEN","凭据没有该项目的拉取与确认权限",403);
  return c;
 }
-async function request(base,path,c,body,fetchImpl,signal){
+export async function request(base,path,c,body,fetchImpl,signal){
  const r=await fetchImpl(base+path,{method:"POST",redirect:"error",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),
   headers:{Authorization:"Bearer "+c.token,"Content-Type":"application/json"},body:JSON.stringify(body)});
  const reader=r.body?.getReader();if(!reader)throw new PeerError("BAD_RESPONSE","对端响应为空");
@@ -54,7 +56,7 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
  let applied=0,batches=0,more=false,snapshotPages=0,rebuilt=0;
  try{
   // Check stored epoch before sending a credential or requesting a reset.
-  cursor(db,c.server_node_id,c.server_epoch,projectId);
+  replicationCursor(db,c.server_node_id,c.server_epoch,projectId);
   const hello=await request(base,"/peer/v1/hello",c,{node_id:local.node_id,sync_epoch:local.sync_epoch,
    protocol:{min:1,max:1},required_capabilities:["task-projection-sync-v1"],required_extensions:[],extensions:{}},fetchImpl,signal);
   if(hello.protocol_version!==1||hello.node?.node_id!==c.server_node_id||hello.node?.sync_epoch!==c.server_epoch||
@@ -72,16 +74,16 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
   const downloadSnapshot=async()=>{
    if(!canSnapshot)throw new PeerError("REQUIRED_FEATURE_UNSUPPORTED","对端未提供快照恢复能力");
    let staged=snapshotStage(db,source);
-   if(staged&&cursor(db,source.origin,source.epoch,projectId)>staged.manifest.head_seq){discardSnapshotStage(db,source);return true;}
+   if(staged&&replicationCursor(db,source.origin,source.epoch,projectId)>staged.manifest.head_seq){discardSnapshotStage(db,source);return true;}
    if(!staged){
-    const manifest=await request(base,"/peer/v1/snapshot/start",c,{project_id:projectId,min_seq:cursor(db,source.origin,source.epoch,projectId)},fetchImpl,signal);
+    const manifest=await request(base,"/peer/v1/snapshot/start",c,{project_id:projectId,min_seq:replicationCursor(db,source.origin,source.epoch,projectId)},fetchImpl,signal);
     staged=beginSnapshot(db,source,manifest);
    }
    while(snapshotPages<maxBatches){
     let page;try{page=await request(base,"/peer/v1/snapshot/page",c,{project_id:projectId,snapshot_id:staged.manifest.snapshot_id,offset:staged.next_offset},fetchImpl,signal);}
     catch(e){if(e.code==="SNAPSHOT_EXPIRED")discardSnapshotStage(db,source);throw e;}
     let result;try{result=receiveSnapshotPage(db,source,page);}catch(e){
-     if(e.code==="VERSION_REGRESSION"&&cursor(db,source.origin,source.epoch,projectId)>staged.manifest.head_seq){discardSnapshotStage(db,source);return true;}throw e;
+     if(e.code==="VERSION_REGRESSION"&&replicationCursor(db,source.origin,source.epoch,projectId)>staged.manifest.head_seq){discardSnapshotStage(db,source);return true;}throw e;
     }
     snapshotPages++;
     if(result.installed){rebuilt+=result.records;await ack(result.checkpoint);return true;}
@@ -91,10 +93,10 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
   };
   const hasCursor=!!db.prepare("SELECT 1 FROM federation_cursors WHERE origin_node_id=? AND project_id=?").get(source.origin,projectId);
   let ready=true;
-  if(snapshotStage(db,source)||!hasCursor&&canSnapshot)ready=await downloadSnapshot();
+  if(pendingRecovery(db,source)||snapshotStage(db,source)||!hasCursor&&canSnapshot)ready=await downloadSnapshot();
   if(!ready)more=true;
   while(ready&&batches<maxBatches){
-   const after=cursor(db,source.origin,source.epoch,projectId);
+   const after=replicationCursor(db,source.origin,source.epoch,projectId);
    let batch;try{batch=await request(base,"/peer/v1/pull",c,{project_id:projectId,after_seq:after,limit:25},fetchImpl,signal);}
    catch(e){
     if(e.code!=="SNAPSHOT_REQUIRED")throw e;
@@ -109,7 +111,7 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
   const at=new Date(now).toISOString();
   db.prepare("INSERT INTO federation_sync_attempts(origin_node_id,project_id,last_attempt_at,last_success_at,has_more) VALUES(?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET last_attempt_at=excluded.last_attempt_at,last_success_at=excluded.last_success_at,error_code=NULL,failure_count=0,retry_after=0,has_more=excluded.has_more")
    .run(c.server_node_id,projectId,at,at,Number(more));
-  return {state:more?"pending":"synced",applied,batches,snapshot_pages:snapshotPages,rebuilt,has_more:more,cursor:cursor(db,c.server_node_id,c.server_epoch,projectId)};
+  return {state:more?"pending":"synced",applied,batches,snapshot_pages:snapshotPages,rebuilt,has_more:more,cursor:replicationCursor(db,c.server_node_id,c.server_epoch,projectId)};
  }catch(e){
   const failures=(previous?.failure_count??0)+1,retryAfter=now+Math.floor(performance.now()-started)+Math.min(30000,1000*2**Math.min(failures-1,5));
   const code=typeof e.code==="string"&&/^[A-Z0-9_]{1,64}$/.test(e.code)?e.code:"NETWORK_ERROR";
