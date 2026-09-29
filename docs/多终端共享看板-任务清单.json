@@ -732,13 +732,18 @@
       "evidence_required": [
         "restore-drill.json"
       ],
-      "status": "planned",
+      "status": "implemented_pending_validation",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": null,
-      "acceptance_receipt": null
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/backup.md",
+        "tests/backuptest.mjs",
+        "2026-09-29 live database read-only restore drill; private receipt in ignored worktree data"
+      ]
     },
     {
       "id": "T01.06",

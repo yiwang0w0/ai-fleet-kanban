@@ -494,10 +494,16 @@ function migrateNodeIdentity(db) {
 }
 
 function open(readOnly = false) {
+  if (!readOnly && fs.existsSync(path.join(path.dirname(DB_PATH), ".incomplete")))
+    throw err(ERR.CONFLICT, "备份或恢复目录尚未完成，禁止写入或启动执行器");
   if (!readOnly && !fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH, { readOnly });
   db.exec("PRAGMA busy_timeout=5000");
   if (!readOnly) {
+    if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_restore_hold'").get()) {
+      db.close();
+      throw err(ERR.CONFLICT, "恢复副本处于隔离状态，禁止写入或启动执行器；先完成恢复核验与身份恢复流程");
+    }
     db.exec("PRAGMA journal_mode=WAL");
     try { migrate(db); }
     catch (e) { db.close(); throw e; }

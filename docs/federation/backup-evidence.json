@@ -1,0 +1,89 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-02-backup",
+  "date": "2026-09-29",
+  "base_commit": "98299913aa58e9341c8ec384550616ff972a5a29",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/backup.mjs": "ac4137f480b85f0e6eda332b1cdf7a9e1d75964b5c2a97fde5ee47c5a04ea716",
+    "cli/backup.mjs": "00c1403880fe6375a8d3d2df56de8d8dae3156f82f3e8ba403a91455ef8bcecd",
+    "tests/backuptest.mjs": "a557104bb5b8c04b2a3fb9a10343d1dec2759f039003538122927e711c48fe19",
+    "core/store.js": "3104e2d455d2d08e3141a3b9b67180de83dde9a4c1475a1e1c187b546d4041a8",
+    "package.json": "e48bd273fb006597aafd4af4627aa3935f0d639f2e3ff140839473889cef7fba",
+    ".github/workflows/ci.yml": "b0d0905f6fef945ae9c3c3f41043139313c1ed0beaf53df27be7cdd15ba6360e"
+  },
+  "local_validation": {
+    "command": "npm test",
+    "result": "passed",
+    "legacy_suites": [
+      {
+        "passed": 401,
+        "failed": 0
+      },
+      {
+        "passed": 25,
+        "failed": 0
+      },
+      {
+        "passed": 29,
+        "failed": 0
+      },
+      {
+        "passed": 27,
+        "failed": 0
+      },
+      {
+        "passed": 41,
+        "failed": 0
+      },
+      {
+        "passed": 72,
+        "failed": 0
+      },
+      {
+        "passed": 195,
+        "failed": 0
+      },
+      {
+        "passed": 22,
+        "failed": 0
+      },
+      {
+        "passed": 5,
+        "failed": 0
+      },
+      {
+        "passed": 23,
+        "failed": 0
+      }
+    ],
+    "identity_tests": 10,
+    "backup_tests": 14,
+    "log": "backup-full-test.log",
+    "prompt_selftest": "57 PASS / 0 FAIL"
+  },
+  "live_restore_drill": {
+    "result": "passed",
+    "source_access": "read-only SQLite snapshot; no source migration",
+    "tasks": 11,
+    "events": 14,
+    "evidence_files": 1,
+    "tasks_equal": true,
+    "events_equal": true,
+    "restored_execution_disabled": true,
+    "artifacts": "private ignored .data/restore-drill directory; no production data committed"
+  },
+  "ci": "pending",
+  "gates_completed": 0,
+  "model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "limitations": [
+    "No restore activation command, epoch rotation or peer rejoin yet",
+    "Evidence file set is checked before/after SQLite snapshot; not a cross-resource transaction",
+    "Node authentication and signed backup provenance are separate",
+    "Deployment workspace and credential isolation still pending"
+  ]
+}

@@ -101,7 +101,7 @@
   ],
   "constraints": {
     "physical_multi_node_test": false,
-    "linux_ci": "pending",
+    "linux_ci": "success at tested_commit",
     "production_deployment": false,
     "accepted_phase_count": 0,
     "model_calls": {
@@ -111,5 +111,12 @@
     }
   },
   "logs_note": "Log paths are local ignored files relative to this implementation worktree; they are not committed. CI will rerun both supported platforms.",
-  "hash_format": "sha256 of UTF-8 source bytes with LF line endings"
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "tested_commit": "98299913aa58e9341c8ec384550616ff972a5a29",
+  "ci_verified": {
+    "run_id": 36528208162,
+    "windows": "success",
+    "ubuntu": "success",
+    "gitleaks": "success"
+  }
 }
