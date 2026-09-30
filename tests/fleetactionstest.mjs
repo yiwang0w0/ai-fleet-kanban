@@ -173,7 +173,7 @@ test("bound cancellation shows received until local quiescence and explicit sour
 });
 test("release and fixture candidate transfer preserve pending review; owner rejection returns without relaunch",async()=>{
  const f=await bound(),rid=f.d.relation_id,n=f.b;
- const released=action(f.right,"release_delegation",{relation_id:rid,expected_version:store.get(n.db,f.target.id).aggregate_version});assert.equal(released.result.dispatch_started,false);assert.equal(n.db.prepare("SELECT count(*) n FROM task_runs").get().n,0);
+ const released=action(f.right,"release_delegation",{relation_id:rid,expected_version:store.get(n.db,f.target.id).aggregate_version});assert.equal(released.result.state,"released");assert.equal(released.result.dispatch_started,false);assert.equal(n.db.prepare("SELECT count(*) n FROM task_runs").get().n,0);
  migrateDispatch(n.db);putRole(n.db,{...n.policy,role_id:"engine",kind:"implement",capabilities:["board-tools"],runtime:"claude",model:"fixture-model",effort:"low"});
  const auth="Bearer "+JSON.parse(readFileSync(n.principal_file,"utf8")).token,current=store.get(n.db,f.target.id);
  const assigned=callTool(n.db,auth,"request_assignment",{request_id:randomUUID(),task_uid:current.task_uid,expected_version:current.aggregate_version});
@@ -225,4 +225,109 @@ test("credential metadata must match the authenticated node, epoch and version",
   const value=structuredClone(original);change(value);writeFileSync(f.a.principal_file,JSON.stringify(value));assert.throws(()=>f.source.enqueue(proposal(f)),{code:"AUTHORIZATION_CHANGED"});assert.equal(rows(f.a.db),0);
  }
  writeFileSync(f.a.principal_file,JSON.stringify(original));
+});
+
+
+// Administrative graph/credential setup is explicit; every subsequent workflow step uses the panel controller.
+async function bindingWorkflow({localRegistrar=false,fetchImpl=fetch}={}){
+ const a=node(),b=node(),r=localRegistrar?a:node();for(const n of new Set([a,b,r])){migrateBindings(n.db);migrateRelations(n.db);}
+ const source=card(a);const ab=grant(a,b),ba=grant(b,a,["peer:handshake","delegation:offer","delegation:status","delegation:binding","relations:read","relations:approve","relations:publish"]);
+ const ar=localRegistrar?null:grant(a,r,["peer:handshake","relations:read","relations:approve","relations:publish"]),br=localRegistrar?ba:grant(b,r,["peer:handshake","relations:read","relations:approve","relations:publish"]);
+ const endpoints=new Map();for(const n of new Set([a,b,r])){const s=await listenPeerServer(n.db,{port:0});servers.push(s);endpoints.set(n,"http://127.0.0.1:"+s.address().port);}
+ const connect=(n,other,c)=>n.config.peers.push({node_id:other.identity.node_id,node_epoch:other.identity.sync_epoch,projects:["demo"],url:endpoints.get(other),credential_file:c.file});
+ connect(a,b,ab);connect(b,a,ba);if(!localRegistrar){connect(a,r,ar);connect(b,r,br);}
+ let clock=Date.now();const open=(n,fetchImpl=fetch)=>{const a=openFleetActions(n.db,{config:n.config,fetchImpl,now:()=>clock});controllers.push(a);return a;};
+ const left=open(a,fetchImpl),right=open(b);
+ const offer=action(left,"create_delegation",{task_uid:source.task_uid,expected_version:source.aggregate_version,target_node_id:b.identity.node_id,target_epoch:b.identity.sync_epoch});await left.tick();
+ action(right,"decide_delegation",{delegation_id:offer.action_id,expected_version:1,decision:"accept",note:"reviewed"});
+ action(left,"poll_delegation",{id:offer.action_id});await left.tick();
+ const target=store.list(b.db).tasks[0],g=createRelationGraph(r.db,{projectId:"demo",members:[a,b].map(n=>({node_id:n.identity.node_id,node_epoch:n.identity.sync_epoch}))});
+ for(const n of [a,b])bindTopology(n.db,{projectId:"demo",graphId:g.graph_id,graphEpoch:g.graph_epoch,registrarNodeId:r.identity.node_id,registrarEpoch:r.identity.sync_epoch});
+ return {a,b,r,left,right,source,target,offer,g,open,advance:ms=>clock+=ms};
+}
+async function registerBoth(f){
+ for(const c of [f.left,f.right]){action(c,"publish_topology",{expected_revision:0});await c.tick();assert.equal(c.catalog("demo").topologies[0].phase,"ready");}
+ action(f.left,"refresh_registration",{id:"demo"});await f.left.tick();
+ return f.left.catalog("demo").outgoing[0].binding_draft;
+}
+async function proposeBinding(f){
+ const draft=await registerBoth(f);assert.equal(draft.ready,true);
+ const prepared=action(f.left,"propose_binding",{delegation_id:f.offer.action_id,review_digest:draft.review_digest});await f.left.tick();return prepared.action_id;
+}
+for(const localRegistrar of [false,true])test("panel workflow independently confirms both endpoints with "+(localRegistrar?"local":"remote")+" registrar",async()=>{
+ const f=await bindingWorkflow({localRegistrar});const rid=await proposeBinding(f);
+ assert.equal(f.left.catalog("demo").bindings[0].source_approved,true);
+ action(f.left,"send_binding_proposal",{id:rid});await f.left.tick();
+ const p=f.right.catalog("demo").proposals[0];assert.equal(p.relation_id,rid);assert.equal(p.description,"public work");assert.equal(p.acceptance,"explicit review");
+ assert.throws(()=>action(f.right,"release_delegation",{relation_id:rid,expected_version:p.task_version}));
+ action(f.right,"accept_binding_proposal",{relation_id:rid,descriptor_digest:p.descriptor_digest,expected_version:p.task_version});await f.right.tick();
+ assert.equal(f.right.catalog("demo").bindings[0].state,"confirmed");assert.equal(f.right.catalog("demo").bindings[0].execution_authorized,false);
+ action(f.left,"poll_binding",{id:rid});await f.left.tick();assert.equal(f.left.catalog("demo").bindings[0].state,"confirmed");
+ action(f.left,"send_source_ready",{id:rid});await f.left.tick();const bound=f.right.catalog("demo").bindings[0];assert.equal(bound.execution_authorized,true);
+ action(f.right,"release_delegation",{relation_id:rid,expected_version:bound.task_version});assert.equal(store.get(f.b.db,f.target.id).released,true);
+ assert.equal(f.a.db.prepare("SELECT count(*) n FROM task_runs").get().n,0);assert.equal(f.b.db.prepare("SELECT count(*) n FROM task_runs").get().n,0);
+ assert.equal(f.left.catalog("demo").actions.every(a=>["applied","acknowledged"].includes(a.state)),true);
+ assert.equal(f.right.catalog("demo").actions.every(a=>["applied","acknowledged"].includes(a.state)),true);
+ // A terminal protocol state remains a successful receipt when the same operation is resumed.
+ action(f.left,"poll_binding",{id:rid});await f.left.tick();assert.equal(f.left.catalog("demo").actions.find(a=>a.command==="poll_binding").state,"acknowledged");
+});
+test("binding review freezes registration and task version; changed previews never auto-advance",async()=>{
+ const f=await bindingWorkflow(),draft=await registerBoth(f);
+ store.update(f.a.db,{id:f.source.id,expectedVersion:store.get(f.a.db,f.source.id).aggregate_version,description:"changed contract",actor:"test"});
+ assert.throws(()=>action(f.left,"propose_binding",{delegation_id:f.offer.action_id,review_digest:draft.review_digest}),{code:"REVIEW_CHANGED"});
+ assert.equal(f.a.db.prepare("SELECT count(*) n FROM delegation_bindings").get().n,0);
+ const next=f.left.catalog("demo").outgoing[0].binding_draft;
+ assert.throws(()=>action(f.left,"propose_binding",{delegation_id:f.offer.action_id,review_digest:next.review_digest}),{code:"CONTRACT_CHANGED"});
+ assert.throws(()=>action(f.left,"refresh_registration",{id:"another"}),{code:"NOT_FOUND"});
+ assert.throws(()=>action(f.left,"publish_topology",{expected_revision:1,edits:[]}),{code:"BAD_INPUT"});
+});
+test("lost structure receipt recovers original operation after reopening; no duplicate revision",async()=>{
+ let lose=true;
+ const f=await bindingWorkflow({fetchImpl:async(...args)=>{const response=await fetch(...args);if(lose&&String(args[0]).endsWith("/relations/publish")){lose=false;await response.arrayBuffer();throw Error("lost private response");}return response;}});
+ const sent=action(f.left,"publish_topology",{expected_revision:0});await f.left.tick();
+ assert.equal(f.left.catalog("demo").actions.find(a=>a.action_id===sent.action_id).state,"retry_pending");await f.left.close();f.advance(31000);f.left=f.open(f.a);await f.left.tick();
+ assert.equal(f.left.catalog("demo").topologies[0].revision,1);assert.equal(f.left.catalog("demo").topologies[0].phase,"ready");
+ assert.equal(f.r.db.prepare("SELECT revision FROM relation_topologies WHERE node_id=?").get(f.a.identity.node_id).revision,1);
+ action(f.left,"resend_topology",{id:sent.action_id});await f.left.tick();assert.equal(f.left.catalog("demo").actions.find(a=>a.command==="resend_topology").state,"acknowledged");
+});
+test("target declines authenticated proposal and source withdraws without releasing tasks",async()=>{
+ const f=await bindingWorkflow(),rid=await proposeBinding(f);action(f.left,"send_binding_proposal",{id:rid});await f.left.tick();
+ const p=f.right.catalog("demo").proposals[0];
+ action(f.right,"decline_binding_proposal",{relation_id:rid,expected_descriptor_digest:p.descriptor_digest,reason_code:"operator_declined"});
+ assert.equal(f.right.catalog("demo").proposals.length,0);
+ assert.throws(()=>action(f.right,"accept_binding_proposal",{relation_id:rid,descriptor_digest:p.descriptor_digest,expected_version:p.task_version}),{code:"PROPOSAL_DECLINED"});
+ action(f.left,"cancel_binding",{id:rid});await f.left.tick();assert.equal(f.left.catalog("demo").bindings[0].state,"cancelled");
+ assert.equal(store.get(f.b.db,f.target.id).released,false);
+});
+test("failed action insert rolls back prepared binding and broker receipt together",async()=>{
+ const f=await bindingWorkflow(),draft=await registerBoth(f);
+ f.a.db.exec("CREATE TRIGGER reject_binding_queue BEFORE INSERT ON fleet_operator_actions WHEN NEW.command='propose_binding' BEGIN SELECT RAISE(ABORT,'queue unavailable'); END");
+ const id=randomUUID(),input={action_id:id,project_id:"demo",command:"propose_binding",arguments:{delegation_id:f.offer.action_id,review_digest:draft.review_digest}};
+ assert.throws(()=>f.left.enqueue(input),/queue unavailable/);assert.equal(f.a.db.prepare("SELECT count(*) n FROM delegation_bindings").get().n,0);
+ assert.equal(f.a.db.prepare("SELECT count(*) n FROM broker_requests WHERE request_id=?").get(id).n,0);
+ f.a.db.exec("DROP TRIGGER reject_binding_queue");f.left.enqueue(input);await f.left.tick();assert.equal(f.left.catalog("demo").bindings.length,1);
+});
+test("revocation during registrar handshake prevents status caching and approval",async()=>{
+ let armed=false,f;
+ f=await bindingWorkflow({fetchImpl:async(...args)=>{const response=await fetch(...args);if(armed&&String(args[0]).endsWith("/hello")){armed=false;revokePrincipal(f.a.db,{principalId:f.a.principal.principal_id,expectedVersion:1});}return response;}});
+ await registerBoth(f);f.a.db.exec("DELETE FROM fleet_registrar_observations");
+ const sent=action(f.left,"refresh_registration",{id:"demo"});armed=true;await f.left.tick();
+ assert.equal(f.a.db.prepare("SELECT count(*) n FROM fleet_registrar_observations").get().n,0);
+ assert.equal(f.a.db.prepare("SELECT state FROM fleet_operator_actions WHERE action_id=?").get(sent.action_id).state,"blocked");
+});
+
+test("stale target revision is rejected by registrar and cannot authorize a target task",async()=>{
+ const f=await bindingWorkflow(),draft=await registerBoth(f);
+ action(f.right,"publish_topology",{expected_revision:1});await f.right.tick();assert.equal(f.right.catalog("demo").topologies[0].revision,2);
+ const proposed=action(f.left,"propose_binding",{delegation_id:f.offer.action_id,review_digest:draft.review_digest});await f.left.tick();
+ const receipt=f.left.catalog("demo").actions.find(a=>a.action_id===proposed.action_id);assert.equal(receipt.state,"blocked");assert.equal(receipt.last_error_code,"TOPOLOGY_VERSION_CONFLICT");
+ assert.equal(f.left.catalog("demo").bindings[0].source_approved,false);assert.equal(f.right.catalog("demo").proposals.length,0);
+ assert.equal(store.get(f.b.db,f.target.id).released,false);action(f.left,"cancel_binding",{id:proposed.action_id});await f.left.tick();assert.equal(f.left.catalog("demo").bindings[0].state,"cancelled");
+});
+test("registrar observation discards arbitrary response fields and rejects changed registrar identity",async()=>{
+ let mode="extra";
+ const f=await bindingWorkflow({fetchImpl:async(...args)=>{const response=await fetch(...args);if(String(args[0]).endsWith("/relations/status")&&response.ok){const value=await response.json();if(value.topologies){if(mode==="extra")value.private_raw="must never be persisted";else value.registrar_epoch=randomUUID();return new Response(JSON.stringify(value),{status:200,headers:{"Content-Type":"application/json"}});}return new Response(JSON.stringify(value),{status:200});}return response;}});
+ await registerBoth(f);const before=f.a.db.prepare("SELECT * FROM fleet_registrar_observations").get();assert.equal(before.status_json.includes("must never"),false);
+ mode="identity";const sent=action(f.left,"refresh_registration",{id:"demo"});await f.left.tick();assert.deepEqual(f.a.db.prepare("SELECT * FROM fleet_registrar_observations").get(),before);
+ assert.equal(f.a.db.prepare("SELECT last_error_code FROM fleet_operator_actions WHERE action_id=?").get(sent.action_id).last_error_code,"GRAPH_MISMATCH");
 });

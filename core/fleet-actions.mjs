@@ -13,8 +13,9 @@ import {deliverCancellation} from "./federation/cancellation-client.mjs";
 import {migrateResults,listResults,resultState} from "./federation/results.mjs";
 import {deliverResult} from "./federation/result-client.mjs";
 import {listBindings,bindingState} from "./federation/bindings.mjs";
-const LOCAL=new Set(["create_delegation","decide_delegation","request_cancellation","progress_cancellation","prepare_result","reject_result","release_delegation"]);
-const NETWORK={resend_delegation:["delegation","offer"],poll_delegation:["delegation","status"],resend_cancellation:["cancellation","send"],poll_cancellation:["cancellation","poll"],resend_result:["result","send"],poll_result:["result","poll"]};
+import {BINDING_LOCAL,BINDING_NETWORK,migrateFleetBindings,fleetTopology,fleetBindingDraft,prepareFleetBinding,fleetBindingTransport,deliverFleetBinding} from "./fleet-binding-actions.mjs";
+const LOCAL=new Set(["create_delegation","decide_delegation","request_cancellation","progress_cancellation","prepare_result","reject_result","release_delegation","decline_binding_proposal"]);
+const NETWORK={...BINDING_NETWORK,resend_delegation:["delegation","offer"],poll_delegation:["delegation","status"],resend_cancellation:["cancellation","send"],poll_cancellation:["cancellation","poll"],resend_result:["result","send"],poll_result:["result","poll"]};
 const fail=(code,message,status=409)=>{throw new PeerError(code,message,status);};
 const errorCode=e=>e instanceof PeerError&&/^[A-Z][A-Z0-9_]{0,63}$/.test(e.code)?e.code:"ACTION_FAILED";
 const MAX_ACTIONS=10000;
@@ -35,7 +36,7 @@ function normalizeConfig(c){
 }
 function summary(state){
  const receipt=state.receipt??null;
- return {state:state.state??receipt?.state??(receipt?.kind==="cancel_stopped"?"stopped":receipt?.kind==="cancel_received"?"received":state.decision?"decision_recorded":"prepared"),
+ return {state:state.state??receipt?.state??(state.released===true?"released":receipt?.kind==="cancel_stopped"?"stopped":receipt?.kind==="cancel_received"?"received":state.decision?"decision_recorded":"prepared"),
   delegation_id:state.delegation_id??state.offer?.delegation_id??null,relation_id:state.relation_id??state.body?.relation?.relation_id??receipt?.relation_id??null,
   result_id:state.result_id??state.body?.result_id??null,target_task_uid:receipt?.target_task_uid??null,
   stopped:state.stopped===true||receipt?.kind==="cancel_stopped",blocker_count:state.blocker_count??state.blockers?.length??0,dispatch_started:false};
@@ -51,7 +52,7 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   return {p,auth,credential};
  }
  const initial=principal();
- migrateDelegation(db);migrateCancellations(db);migrateResults(db);
+ migrateDelegation(db);migrateCancellations(db);migrateResults(db);migrateFleetBindings(db);
  atomic(db,()=>{
   db.exec("CREATE TABLE IF NOT EXISTS fleet_operator_actions(action_id TEXT PRIMARY KEY,node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,principal_id TEXT NOT NULL,credential_version INTEGER NOT NULL,role_version INTEGER NOT NULL,project_id TEXT NOT NULL,command TEXT NOT NULL,input_digest TEXT NOT NULL,transport_json TEXT,summary_json TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('pending','applied','acknowledged','retry_pending','blocked')),attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL DEFAULT 0,last_error_code TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
   db.exec("CREATE TRIGGER IF NOT EXISTS fleet_operator_action_intent_immutable BEFORE UPDATE OF action_id,node_id,node_epoch,principal_id,credential_version,role_version,project_id,command,input_digest,transport_json,created_at ON fleet_operator_actions BEGIN SELECT RAISE(ABORT,'operator action intent is immutable'); END");
@@ -67,6 +68,10 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
  }
  function publicRow(r){return {action_id:r.action_id,project_id:r.project_id,command:r.command,state:r.state,attempts:r.attempts,next_attempt_at:r.next_attempt_at,last_error_code:r.last_error_code,created_at:r.created_at,updated_at:r.updated_at,result:JSON.parse(r.summary_json)};}
  function transport(kind,id,project,context){
+  if(["registration","topology","binding","binding_message"].includes(kind)){
+   const result=fleetBindingTransport(db,{kind,id,project,auth:context.auth});const b=result.binding;
+   if(b.node_id===c.node_id){if(b.node_epoch!==c.node_epoch)fail("EPOCH_CHANGED","登记节点代次已变化");}else route(b.node_id,b.node_epoch,project);return result;
+  }
   let v,nodeId,epoch;
   if(kind==="delegation"){v=callTool(db,context.auth,"get_delegation",{delegation_id:id,direction:"outgoing"});if(v.offer.project_id!==project)fail("NOT_FOUND","当前项目未找到委派",404);nodeId=v.offer.target_node_id;epoch=v.offer.target_epoch;}
   else if(kind==="cancellation"){v=callTool(db,context.auth,"get_cancellation",{relation_id:id});if(v.project_id!==project||v.side!=="source")fail("NOT_FOUND","当前项目未找到来源取消",404);nodeId=v.request.relation.target_node_id;epoch=v.request.relation.target_epoch;}
@@ -77,7 +82,7 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   exact(input,["action_id","project_id","command","arguments"],"fleet_action");uuid(input.action_id,"action_id");names([input.project_id],"project_id",null,1);
   const context=principal(),{p,credential}=context;
   if(!p.projects.includes(input.project_id))fail("FORBIDDEN","协调身份未获准操作该项目",403);
-  if(!LOCAL.has(input.command)&&!Object.hasOwn(NETWORK,input.command))fail("BAD_INPUT","面板操作不在允许列表",400);
+  if(!LOCAL.has(input.command)&&!BINDING_LOCAL.has(input.command)&&!Object.hasOwn(NETWORK,input.command))fail("BAD_INPUT","面板操作不在允许列表",400);
   const requestHash=digest({project_id:input.project_id,command:input.command,arguments:input.arguments}),old=db.prepare("SELECT * FROM fleet_operator_actions WHERE action_id=?").get(input.action_id);
   if(old){authorized(old,context);if(old.input_digest!==requestHash)fail("REQUEST_CONFLICT","同一操作 ID 的内容不能改变");return publicRow(old);}
   // Repeated create from another tab keeps the same delegation, even with a new click ID.
@@ -87,7 +92,10 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   }
   if(db.prepare("SELECT count(*) n FROM fleet_operator_actions").get().n>=MAX_ACTIONS)fail("QUEUE_LIMIT","操作历史达到上限，需按保留规程处理");
   let v,binding=null,mode=null;
-  if(LOCAL.has(input.command)){
+  if(BINDING_LOCAL.has(input.command)){
+   const prepared=prepareFleetBinding(db,{command:input.command,args:input.arguments,project:input.project_id,requestId:input.action_id,auth:context.auth});
+   v=prepared.v;mode=prepared.mode;({binding}=transport(prepared.kind,prepared.id,input.project_id,context));
+  }else if(LOCAL.has(input.command)){
    const def=TOOL_DEFINITIONS.find(t=>t.name===input.command),args={...input.arguments,request_id:input.action_id};
    if(input.arguments===null||typeof input.arguments!=="object"||Array.isArray(input.arguments)||Object.hasOwn(input.arguments,"request_id"))fail("BAD_INPUT","操作参数不得自行指定请求身份",400);
    validate(args,def.inputSchema);
@@ -95,6 +103,7 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
    let scoped;
    if(input.command==="create_delegation")scoped=callTool(db,context.auth,"get_task",{task_uid:args.task_uid}).task.project_id;
    else if(input.command==="decide_delegation")scoped=callTool(db,context.auth,"get_delegation",{delegation_id:args.delegation_id,direction:"incoming"}).offer.project_id;
+   else if(input.command==="decline_binding_proposal")scoped=callTool(db,context.auth,"get_binding_proposal",{relation_id:args.relation_id}).relation.project_id;
    else if(input.command==="reject_result")scoped=callTool(db,context.auth,"get_result",{result_id:args.result_id}).body.relation.project_id;
    else if(input.command==="progress_cancellation")scoped=callTool(db,context.auth,"get_cancellation",{relation_id:args.relation_id}).project_id;
    else scoped=callTool(db,context.auth,"get_binding",{relation_id:args.relation_id}).relation.project_id;
@@ -105,7 +114,7 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
    if(input.command==="request_cancellation"){({binding}=transport("cancellation",args.relation_id,input.project_id,context));mode="send";}
    if(input.command==="prepare_result"){({binding}=transport("result",input.action_id,input.project_id,context));mode="send";}
   }else{
-   exact(input.arguments,["id"],"transport_action");uuid(input.arguments.id,"id");
+   exact(input.arguments,["id"],"transport_action");if(input.command!=="refresh_registration")uuid(input.arguments.id,"id");
    const [kind,m]=NETWORK[input.command];({v,binding}=transport(kind,input.arguments.id,input.project_id,context));mode=m;
   }
   const at=new Date(now()).toISOString();
@@ -114,11 +123,13 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
  });}
  async function deliver(row){
   let binding,context;
-  try{context=authorized(row);binding=JSON.parse(row.transport_json);const peer=route(binding.node_id,binding.node_epoch,row.project_id);
+  try{context=authorized(row);binding=JSON.parse(row.transport_json);const localRegistrar=binding.node_id===c.node_id&&["registration","topology","binding"].includes(binding.kind);
+   if(localRegistrar&&binding.node_epoch!==c.node_epoch)fail("EPOCH_CHANGED","登记节点代次已变化");
+   const peer=localRegistrar?null:route(binding.node_id,binding.node_epoch,row.project_id);
    const guardedFetch=(...args)=>{authorized(row);return fetchImpl(...args);};
-   const options={url:peer.url,credentialFile:peer.credential_file,fetchImpl:guardedFetch,signal:controller.signal,mode:binding.mode};
-   const v=await (binding.kind==="delegation"?deliverIntent(db,{...options,delegationId:binding.id}):binding.kind==="cancellation"?deliverCancellation(db,{...options,relationId:binding.id}):deliverResult(db,{...options,resultId:binding.id}));
-   const state=v.delivery_state==="acknowledged"?"acknowledged":v.delivery_state==="retry_pending"?"retry_pending":"blocked";
+   const options={url:peer?.url,credentialFile:peer?.credential_file,fetchImpl:guardedFetch,signal:controller.signal,mode:binding.mode};
+   const v=await (["registration","topology","binding","binding_message"].includes(binding.kind)?deliverFleetBinding(db,{binding,project:row.project_id,options,authorize:()=>authorized(row),now}):binding.kind==="delegation"?deliverIntent(db,{...options,delegationId:binding.id}):binding.kind==="cancellation"?deliverCancellation(db,{...options,relationId:binding.id}):deliverResult(db,{...options,resultId:binding.id}));
+   const state=["acknowledged","applied","cancelled","confirmed","completed"].includes(v.delivery_state)?"acknowledged":v.delivery_state==="retry_pending"?"retry_pending":"blocked";
    const code=v.error_code??v.last_error_code??null;
    if(code!==null&&!/^[A-Z][A-Z0-9_]{0,63}$/.test(code))fail("BAD_RESPONSE","对端错误标识无效");
    atomic(db,()=>db.prepare("UPDATE fleet_operator_actions SET state=?,summary_json=?,last_error_code=?,next_attempt_at=?,updated_at=? WHERE action_id=?").run(state,canonical(summary(v)),state==="acknowledged"?null:code,now()+Math.min(30000,1000*2**Math.min(row.attempts,5)),new Date(now()).toISOString(),row.action_id));
@@ -141,21 +152,27 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   const context=principal(),projects=context.p.projects;
   if(projectId!==null&&projectId!==undefined&&!projects.includes(projectId))fail("FORBIDDEN","协调身份未获准查看该项目",403);
   const selected=projectId?[projectId]:projects;
-  const groups={actions:[],incoming:[],outgoing:[],bindings:[],cancellations:[],results:[]};let truncated=false;
+  const groups={actions:[],incoming:[],outgoing:[],bindings:[],cancellations:[],results:[],topologies:[],proposals:[]};let truncated=false;
   const collect=(name,rows)=>{const remaining=100-groups[name].length;if(rows.length>remaining)truncated=true;groups[name].push(...rows.slice(0,remaining));};
   for(const project of selected){
+   collect("topologies",[fleetTopology(db,project)]);
+   const bindingList=listBindings(db,{projectId:project,limit:101});
+   collect("proposals",bindingList.pending_proposals.map(r=>{
+    const t=db.prepare("SELECT aggregate_version,subject,description,acceptance FROM tasks WHERE task_uid=?").get(r.relation.target_task_uid);
+    return {...r,project_id:project,task_version:t?.aggregate_version??null,subject:t?.subject??"",description:t?.description??"",acceptance:t?.acceptance??""};
+   }));
    for(const direction of ["incoming","outgoing"]){
     const items=listDelegations(db,{direction,projectId:project,limit:100}),remaining=100-groups[direction].length;
     if(items.length>remaining)truncated=true;
     collect(direction,items.slice(0,remaining).map(r=>{
      const v=direction==="incoming"?incomingStatus(db,r.delegation_id):outgoingStatus(db,r.delegation_id);
-     return {project_id:project,direction,delegation_id:r.delegation_id,state:r.state,identity_current:v.identity_current,source_node_id:v.offer.source_node_id,target_node_id:v.offer.target_node_id,source_task_uid:v.offer.source_task_uid,target_task_uid:v.receipt?.target_task_uid??null,version:v.receipt?.version??null,subject:v.offer.task.subject,description:v.offer.task.description,acceptance:v.offer.task.acceptance};
+     return {project_id:project,direction,delegation_id:r.delegation_id,state:r.state,identity_current:v.identity_current,source_node_id:v.offer.source_node_id,target_node_id:v.offer.target_node_id,source_task_uid:v.offer.source_task_uid,target_task_uid:v.receipt?.target_task_uid??null,version:v.receipt?.version??null,subject:v.offer.task.subject,description:v.offer.task.description,acceptance:v.offer.task.acceptance,...(direction==="outgoing"&&v.identity_current&&v.state==="accepted_unconfirmed"?{binding_draft:fleetBindingDraft(db,r.delegation_id)}:{})};
     }));
    }
-   collect("bindings",listBindings(db,{projectId:project,limit:100}).bindings.map(r=>{
+   collect("bindings",bindingList.bindings.map(r=>{
     const t=db.prepare("SELECT aggregate_version,status,released,subject FROM tasks WHERE task_uid=?").get(r.task_uid);
     const b=r.identity_current?bindingState(db,r.relation_id):null;
-    return {...r,project_id:project,task_version:t?.aggregate_version??null,task_status:t?.status??null,released:!!t?.released,subject:t?.subject??"",execution_authorized:b?.execution_authorized===true,cancellation_state:b?.cancellation?.state??null};
+    return {...r,project_id:project,task_version:t?.aggregate_version??null,task_status:t?.status??null,released:!!t?.released,subject:t?.subject??"",execution_authorized:b?.execution_authorized===true,binding_authorized:b?.binding_authorized===true,source_approved:b?.side==="source"&&(b.state==="confirmed"||b.attempts.some(a=>a.action==="approve"&&a.state==="acknowledged")),source_node_id:b?.relation.source_node_id??null,target_node_id:b?.relation.target_node_id??null,cancellation_state:b?.cancellation?.state??null};
    }));
    collect("cancellations",listCancellations(db,{projectId:project,limit:100}).cancellations.map(r=>({...r,project_id:project})));
    collect("results",listResults(db,{projectId:project,limit:100}).results.map(r=>{

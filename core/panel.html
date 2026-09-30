@@ -3036,7 +3036,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }}walk();for(const t of tasks)if(!seen.has(t.task_uid)){stack.push([t,0,true]);walk();}
  }
  const moduleNames={delegation:"委派",binding:"端点绑定",registration:"关系登记",cancellation:"取消",runs:"执行历史",dispatch:"执行分派",results:"交付候选",artifacts:"交付产物",verification:"来源验证",integration:"来源合并",completion:"双端结案"},moduleStates={not_configured:"尚未配置",upgrade_required:"需要升级"};
- const historyStates={pending:"待送达",received:"已收到",accepted_unconfirmed:"已接收，待确认关系",rejected:"已拒绝",prepared:"已准备",confirmed:"已确认",cancelled:"已取消",proposed:"待登记",withdrawn:"已撤回",completed:"已登记结案",stopped:"已有停止回执",unverified:"记录待核对"};
+ const historyStates={pending:"待送达",received:"已收到",accepted_unconfirmed:"已接收，待确认关系",rejected:"已拒绝",prepared:"已准备",confirmed:"已确认",cancelled:"已取消",proposed:"待登记",withdrawn:"已撤回",completed:"已登记结案",stopped:"已有停止回执",unverified:"记录待核对",observed:"已读取登记状态",applied:"结构已提交",released:"已放行"};
  function taskButton(t){if(!t)return el("span","端点未共享、不可见或尚未建卡","fleet-note fleet-warning");const b=el("button",t.owner_name+" · "+t.subject,"fleet-endpoint");b.type="button";b.title=t.task_uid;b.addEventListener("click",()=>showTask(t.task_uid));if(!t.in_view)b.append(el("small","（当前列表外）"));return b;}
  function relationships(value,container){
   container.replaceChildren();container.append(el("h3","跨终端委派"));
@@ -3074,8 +3074,8 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
 
 
  const actionDialog=$("fleet-action-dialog"),actionBody=$("fleet-action-body"),actionSubmit=$("fleet-action-submit"),actionStatus=$("fleet-action-status");
- const actionStates={pending:"已保存 · 待送达",applied:"本机已记录",acknowledged:"对端已确认请求",retry_pending:"等待重连重发",blocked:"请求受阻"};
- const commandNames={create_delegation:"发起委派",decide_delegation:"处理接收委派",resend_delegation:"重发委派",poll_delegation:"查询委派回执",request_cancellation:"请求取消",progress_cancellation:"核对本机停止",resend_cancellation:"重发取消",poll_cancellation:"查询停止回执",prepare_result:"封存并回传候选",reject_result:"要求返工",resend_result:"重传候选",poll_result:"查询验收决定",release_delegation:"放行本机任务"};
+ const actionStates={pending:"已保存 · 待送达",applied:"本机已记录",acknowledged:"协议回执已核验",retry_pending:"等待重连重发",blocked:"请求受阻"};
+ const commandNames={create_delegation:"发起委派",decide_delegation:"处理接收委派",resend_delegation:"重发委派",poll_delegation:"查询委派回执",request_cancellation:"请求取消",progress_cancellation:"核对本机停止",resend_cancellation:"重发取消",poll_cancellation:"查询停止回执",prepare_result:"封存并回传候选",reject_result:"要求返工",resend_result:"重传候选",poll_result:"查询验收决定",release_delegation:"放行本机任务",publish_topology:"登记当前结构",refresh_registration:"刷新登记状态",resend_topology:"恢复原结构提交",cancel_topology:"取消结构提交",propose_binding:"准备来源绑定",accept_binding_proposal:"接受绑定提案",decline_binding_proposal:"拒绝绑定提案",approve_binding:"恢复本方确认",poll_binding:"查询双方确认",withdraw_binding:"撤回绑定",cancel_binding:"撤回未确认绑定",send_binding_proposal:"发送绑定提案",send_source_ready:"发送来源就绪证明"};
  let actionDraft=null,actionBusy=false;const actionFolds=new Map();
  function actionButton(label,projectId,command,args,review,{note=false,required=false}={}){
   const b=el("button",label);b.type="button";b.addEventListener("click",()=>openAction(label,projectId,command,args,review,{note,required}));return b;
@@ -3108,19 +3108,45 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   const box=$("fleet-actions");box.replaceChildren(el("h3","跨端操作与回执"));
   if(!v.enabled){box.append(el("p",v.error||"尚未配置本机协调身份和对端连接。","fleet-note"));return;}
   box.append(el("p","此处使用本机协调身份。接收委派只建立待确认任务；关系登记、双方就绪后才能放行。送达回执不等于执行完成。","fleet-note"));
-  const groups=[["待接收委派",v.incoming],["发出的委派",v.outgoing],["已绑定任务",v.bindings],["取消回执",v.cancellations],["交付候选",v.results]];
+  const structures=el("details",undefined,"fleet-trace");structures.open=actionFolds.get("项目结构登记")??true;structures.addEventListener("toggle",()=>actionFolds.set("项目结构登记",structures.open));structures.append(el("summary","项目结构登记"));
+  for(const t of v.topologies||[]){const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");card.append(el("p",t.project_id,"fleet-task-title"));
+   if(!t.configured)card.append(el("p","尚未配置本机项目的固定登记节点，请先完成节点部署。 ["+t.error_code+"]","fleet-note"));
+   else{
+    card.append(el("p","本机结构："+({unregistered:"未登记",ready:"已登记",pending:"等待回执"}[t.phase]||t.phase)+" · 修订 "+t.revision+(t.observed?" · 登记状态读取于 "+time(t.observed.observed_at):" · 尚未读取登记状态"),"fleet-note"));
+    const review="项目："+t.project_id+"\n登记节点："+t.registrar_node_id+"\n本机结构修订："+t.revision;
+    if(!t.operation_id&&["unregistered","ready"].includes(t.phase))bar.append(actionButton("登记当前结构",t.project_id,"publish_topology",{expected_revision:t.revision},review+"\n提交本机当前任务树和依赖；取得回执前保持等待。"));
+    if(t.operation_id){bar.append(actionButton("恢复原结构提交",t.project_id,"resend_topology",{id:t.operation_id},review),actionButton("取消未确认结构提交",t.project_id,"cancel_topology",{id:t.operation_id},review+"\n未知结果必须先恢复原请求，不能直接回退。"));}
+    bar.append(actionButton("刷新登记状态",t.project_id,"refresh_registration",{id:t.project_id},review+"\n读取固定登记节点保存的双方结构版本。"));
+   }card.append(bar);structures.append(card);
+  }box.append(structures);
+  const groups=[["待接收委派",v.incoming],["发出的委派",v.outgoing],["待确认绑定",v.proposals||[]],["已绑定任务",v.bindings],["取消回执",v.cancellations],["交付候选",v.results]];
   for(const[label,items]of groups){
    const section=el("details",undefined,"fleet-trace");section.open=actionFolds.get(label)??(label==="待接收委派"&&items.some(r=>r.state==="received"));section.addEventListener("toggle",()=>actionFolds.set(label,section.open));section.append(el("summary",label+" · "+items.length));
    for(const r of items){
     const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-    card.append(el("p",r.subject||r.result_id||r.relation_id,"fleet-task-title"),el("p",r.project_id+" · "+(historyStates[r.state]||({accepted:"已验收",delivered:"已送达 · 待决定"}[r.state])||r.state),"fleet-note"));
+    card.append(el("p",r.subject||r.result_id||r.relation_id,"fleet-task-title"),el("p",r.project_id+" · "+(label==="待确认绑定"&&r.state==="pending"?"待本方确认":historyStates[r.state]||({accepted:"已验收",delivered:"已送达 · 待决定"}[r.state])||r.state),"fleet-note"));
     const review=(r.subject?r.subject+"\n":"")+"项目："+r.project_id+"\n对象："+(r.delegation_id||r.relation_id||r.result_id);
     if(!r.identity_current){card.append(el("p","旧节点代次，仅供查看。","fleet-note fleet-warning"));}
     else if(label==="待接收委派"){
      if(r.state==="received")for(const[decision,text]of [["accept","接收为待确认任务"],["reject","拒绝委派"]])bar.append(actionButton(text,r.project_id,"decide_delegation",{delegation_id:r.delegation_id,expected_version:r.version,decision},review+"\n来源终端："+r.source_node_id+"\n任务说明："+r.description+"\n验收条件："+r.acceptance,{note:true}));
     }else if(label==="发出的委派"){
      for(const[command,text]of [["resend_delegation","重发原委派"],["poll_delegation","查询对端回执"]])bar.append(actionButton(text,r.project_id,command,{id:r.delegation_id},review+"\n目标终端："+r.target_node_id));
+     if(r.binding_draft){const d=r.binding_draft;if(d.ready)bar.append(actionButton("准备绑定并提交本方确认",r.project_id,"propose_binding",{delegation_id:r.delegation_id,review_digest:d.review_digest},review+"\n目标终端："+d.target_node_id+"\n目标任务："+d.target_task_uid+"\n双方结构修订："+d.source_topology_revision+" / "+d.target_topology_revision+"\n登记状态读取于："+time(d.observed_at)+"\n任务说明："+r.description+"\n验收条件："+r.acceptance+"\n只提交来源方确认；接收端仍须独立核对并确认。"));else if(d.error_code!=="BINDING_EXISTS")card.append(el("p",({REGISTRATION_REQUIRED:"请先刷新登记状态。",TOPOLOGY_NOT_READY:"请先登记本机当前结构。",TOPOLOGY_DIVERGED:"登记状态与本机结构不一致，请刷新后核对。",TARGET_TOPOLOGY_REQUIRED:"等待目标终端登记结构，再刷新登记状态。"}[d.error_code]||"绑定准备条件尚未满足。")+" ["+d.error_code+"]","fleet-note"));}
+    }else if(label==="待确认绑定"){
+     const d=r.relation,contract=review+"\n来源终端："+d.source_node_id+"\n来源任务："+d.source_task_uid+"\n本机任务："+d.target_task_uid+"\n双方结构修订："+d.source_topology_revision+" / "+d.target_topology_revision+"\n任务说明："+r.description+"\n验收条件："+r.acceptance;
+     if(r.task_version)bar.append(actionButton("接受绑定并提交本方确认",r.project_id,"accept_binding_proposal",{relation_id:r.relation_id,descriptor_digest:r.descriptor_digest,expected_version:r.task_version},contract+"\n核对本机任务后提交接收方确认；尚不放行。"));
+     bar.append(actionButton("拒绝绑定提案",r.project_id,"decline_binding_proposal",{relation_id:r.relation_id,expected_descriptor_digest:r.descriptor_digest,reason_code:"operator_declined"},contract+"\n来源端仍须撤回未确认申请。"));
     }else if(label==="已绑定任务"){
+     if(r.side==="target")card.append(el("p","本机任务："+(r.released?"已放行":"待放行"),"fleet-note"));
+     const relationReview=review+"\n关系："+r.relation_id+"\n来源终端："+r.source_node_id+"\n目标终端："+r.target_node_id;
+     if(r.state==="prepared"){
+      for(const[command,text]of [["approve_binding","恢复本方确认"],["poll_binding","查询双方确认"],["cancel_binding","撤回未确认绑定"]])bar.append(actionButton(text,r.project_id,command,{id:r.relation_id},relationReview+"\n未知结果须先恢复原确认请求。"));
+     }
+     if(r.side==="source"&&["prepared","confirmed"].includes(r.state)){
+      if(r.source_approved)bar.append(actionButton("发送绑定提案",r.project_id,"send_binding_proposal",{id:r.relation_id},relationReview+"\n交给接收端独立核对任务合同。"));
+      if(r.state==="confirmed"&&!r.cancellation_state)bar.append(actionButton("发送来源就绪证明",r.project_id,"send_source_ready",{id:r.relation_id},relationReview+"\n双方已登记确认，接收端取得此证明后可按本地权限放行。"));
+     }
+
      if(r.state==="confirmed"&&r.task_version){
       if(r.side==="source"&&!r.cancellation_state)bar.append(actionButton("请求取消委派",r.project_id,"request_cancellation",{relation_id:r.relation_id,expected_version:r.task_version,reason_code:"operator_cancelled"},review+"\n仅发送取消请求，取得停止证明后才显示已停止。"));
       if(r.side==="target"){

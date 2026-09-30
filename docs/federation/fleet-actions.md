@@ -81,4 +81,35 @@ GET /api/fleet/actions[?project=demo] 返回当前协调身份获准的本地协
 
 实际浏览器在两个临时本机看板完成发起 → 接收 → 来源查询，目标只有一张未放行任务，两端 run 数均为 0；HTML 片段保持文字。验证了键盘入口、自动刷新修复及 390 像素视窗下的操作按钮布局。
 
-尚需接入端点绑定/关系登记/双方就绪的完整页面流程、最终验证/合并/结案操作入口、历史翻页、队列保留运维、真实 Tailscale 双机和桌面客户端验收。T08.03 记为部分实现，不以本机两个实例替代两台实体电脑，也不通过 G08。
+尚需最终验证/合并/结案操作入口、历史翻页、队列保留运维、真实 Tailscale 双机和桌面客户端验收。T08.03 记为部分实现，不以本机两个实例替代两台实体电脑，也不通过 G08。
+
+
+## 面板绑定与就绪流程
+
+节点部署时仍需显式创建项目关系图、登记双方稳定身份和代次，并将各本机项目绑定到同一个固定登记节点（见 [bindings.md](bindings.md) 和 [topology.md](topology.md)）。面板不能修改登记节点地址、成员、凭据或任务所有权。
+
+1. 接收方接受委派，来源查询到接收回执后，两端在「项目结构登记」提交当前任务树。已登记项目新增任务后也可以重新提交当前结构；存在未确认操作时只能恢复或取消原操作。
+2. 来源点击「刷新登记状态」，经认证握手读取固定登记节点的双方结构修订。页面显示观察时间；缓存只是准备材料，不能代替登记审批或执行许可。
+3. 来源在「发出的委派」核对合同、目标任务和双方修订，点击「准备绑定并提交本方确认」。服务端从实际接收回执和登记观察生成关系，浏览器只提交该预览的摘要；任务版本或观察内容变化会拒绝旧预览。
+4. 来源取得本方审批回执后点击「发送绑定提案」。接收端在「待确认绑定」独立核对本机任务、原关系和合同，可以拒绝，或「接受绑定并提交本方确认」。
+5. 来源「查询双方确认」取得登记节点的最终回执后，再「发送来源就绪证明」。接收端取得匹配证明、满足当前权限与本地结构条件后，才启用「放行本机任务」。放行与真实启动分别记录。
+6. 未确认的绑定可以撤回；若先前审批结果未知，必须恢复原审批请求。已确认关系不能用撤回代替执行取消，仍走停止证明协议。
+
+本机同时担任登记节点时调用同一登记协议和真实本机身份，不需要伪造一个自连接凭据。远程登记节点仍须存在于固定 peers 配置，所需 scopes 为 peer:handshake 加 relations:read、relations:publish、relations:approve；来源向接收端发送绑定消息还需 delegation:offer、delegation:binding。
+
+新增面板命令：
+
+| command | arguments | 结果 |
+|---|---|---|
+| publish_topology | expected_revision | 准备当前结构并持久排队提交；不接受手写 edits |
+| refresh_registration | id 为项目名 | 保存经过身份核对的登记观察 |
+| propose_binding | delegation_id、review_digest | 从已核对预览准备来源绑定并排队审批 |
+| accept_binding_proposal | relation_id、descriptor_digest、expected_version | 接受实际收到的同一提案并排队审批 |
+| decline_binding_proposal | 现有 MCP 参数 | 本机拒绝，来源仍须撤回 |
+| resend_topology / cancel_topology | id 为结构操作 ID | 恢复原提交或按现有协议取消 |
+| approve_binding / poll_binding / withdraw_binding / cancel_binding | id 为关系 ID | 恢复审批、查询或撤回 |
+| send_binding_proposal / send_source_ready | id 为关系 ID | 发送原提案或来源就绪证明 |
+
+这些命令继续使用同一操作 ID、事务、授权快照及持久队列。登记观察只保留有限的身份、代次、版本和结构摘要字段；对端附加字段不写入缓存。登记节点拒绝过期结构时保留失败回执和未确认绑定，不自动更新用户核对的关系。
+
+本轮验证见 [fleet-binding-actions-evidence.json](fleet-binding-actions-evidence.json)。尚未完成最终验证/合并/结案的页面入口、完整结构编辑器、历史翻页和队列保留运维，以及真实 Tailscale 两机验收。

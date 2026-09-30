@@ -2399,9 +2399,9 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Opt-in coordinator-backed operator API and browser controls; durable atomic outbox, same-contract create deduplication, bound peer delivery, cancellation receipts and candidate rework. Actual localhost HTTP/browser and isolated Windows tests; no new real model tasks.",
+        "scope": "Coordinator-backed panel workflow now includes topology publication, authenticated registrar observations, derived source binding preview, independently reviewed target proposal, approval/poll/withdrawal and source-ready delivery. Isolated Windows HTTP and browser tests only; no new model tasks.",
         "pending": [
-          "Full binding, graph registration, bilateral readiness and final verification/integration/completion UI",
+          "Final verification/integration/completion UI and full structural editor",
           "History pagination and operator queue retention procedure",
           "Actual Tailscale two-PC and desktop G08 acceptance"
         ]
@@ -2411,7 +2411,9 @@
         "docs/federation/fleet-actions.md",
         "docs/federation/fleet-actions-evidence.json",
         "core/fleet-actions.mjs",
-        "tests/fleetactionstest.mjs"
+        "tests/fleetactionstest.mjs",
+        "core/fleet-binding-actions.mjs",
+        "docs/federation/fleet-binding-actions-evidence.json"
       ]
     },
     {
