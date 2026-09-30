@@ -231,3 +231,29 @@ test("panel refreshes missing or malformed versions without posting or retrying"
   await assert.rejects(context.post("/api/tasks/1/archive",version===undefined?{}:{expected_version:version}),/版本不可用/);
  assert.equal(fetched,0);assert.equal(refreshed,6);
 });
+
+test("file preparation releases the writer lock and still refuses a concurrent newer task version",()=>{
+ const dbPath=join(TMP,"preparation.db"),{db,id}=fixture(dbPath);db.exec("PRAGMA journal_mode=WAL");
+ const claimed=store.claimById(db,{id,worker:"v"}).task;store.report(db,{id,worker:"v",runId:claimed.run_id,outcome:"done",evidence:"proof"});
+ const version=store.get(db,id).aggregate_version,other=new DatabaseSync(dbPath);handles.push(other);other.exec("PRAGMA busy_timeout=50");let preparations=0;
+ const prepare=()=>{preparations++;assert.equal(db.isTransaction,false);other.prepare("UPDATE tasks SET description='concurrent change' WHERE id=?").run(id);return {note:"prepared files"};};
+ assert.throws(()=>store.resolveWithPreparation(db,{id,verdict:"approve",expectedVersion:version-1},prepare),{code:"CONFLICT"});assert.equal(preparations,0);
+ assert.throws(()=>store.resolveWithPreparation(db,{id,verdict:"approve",expectedVersion:version},prepare),{code:"CONFLICT"});assert.equal(preparations,1);assert.equal(store.get(db,id).status,"waiting");assert.equal(store.get(db,id).description,"concurrent change");
+ store.resolveWithPreparation(db,{id,verdict:"approve",expectedVersion:store.get(db,id).aggregate_version},()=>{assert.equal(db.isTransaction,false);return {};});assert.equal(store.get(db,id).status,"done");
+});
+
+test("file preparation refuses a caller transaction before any side effect",()=>{
+ const {db,id}=fixture();let prepared=false;db.exec("BEGIN IMMEDIATE");
+ assert.throws(()=>store.resolveWithPreparation(db,{id,verdict:"approve",expectedVersion:1},()=>{prepared=true;return {};}),{code:"CONFLICT"});assert.equal(prepared,false);assert.equal(db.isTransaction,true);db.exec("ROLLBACK");
+});
+
+for(const op of ["setPinned","archive","markAutoReviewed","reopen"])test(op+" joins a caller transaction and preserves it on a failed stale command",()=>{
+ const f=fixture(),db=f.db,id=op==="setPinned"?store.add(db,{subject:"goal",kind:"goal"}):f.id;
+ if(op!=="setPinned"){const t=store.claimById(db,{id,worker:"v"}).task;store.report(db,{id,worker:"v",runId:t.run_id,outcome:"done",evidence:"proof"});}
+ if(op==="archive")store.resolve(db,{id,verdict:"approve",expectedVersion:store.get(db,id).aggregate_version});
+ const before=store.get(db,id),events=store.events(db,{taskId:id});
+ db.exec("BEGIN IMMEDIATE");
+ assert.throws(()=>store[op](db,{id,pinned:true,note:"reviewed",expectedVersion:before.aggregate_version+1}),{code:"CONFLICT"});assert.equal(db.isTransaction,true);assert.deepEqual(store.get(db,id),before);
+ store[op](db,{id,pinned:true,note:"reviewed",expectedVersion:before.aggregate_version});assert.equal(db.isTransaction,true);assert.notDeepEqual(store.get(db,id),before);
+ db.exec("ROLLBACK");assert.deepEqual(store.get(db,id),before);assert.deepEqual(store.events(db,{taskId:id}),events);
+});

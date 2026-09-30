@@ -605,11 +605,12 @@ function assertExpectedVersion(db,id,value) {
   }
 }
 function withTaskVersion(db,args,fn) {
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_task_version");
   try {
     assertExpectedVersion(db,args.id,args.expectedVersion);
-    const result=fn();db.exec("COMMIT");return result;
-  } catch(e) {try {db.exec("ROLLBACK");} catch {} throw e;}
+    const result=fn();db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_task_version");return result;
+  } catch(e) {try {db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_task_version; RELEASE store_task_version");} catch {} throw e;}
 }
 
 /** WAL bootstrap may report SQLITE_BUSY immediately while another opener changes
@@ -655,16 +656,17 @@ function open(readOnly = false) {
 /** Serialize schema inspection, identity generation and backfill across processes.
  * An invalid identity or failed DDL rolls back the whole migration. */
 function migrate(db) {
-  db.exec("BEGIN IMMEDIATE TRANSACTION");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE TRANSACTION" : "SAVEPOINT store_migrate");
   try {
     migrateInner(db);
     migrateNodeIdentity(db);
     migrateRuns(db);
     migrateTaskVersions(db);
     migrateLifecycle(db);
-    db.exec("COMMIT TRANSACTION");
+    db.exec(ownsTransaction ? "COMMIT TRANSACTION" : "RELEASE store_migrate");
   } catch (e) {
-    try { db.exec("ROLLBACK TRANSACTION"); } catch {}
+    try { db.exec(ownsTransaction ? "ROLLBACK TRANSACTION" : "ROLLBACK TO store_migrate; RELEASE store_migrate"); } catch {}
     throw e;
   }
 }
@@ -1903,6 +1905,18 @@ function cascadeClose(db, t, proofNote) {
  * attempts was already counted at claim; not touched here. Ruling records are
  * APPENDED, never overwritten.
  */
+/** File preparation must not hold SQLite's writer lock. Both version checks are
+ * required: reject known-stale commands before I/O, then reject a race after I/O.
+ * DB-only preparation callbacks in resolve remain inside its transaction. */
+function resolveWithPreparation(db,args,prepare) {
+  if(db.isTransaction)throw err(ERR.CONFLICT,"文件准备必须在数据库写事务之外进行");
+  requireExpectedVersion(args.expectedVersion);
+  assertExpectedVersion(db,args.id,args.expectedVersion);
+  if(typeof prepare!=="function")throw err(ERR.BAD_INPUT,"缺少裁定文件准备函数");
+  const prepared=prepare();
+  return resolve(db,{...args,...prepared,id:args.id,expectedVersion:args.expectedVersion});
+}
+
 function resolve(db, args) {
   const ownsTransaction = !db.isTransaction;
   db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_resolve");
@@ -2683,7 +2697,8 @@ function setReleased(db, { id, released, actor = "human", expectedVersion }) {
  *  needed after all" happens routinely. Attempts and ruling records are NEVER
  *  erased (history; a redo does not unhappen it). */
 function reopen(db, args) {
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_reopen");
   try {
     assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
@@ -2698,9 +2713,9 @@ function reopen(db, args) {
         detail: eventState(after, { from_status: before?.status ?? null }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_reopen");
     return out;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_reopen; RELEASE store_reopen"); } catch {} throw e; }
 }
 
 function reopenInner(db, { id, line }) {
@@ -2997,7 +3012,7 @@ function openChildrenOnLines(db, parentId, lines) {
 }
 
 module.exports = {
-  migrateLifecycle,
+  UUID_RE, migrateLifecycle, resolveWithPreparation,
   localNode, renameNode, assertLocalIdentityInput, requireRun, runs, requireExpectedVersion, assertExpectedVersion,
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,

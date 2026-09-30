@@ -483,8 +483,13 @@ function normalizeRole(raw, lineId) {
   }
   return { kind, tools, charter, seat };
 }
-let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT, LINE_ROLE, IMPL_LINES, REVIEW_LINES;
+let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT, LINE_ROLE, LINE_CHARTER_HASH, IMPL_LINES, REVIEW_LINES;
 function rebuildLines() {
+  // Bind charter bytes to the loaded configuration before publishing any new maps.
+  // Claim runs inside a writer transaction and must not perform filesystem reads.
+  const roles = Object.fromEntries(CFG.lines.map((l) => [l.id, normalizeRole(l.role, l.id)]));
+  const charterHashes = Object.fromEntries(Object.entries(roles).map(([id, role]) => [id,
+    role?.charter ? createHash("sha256").update(readFileSync(resolve(CODE_ROOT, role.charter))).digest("hex") : null]));
   LINES = CFG.lines.map((l) => String(l.id));
   SUPERVISED = [...LINES, ...ROLES];
   LINE_HINT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.hint || ""]));
@@ -495,7 +500,8 @@ function rebuildLines() {
   LINE_LABEL = Object.fromEntries(CFG.lines.map((l) => [l.id, String(l.label || "").trim()]));
   LINE_ACCEPT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.accept === "auto" ? "auto" : "human"]));
   // v0.22: identity (null = a plain line, exactly as before this version).
-  LINE_ROLE = Object.fromEntries(CFG.lines.map((l) => [l.id, normalizeRole(l.role, l.id)]));
+  LINE_ROLE = roles;
+  LINE_CHARTER_HASH = charterHashes;
   IMPL_LINES = LINES.filter((id) => (LINE_ROLE[id]?.kind || "implement") === "implement");
   REVIEW_LINES = LINES.filter((id) => LINE_ROLE[id]?.kind === "review");
 }
@@ -2266,14 +2272,13 @@ const WORKER_PROTOCOL_VERSION = 2;
 function claimIdentity(body, role) {
   if (role === "worker" && (body.worker_protocol_version !== WORKER_PROTOCOL_VERSION ||
       typeof body.agent_instance_id !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.agent_instance_id)))
+      !store.UUID_RE.test(body.agent_instance_id)))
     throw store.err(store.ERR.BAD_INPUT, "执行器协议需要版本 2 和 agent_instance_id；请先升级 worker，再领取任务");
   return { agentInstanceId:body.agent_instance_id ?? null, runContextForTask: task => {
     const roleId = task.line || body.line || body.worker;
     const role = LINE_ROLE[roleId] || {kind:"implement",tools:"write",charter:null,seat:null};
     return { role_id:roleId, role_kind:role.kind, tools:role.tools,
-      charter:role.charter, charter_sha256:role.charter
-        ? createHash("sha256").update(readFileSync(resolve(CODE_ROOT,role.charter))).digest("hex") : null,
+      charter:role.charter, charter_sha256:LINE_CHARTER_HASH[roleId] ?? null,
       seat:role.seat, enforcement:"unattested", worker_protocol_version:body.worker_protocol_version ?? null };
   }};
 }
@@ -2926,10 +2931,11 @@ const server = http.createServer(async (req, res) => {
         //     closure get the gate itself switched off.
         if (disp === "close" && b.allow_uncommitted !== true) closeGateOrThrow(t);
 
-        const r = store.resolve(db, { id, verdict:b.verdict, expectedVersion:b.expected_version,
+        const r = store.resolveWithPreparation(db, { id, verdict:b.verdict, expectedVersion:b.expected_version,
           resolvedBy:b.resolved_by || "human", verifyOk:b.verify_ok, selectedOption:b.selected_option,
-          disposition:disp, prepareResolution:()=>{
-            // Version was rechecked under the write lock before any file preparation.
+          disposition:disp }, ()=>{
+            // Known-stale commands refuse before copying; commit rechecks under the
+            // write lock. File preparation never holds the SQLite writer lock.
             let receiptBlock = null;
             if (plan) {
               const { opt, decisionAction, receipt, outcome } = plan;
@@ -2966,7 +2972,7 @@ const server = http.createServer(async (req, res) => {
             }
 
             return {note:resolveNote,sqlArchive:archive,sqlReceipt:receiptBlock};
-          }});
+          });
         emit("task.resolved", r);
         return json(res, 200, { task: taskOut(store.get(db, id)) });
       }

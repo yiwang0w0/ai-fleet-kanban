@@ -30,10 +30,28 @@ SQLite 快照具有事务一致性；数据库与外部文件没有共同事务�
 
 恢复不复制令牌、worker 自动启动设置、模型凭据、运行日志、验收登记簿或本地部署配置。它是任务数据与证据恢复工具，不是完整机器镜像。迁移前后不同版本的配置及凭据恢复须另行登记。
 
-后续第八批提供已核对计划和退役声明下的源端激活，见 [recovery.md](recovery.md)。它轮换 epoch/凭据、结束在途 run 并保持任务未放行；对端新 epoch 接受仍待实现，不能手工删表后直接入网。对完成的恢复副本做再次备份仍会保持隔离。
+后续第八批提供已核对计划和退役声明下的源端激活，见 [recovery.md](recovery.md)。它轮换 epoch/凭据、结束在途 run 并保持任务未放行；对端新 epoch 需按 [source-recovery.md](source-recovery.md) 显式接纳，不能手工删表后直接入网。对完成的恢复副本做再次备份仍会保持隔离。
 
 ## 验证记录
 
 - `npm run test:backup`：活动 WAL、并发写入、CLI 往返、隔离启动防护、摘要篡改、文件变化、文件索引、路径和联接边界等 14 项测试。
 - 2026-09-29 的部署数据库只读演练：11 张任务、14 条事件、1 份证据；恢复后任务与事件摘要一致，恢复隔离存在。私有备份和原始回执保存在独立工作区的忽略目录中，未提交。
 - 真实多机恢复后重新入网、激活与灾难 RPO/RTO 验收仍待后续阶段完成。
+
+## 旧数据库的显式恢复迁移
+
+缺少 board_node、task_runs 或 aggregate_version 的历史备份，使用新增开关恢复到另一个全新目录：
+
+```powershell
+node cli/backup.mjs verify <已校验备份目录>
+node cli/backup.mjs restore <已校验备份目录> <全新恢复目录> --upgrade-schema
+node cli/recovery.mjs prepare --db <全新恢复目录/board.db> --plan-file <新的计划文件>
+```
+
+默认 restore 保持原 schema；prepare 如遇旧 schema，返回 SCHEMA_UPGRADE_REQUIRED 并指向上述流程。已有的隔离目录保留，不在原处修改或手工删除隔离表。
+
+--upgrade-schema 仅修改新复制出的数据库，在恢复事务内完成证据路径调整与 store schema 迁移。已有 node_id、sync_epoch 和任务 UID 保留；尚无身份的旧库在隔离副本中初始化身份。旧 in_progress 任务转换出 imported 运行记录，供后续激活终止旧运行。任务编号、依赖和原事件记录保留。
+
+最终 restore-receipt.json 的 database 记录迁移后的身份与计数，source_database 保留备份原摘要，schema_upgrade 记录原数据库文件摘要及身份是 initialized 或 preserved。恢复回执在迁移成功后才生成并绑定新数据库字节。原备份仍可独立 verify。
+
+迁移失败会回滚数据库修改并保留 .incomplete；不会生成成功回执。成功迁移也保留 board_restore_hold，不启动服务、不生成操作员令牌、不放行任务。之后仍须核对恢复计划、提供真实停机声明并显式 activate；没有旧联邦身份的备份也必须确认原服务和其他副本已经停止，不能据新建 UUID 推定唯一写者。

@@ -6,7 +6,8 @@ import { createRequire } from "node:module";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
@@ -204,4 +205,31 @@ test("HTTP protocol rejects old workers and stale child/report/retry/heartbeat w
   } finally {
     if(proc.exitCode===null){proc.kill();await new Promise(r=>proc.once("exit",r));}
   }
+});
+
+
+test("HTTP claim identity enforces canonical v4 UUIDs and uses the loaded charter snapshot",()=>{
+  const source=readFileSync(join(ROOT,"core/server.mjs"),"utf8"),charter=join(TMP,"claim-charter.md");
+  writeFileSync(charter,"original charter");let reads=0;
+  const role={kind:"implement",tools:"write",charter:"claim-charter.md",seat:null};
+  const context=vm.createContext({CFG:{lines:[{id:"dev",role}]},ROLES:[],CODE_ROOT:TMP,store,resolve,createHash,
+    normalizeRole:value=>value??null,readFileSync:path=>{reads++;return readFileSync(path);}});
+  vm.runInContext(source.slice(source.indexOf("let LINES, SUPERVISED,"),source.indexOf("try { rebuildLines(); }"))+
+    source.slice(source.indexOf("const WORKER_PROTOCOL_VERSION = 2;"),source.indexOf("const server = http.createServer")),context);
+  vm.runInContext("rebuildLines()",context);assert.equal(reads,1);
+  const good="550e8400-e29b-41d4-a716-446655440000";
+  for(const bad of [good.toUpperCase(),good.replace("41d4","11d4"),good.replace("a716","0716"),"bad",null])
+    assert.throws(()=>context.claimIdentity({worker_protocol_version:2,agent_instance_id:bad},"worker"),{code:"BAD_INPUT"});
+  assert.throws(()=>context.claimIdentity({worker_protocol_version:1,agent_instance_id:good},"worker"),{code:"BAD_INPUT"});
+  writeFileSync(charter,"changed on disk");
+  const run=context.claimIdentity({worker_protocol_version:2,agent_instance_id:good,line:"dev"},"worker").runContextForTask({line:"dev"});
+  assert.equal(run.charter_sha256,createHash("sha256").update("original charter").digest("hex"));assert.equal(reads,1);
+  vm.runInContext("rebuildLines()",context);assert.equal(reads,2);
+  assert.equal(context.claimIdentity({line:"dev"},"operator").runContextForTask({line:"dev"}).charter_sha256,
+    createHash("sha256").update("changed on disk").digest("hex"));
+  rmSync(charter);
+  assert.throws(()=>vm.runInContext("rebuildLines()",context),{code:"ENOENT"});
+  const prior=context.claimIdentity({line:"dev"},"operator").runContextForTask({line:"dev"});
+  assert.equal(prior.charter_sha256,createHash("sha256").update("changed on disk").digest("hex"));assert.equal(reads,3);
+  assert.equal(context.claimIdentity({line:"plain"},"operator").runContextForTask({line:"plain"}).charter_sha256,null);
 });

@@ -15,6 +15,7 @@ const has=(db,name)=>!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table
 const count=(db,name)=>has(db,name)?db.prepare("SELECT count(*) n FROM "+quoted(name)).get().n:0;
 const quoted=name=>'"'+name.replaceAll('"','""')+'"';
 function rawIdentity(db){
+ if(!has(db,"board_node"))fail("SCHEMA_UPGRADE_REQUIRED","旧备份缺少节点身份；请从已校验备份重新 restore 到新目录并指定 --upgrade-schema，再生成恢复计划");
  const row=db.prepare("SELECT * FROM board_node WHERE singleton=1").get();
  if(!row)fail("IDENTITY_MISSING","缺少节点身份");
  uuid(row.node_id,"node_id");uuid(row.sync_epoch,"sync_epoch");return row;
@@ -78,7 +79,7 @@ export function prepareRecovery({dbPath,retiredEpoch}){
   db.exec("BEGIN"); // one consistent read view, including WAL
   const status=inspect(db),node=rawIdentity(db);
   if(status.state!=="restore_hold")fail("RESTORE_HOLD","只对已隔离恢复副本生成计划");
-  if(!has(db,"task_runs")||!db.prepare("PRAGMA table_info(tasks)").all().some(c=>c.name==="aggregate_version"))fail("SCHEMA_INCOMPATIBLE","备份尚未具有执行实例与版本字段，需要先迁移备份");
+  if(!has(db,"task_runs")||!db.prepare("PRAGMA table_info(tasks)").all().some(c=>c.name==="aggregate_version"))fail("SCHEMA_UPGRADE_REQUIRED","旧备份缺少执行实例或版本字段；请从已校验备份重新 restore 到新目录并指定 --upgrade-schema，再生成恢复计划");
   retiredEpoch??=node.sync_epoch;uuid(retiredEpoch,"retired_epoch");
   const plan={format:PLAN,plan_id:randomUUID(),node_id:node.node_id,backup_epoch:node.sync_epoch,retired_epoch:retiredEpoch,
    backup_id:restored.receipt.backup_id,database_path:dbPath,state_digest:recoveryFingerprint(db),

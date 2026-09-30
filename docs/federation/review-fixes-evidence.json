@@ -82,7 +82,7 @@
       ".data/review31-selftest.log": "ef1ed205f6a56642852c348600a39e2d0cbade32771163fe7475fc930901c5bf"
     }
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": "failure",
   "complete_phase_gates": 0,
   "total_phase_gates": 12,
   "real_provider_calls": {
@@ -103,5 +103,16 @@
     "scope": "staged diff",
     "exit_code": 0,
     "findings": 0
+  },
+  "exact_commit_ci": {
+    "commit": "1eb105650eb7fde221427eccc92542b4feacbcfd",
+    "run_id": 36690834566,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36690834566",
+    "windows_job_id": 109807397164,
+    "windows": "failure",
+    "gitleaks_job_id": 109807396855,
+    "gitleaks": "success",
+    "failed_step": "recoverytest",
+    "cause": "Revoked credentials now return UNAUTHENTICATED before lifecycle state; old retirement test expected NODE_RETIRED. Corrected in batch 32. Later steps were skipped."
   }
 }

@@ -291,3 +291,17 @@ test("non-busy WAL failures are reported once without retrying or leaking a conn
   });
   assert.equal(child.status,0,child.stderr);
 });
+
+test("migration inside an outer restore transaction does not commit that transaction",()=>{
+ const db=database();db.exec("BEGIN IMMEDIATE; CREATE TABLE outer_marker(value TEXT); INSERT INTO outer_marker VALUES('keep until rollback')");
+ store.migrate(db);assert.equal(db.isTransaction,true);assert.ok(store.localNode(db).node_id);
+ db.exec("ROLLBACK");assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE name='tasks'").get(),undefined);assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE name='outer_marker'").get(),undefined);
+});
+
+test("failed nested migration rolls back its own schema and leaves the caller transaction intact",()=>{
+ const db=database(),previous=process.env.BOARD_NODE_NAME;
+ db.exec("BEGIN IMMEDIATE; CREATE TABLE outer_marker(value TEXT); INSERT INTO outer_marker VALUES('preserved')");
+ try{process.env.BOARD_NODE_NAME="bad\nname";assert.throws(()=>store.migrate(db),/终端名/);}finally{if(previous===undefined)delete process.env.BOARD_NODE_NAME;else process.env.BOARD_NODE_NAME=previous;}
+ assert.equal(db.isTransaction,true);assert.equal(db.prepare("SELECT value FROM outer_marker").get().value,"preserved");assert.equal(db.prepare("SELECT 1 FROM sqlite_schema WHERE name='tasks'").get(),undefined);
+ db.exec("COMMIT");assert.equal(db.prepare("SELECT value FROM outer_marker").get().value,"preserved");
+});

@@ -8,7 +8,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {createBackup,restoreBackup,inspectRestore} from "../core/backup.mjs";
+import {createBackup,restoreBackup,inspectRestore,verifyBackup} from "../core/backup.mjs";
 import {prepareRecovery,activateRecovery,retireNode,recoveryStatus,recoveryFingerprint,writeRecoveryJSON} from "../core/recovery.mjs";
 import {migratePeers,issueCredential,authenticate,localIdentity} from "../core/federation/peers.mjs";
 import {migrateSync,shareTask,exportBatch,digest} from "../core/federation/sync-store.mjs";
@@ -139,7 +139,7 @@ test("retirement blocks existing database handles, old credentials and reopened 
  assert.equal(recoveryStatus(f.dbPath).state,"retired");assert.equal(store.get(f.db,f.id).run_id,null);
  assert.throws(()=>store.add(f.db,{subject:"stale open handle"}),/NODE_RETIRED/);
  assert.throws(()=>f.db.prepare("UPDATE tasks SET description='late' WHERE id=?").run(f.id),/NODE_RETIRED/);
- assert.throws(()=>authenticate(f.db,"Bearer "+f.credential.token),{code:"NODE_RETIRED"});
+ assert.throws(()=>authenticate(f.db,"Bearer "+f.credential.token),{code:"UNAUTHENTICATED"});
  const code='const store=require('+JSON.stringify(join(ROOT,"core/store.js"))+');store.open();';
  const child=spawnSync(process.execPath,["-e",code],{windowsHide:true,encoding:"utf8",env:{...process.env,BOARD_DB:f.dbPath,BOARD_DATA_DIR:f.dir}});
  assert.notEqual(child.status,0);assert.match(child.stderr,/已退役/);
@@ -220,4 +220,59 @@ console.log(JSON.stringify({bytes:bytes.length,stable:true,last_byte_bound:true}
 `);
  const r=spawnSync(process.execPath,["--max-old-space-size=192",script],{encoding:"utf8",windowsHide:true,timeout:20000,maxBuffer:1024*1024});
  assert.equal(r.status,0,r.error?.message??r.stderr);assert.deepEqual(JSON.parse(r.stdout),{bytes:48*1024*1024,stable:true,last_byte_bound:true});
+});
+
+function legacySource(withIdentity=false){
+ const dir=path("legacy-source");mkdirSync(dir);const evidence=join(dir,"evidence");mkdirSync(evidence);writeFileSync(join(evidence,"result.txt"),"legacy evidence");
+ const dbPath=join(dir,"board.db"),db=new DatabaseSync(dbPath);handles.push(db);
+ db.exec(`CREATE TABLE tasks(id INTEGER PRIMARY KEY AUTOINCREMENT,subject TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',acceptance TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'not_started',worker TEXT,attempts INTEGER NOT NULL DEFAULT 0,lease_until INTEGER,result TEXT,verdict_note TEXT,blocked_by TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL,updated_at TEXT NOT NULL,parent_id INTEGER,evidence_path TEXT);
+ INSERT INTO tasks(id,subject,status,worker,attempts,blocked_by,created_at,updated_at,parent_id) VALUES(7,'old parent','done',NULL,0,'[]','before','before',NULL),(12,'old running child','in_progress','legacy-worker',2,'[7]','before','before',7);
+ CREATE TABLE task_events(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,task_id INTEGER NOT NULL,kind TEXT NOT NULL,actor TEXT NOT NULL,detail TEXT NOT NULL DEFAULT '{}');
+ INSERT INTO task_events VALUES(40,'before',12,'add','operator','{"legacy":true}');`);
+ db.prepare("UPDATE tasks SET evidence_path=? WHERE id=12").run(join(evidence,"result.txt"));
+ let node=null;
+ if(withIdentity){
+  node={node_id:randomUUID(),sync_epoch:randomUUID()};
+  db.exec("CREATE TABLE board_node(singleton INTEGER PRIMARY KEY,node_id TEXT,display_name TEXT,sync_epoch TEXT,protocol_version INTEGER,created_at TEXT,updated_at TEXT); ALTER TABLE tasks ADD COLUMN task_uid TEXT; ALTER TABLE tasks ADD COLUMN owner_node_id TEXT");
+  db.prepare("INSERT INTO board_node VALUES(1,?,'legacy-node',?,1,'before','before')").run(node.node_id,node.sync_epoch);
+  for(const id of [7,12])db.prepare("UPDATE tasks SET task_uid=?,owner_node_id=? WHERE id=?").run(node.node_id+"/"+randomUUID(),node.node_id,id);
+ }
+ return {dir,dbPath,evidence,db,node};
+}
+for(const withIdentity of [false,true])test("explicit restore upgrade reaches reviewed activation from "+(withIdentity?"pre-run identity schema":"pre-federation schema"),()=>{
+ const f=legacySource(withIdentity),b=createBackup({dbPath:f.dbPath,evidenceDir:f.evidence,destination:path("legacy-backup")});
+ const backupHash=hashFile(join(b.destination,"board.db")),sourceHash=hashFile(f.dbPath),dir=path("upgraded-restore");
+ const receipt=restoreBackup({backupDirectory:b.destination,destination:dir,upgradeSchema:true}),dbPath=join(dir,"board.db"),db=open({dbPath});
+ assert.equal(receipt.schema_upgrade.identity,withIdentity?"preserved":"initialized");assert.deepEqual(receipt.source_database,b.database);
+ assert.equal(has(db,"board_restore_hold"),true);assert.equal(has(db,"task_runs"),true);assert.equal(receipt.quarantined,true);
+ assert.equal(inspectRestore(dir).summary.node_id,receipt.database.node_id);
+ if(withIdentity){assert.equal(receipt.database.node_id,f.node.node_id);assert.equal(receipt.database.sync_epoch,f.node.sync_epoch);assert.equal(store.get(db,12).task_uid,f.db.prepare("SELECT task_uid FROM tasks WHERE id=12").get().task_uid);}
+ const before=store.get(db,12);assert.deepEqual(before.blocked_by,[7]);assert.equal(before.parent_id,7);assert.equal(before.status,"in_progress");assert.equal(before.worker,"legacy-worker");assert.equal(before.attempts,2);assert.equal(before.evidence_path,join(dir,"evidence/result.txt"));
+ assert.equal(store.runs(db,12)[0].imported,1);assert.equal(db.prepare("SELECT detail FROM task_events WHERE id=40").get().detail,'{"legacy":true}');
+ const guardCode='require('+JSON.stringify(join(ROOT,"core/store.js"))+').open()';
+ const blocked=spawnSync(process.execPath,["-e",guardCode],{env:{...process.env,BOARD_DB:dbPath,BOARD_DATA_DIR:dir},encoding:"utf8",windowsHide:true});assert.notEqual(blocked.status,0);assert.match(blocked.stderr,/隔离/);
+ const frozen=hashFile(dbPath),plan=prepareRecovery({dbPath});assert.equal(hashFile(dbPath),frozen);assert.equal(plan.counts.active_runs,1);
+ const activated=activate({dbPath},plan);assert.equal(activated.services_started,false);assert.equal(activated.tasks_released,0);assert.equal(activated.node_id,receipt.database.node_id);assert.notEqual(activated.new_epoch,receipt.database.sync_epoch);
+ const after=store.get(db,12);assert.equal(after.task_uid,before.task_uid);assert.equal(after.owner_node_id,before.owner_node_id);assert.equal(after.status,"waiting");assert.equal(after.waiting_for,"decision");assert.equal(after.released,false);assert.equal(after.run_id,null);
+ assert.equal(store.runs(db,12)[0].state,"ended");assert.equal(hashFile(f.dbPath),sourceHash);assert.equal(hashFile(join(b.destination,"board.db")),backupHash);assert.equal(verifyBackup(b.destination).verified,true);
+});
+
+test("failed legacy schema upgrade leaves an incomplete quarantined copy and unchanged backup",()=>{
+ const f=legacySource(),b=createBackup({dbPath:f.dbPath,evidenceDir:f.evidence,destination:path("failed-upgrade-backup")}),before=hashFile(join(b.destination,"board.db")),dir=path("failed-upgrade"),oldName=process.env.BOARD_NODE_NAME;
+ try{process.env.BOARD_NODE_NAME="invalid\nnode";assert.throws(()=>restoreBackup({backupDirectory:b.destination,destination:dir,upgradeSchema:true}),/终端名/);}finally{if(oldName===undefined)delete process.env.BOARD_NODE_NAME;else process.env.BOARD_NODE_NAME=oldName;}
+ assert.equal(existsSync(join(dir,".incomplete")),true);assert.equal(existsSync(join(dir,"restore-receipt.json")),false);
+ const db=open({dbPath:join(dir,"board.db")});assert.equal(has(db,"board_node"),false);assert.equal(has(db,"task_runs"),false);assert.equal(has(db,"board_restore_hold"),true);
+ assert.equal(db.prepare("PRAGMA table_info(tasks)").all().some(c=>c.name==="aggregate_version"),false);
+ assert.equal(db.prepare("SELECT evidence_path FROM tasks WHERE id=12").get().evidence_path,join(f.evidence,"result.txt"));
+ assert.equal(hashFile(join(b.destination,"board.db")),before);assert.equal(verifyBackup(b.destination).verified,true);
+ assert.throws(()=>prepareRecovery({dbPath:join(dir,"board.db")}),/尚未完成/);
+});
+
+test("legacy restore is opt-in and CLI upgrade produces a preparation-ready held copy",()=>{
+ const f=legacySource(),b=createBackup({dbPath:f.dbPath,evidenceDir:f.evidence,destination:path("legacy-cli-backup")}),raw=path("raw-restore");
+ restoreBackup({backupDirectory:b.destination,destination:raw});
+ assert.throws(()=>prepareRecovery({dbPath:join(raw,"board.db")}),{code:"SCHEMA_UPGRADE_REQUIRED"});
+ const dir=path("cli-upgrade"),cli=spawnSync(process.execPath,[join(ROOT,"cli/backup.mjs"),"restore",b.destination,dir,"--upgrade-schema"],{encoding:"utf8",windowsHide:true});
+ assert.equal(cli.status,0,cli.stderr);assert.equal(JSON.parse(cli.stdout).schema_upgrade.identity,"initialized");
+ assert.equal(prepareRecovery({dbPath:join(dir,"board.db")}).counts.active_runs,1);assert.equal(recoveryStatus(join(dir,"board.db")).state,"restore_hold");
 });

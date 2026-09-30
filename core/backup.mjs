@@ -5,6 +5,7 @@ import {
   readSync, writeSync, fstatSync, fsyncSync, unlinkSync
 } from "node:fs";
 import { dirname, basename, join, resolve, relative, isAbsolute } from "node:path";
+import { createRequire } from "node:module";
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -268,12 +269,14 @@ export function verifyBackup(directory) {
   validateBundle(root, manifest);
   return { verified: true, manifest };
 }
-export function restoreBackup({ backupDirectory, destination }) {
+export function restoreBackup({ backupDirectory, destination, upgradeSchema = false }) {
+  if(typeof upgradeSchema!=="boolean")fail("upgradeSchema 必须是布尔值");
   const root = canonicalDirectory(backupDirectory), manifest = readManifest(root);
   const dest = newDirectory(destination, [root]);
   // Copy and hash from the SAME handle; a verify-then-copy would introduce TOCTOU.
   validateBundle(root, manifest, dest);
   const db = new DatabaseSync(join(dest, "board.db"));
+  let restoredSummary;
   try {
     db.exec("PRAGMA trusted_schema=OFF; PRAGMA synchronous=FULL; BEGIN IMMEDIATE");
     db.exec("CREATE TABLE IF NOT EXISTS board_restore_hold (backup_id TEXT NOT NULL, restored_at TEXT NOT NULL)");
@@ -283,16 +286,26 @@ export function restoreBackup({ backupDirectory, destination }) {
     if(wasRetired)db.exec("UPDATE board_lifecycle SET state='active' WHERE singleton=1");
     for (const ref of manifest.evidence_references)
       db.prepare("UPDATE tasks SET evidence_path=? WHERE id=?").run(join(dest, ref.path), ref.task_id);
+    // Only the new held copy is upgraded, before its final receipt is sealed.
+    // migrate joins this transaction; failure also rolls back evidence relocation.
+    if(upgradeSchema)createRequire(import.meta.url)("./store.js").migrate(db);
     if(wasRetired)db.exec("UPDATE board_lifecycle SET state='retired' WHERE singleton=1");
+    restoredSummary=databaseSummary(db);
+    if(restoredSummary.tasks!==manifest.database.tasks || manifest.database.node_id!==null &&
+       (restoredSummary.node_id!==manifest.database.node_id || restoredSummary.sync_epoch!==manifest.database.sync_epoch))
+      fail("恢复迁移改变了原有任务数量或节点身份");
     db.exec("COMMIT");
-    databaseSummary(db);
   } catch (e) {
     try { db.exec("ROLLBACK"); } catch {}
     throw e;
   } finally { db.close(); }
   const receipt = {
     backup_id: manifest.backup_id, restored_at: new Date().toISOString(),
-    quarantined: true, database: manifest.database,
+    quarantined: true, database: restoredSummary, source_database: manifest.database,
+    schema_upgrade: upgradeSchema ? {format:"ai-fleet-restore-schema-upgrade/v1",
+      identity:manifest.database.node_id===null?"initialized":"preserved",
+      source_database_sha256:manifest.files.find(f=>f.path==="board.db").sha256,
+      services_started:false} : null,
     restored_database_sha256: stableFile(join(dest, "board.db")).sha256,
     evidence_files: manifest.files.length - 1,
     evidence_manifest: manifest.files.filter(f=>f.path!=="board.db").map(f=>({path:f.path,bytes:f.bytes,sha256:f.sha256}))
