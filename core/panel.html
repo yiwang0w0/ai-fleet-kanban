@@ -382,13 +382,54 @@
          border-top:1px solid var(--line);padding:7px 16px;color:var(--dim);font-size:var(--fs-sm);
          display:flex;gap:16px;flex-wrap:wrap}
   footer b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+
+  .fleet-dialog{width:min(1400px,96vw);max-width:96vw;height:92vh;max-height:92vh;padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-md);background:var(--bg);color:var(--fg);overflow:auto}
+  .fleet-dialog::backdrop{background:rgba(0,0,0,.55)}
+  .fleet-top,.fleet-filters,.fleet-summary{display:flex;gap:var(--sp-3);align-items:center;flex-wrap:wrap;margin-bottom:var(--sp-3)}
+  .fleet-top h2{margin:0;font-size:var(--fs-xl)}.fleet-top button:last-child{margin-left:auto}
+  .fleet-filters label{display:flex;gap:var(--sp-2);align-items:center;font-size:var(--fs-sm)}.fleet-filters input{width:240px;max-width:100%}
+  .fleet-note{font-size:var(--fs-sm);color:var(--dim);margin:var(--sp-2) 0}.fleet-warning{color:var(--warn)}
+  .fleet-nodes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:var(--sp-4);align-items:start}
+  .fleet-node{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:var(--sp-3);min-width:0}
+  .fleet-node>summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center}.fleet-node h3{font-size:var(--fs-lg);margin:0}
+  .fleet-badge{font-size:var(--fs-sm);color:var(--dim);border:1px solid var(--line);border-radius:var(--r-sm);padding:0 var(--sp-1)}
+  .fleet-badge.waiting{color:var(--accent)}.fleet-badge.done{color:var(--ok)}.fleet-badge.in_progress{color:var(--cc)}
+  .fleet-id{font-family:var(--mono);font-size:var(--fs-sm);color:var(--dim);overflow-wrap:anywhere}
+  .fleet-tasks{display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-3)}
+  .fleet-task{display:flex;align-items:start;gap:var(--sp-2);width:calc(100% - var(--indent));margin-left:var(--indent);padding:var(--sp-2);text-align:left;white-space:normal;border-left:3px solid var(--line);background:var(--panel2)}
+  .fleet-task[data-state="waiting"]{border-left-color:var(--accent)}.fleet-task[data-state="in_progress"]{border-left-color:var(--cc)}.fleet-task[data-state="done"]{border-left-color:var(--ok)}
+  .fleet-task-title{flex:1;overflow-wrap:anywhere}.fleet-task-meta{display:block;font-size:var(--fs-sm);color:var(--dim);margin-top:var(--sp-1)}
+  .fleet-detail{width:min(800px,96vw)}.fleet-detail dl{display:grid;grid-template-columns:100px 1fr;gap:var(--sp-2)}.fleet-detail dd{margin:0;overflow-wrap:anywhere}.fleet-detail dt{color:var(--dim)}
+  .fleet-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--fs-md)/1.6 var(--font);background:var(--panel);padding:var(--sp-3);border:1px solid var(--line);border-radius:var(--r-sm)}
+  @media(max-width:520px){.fleet-filters label{width:100%;justify-content:space-between}.fleet-filters input,.fleet-filters select{max-width:68%}.fleet-dialog{padding:var(--sp-3)}.fleet-detail dl{grid-template-columns:1fr}.fleet-top h2{font-size:var(--fs-lg)}}
 </style>
 </head>
 <body>
 <header>
   <h1>AI 舰队看板</h1>
+  <button type="button" id="fleet-open">全局视图</button>
   <span class="live"><span class="dot" id="dot"></span><span id="livetxt">连接中</span></span>
 </header>
+
+<dialog id="fleet-dialog" class="fleet-dialog" aria-labelledby="fleet-title">
+  <div class="fleet-top"><h2 id="fleet-title">全局任务视图</h2><span class="fleet-badge">按终端归属</span><button type="button" id="fleet-refresh">刷新</button><button type="button" id="fleet-close" aria-label="关闭全局视图">关闭</button></div>
+  <form id="fleet-filters" class="fleet-filters" role="search">
+    <label>终端<select id="fleet-owner"><option value="">全部终端</option></select></label>
+    <label>项目<select id="fleet-project"><option value="">全部项目</option></select></label>
+    <label>任务<input id="fleet-query" type="search" maxlength="160" placeholder="标题或完整任务 UID"></label>
+    <button type="submit">查找</button>
+  </form>
+  <p id="fleet-notice" class="fleet-note" role="status" aria-live="polite">正在读取全局视图…</p>
+  <div id="fleet-summary" class="fleet-summary"></div>
+  <div id="fleet-nodes" class="fleet-nodes"></div>
+  <button type="button" id="fleet-more" hidden>显示更多</button>
+  <p class="fleet-note">远端显示上次收到的授权数据。同步失败时保留缓存；尚未同步的终端任务数量未知。本视图用于查看，任务处理仍由所有者终端负责。</p>
+</dialog>
+<dialog id="fleet-detail" class="fleet-dialog fleet-detail" aria-labelledby="fleet-detail-title">
+ <div class="fleet-top"><h2 id="fleet-detail-title">任务详情</h2><button type="button" id="fleet-detail-close">返回视图</button></div>
+ <div id="fleet-detail-body"></div>
+</dialog>
+
 
 <form class="task-find" id="task-find" role="search">
   <label for="task-find-id">按卡号定位</label>
@@ -2959,6 +3000,42 @@ es.addEventListener("log", () => {
 refresh();
 setInterval(tick, 1000);        // running numbers update in place (no full redraw = open state survives)
 setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stale screen
+
+// Global read view stays within the existing operator panel. Remote strings are text.
+(()=>{
+ const $=id=>document.getElementById(id),dialog=$("fleet-dialog"),detail=$("fleet-detail"),nodes=$("fleet-nodes"),notice=$("fleet-notice"),owner=$("fleet-owner"),project=$("fleet-project"),query=$("fleet-query");
+ const states={not_started:"未开始",in_progress:"进行中",waiting:"等待处理",done:"已完成"},connections={local:"本机",recent:"最近已同步",stale:"缓存可能过期",failed:"同步失败",syncing:"同步未追平",recovery:"恢复待核对",clock_unknown:"时间待核对",unknown:"尚未取得列表"};
+ const ownerNames=new Map(),projectNames=new Set(),folds=new Map();let generation=0,detailGeneration=0,limit=1000,timer=null,controller=null,last=null;
+ const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
+ const time=v=>{if(!v)return "尚无记录";const d=new Date(v);return Number.isNaN(d.valueOf())?"时间无效":d.toLocaleString();};
+ const request=async(path,signal)=>{const r=await fetch(path,{headers:WH,cache:"no-store",signal});const value=await r.json();if(!r.ok)throw Error(value.error||"读取失败");return value;};
+ function choices(){const oldOwner=owner.value,oldProject=project.value;owner.replaceChildren(el("option","全部终端"));owner.firstChild.value="";for(const[id,name]of ownerNames){const option=el("option",name+" · "+id.slice(0,8));option.value=id;owner.append(option);}owner.value=oldOwner;project.replaceChildren(el("option","全部项目"));project.firstChild.value="";for(const name of [...projectNames].sort()){const option=el("option",name);option.value=name;project.append(option);}project.value=oldProject;}
+ function taskRows(tasks,container){
+  const byUid=new Map(tasks.map(t=>[t.task_uid,t])),children=new Map(),roots=[];
+  for(const t of tasks){if(t.parent_uid&&byUid.has(t.parent_uid)&&byUid.get(t.parent_uid).owner_node_id===t.owner_node_id){if(!children.has(t.parent_uid))children.set(t.parent_uid,[]);children.get(t.parent_uid).push(t);}else roots.push(t);}
+  const seen=new Set(),stack=roots.slice().reverse().map(t=>[t,0,false]);
+  function walk(){while(stack.length){const[t,depth,broken]=stack.pop();if(seen.has(t.task_uid))continue;seen.add(t.task_uid);const row=el("button",undefined,"fleet-task");row.type="button";row.dataset.state=t.status;row.style.setProperty("--indent",Math.min(depth,8)*12+"px");row.setAttribute("aria-label",t.subject+"，"+(states[t.status]||t.status));
+   const title=el("span",t.subject,"fleet-task-title"),extra=[t.local_id!==null?"#"+t.local_id:t.task_uid.slice(-8),t.project_id||"未绑定项目",t.read_only?"远端缓存":"本机任务"];
+   if(t.recovery_state)extra.push(t.recovery_state==="missing_review"?"来源恢复后缺失，待核对":"等待新快照");if(t.parent_uid&&!byUid.has(t.parent_uid))extra.push("父任务未在当前筛选中");if(broken)extra.push("父子关系待核对");if(depth>8)extra.push("层级 "+depth);
+   title.append(el("span",extra.join(" · "),"fleet-task-meta"));row.append(title,el("span",states[t.status]||t.status,"fleet-badge "+t.status));row.addEventListener("click",()=>showTask(t.task_uid));container.append(row);for(const child of (children.get(t.task_uid)||[]).slice().reverse())stack.push([child,depth+1,false]);
+  }}walk();for(const t of tasks)if(!seen.has(t.task_uid)){stack.push([t,0,true]);walk();}
+ }
+ function render(value){last=value;for(const n of value.nodes)ownerNames.set(n.node_id,n.display_name);for(const p of value.projects)projectNames.add(p);choices();nodes.replaceChildren();$("fleet-summary").replaceChildren(el("span",value.nodes.length+" 个终端"),el("span",value.total_matching+" 项匹配任务"),el("span",value.pending_publications+" 项待发布"),el("span",value.pending_acknowledgements+" 项同步待确认"));
+  for(const n of value.nodes){const section=el("details",undefined,"fleet-node");section.open=folds.get(n.node_id)!==false;section.addEventListener("toggle",()=>folds.set(n.node_id,section.open));const heading=el("summary");heading.append(el("h3",n.display_name),el("span",connections[n.connection_state],"fleet-badge"));section.append(heading,el("p",n.node_id,"fleet-id"));
+   if(n.counts)section.append(el("p",(n.local?"当前筛选":"已缓存可见")+" "+n.counts.total+" 项 · 进行中 "+n.counts.in_progress+" · 等待 "+n.counts.waiting+" · 已完成 "+n.counts.done,"fleet-note"));else section.append(el("p","任务数量未知；取得远端列表后才显示数量。","fleet-note fleet-warning"));
+   for(const p of n.projects)section.append(el("p",p.project_id+" · "+connections[p.state]+" · 上次同步 "+time(p.last_sync_at)+(p.error_code?" · "+p.error_code:""),"fleet-note"));
+   const tasks=value.tasks.filter(t=>t.owner_node_id===n.node_id),list=el("div",undefined,"fleet-tasks");if(tasks.length)taskRows(tasks,list);else list.append(el("p",n.counts?"当前筛选没有可显示的已知任务。":"此终端尚无可用任务列表。","fleet-note"));section.append(list);nodes.append(section);
+  }
+  notice.className="fleet-note";notice.textContent="视图更新于 "+time(value.generated_at)+(value.sync_state==="not_configured"?" · 本机尚未配置联邦同步":value.sync_state==="upgrade_required"?" · 同步存储需要升级，未读取远端数据":"")+(value.truncated?" · 仅显示前 "+value.returned+" 项，请缩小筛选或显示更多":"");$("fleet-more").hidden=!value.truncated||limit>=10000;
+ }
+ async function load(){if(!dialog.open)return;const id=++generation;controller?.abort();controller=new AbortController();const params=new URLSearchParams({limit:String(limit)});if(owner.value)params.set("owner",owner.value);if(project.value)params.set("project",project.value);if(query.value.trim())params.set("q",query.value.trim());notice.textContent="正在更新…";
+  try{const value=await request("/api/fleet?"+params,controller.signal);if(id===generation)render(value);}catch(e){if(e.name==="AbortError")return;if(id===generation){notice.className="fleet-note fleet-warning";notice.textContent=(last?"更新失败，保留上次视图。":"视图读取失败。")+e.message;}}
+ }
+ async function showTask(uid){const id=++detailGeneration;$("fleet-detail-title").textContent="任务详情";detail.showModal();const body=$("fleet-detail-body");body.replaceChildren(el("p","正在读取任务…","fleet-note"));try{const t=await request("/api/fleet/task?uid="+encodeURIComponent(uid));if(id!==detailGeneration||!detail.open)return;$("fleet-detail-title").textContent=t.subject;body.replaceChildren();const dl=el("dl");for(const[label,value]of [["所属终端",t.owner_name],["终端身份",t.owner_node_id],["任务 UID",t.task_uid],["父任务",t.parent_uid||"根任务"],["项目",t.project_id||"未绑定"],["状态",states[t.status]||t.status],["数据来源",t.read_only?"远端缓存 · "+time(t.last_sync_at):"本机"],["运行",t.run_id||"尚无运行"],["更新",time(t.updated_at)]])dl.append(el("dt",label),el("dd",value));body.append(dl);for(const[label,value]of [["任务说明",t.description],["验收条件",t.acceptance],["执行结果",t.result],["裁定",t.verdict_note]])if(value){body.append(el("h3",label),el("pre",value));}if(t.local_id!==null){const locate=el("button","在本机面板定位");locate.type="button";locate.addEventListener("click",()=>{detail.close();dialog.close();$("task-find-id").value=String(t.local_id);$("task-find").requestSubmit();});body.append(locate);}}catch(e){if(id===detailGeneration)body.replaceChildren(el("p",e.message,"fleet-note fleet-warning"));}}
+ $("fleet-open").addEventListener("click",()=>{dialog.showModal();load();timer=setInterval(load,15000);});$("fleet-close").addEventListener("click",()=>dialog.close());dialog.addEventListener("close",()=>{clearInterval(timer);controller?.abort();generation++;});$("fleet-detail-close").addEventListener("click",()=>detail.close());detail.addEventListener("close",()=>detailGeneration++);
+ $("fleet-refresh").addEventListener("click",load);$("fleet-filters").addEventListener("submit",e=>{e.preventDefault();limit=1000;load();});owner.addEventListener("change",load);project.addEventListener("change",load);$("fleet-more").addEventListener("click",()=>{limit=Math.min(limit*2,10000);load();});
+})();
+
 </script>
 </body>
 </html>

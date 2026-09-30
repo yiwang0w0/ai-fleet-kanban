@@ -387,7 +387,7 @@
     {
       "id": "S08",
       "title": "全局共享视图、阶段进度与审计",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "S05",
         "S06"
@@ -2282,13 +2282,25 @@
       "evidence_required": [
         "UI 场景与数据断言"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Operator-only cached fleet read model, per-node task trees and freshness; 14 data/HTTP tests plus 195 existing server checks and isolated browser inspection",
+        "pending": [
+          "Cross-terminal relation visualization and receipted remote actions",
+          "Desktop Markdown/MCP context and physical two-PC G08 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/fleet-view.md",
+        "docs/federation/fleet-view-evidence.json",
+        "tests/fleetviewtest.mjs"
+      ]
     },
     {
       "id": "T08.02",
@@ -2311,15 +2323,27 @@
       "evidence_required": [
         "offline-UI 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Operator-only cached fleet read model, per-node task trees and freshness; 14 data/HTTP tests plus 195 existing server checks and isolated browser inspection",
+        "pending": [
+          "Cross-terminal relation visualization and receipted remote actions",
+          "Desktop Markdown/MCP context and physical two-PC G08 acceptance"
+        ]
+      },
       "acceptance_receipt": null,
       "design_references": [
         "docs/federation/desktop-context.md"
+      ],
+      "implementation_evidence": [
+        "docs/federation/fleet-view.md",
+        "docs/federation/fleet-view-evidence.json",
+        "tests/fleetviewtest.mjs"
       ]
     },
     {

@@ -523,5 +523,16 @@
   "references": [
     "https://developers.openai.com/codex/config-schema.json",
     "https://code.claude.com/docs/en/settings"
-  ]
+  ],
+  "final_ci": {
+    "commit": "e32191801095f84806288693eae3b0e85b74e584",
+    "run_id": 36708993471,
+    "windows_job_id": 109865981623,
+    "gitleaks_job_id": 109865981874,
+    "status": "success",
+    "main_pass": 1512,
+    "additional_pass": 90,
+    "fail": 0,
+    "skip": 0
+  }
 }

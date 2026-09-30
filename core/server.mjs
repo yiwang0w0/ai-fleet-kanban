@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve, relative } from "node:path";
 import { createRequire } from "node:module";
 import { nodeTooOld } from "./env.mjs";
+import {readFleetView,readFleetTask} from "./fleet-view.mjs";
+import {PeerError} from "./federation/protocol.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require_ = createRequire(import.meta.url);
@@ -2306,6 +2308,15 @@ const server = http.createServer(async (req, res) => {
         `<script>window.__BOARD_TOKEN=${JSON.stringify(BOARD_TOKEN)};</script>\n<script>`);
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
       return res.end(html);
+    }
+    // The new fleet reads require the existing operator credential. No new page
+    // receives an injected credential; the view lives inside the existing panel.
+    if (m === "GET" && (p === "/api/fleet" || p === "/api/fleet/task")) {
+      if (!guardWrite(req,res,p)) return;
+      try {
+        const value=p.endsWith("/task")?readFleetTask(db,url.searchParams.get("uid")):readFleetView(db,{projectId:url.searchParams.get("project"),ownerNodeId:url.searchParams.get("owner"),query:url.searchParams.get("q")??"",limit:url.searchParams.has("limit")?Number(url.searchParams.get("limit")):1000});
+        return json(res,200,value);
+      } catch(e) {return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"FLEET_VIEW_UNAVAILABLE",error:e instanceof PeerError?e.message:"全局视图暂不可读；请检查数据库与升级状态"});}
     }
     if (m === "GET" && p === "/health") return json(res, 200, { status: "ok", port: PORT });
 
