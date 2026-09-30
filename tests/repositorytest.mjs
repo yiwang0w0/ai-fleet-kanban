@@ -1,3 +1,6 @@
+import vm from "node:vm";
+import {requireGitVersion,probeGitVersion} from "../core/git-version.mjs";
+import {PeerError} from "../core/federation/protocol.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -137,4 +140,36 @@ test("filesystem identity accepts native/alias paths but still rejects a child d
  }
  else{alias=fresh("repository-alias");symlinkSync(r.root,alias,"dir");}
  const x=register(b,{...r,root:alias});assert.equal(repositoryReader({root:alias,git}).info.root,realpathSync.native(r.root));assert.deepEqual(registerRepository(b.db,x.config),x.state);assert.deepEqual(capture(b,r).files.find(f=>f.path==="src/demo.txt").bytes,r.original);assert.throws(()=>repositoryReader({root:join(alias,"src"),git}),{code:"REPOSITORY_ROOT_REQUIRED"});
+});
+
+
+test("Git version and required no-lazy-fetch capability fail early with actionable diagnostics",()=>{
+ for(const value of ["git version 1.99.9","git version 2.43.0.windows.1","git version 2.44.99"])
+  assert.throws(()=>requireGitVersion(value),{code:"GIT_TOO_OLD"});
+ for(const value of ["git version 2.45.0","git version 2.45.2.windows.1","git version 3.0.0\n"])
+  assert.ok(requireGitVersion(value));
+ for(const value of [null,"git 2.45.0","git version 2.45","warning\ngit version 2.45.0","git version 99999999999999999999.0.0"])
+  assert.throws(()=>requireGitVersion(value),{code:"GIT_VERSION_UNVERIFIED"});
+ assert.ok(probeGitVersion(git.path));
+ const source=readFileSync(join(ROOT,"core/git-version.mjs"),"utf8").replace(/^import .*;$/gm,"").replace(/^export /gm,"");
+ for(const mode of ["old","missing","unsupported","current"]){
+  const calls=[],context=vm.createContext({PeerError,process,execFileSync:(path,args,opts)=>{
+   calls.push(args);assert.equal(path,"fixture-git");assert.equal(opts.timeout,5000);assert.equal(opts.maxBuffer,4096);
+   if(mode==="missing"||mode==="unsupported"&&calls.length===2)throw Error("synthetic failure");
+   return mode==="old"?"git version 2.43.0":"git version 2.45.0.windows.1";
+  }});vm.runInContext(source,context);
+  if(mode==="current")assert.equal(context.probeGitVersion("fixture-git"),"2.45.0");
+  else assert.throws(()=>context.probeGitVersion("fixture-git"),{code:{old:"GIT_TOO_OLD",missing:"GIT_UNAVAILABLE",unsupported:"GIT_CAPABILITY_UNAVAILABLE"}[mode]});
+  assert.equal(calls.length,["old","missing"].includes(mode)?1:2);
+ }
+});
+
+test("ordinary git directories are portable artifacts while metadata aliases stay forbidden",()=>{
+ for(const path of ["git/readme.txt","src/Git/tool.mjs","git.txt"])assert.equal(artifactPath(path),path);
+ for(const path of [".git/config","src/.GIT/index","git~1/config","GIT~23/config"])assert.throws(()=>artifactPath(path),{code:"UNSAFE_ARTIFACT_PATH"});
+ const r=repo();mkdirSync(join(r.root,"git"));writeFileSync(join(r.root,"git","readme.txt"),"ordinary source directory");
+ g(r.root,["add","git/readme.txt"]);g(r.root,["commit","-m","ordinary git directory"]);r.commit=text(r.root,["rev-parse","HEAD"]);
+ const reader=repositoryReader({root:r.root,git}),result=reader.capture({baseCommit:r.base,commit:r.commit,paths:["git/readme.txt"],allowed:["git/"]});
+ assert.equal(result.files[0].bytes.toString(),"ordinary source directory");
+ const seen=[];reader.snapshot({commit:r.commit,consume:file=>seen.push(file.path)});assert.ok(seen.includes("git/readme.txt"));
 });

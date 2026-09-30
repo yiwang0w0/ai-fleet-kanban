@@ -103,9 +103,9 @@ request_assignment 要求当前 expected_version，且任务未开始、未归�
       }
     }
 
-更新角色需 --version <所见角色版本>，旧凭据随即失效。撤销使用 revoke --db <绝对路径> --principal <ID> --version <凭据版本>。已有任务登记使用 enroll --db <绝对路径> --task <数字ID> --project demo --work-kind implement --capabilities code --version <当前任务版本>；父卡应先登记同项目，不能改变已有登记。
+更新角色需 --version <所见角色版本>，旧凭据随即失效。撤销使用 revoke --db <绝对路径> --principal <ID> --version <凭据版本>。已有任务登记使用 enroll --db <绝对路径> --task <数字ID> --project demo --work-kind implement --capabilities board-tools --version <当前任务版本>；父卡应先登记同项目，不能改变已有登记。
 
-implement/review 角色必须声明 claude、codex 或 zcode 以及已核实的 model/effort；review 必须 tools=read-only。执行凭据 grant 还要求 --run <实际运行ID>。该 run 必须由可信调度器写入匹配的 broker_role_version / broker_role_digest 策略上下文。该上下文由受控 dispatch prepare 原子生成；其运行凭据必须等一次性启动许可提交后才能调用 MCP 工具。实际执行器监督与适配未完成；参见 [受控调度](dispatch.md)，不要手工伪造 run。
+implement/review 角色必须声明 claude、codex 或 zcode 以及已核实的 model/effort；review 必须 tools=read-only。执行角色的 capabilities 必须且只能选择 ["board-tools"] 或 ["workspace-files"] 一个配置，与适配器共用支持集合；空数组、组合配置、code、shell-anything 等其他值在角色登记前返回 BAD_INPUT。workspace-files 已包含该角色所需的看板工具，无需再添加 board-tools。业务技能名称不构成工具授权。执行凭据 grant 还要求 --run <实际运行ID>。该 run 必须由可信调度器写入匹配的 broker_role_version / broker_role_digest 策略上下文。该上下文由受控 dispatch prepare 原子生成；其运行凭据必须等一次性启动许可提交后才能调用 MCP 工具。实际执行器监督与适配未完成；参见 [受控调度](dispatch.md)，不要手工伪造 run。
 
 ## MCP 协议与验证
 
@@ -128,3 +128,12 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 仓库元数据新增 get_repository(project_id, repo_id) / list_repositories(project_id, limit)，仅 coordinate / observe 可按项目读取已登记仓库、批准基线及当前代次标识。不会返回本机路径、Git 程序或文件内容，也不提供登记/批准入口。见 [仓库映射与内容读取](repositories.md)。
 
 专用 workspace-files 执行身份新增 get_workspace / list_workspace_files / read_workspace_file；implement 且 tools=write 另有 edit_workspace_file / delete_workspace_file。版本和字节写入与 MCP 回执原子提交，不开放本机路径或 shell。详见 [文件会话合同](workspace-files.md)。
+
+
+## 已存角色的升级检查
+
+本机管理员可执行 `node cli/mcp-admin.mjs roles --db <绝对数据库路径>`，查看角色所见版本、摘要及 valid 标记。此命令不输出凭据；无效角色返回 POLICY_INVALID 诊断，不把未经验证的策略 JSON 当作有效策略展示。
+
+授权、凭据认证及 dispatch prepare/launch 均重新验证已存策略的字段、能力、角色标识和摘要。未知旧能力（例如 code）不会自动转换为文件或 shell 权限，也不能因为此前已登记或已有凭据而继续执行。MCP list_roles 与候选选择只纳入有效角色，单个旧角色不会阻止其他合法角色被选中。
+
+修复须由本机管理员核对权限后，准备符合当前合同的角色 JSON，并使用 `role --db <路径> --policy-file <JSON> --version <所见角色版本>` 显式更新。旧版本或省略版本会拒绝；成功更新使旧凭据和旧分派策略失效，需要重新核对及授权，不自动重启任务。能力不满足的新旧任务仍停在 waiting_policy；任务的 required_capabilities 是匹配需求，不能扩展角色工具范围。已有任务登记保持不可变，不对旧 code 需求自动赋予新权限。

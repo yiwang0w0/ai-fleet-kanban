@@ -32,7 +32,7 @@ function source(){
 }
 const SOURCE=source();
 function policy(id,kind,extra={}){
- return {role_id:id,kind,projects:["demo"],capabilities:kind==="implement"?["code"]:[],runtime:kind==="implement"?"claude":null,model:kind==="implement"?"fixture-model":null,effort:kind==="implement"?"fixture-effort":null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
+ return {role_id:id,kind,projects:["demo"],capabilities:kind==="implement"?["board-tools"]:[],runtime:kind==="implement"?"claude":null,model:kind==="implement"?"fixture-model":null,effort:kind==="implement"?"fixture-effort":null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
 }
 function fixture({limit=5,sourceInfo=SOURCE,executionMode="fixture"}={}){
  const dbPath=path("board")+".db",db=new DatabaseSync(dbPath);dbs.push(db);db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000");store.migrate(db);migratePeers(db);migrateSync(db);migrateBroker(db);migrateDispatch(db);
@@ -43,7 +43,7 @@ function fixture({limit=5,sourceInfo=SOURCE,executionMode="fixture"}={}){
  return {db,dbPath,coord,quota,source:sourceInfo};
 }
 const count=(f,name)=>f.db.prepare("SELECT count(*) n FROM "+name).get().n;
-function card(f,{kind="task",parent=null,release=true,capabilities=["code"]}={}){
+function card(f,{kind="task",parent=null,release=true,capabilities=["board-tools"]}={}){
  const args={request_id:randomUUID(),project_id:"demo",subject:randomUUID(),description:"fixture task",acceptance:"observed receipt",work_kind:"implement",required_capabilities:capabilities};
  const created=parent?callTool(f.db,f.coord.auth,"split_task",{...args,parent_uid:parent.task_uid,expected_version:parent.aggregate_version}):callTool(f.db,f.coord.auth,"create_task",{...args,kind});
  if(release)store.setReleased(f.db,{id:created.task.id,expectedVersion:created.task.aggregate_version,released:true});
@@ -530,4 +530,18 @@ test("a journal file created during execution cannot suppress settlement or cred
  assert.equal(readFileSync(join(options.privateDirectory,"execution-observation.json"),"utf8"),"untrusted precreation");
  assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
  await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
+});
+
+
+test("persisted unsupported role refuses preparation and launch before consuming a model allowance",()=>{
+ for(const phase of ["prepare","launch"]){
+  const f=fixture(),t=card(f),a=assign(f,t),w=phase==="launch"?prepare(f,a):null;
+  const old=policy("engine","implement",{capabilities:["shell-anything"]});
+  f.db.prepare("UPDATE broker_roles SET policy_json=? WHERE role_id='engine'").run(JSON.stringify(old));
+  const before=quotaStatus(f.db,f.quota.quota_id),state=store.get(f.db,t.id),principals=f.db.prepare("SELECT count(*) n FROM broker_principals").get().n;
+  assert.throws(()=>phase==="prepare"?prepare(f,a):launch(f,w),{code:"POLICY_INVALID"});
+  assert.deepEqual(quotaStatus(f.db,f.quota.quota_id),before);assert.equal(before.used,0);assert.deepEqual(store.get(f.db,t.id),state);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM broker_principals").get().n,principals);
+  if(w)assert.equal(f.db.prepare("SELECT launch_at FROM broker_dispatches WHERE dispatch_id=?").get(w.receipt.dispatch_id).launch_at,null);
+ }
 });

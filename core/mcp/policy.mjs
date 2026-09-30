@@ -6,6 +6,7 @@ import {localIdentity} from "../federation/peers.mjs";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {PeerError,keys,names,uuid,version} from "../federation/protocol.mjs";
 import {writeRecoveryJSON} from "../recovery.mjs";
+export const EXECUTION_CAPABILITIES=Object.freeze(["board-tools","workspace-files"]);
 export const ROLE_KINDS=["coordinate","implement","review","observe"];
 export const READ_TOOLS=["get_repository","list_repositories","list_nodes","list_roles","get_task","get_sync_status","get_delegation","list_bindings","get_binding","get_binding_proposal","get_cancellation","list_cancellations","get_result","list_results"];
 export const ROLE_TOOLS=Object.freeze({
@@ -23,10 +24,11 @@ export function exact(x,fields,label){keys(x,fields,label);if(Object.keys(x).len
 function integer(x,label,min,max){if(!Number.isSafeInteger(x)||x<min||x>max)fail("BAD_INPUT",label+" 超出范围",400);return x;}
 export function rolePolicy(input){
  exact(input,["role_id","kind","projects","capabilities","runtime","model","effort","tools","priority","enabled","limits"],"role");
- const role_id=names([input.role_id],"role_id",null,1)[0],projects=names(input.projects,"projects",null,1),capabilities=names(input.capabilities,"capabilities");
+ const role_id=names([input.role_id],"role_id",null,1)[0],projects=names(input.projects,"projects",null,1),capabilities=names(input.capabilities,"capabilities",EXECUTION_CAPABILITIES);
  if(!ROLE_KINDS.includes(input.kind)||typeof input.enabled!=="boolean"||!["read-only","write"].includes(input.tools))fail("BAD_INPUT","角色种类或工具权限无效",400);
  const execution=["implement","review"].includes(input.kind);
  if(execution){
+  if(capabilities.length!==1)fail("BAD_INPUT","执行角色必须选择一个 board-tools 或 workspace-files 能力配置",400);
   if(!["claude","codex","zcode"].includes(input.runtime))fail("BAD_INPUT","执行角色必须声明受支持的运行时",400);
   for(const k of ["model","effort"])if(typeof input[k]!=="string"||!input[k]||input[k].length>120||/[\u0000-\u001f\u007f]/.test(input[k]))fail("BAD_INPUT","模型或推理档位无效",400);
  }else if(input.runtime!==null||input.model!==null||input.effort!==null)fail("BAD_INPUT","非执行角色不能声明模型",400);
@@ -58,11 +60,28 @@ export function migrateBroker(db){
 }
 export function getRole(db,id){
  const row=db.prepare("SELECT * FROM broker_roles WHERE role_id=?").get(id);
- return row?{role_id:row.role_id,version:row.version,policy:JSON.parse(row.policy_json),policy_digest:row.policy_digest}:null;
+ if(!row)return null;
+ let policy;
+ try{
+  policy=rolePolicy(JSON.parse(row.policy_json));version(row.version);
+  if(policy.role_id!==row.role_id||digest(policy)!==row.policy_digest)fail("BAD_INPUT","策略标识或摘要不匹配",400);
+ }catch(e){
+  if(!(e instanceof SyntaxError)&&!(e instanceof PeerError))throw e;
+  fail("POLICY_INVALID","角色 "+row.role_id+" 的已存策略不受支持或已损坏；请由本机管理员检查并按所见版本更新",409);
+ }
+ return {role_id:row.role_id,version:row.version,policy,policy_digest:row.policy_digest};
 }
+/** Invalid stored roles remain diagnosable locally but never become candidates. */
+export function inspectRoles(db){
+ return db.prepare("SELECT role_id,version,policy_digest FROM broker_roles ORDER BY role_id").all().map(row=>{
+  try{return {...getRole(db,row.role_id),valid:true};}
+  catch(e){if(e.code!=="POLICY_INVALID")throw e;return {...row,valid:false,error:{code:e.code,message:e.message}};}
+ });
+}
+export function availableRoles(db){return inspectRoles(db).filter(r=>r.valid).map(({valid,...role})=>role);}
 export function putRole(db,policy,expectedVersion){
  policy=rolePolicy(policy);return atomic(db,()=>{
-  localIdentity(db);const old=getRole(db,policy.role_id);
+  localIdentity(db);const old=db.prepare("SELECT version FROM broker_roles WHERE role_id=?").get(policy.role_id);
   if(old){version(expectedVersion);if(old.version!==expectedVersion)fail("CONFLICT","角色版本已变化");if(old.version>=Number.MAX_SAFE_INTEGER)fail("VERSION_EXHAUSTED","角色版本已达上限");}
   else if(expectedVersion!==undefined)fail("CONFLICT","角色尚未登记");
   const next=(old?.version??0)+1,now=new Date().toISOString();

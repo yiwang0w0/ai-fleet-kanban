@@ -3,7 +3,7 @@ import {isAbsolute,join,relative,sep,dirname} from "node:path";
 import {createHash} from "node:crypto";
 import {ZCODE_PROVIDER,ZCODE_EFFORTS,zcodeAuthBase,zcodeProviderProfile,zcodeSettings,zcodeArguments} from "./zcode-profile.mjs";
 import {pinFile} from "./supervisor.mjs";
-import {roleTools,loadPrincipalCredential,fail,exact} from "../mcp/policy.mjs";
+import {EXECUTION_CAPABILITIES,roleTools,loadPrincipalCredential,fail,exact} from "../mcp/policy.mjs";
 import {uuid} from "../federation/protocol.mjs";
 import {canonical} from "../federation/sync-store.mjs";
 
@@ -75,7 +75,7 @@ export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,pr
  if(!["read-only","write"].includes(role.tools)||role.kind==="review"&&role.tools!=="read-only")fail("POLICY_MISMATCH","角色工具策略无效");
  // No code/shell capability is silently granted by a board probe profile.
  const fileScope=Array.isArray(role.capabilities)&&role.capabilities.length===1&&role.capabilities[0]==="workspace-files";
- if(!Array.isArray(role.capabilities)||role.capabilities.length!==1||!fileScope&&role.capabilities[0]!=="board-tools")fail("CAPABILITY_UNAVAILABLE","适配配置需要明确的 board-tools 或 workspace-files 能力");
+ if(!Array.isArray(role.capabilities)||role.capabilities.length!==1||!EXECUTION_CAPABILITIES.includes(role.capabilities[0]))fail("CAPABILITY_UNAVAILABLE","适配配置需要明确的 board-tools 或 workspace-files 能力");
  if(fileScope){exact(workspaceBinding,["workspace_id","descriptor_digest","base_commit","baseline_digest","access"],"workspace_binding");uuid(workspaceBinding.workspace_id,"workspace_id");if(workspaceBinding.access!=="mcp-files-v1"||!/^[a-f0-9]{64}$/.test(workspaceBinding.descriptor_digest)||!/^[a-f0-9]{64}$/.test(workspaceBinding.baseline_digest)||!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(workspaceBinding.base_commit))fail("WORKSPACE_NOT_BOUND","需要受管文件会话");}
  else if(workspaceBinding!==null)fail("WORKSPACE_ADAPTER_REQUIRED","board-tools 不能绑定任务文件会话");
  if(typeof prompt!=="string"||!prompt.trim()||Buffer.byteLength(prompt)>131072||prompt.includes("\0"))fail("BAD_INPUT","提示内容无效或超限",400);

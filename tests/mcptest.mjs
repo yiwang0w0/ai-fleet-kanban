@@ -11,6 +11,7 @@ import {fileURLToPath} from "node:url";
 import http from "node:http";
 import {PassThrough} from "node:stream";
 import {localIdentity,migratePeers} from "../core/federation/peers.mjs";
+import {digest} from "../core/federation/sync-store.mjs";
 import {migrateSync} from "../core/federation/sync-store.mjs";
 import {migrateBroker,putRole,getRole,issuePrincipal,revokePrincipal,authenticatePrincipal} from "../core/mcp/policy.mjs";
 import {callTool,listTools,enrollTask,TOOL_DEFINITIONS} from "../core/mcp/tools.mjs";
@@ -22,7 +23,7 @@ after(async()=>{for(const c of children)if(c.exitCode===null&&c.signalCode===nul
 const path=name=>join(TMP,name+"-"+seq++);
 function policy(role_id="coord",kind="coordinate",extra={}){
  const execution=["implement","review"].includes(kind);
- return {role_id,kind,projects:["demo"],capabilities:execution?["code"]:[],runtime:execution?"claude":null,model:execution?"fixture-model":null,effort:execution?"fixture-effort":null,tools:kind==="review"||kind==="observe"?"read-only":"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
+ return {role_id,kind,projects:["demo"],capabilities:execution?["board-tools"]:[],runtime:execution?"claude":null,model:execution?"fixture-model":null,effort:execution?"fixture-effort":null,tools:kind==="review"||kind==="observe"?"read-only":"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
 }
 function fixture(){
  const dir=path("node");mkdirSync(dir);const dbPath=join(dir,"board.db"),db=new DatabaseSync(dbPath);dbs.push(db);
@@ -33,7 +34,7 @@ function grant(f,roleId,projects=["demo"],runId=null){
  const file=path("credential")+".json",principal=issuePrincipal(f.db,{roleId,projects,runId,credentialFile:file}),credential=JSON.parse(readFileSync(file,"utf8"));
  return {file,principal,credential,auth:"Bearer "+credential.token};
 }
-const createArgs=(extra={})=>({request_id:randomUUID(),project_id:"demo",subject:"test task",description:"",acceptance:"check fixture",work_kind:"implement",required_capabilities:["code"],kind:"task",...extra});
+const createArgs=(extra={})=>({request_id:randomUUID(),project_id:"demo",subject:"test task",description:"",acceptance:"check fixture",work_kind:"implement",required_capabilities:["board-tools"],kind:"task",...extra});
 const create=(f,extra={})=>callTool(f.db,f.coord.auth,"create_task",createArgs(extra)).task;
 function worker(f,{kind="implement"}={}){
  const role=putRole(f.db,policy("engine",kind)),task=create(f,{work_kind:kind});
@@ -355,7 +356,7 @@ test("MCP enrollment keeps a legacy tree and refuses legacy uplift instead of ch
  const f=fixture();let parent;
  for(let depth=0;depth<=2;depth++){
   const id=store.add(f.db,{subject:"legacy "+depth,parentId:parent?.id??null,kind:depth?"task":"goal"});
-  parent=store.get(f.db,id);enrollTask(f.db,{id,projectId:"demo",workKind:"implement",capabilities:["code"],expectedVersion:parent.aggregate_version});
+  parent=store.get(f.db,id);enrollTask(f.db,{id,projectId:"demo",workKind:"implement",capabilities:["board-tools"],expectedVersion:parent.aggregate_version});
  }
  const args=createArgs();delete args.kind;const before=count(f,"tasks");
  assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",{...args,parent_uid:parent.task_uid,expected_version:parent.aggregate_version}),{code:"CHAIN_LIMIT"});
@@ -366,4 +367,48 @@ test("deep JSON tool arguments return BAD_INPUT over HTTP without writing a task
  const f=fixture(),n=await network(f);let nested="end";for(let i=0;i<1000;i++)nested={child:nested};
  const r=await fetch(n.url+"/local/v1/tools/call",{method:"POST",headers:{Authorization:f.coord.auth,"Content-Type":"application/json"},body:JSON.stringify({name:"create_task",arguments:createArgs({description:nested})})});
  assert.equal(r.status,400);assert.equal((await r.json()).code,"BAD_INPUT");assert.equal(count(f,"tasks"),0);assert.equal(count(f,"broker_requests"),0);
+});
+
+
+test("role registration rejects unknown and incompatible execution capability profiles before writing",()=>{
+ const f=fixture(),roles=count(f,"broker_roles"),events=count(f,"broker_auth_events");
+ for(const kind of ["implement","review"])for(const capabilities of [[],["code"],["shell-anything"],["board-tools","workspace-files"],["board-tools","board-tools"]])
+  assert.throws(()=>putRole(f.db,policy("bad",kind,{capabilities})),{code:"BAD_INPUT"});
+ assert.throws(()=>putRole(f.db,policy("bad","coordinate",{capabilities:["shell-anything"]})),{code:"BAD_INPUT"});
+ assert.equal(count(f,"broker_roles"),roles);assert.equal(count(f,"broker_auth_events"),events);
+ for(const runtime of ["claude","codex","zcode"])for(const capability of ["board-tools","workspace-files"]){
+  const r=putRole(f.db,policy(runtime+"-"+capability,"implement",{runtime,capabilities:[capability]}));
+  assert.deepEqual(r.policy.capabilities,[capability]);
+ }
+});
+
+test("legacy unsupported roles cannot authenticate, mint credentials or route work and need explicit versioned repair",()=>{
+ const f=fixture(),w=worker(f),old={...w.role.policy,capabilities:["code"]};
+ f.db.prepare("UPDATE broker_roles SET policy_json=?,policy_digest=? WHERE role_id='engine'").run(JSON.stringify(old),digest(old));
+ const rows=count(f,"broker_principals"),events=count(f,"broker_auth_events"),file=path("legacy-grant")+".json";
+ assert.throws(()=>getRole(f.db,"engine"),{code:"POLICY_INVALID"});
+ assert.throws(()=>authenticatePrincipal(f.db,w.identity.auth),{code:"POLICY_INVALID"});
+ assert.throws(()=>issuePrincipal(f.db,{roleId:"engine",projects:["demo"],runId:w.task.run_id,credentialFile:file}),{code:"POLICY_INVALID"});
+ assert.equal(existsSync(file),false);assert.equal(count(f,"broker_principals"),rows);assert.equal(count(f,"broker_auth_events"),events);
+ assert.deepEqual(callTool(f.db,f.coord.auth,"list_roles",{}).roles.map(r=>r.role_id),["coord"]);
+ const t=create(f),args=()=>({request_id:randomUUID(),task_uid:t.task_uid,expected_version:t.aggregate_version});
+ assert.equal(callTool(f.db,f.coord.auth,"request_assignment",args()).state,"waiting_policy");assert.equal(store.get(f.db,t.id).attempts,0);
+ const child=spawnSync(process.execPath,[join(ROOT,"cli/mcp-admin.mjs"),"roles","--db",f.dbPath],{encoding:"utf8",windowsHide:true});
+ assert.equal(child.status,0,child.stderr);const bad=JSON.parse(child.stdout).roles.find(r=>r.role_id==="engine");
+ assert.equal(bad.valid,false);assert.equal(bad.version,1);assert.equal(bad.error.code,"POLICY_INVALID");assert.equal(bad.policy,undefined);
+ putRole(f.db,policy("fallback","implement",{priority:20}));assert.equal(callTool(f.db,f.coord.auth,"request_assignment",args()).role_id,"fallback");
+ assert.throws(()=>putRole(f.db,policy("engine","implement"),2),{code:"CONFLICT"});
+ const repaired=putRole(f.db,policy("engine","implement"),1);assert.equal(repaired.version,2);
+ assert.throws(()=>authenticatePrincipal(f.db,w.identity.auth),{code:"POLICY_CHANGED"});
+ assert.equal(callTool(f.db,f.coord.auth,"request_assignment",args()).role_id,"engine");
+});
+
+test("stored role JSON, identity and digest corruption fail closed but remain replaceable",()=>{
+ for(const mode of ["json","identity","digest"]){
+  const f=fixture(),r=putRole(f.db,policy("engine","implement"));
+  const bad=mode==="json"?"{":JSON.stringify({...r.policy,...(mode==="identity"?{role_id:"other"}:{})});
+  f.db.prepare("UPDATE broker_roles SET policy_json=?,policy_digest=? WHERE role_id='engine'").run(bad,mode==="digest"?"0".repeat(64):r.policy_digest);
+  assert.throws(()=>getRole(f.db,"engine"),{code:"POLICY_INVALID"});
+  assert.equal(putRole(f.db,policy("engine","implement"),1).version,2);
+ }
 });

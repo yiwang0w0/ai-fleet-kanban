@@ -16,11 +16,11 @@
 
 调用者指定已登记 repo_id、批准 base_commit、完整 commit 和明确的相对文件列表。提交标识只接受当前对象格式的完整小写 SHA-1 或 SHA-256，不接受 HEAD、分支、标签对象或任意 revision 表达式。交付提交必须能沿经逐项哈希核验的父链到达批准基线；缺少对象或无继承关系拒绝，不自动 fetch。
 
-Git 使用固定程序路径、过滤后的环境和固定参数，禁用 lazy fetch、replacement refs、外部传输、可选锁及 fsmonitor。Windows 固定实际 bin/git.exe，拒绝 cmd/git.exe 启动器。读取不 checkout，不调用 textconv/smudge，不使用工作目录中同名文件的内容。因此本机未提交修改和换行转换不会混入交付。
+Git 使用固定程序路径、过滤后的环境和固定参数，禁用 lazy fetch、replacement refs、外部传输、可选锁及 fsmonitor。Windows 固定实际 bin/git.exe，拒绝 cmd/git.exe 启动器。最低要求 Git for Windows 2.45.0；[Git 2.45 官方发布说明](https://raw.githubusercontent.com/git/git/v2.45.0/Documentation/RelNotes/2.45.0.txt)记录了 --no-lazy-fetch 的引入。固定程序通过 SHA-256 检查后，再探测版本与该选项；旧版本返回 GIT_TOO_OLD，未知版本返回 GIT_VERSION_UNVERIFIED，缺少选项返回 GIT_CAPABILITY_UNAVAILABLE，均早于仓库对象读取和登记。成功探测仅按已复核的程序路径与摘要在当前进程缓存，程序摘要仍在每次 gitPin 时重新检查。读取不 checkout，不调用 textconv/smudge，不使用工作目录中同名文件的内容。因此本机未提交修改和换行转换不会混入交付。
 
 读取原始 commit、tree、blob 对象，按 Git 对象格式重新计算内容地址。每条选定文件路径经过的目录对象及提交父链都验证，不能仅信任 ls-tree 的对象名。实际文件另计算 SHA-256 和字节数，作为后续内容传输依据；损坏对象即使放在正确对象文件名下仍拒绝。
 
-路径必须为 NFC、UTF-8、规范相对路径。禁止绝对路径、反斜杠、盘符/流、父目录跳转、空段、控制字符、Windows 设备名和 Git 元数据保留名；同时检查选中文件及目录前缀的大小写冲突。只接受 Git 普通文件模式 100644 / 100755，允许零字节文件。符号链接、穿越链接、子模块和 LFS 指针不充当实际产物。
+路径必须为 NFC、UTF-8、规范相对路径。禁止绝对路径、反斜杠、盘符/流、父目录跳转、空段、控制字符、Windows 设备名和 Git 元数据保留名（.git 及 git~1 等短名）；普通 git/ 目录允许读取；同时检查选中文件及目录前缀的大小写冲突。只接受 Git 普通文件模式 100644 / 100755，允许零字节文件。符号链接、穿越链接、子模块和 LFS 指针不充当实际产物。
 
 | 范围 | 限制 |
 | --- | --- |

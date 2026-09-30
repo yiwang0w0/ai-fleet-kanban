@@ -67,7 +67,7 @@ test("unsupported provider, unverified version, runtime mismatch and unresolved 
  }
 });
 test("file/shell capabilities and malformed role policies are never upgraded to board capability",()=>{
- for(const capabilities of [[],["shell"],["board-tools","files"],["board-tools","board-tools"],null,{}]){
+ for(const capabilities of [[],["shell"],["code"],["board-tools","workspace-files"],["board-tools","files"],["board-tools","board-tools"],null,{}]){
   const f=fixture();f.input.role.capabilities=capabilities;
   assert.throws(()=>prepareAdapter(f.input),{code:"CAPABILITY_UNAVAILABLE"});
  }

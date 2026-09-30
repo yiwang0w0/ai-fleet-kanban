@@ -2,9 +2,11 @@ import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {readFileSync,realpathSync,statSync} from "node:fs";
 import {basename,dirname,isAbsolute,join} from "node:path";
+import {probeGitVersion} from "../git-version.mjs";
 import {PeerError} from "../federation/protocol.mjs";
 
 export const MAX_FILE_BYTES=8*1024*1024,MAX_CAPTURE_BYTES=32*1024*1024,MAX_CAPTURE_FILES=256;
+const verifiedGitVersions=new Map();
 const fail=(code,message)=>{throw new PeerError(code,message,409);};
 export function objectId(value,format=null){
  if(typeof value!=="string"||!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value)||format&&value.length!==(format==="sha1"?40:64))fail("BAD_OBJECT_ID","需要完整的当前对象格式提交编号");
@@ -13,7 +15,7 @@ export function objectId(value,format=null){
 export function artifactPath(value){
  if(typeof value!=="string"||!value||Buffer.byteLength(value)>1024||value!==value.normalize("NFC")||/[\\:*?"<>|\p{C}]/u.test(value)||value.startsWith("/"))fail("UNSAFE_ARTIFACT_PATH","产物须使用可移植的规范相对路径");
  const parts=value.split("/");
- if(parts.length>32||parts.some(p=>!p||p.startsWith(" ")||p==="."||p===".."||/[. ]$/.test(p)||Buffer.byteLength(p)>240||/^(?:con|conin\$|conout\$|clock\$|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(p)||/^\.?git(?:~[0-9]+)?$/i.test(p)))fail("UNSAFE_ARTIFACT_PATH","产物路径包含保留名、空段或不可移植段");
+ if(parts.length>32||parts.some(p=>!p||p.startsWith(" ")||p==="."||p===".."||/[. ]$/.test(p)||Buffer.byteLength(p)>240||/^(?:con|conin\$|conout\$|clock\$|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(?:\.|$)/i.test(p)||/^(?:\.git|git~[0-9]+)$/i.test(p)))fail("UNSAFE_ARTIFACT_PATH","产物路径包含保留名、空段或不可移植段");
  return value;
 }
 export function allowedPaths(values){
@@ -27,6 +29,12 @@ export function gitPin(pin){
  let path,bytes;try{path=realpathSync.native(pin.path);if(!statSync(path).isFile()||statSync(path).size>64*1024*1024)throw Error();bytes=readFileSync(path);}catch{fail("GIT_UNAVAILABLE","无法读取已登记 Git 程序");}
  if(process.platform==="win32"&&basename(dirname(path)).toLowerCase()==="cmd")fail("GIT_LAUNCHER_UNSUPPORTED","请固定 Git 的实际 bin/git.exe，不能使用 cmd 启动器");
  if(createHash("sha256").update(bytes).digest("hex")!==pin.sha256)fail("GIT_CHANGED","Git 程序与已登记摘要不一致");
+ const key=path+"\0"+pin.sha256;
+ if(!verifiedGitVersions.has(key)){
+  const version=probeGitVersion(path,{env:gitEnvironment(path),cwd:dirname(path)});
+  if(verifiedGitVersions.size>=128)verifiedGitVersions.clear();
+  verifiedGitVersions.set(key,version);
+ }
  return {path,sha256:pin.sha256};
 }
 function directory(path){

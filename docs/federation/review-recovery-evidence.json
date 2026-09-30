@@ -98,7 +98,7 @@
       ".data/review32-decision.log": "f904d0a449935df9b97ae4d0c5b2a539aff0f63434789c268a6119e9cb265480"
     }
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": "success",
   "previous_commit_ci": {
     "commit": "1eb105650eb7fde221427eccc92542b4feacbcfd",
     "run_id": 36690834566,
@@ -126,5 +126,71 @@
     "scope": "staged diff",
     "exit_code": 0,
     "findings": 0
+  },
+  "exact_commit_ci": {
+    "commit": "73ca689d1dfeedef61931e1cb882fb8b1f246a9e",
+    "run_id": 36694177392,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36694177392",
+    "windows_job_id": 109818077647,
+    "windows": "success",
+    "gitleaks_job_id": 109818077962,
+    "gitleaks": "success",
+    "main_pass": 1483,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0,
+    "native_harness_pass_counts": [
+      15,
+      14,
+      18,
+      26,
+      20,
+      29,
+      21,
+      19,
+      18,
+      21,
+      26,
+      28,
+      35,
+      40,
+      24,
+      18,
+      22,
+      21,
+      19,
+      4,
+      8,
+      8,
+      10,
+      8,
+      14,
+      29,
+      43,
+      38,
+      22,
+      24
+    ],
+    "classic_pass_counts": [
+      402,
+      25,
+      29,
+      27,
+      41,
+      20,
+      57,
+      13,
+      72,
+      195,
+      22,
+      5,
+      23
+    ],
+    "additional_counts": {
+      "codex_selftest": 20,
+      "prompt_selftest": 57,
+      "verify_page": 13
+    },
+    "other_required_checks": "gates_lib and board_health_watch completed successfully"
   }
 }

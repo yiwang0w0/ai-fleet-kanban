@@ -16,7 +16,7 @@ read ahead or work without the panel.
 
 - **node ≥ 22.5** (24+ recommended — the store runs on `node:sqlite`)
 - **python 3** (the worker loop)
-- **git** (the revision gate anchors on it)
+- **Git for Windows >= 2.45.0** (revision checks and federation artifacts require `--no-lazy-fetch`; `npm run doctor` checks both the version and the flag)
 - optional but the point: **a local agent CLI** (e.g. Claude Code) for the real run
 - Windows PowerShell users: set `$env:PYTHONUTF8 = "1"` in each shell — pipes
   default to a legacy codepage and the harnesses print CJK

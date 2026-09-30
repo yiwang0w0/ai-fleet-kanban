@@ -31,7 +31,7 @@ function source(){
 }
 const SOURCE=source();
 function policy(id,kind,extra={}){
- return {role_id:id,kind,projects:["demo"],capabilities:kind==="implement"?["code"]:[],runtime:kind==="implement"?"claude":null,model:kind==="implement"?"fixture-model":null,effort:kind==="implement"?"fixture-effort":null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
+ return {role_id:id,kind,projects:["demo"],capabilities:kind==="implement"?["board-tools"]:[],runtime:kind==="implement"?"claude":null,model:kind==="implement"?"fixture-model":null,effort:kind==="implement"?"fixture-effort":null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
 }
 function fixture({limit=5,sourceInfo=SOURCE,executionMode="fixture"}={}){
  const boardRoot=path("board");mkdirSync(boardRoot);const dbPath=join(boardRoot,"board.db"),db=new DatabaseSync(dbPath);dbs.push(db);db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000");store.migrate(db);migratePeers(db);migrateSync(db);migrateBroker(db);migrateDispatch(db);
@@ -42,7 +42,7 @@ function fixture({limit=5,sourceInfo=SOURCE,executionMode="fixture"}={}){
  return {db,dbPath,coord,quota,source:sourceInfo};
 }
 const count=(f,name)=>f.db.prepare("SELECT count(*) n FROM "+name).get().n;
-function card(f,{kind="task",parent=null,release=true,capabilities=["code"]}={}){
+function card(f,{kind="task",parent=null,release=true,capabilities=["board-tools"]}={}){
  const args={request_id:randomUUID(),project_id:"demo",subject:randomUUID(),description:"fixture task",acceptance:"observed receipt",work_kind:"implement",required_capabilities:capabilities};
  const created=parent?callTool(f.db,f.coord.auth,"split_task",{...args,parent_uid:parent.task_uid,expected_version:parent.aggregate_version}):callTool(f.db,f.coord.auth,"create_task",{...args,kind});
  if(release)store.setReleased(f.db,{id:created.task.id,expectedVersion:created.task.aggregate_version,released:true});

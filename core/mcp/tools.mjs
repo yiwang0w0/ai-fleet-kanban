@@ -11,7 +11,7 @@ import {randomUUID} from "node:crypto";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {localIdentity} from "../federation/peers.mjs";
 import {uuid,names,version} from "../federation/protocol.mjs";
-import {ROLE_TOOLS,READ_TOOLS,roleTools,isReadTool,authenticatePrincipal,getRole,fail} from "./policy.mjs";
+import {ROLE_TOOLS,READ_TOOLS,roleTools,isReadTool,authenticatePrincipal,availableRoles,fail} from "./policy.mjs";
 const require=createRequire(import.meta.url),store=require("../store.js");
 const text=(max=16384)=>({type:"string",maxLength:max});
 const uuidSchema={type:"string",pattern:"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"};
@@ -142,7 +142,7 @@ export function enrollTask(db,{id,projectId,workKind,capabilities,expectedVersio
 }
 export function chooseRole(db,t){
  const required=JSON.parse(t.capabilities_json);
- return db.prepare("SELECT role_id FROM broker_roles ORDER BY role_id").all().map(x=>getRole(db,x.role_id)).filter(r=>r.policy.enabled&&r.policy.kind===t.work_kind&&r.policy.projects.includes(t.project_id)&&required.every(c=>r.policy.capabilities.includes(c)))
+ return availableRoles(db).filter(r=>r.policy.enabled&&r.policy.kind===t.work_kind&&r.policy.projects.includes(t.project_id)&&required.every(c=>r.policy.capabilities.includes(c)))
   .sort((a,b)=>a.policy.priority-b.policy.priority||(a.role_id<b.role_id?-1:a.role_id>b.role_id?1:0))[0]??null;
 }
 function assign(db,p,args){
@@ -204,7 +204,7 @@ function execute(db,p,name,args){
   return name==="get_binding"?bindingState(db,args.relation_id):releaseBoundTask(db,{relationId:args.relation_id,expectedTaskVersion:args.expected_version});
  }
  case "prepare_binding":{scoped(p,args.relation.project_id);migrateBindings(db);const b=prepareBinding(db,{relation:args.relation,expectedTaskVersion:args.expected_version});return {relation_id:b.relation_id,side:b.side,state:b.state,execution_authorized:b.execution_authorized,dispatch_started:false};}
- case "list_roles":return {roles:db.prepare("SELECT role_id FROM broker_roles ORDER BY role_id").all().map(x=>getRole(db,x.role_id)).filter(r=>r.policy.projects.some(x=>p.projects.includes(x))).map(r=>({...r,policy:{...r.policy,projects:r.policy.projects.filter(x=>p.projects.includes(x))},enforcement:r.policy.capabilities.includes("workspace-files")?"mcp_workspace_files_only":"board_tool_scope_only"}))};
+ case "list_roles":return {roles:availableRoles(db).filter(r=>r.policy.projects.some(x=>p.projects.includes(x))).map(r=>({...r,policy:{...r.policy,projects:r.policy.projects.filter(x=>p.projects.includes(x))},enforcement:r.policy.capabilities.includes("workspace-files")?"mcp_workspace_files_only":"board_tool_scope_only"}))};
  case "list_nodes":{
   const local=localIdentity(db),sources=db.prepare("SELECT DISTINCT s.* FROM federation_sources s JOIN federation_cursors c ON s.origin_node_id=c.origin_node_id WHERE c.project_id IN("+marks(p)+") ORDER BY s.origin_node_id").all(...p.projects);
   return {local:{node_id:local.node_id,display_name:local.display_name,sync_epoch:local.sync_epoch},sources};

@@ -13,6 +13,7 @@ import { existsSync, readFileSync, accessSync, constants } from "node:fs";
 import { createServer } from "node:net";
 import { join, dirname, isAbsolute, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { MIN_GIT_VERSION, probeGitVersion } from "../core/git-version.mjs";
 import { applyConfigDefaults } from "../core/env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -67,15 +68,15 @@ if (process.platform === "win32" && process.env.PYTHONUTF8 !== "1")
 
 // ── ③ git — the revision gate's ground ──────────────────────────────────────
 try {
-  execFileSync("git", ["--version"], { stdio: "ignore", windowsHide: true, timeout: 15000 });
+  const gitVersion = probeGitVersion("git");
   try {
     execFileSync("git", ["-C", ROOT, "rev-parse", "HEAD"], { stdio: "ignore", windowsHide: true, timeout: 15000 });
-    ok("git 可用,且本目录是一个 git 仓库(revision 闸有地可站)");
+    ok("Git " + gitVersion + " 可用（最低 " + MIN_GIT_VERSION + "），且本目录是 git 仓库");
   } catch {
     wr("git 可用,但本目录不是 git 仓库", "revision 闸(accepted_rev)需要 git 历史;git init 或从 clone 运行");
   }
-} catch {
-  no("找不到 git", "revision 闸与 CI 都需要它。安装 git 后重试。");
+} catch (e) {
+  no((e.code || "GIT_UNAVAILABLE") + ": " + e.message, "安装 Git for Windows >= " + MIN_GIT_VERSION + " 后重试；联邦产物读取需要 --no-lazy-fetch。");
 }
 
 // ── ④ the local agent CLI — who actually does the work ──────────────────────

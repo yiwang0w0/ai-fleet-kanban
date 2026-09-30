@@ -72,6 +72,8 @@ examples/  fleet config · verify registry · mock runtime adapter · demo seeds
 
 ## Try it
 
+This development branch targets Windows. Install **Git for Windows >= 2.45.0**; the artifact pipeline verifies support for `--no-lazy-fetch` before accessing repository objects. `npm run doctor` reports an old or unsupported Git build explicitly.
+
 ```
 git clone https://github.com/yiwang0w0/ai-fleet-kanban && cd ai-fleet-kanban
 npm run setup              # doctor → config → verify registry → prints the two steps that are yours
