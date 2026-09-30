@@ -2,7 +2,7 @@
 
 已接通 Claude 2.1.247、Codex 0.149.1 和 Zcode 0.16.9 的显式本机启动配置、进程监管、一次性额度及持久化回执。入口为 dispatch execute，每次只处理一个已经领取的分派，不扫描队列。配置构造和输出解析均经过夹具测试；尚未用真实供应商完成该通道的模型任务。
 
-当前支持明确的 capabilities: ["board-tools"] 或 ["workspace-files"]。角色登记与原生适配使用同一能力集合，执行角色只选一个配置；未知值、空配置或两者组合均拒绝，旧已存策略也须重新验证。后者通过受限 MCP 文件会话读写 UTF-8 源码并绑定 v2 启动记录；两种配置均关闭原生文件和命令工具，不自动升级为 shell 能力。详见 [文件会话与提交](workspace-files.md)。该配置不宣称实现 OS 文件隔离，也不满足完整 G04。Zcode 已接通单次启动和 stream-json 回执；安装包对本机假模型/MCP 的工具往返通过，真实订阅登录仍待验收，见 [接入记录](zcode.md)。
+当前支持明确的 capabilities: ["board-tools"] 或 ["workspace-files"]。角色登记与原生适配使用同一能力集合，执行角色只选一个配置；未知值、空配置或两者组合均拒绝，旧已存策略也须重新验证。后者通过受限 MCP 文件会话读写 UTF-8 源码并绑定 v2 启动记录；两种配置均限制原生命令入口；原生工具是否隐藏及拒绝写入的边界按下表核验，不自动升级为 shell 能力。详见 [文件会话与提交](workspace-files.md)。该配置不宣称实现 OS 文件隔离，也不满足完整 G04。Zcode 已接通单次启动和 stream-json 回执；安装包对本机假模型/MCP 的工具往返通过，真实订阅登录仍待验收，见 [接入记录](zcode.md)。
 
 ## 启动配置
 
@@ -16,8 +16,8 @@ core/execution/adapters.mjs 从已登记的角色读取具体模型、推理档�
 
 | 运行时 | 显式配置 | 核验边界 |
 |---|---|---|
-| Claude | --tools ""；仅授权角色 MCP 工具；--strict-mcp-config；--setting-sources ""；禁用 hooks、插件同步、slash commands 和 Chrome；具体模型、effort、固定 session；stdin 提示；不持久化会话 | 初始化工具列表须与授权集完全一致，唯一 fleet MCP 须 connected；额外工具调用或子 agent 输出拒绝；仍需真实运行验证供应商是否遵守配置 |
-| Codex | 忽略用户配置和规则；ephemeral；read-only sandbox；approval never；关闭 shell/unified exec、插件、hooks、apps、多 agent、目标和记忆功能；显式 fleet MCP 与 enabled_tools；stdin 提示 | JSONL 暂无等价的完整实际工具清单或实际模型字段核验；请求模型、启动策略与 MCP 请求审计分别保留，不能假定 JSONL 已证明全部实际权限 |
+| Claude | --tools ""；仅授权角色 MCP 工具；--strict-mcp-config；--setting-sources ""；设置 disableAllHooks、关闭插件同步/slash commands/Chrome；具体模型、effort、固定 session；stdin 提示；不持久化会话 | setting-sources 不排除 managed settings；内置插件/agent 与自动记忆仍需固定版本核验。初始化工具列表及输出校验属于事后拒绝，不能阻止初始化前的副作用；不声称这些参数已建立 OS 隔离 |
+| Codex | 忽略用户配置和规则；ephemeral；read-only sandbox；approval never；关闭 shell/unified exec、view_image、插件、hooks、apps、多 agent、目标和记忆功能；显式 fleet MCP 与 enabled_tools；stdin 提示 | 0.149.1 的假接口实测 features.view_image=false 有效。GPT-5.4 配置仍暴露 apply_patch；一次实际工具调用被 read-only sandbox 拒绝且未写文件。不是全部原生工具隐藏；JSONL 也不提供完整工具清单证明 |
 | Zcode | 固定中国版订阅 provider、单一 GLM-5.3/Flash 和 low/high/max 档位；私有 HOME/config/storage；plan 模式及完整原生工具 denylist；唯一角色 fleet MCP；stdin 启动器 | 实际安装包的本机假接口只观察到允许的 MCP；输出核验模型/工具数/每次工具调用；plan 可执行非破坏 MCP，授权由 broker 控制；真实账号兼容性尚未验收 |
 
 CLI 管理策略及本机文件权限仍可能影响运行；夹具测试不会证明真实登录、模型可用性或供应商内部权限配置已生效。三种 CLI 的配置/帮助核验与真实模型验收分别记录。
@@ -79,3 +79,12 @@ execute 只接受 provider 额度。取消、配置篡改、Python 摘要不符�
 
 接口依据为本机固定版本帮助与实现，另参考 Claude 官方 [CLI reference](https://code.claude.com/docs/en/cli-reference)、[Settings reference](https://code.claude.com/docs/en/settings-reference) 及 Codex 官方 [Configuration reference](https://developers.openai.com/codex/config-reference/)。官方文档会变化；升级后不能沿用未核验的版本登记。
 结算成功同时撤销该 run 的临时 MCP 凭据；结算事务失败时撤销也回滚。已结束执行器不能继续用旧身份读取、拆分或交付任务。恢复补交使用本机受控日志，不依赖被撤销的 agent 凭据。
+
+
+## 固定原生版本复核（2026-09-30）
+
+Codex 0.149.1 使用空认证目录与本机假 Responses 接口进行配置探针，没有连接真实模型或消耗订阅调用。旧参数在 GPT-5.4 配置下仍暴露 apply_patch 与 view_image。审阅建议的顶层 include_apply_patch_tool=false / include_view_image_tool=false 在该版本的工具清单探针中未关闭 view_image，因此不采用为权限措施。官方 schema 的 features.view_image=false 经过实际请求验证，已加入适配器。
+
+features.apply_patch_freeform=false 也不能保证隐藏 GPT-5.4 的 apply_patch。最终配置保留 read-only sandbox 与 approval never；假接口发出一次在独立工作目录创建 fixture-write.txt 的 apply_patch 调用，CLI 返回只读拒绝，文件未产生。仍可见 update_plan/request_user_input。此实测不覆盖所有模型、内置功能、MCP 启动和受管理配置组合，也不代替 Windows OS 隔离或真实订阅验收。
+
+本机 Claude 文件已更新到 2.1.284，合同仍固定 2.1.247。没有为消除版本错误而直接放行新版；当前安装须先完成原生配置/工具及订阅兼容复核。新版帮助说明 --bare 不使用 OAuth，不能直接用于现有订阅接入；--safe-mode 仍应用 managed settings，不能当成独立权限边界。CLAUDE.md/.claude、自动记忆及 managed hooks 的边界仍属 M5 待办。依据见 [Claude 设置优先级](https://code.claude.com/docs/en/settings)与[Codex 配置 schema](https://developers.openai.com/codex/config-schema.json)，版本行为以本机探针为准，证据见 review-native-provider-evidence.json。

@@ -8,7 +8,7 @@
 
 角色明确声明 `capabilities: ["workspace-files"]`。`dispatch execute` 从当前数据库读取该分派的文件会话描述，不接受任务文字传入另一目录或会话。启动记录升级为 `ai-fleet-process/v2`，包含 `workspace_id`、`descriptor_digest`、`base_commit`、`baseline_digest` 和 `access: "mcp-files-v1"`；合同为 `ai-fleet-adapter/workspace-files-v1`。任务版本、源代码审批、角色、额度、初始字节、物理基线和描述必须仍然匹配。执行回执、工作区启动绑定、一次性额度消费在同一事务，SQL 也阻止没有绑定的启动。
 
-Claude/Codex 仍从独立空目录启动，原生文件和命令工具保持关闭，通过唯一 fleet MCP 访问本次文件。角色的 read-only 限制在文件工具层执行。这个合同不提供 shell、测试命令、操作系统文件沙箱或跨端任意路径访问，也不声称第三方 CLI 的权限已经通过真实模型验收。启动参数、配置、凭据和程序摘要沿用 [适配器合同](adapters.md)。
+Claude/Codex 仍从独立空目录启动，通过唯一 fleet MCP 访问本次文件。原生命令入口受限；Codex 关闭 view_image，但部分模型仍暴露 apply_patch，由只读 sandbox 拒绝写入，具体实测及 Claude 未完成核验边界见适配器合同。角色的 read-only 限制在文件工具层执行。这个合同不提供 shell、测试命令、操作系统文件沙箱或跨端任意路径访问，也不声称第三方 CLI 的权限已经通过真实模型验收。启动参数、配置、凭据和程序摘要沿用 [适配器合同](adapters.md)。
 
 ## 文件工具
 

@@ -540,3 +540,17 @@ package、服务启动、doctor、快速入门与同步文档统一最低 Node 2
 本机使用官方 SHA-256 校验的独立 Node 24.21.0，与失败 CI 版本一致。peer 27 项、MCP 37 项、CLI 44 项，共 108 项通过、0 失败、0 跳过；Node 测试框架包装 CLI 的 1 项不重复计数，新增版本边界 3 项。doctor 隔离配置 / 端口 0 实测为 9 PASS / 2 WARN / 0 FAIL，SQLite 事务接口通过。未改变系统 Node 安装，未接触运行部署。
 
 证据见 review-native-runtime-evidence.json。完整 Windows CI 待当前提交复验；M5 原生执行器设置、已授权数据保留、全局界面、后台调度与实体双机验收仍待完成。完整阶段 0/12，真实模型调用各 0/1，部署、全局 MCP 和实际 accepted_rev 未改。
+
+
+第三十九批 CI 41dfc40 / 36707559357：凭据测试 27/27 通过，真实 ACL 用例约 1.03 秒，通过同步、恢复和关系链测试后在 repositorytest 失败。该套件 27 通过 / 1 失败；失败栈与 argv 明确指向 600 文件夹具准备的 git add batch/ 达到 10 秒期限，尚未进入计时的批量读取。gitleaks 通过，后续步骤未运行。终态已写入 review-native-runtime-evidence.json，不再轮询该运行。
+
+## 第四十批：Codex 原生工具实测与夹具准备期限
+
+固定 Codex 0.149.1 的空认证目录 / 本机假 Responses 接口验证了配置实际效果。旧配置对 GPT-5.4 仍暴露 view_image 和 apply_patch；顶层 include_*_tool=false 未能关闭 view_image，未采用这些参数。features.view_image=false 在原生请求中消除图像工具，已加入适配器。features.apply_patch_freeform=false 也不能保证关闭 GPT-5.4 的 apply_patch；最终实现不加入该无效保证。假模型发出一次仅向测试目录写文件的 apply_patch，read-only sandbox / approval never 明确拒绝，文件未产生。
+
+文档改为逐项说明工具可见性、拒绝写入与事后输出校验的边界。M5 仍部分完成：实际 Claude 已为 2.1.284，合同 2.1.247 未自动放宽；managed settings、CLAUDE.md/.claude、自动记忆和新版本订阅接入待核验。现有 CLI 帮助显示 --bare 排除 OAuth，不拿它替代订阅配置。未触发真实模型或改变全局设置。
+
+600 文件测试仅将该次夹具 git add 的期限设为 60 秒，仍在产品读取计时之前；产品单命令 10 秒、总读取 30 秒与批量命令数量、字节哈希等断言不变。此次是根据 CI 具体失败栈修正准备阶段，未通过重跑不变提交掩盖失败。
+
+
+适配器/分派/输出共 107 项通过；仓库初轮 27/28，通过的 600 文件用例整例约 4.86 秒。唯一失败为路径别名探针缺少本次 shell 的 PYTHON 绝对路径（spawn python ENOENT），补上已安装解释器路径后该用例单独通过。不同用例总计 135 项最终通过，保留初轮环境失败，不重复计数。原生 Codex 另有 7 次空账号 / 本机假接口探针，不计入真实调用或普通测试用例数。当前提交完整 CI 待运行，完整阶段仍 0/12；M5 Claude 边界、全局界面、持续调度、授权保留策略及实体联调继续推进。

@@ -25,7 +25,7 @@ const execPath=execFileSync("git",["--exec-path"],{encoding:"utf8"}).trim();
 const gitPath=process.platform==="win32"?realpathSync(join(execPath,"../../bin/git.exe")):realpathSync(execFileSync("which",["git"],{encoding:"utf8"}).trim());
 const git={path:gitPath,sha256:hash(readFileSync(gitPath))};
 const env={...process.env,GIT_CONFIG_NOSYSTEM:"1",GIT_CONFIG_GLOBAL:process.platform==="win32"?"NUL":"/dev/null",GIT_CONFIG_SYSTEM:process.platform==="win32"?"NUL":"/dev/null",GIT_TERMINAL_PROMPT:"0"};
-function g(root,args,input){return execFileSync(gitPath,["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","-c","commit.gpgsign=false",...args],{cwd:root,env,input,windowsHide:true,timeout:10000,stdio:["pipe","pipe","pipe"]});}
+function g(root,args,input,timeout=10000){return execFileSync(gitPath,["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","-c","commit.gpgsign=false",...args],{cwd:root,env,input,windowsHide:true,timeout,stdio:["pipe","pipe","pipe"]});}
 const text=(root,args,input)=>g(root,args,input).toString("utf8").trim();
 function repo(format="sha1"){
  const root=fresh("仓库");mkdirSync(root);g(root,["init","--template=","--object-format="+format]);mkdirSync(join(root,"src"));mkdirSync(join(root,"docs"));
@@ -188,7 +188,9 @@ test("batch object reads snapshot 600 files and capture 256 without per-file Git
   const name="batch/"+String(i).padStart(4,"0")+".bin",bytes=i%67===0?Buffer.alloc(0):Buffer.concat([Buffer.from("row "+i+"\0\r\n"),Buffer.from([0,255,10,13])]);
   writeFileSync(join(r.root,name),bytes);expected.set(name,bytes);
  }
- g(r.root,["-c","core.autocrlf=false","add","batch/"]);g(r.root,["commit","-m","many exact blobs"]);r.commit=text(r.root,["rev-parse","HEAD"]);
+ // This prepares 600 loose objects before the reader's measured operation.
+ // CI hit the fixture's 10 s add deadline; retain the reader's own 10/30 s limits.
+ g(r.root,["-c","core.autocrlf=false","add","batch/"],undefined,60000);g(r.root,["commit","-m","many exact blobs"]);r.commit=text(r.root,["rev-parse","HEAD"]);
  const snapshot=observedReader(r),started=performance.now(),seen=new Map();
  const full=snapshot.reader.snapshot({commit:r.commit,consume:(m,bytes)=>{if(expected.has(m.path)){assert.deepEqual(bytes,expected.get(m.path));assert.equal(m.sha256,hash(bytes));seen.set(m.path,bytes);}}});
  assert.equal(seen.size,600);assert.equal(full.files.length,603);

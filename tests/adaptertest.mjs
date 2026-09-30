@@ -45,7 +45,7 @@ test("Codex retains subscription home while disabling user rules, plugin feature
  assert.equal(validatePreparedAdapter(p),true);assert.equal(p.plan.env.CODEX_HOME,f.dirs.auth);
  for(const flag of ["--ignore-user-config","--ignore-rules","--ephemeral","--json"])assert.ok(args.includes(flag));
  assert.equal(arg(args,"--sandbox"),"read-only");assert.equal(args.at(-1),"-");
- for(const setting of ['approval_policy="never"','web_search="disabled"',"features.shell_tool=false","features.unified_exec=false","features.plugins=false","features.multi_agent=false"])assert.ok(args.includes(setting));
+ for(const setting of ['approval_policy="never"','web_search="disabled"',"features.shell_tool=false","features.unified_exec=false","features.view_image=false","features.plugins=false","features.multi_agent=false"])assert.ok(args.includes(setting));
  const mcp=args.find(v=>v.startsWith("mcp_servers="));assert.ok(mcp.includes("required=true"));assert.ok(mcp.includes("enabled_tools="));
  assert.ok(!args.some(v=>v.includes("dangerously-bypass")));assert.ok(!JSON.stringify(p.manifest).includes("private-fixture"));
 });

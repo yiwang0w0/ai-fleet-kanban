@@ -133,7 +133,7 @@ export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,pr
   const mcpValue="{fleet={command="+configString(node.path)+",args=["+argsBridge.map(configString).join(",")+"],enabled=true,required=true,enabled_tools=["+tools.map(configString).join(",")+"],startup_timeout_sec=30,tool_timeout_sec=30,default_tools_approval_mode=\"approve\"}}";
   const overrides=[
    ["model_reasoning_effort",configString(role.effort)],["approval_policy",'"never"'],["web_search",'"disabled"'],["project_doc_max_bytes","0"],
-   ...["apps","hooks","plugins","remote_plugin","multi_agent","goals","memories","shell_tool","unified_exec","skill_mcp_dependency_install"].map(k=>["features."+k,"false"]),
+   ...["apps","hooks","plugins","remote_plugin","multi_agent","goals","memories","shell_tool","unified_exec","view_image","skill_mcp_dependency_install"].map(k=>["features."+k,"false"]),
    ["mcp_servers",mcpValue]
   ];
   args=["exec","--ignore-user-config","--ignore-rules","--ephemeral","--sandbox","read-only","--json","--color","never","--skip-git-repo-check","--model",role.model,"--cd",cwd,...overrides.flatMap(([k,v])=>["-c",k+"="+v]),"-"];
