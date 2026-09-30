@@ -785,12 +785,58 @@ process.stdin.on("end", () => {
     await runLoopOnce({ WORKER_CLAUDE_CLI: "", WORKER_ALLOW_BATCH_CLI: "", WORKER_CLI_ARGV: JSON.stringify([PY, dump]) }, 60000);
     let argv = []; try { argv = JSON.parse(readFileSync(argvFile, "utf8")); } catch {}
     const i = argv.indexOf("--disallowedTools"); const rules = i >= 0 ? argv.slice(i + 1) : [];
-    const dataFwd = TMP.replace(/\\/g, "/");
+    // v0.21.2: the data dir is spelled the way Claude Code reads an ABSOLUTE path — `//…`
+    // on POSIX (a single slash is project-root-relative and matched nothing, measured
+    // 2026-09-28 on Claude Code 2.1.283), the drive-letter form on Windows.
+    const dataFwd = (WIN ? "" : "/") + TMP.replace(/\\/g, "/");
     ok("⭐真 loop 起的 CLI argv 里有 --disallowedTools", i >= 0, argv.length ? argv.slice(-4).join(" ") : "(argv 未落盘 — 桩没被调到?)");
-    ok("⭐规则覆盖本板的数据目录(<data>/**)与登记簿,五种工具各一条",
-       rules.filter((r) => r.includes(dataFwd + "/**)")).length === 5 && rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 5 &&
-       ["Read", "Edit", "Write", "Glob", "Grep"].every((t) => rules.some((r) => r.startsWith(t + "("))), rules.slice(0, 3).join(" "));
+    ok("⭐规则钉住本板数据目录里的令牌与登记簿(逐文件;Read 与 Edit 各一条)",
+       ["board_token", "worker_token", "review_token"].every((f) =>
+         rules.includes(`Read(${dataFwd}/${f})`) && rules.includes(`Edit(${dataFwd}/${f})`)) &&
+       rules.filter((r) => /verify_registry\.json\)$/.test(r)).length === 2, rules.slice(0, 3).join(" "));
+    ok("⭐只有 Read / Edit 两种规则(Write/Glob/Grep 写法 CLI 明说不匹配)",
+       rules.length > 0 && rules.every((r) => /^(Read|Edit)\(/.test(r)), rules.filter((r) => !/^(Read|Edit)\(/.test(r)).slice(0, 2).join(" "));
+    ok("⭐没有一条规则盖住证据目录(整目录的 Read deny 连 Write 证据都拒 —— 实测)",
+       rules.every((r) => !r.includes(`${dataFwd}/evidence/`) && !r.endsWith(`${dataFwd}/evidence)`)
+                          && !r.endsWith(`${dataFwd}/**)`) && !r.endsWith(`${dataFwd}/*)`)));
     ok("规则里没有反斜杠(正斜杠绝对路径,两平台一致)", rules.length > 0 && rules.every((r) => !r.includes("\\")));
+  }
+
+  // ── ⑮ line identity (v0.22): the tools profile reaches the argv, the charter reaches
+  //    the prompt with its hash, the review frame replaces the worker frame — measured on
+  //    the REAL loop through the argv-dump stub, not on a unit. Refusals exit 3.
+  console.log("\n[⑮ 身份(v0.22):只读工具档进 argv · 章程逐字内联 · 评审框架 · 拒绝码 3]");
+  {
+    const dump = join(TMP, "argvdump2.py"), argvFile = join(TMP, "argv2.json");
+    writeFileSync(dump, ["import sys, json, io",
+      "io.open(" + JSON.stringify(argvFile) + ", 'w', encoding='utf-8').write(json.dumps(sys.argv))",
+      "sys.exit(3)"].join("\n"), "utf8");
+    await api("POST", "/api/tasks", { subject: "identity-dump", line: LINE, maxAttempts: 1, description: "只为抓 argv" });
+    const r = await runLoopOnce({ WORKER_CLAUDE_CLI: "", WORKER_ALLOW_BATCH_CLI: "", WORKER_CLI_ARGV: JSON.stringify([PY, dump]),
+                                  WORKER_ROLE_KIND: "review", WORKER_TOOL_PROFILE: "read-only",
+                                  WORKER_CHARTER: "examples/roles/astra.md" }, 60000);
+    let argv = []; try { argv = JSON.parse(readFileSync(argvFile, "utf8")); } catch {}
+    const allowed = argv.slice(argv.indexOf("--allowedTools") + 1, argv.indexOf("--add-dir"));
+    const prompt = argv[argv.indexOf("-p") + 1] || "";
+    const rootFwd = (WIN ? "" : "/") + ROOT.replace(/\\/g, "/");
+    ok("⑮ ⭐只读档:allowedTools 没有 Edit(Write 留给证据文件)",
+       argv.length > 0 && !allowed.includes("Edit") && allowed.includes("Write"), allowed.join(",") || "(argv 未落盘)");
+    // Python spells the repo through realpath (drive-letter case may differ from Node's
+    // on Windows) — compare case-insensitively there; POSIX stays exact.
+    const sameRule = (r) => WIN ? r.toLowerCase() === `Edit(${rootFwd}/**)`.toLowerCase() : r === `Edit(${rootFwd}/**)`;
+    ok("⑮ ⭐只读档:工作仓在 Edit deny(数据目录在仓外 ⇒ 一条 Edit(//repo/**))",
+       argv.some(sameRule), argv.slice(-2).join(" "));
+    ok("⑮ ⭐章程逐字内联进提示词,带路径与 sha256",
+       /【本线章程 —— examples\/roles\/astra\.md · sha256=[0-9a-f]{64}/.test(prompt) && /方案评审线/.test(prompt),
+       (prompt.match(/【本线章程[^\n]*/) || ["(missing)"])[0].slice(0, 90));
+    ok("⑮ ⭐评审框架:不做活、只判断、要引证", /你是看板的评审线/.test(prompt) && /【评审纪律】/.test(prompt) && !/你是看板 worker/.test(prompt));
+    ok("⑮ 启动行写明身份", /身份: kind=review tools=read-only/.test(r.out));
+    ok("⑮ 只读档也说进了提示词(结构限制,顺便告知)", /【只读】/.test(prompt));
+    const r2 = await runLoopOnce({ WORKER_CLI_ARGV: JSON.stringify([PY, dump]), WORKER_CHARTER: "examples/roles/nope.md" }, 30000);
+    ok("⑮ ⭐章程不存在 → 拒绝启动 exit 3(「被拒绝」族:不排退避,不重启)",
+       r2.code === 3 && /章程/.test(r2.out) && /不存在/.test(r2.out), `code=${r2.code}`);
+    const r3 = await runLoopOnce({ WORKER_CLI_ARGV: JSON.stringify([PY, dump]), WORKER_TOOL_PROFILE: "sudo" }, 30000);
+    ok("⑮ ⭐身份取值不在域内 → 拒绝启动 exit 3", r3.code === 3 && /身份取值不在域内/.test(r3.out), `code=${r3.code}`);
   }
 
 } catch (e) {

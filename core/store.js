@@ -2701,11 +2701,23 @@ function doneRequest(db, id, note = "") {
   return getRequest(db, id);
 }
 
+/** v0.23: children of `parentId` that sit on one of `lines` and are not done — the decompose
+ *  gate's question ("is there an unfinished review card under this goal?"). Pure query; the
+ *  caller decides what to refuse. Archived children do not count; an empty `lines` is "no
+ *  review line configured" and answers [] (nothing can be pending on a line that does not exist). */
+function openChildrenOnLines(db, parentId, lines) {
+  const ls = (lines || []).map(String);
+  if (!ls.length) return [];
+  return db.prepare(`SELECT id FROM tasks WHERE parent_id=? AND archived_at IS NULL AND status<>'done'
+                       AND line IN (${ls.map(() => "?").join(",")}) ORDER BY id`)
+    .all(Number(parentId), ...ls).map((r) => Number(r.id));
+}
+
 module.exports = {
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,
-  noProgressHold, stateFingerprint, fpDiff, heldByNoProgress,
+  noProgressHold, stateFingerprint, fpDiff, heldByNoProgress, openChildrenOnLines,
   reopen, rearmDone, deferToRearm, completeGoals,
   list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, STATUS_LABEL, WF_LABEL, DEFAULT_LEASE_MIN, MAX_LEASE_MIN, defuseRulingHeads,
   DEFAULT_ROUTE,

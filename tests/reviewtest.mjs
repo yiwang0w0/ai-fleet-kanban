@@ -76,11 +76,16 @@ const BASE = `http://127.0.0.1:${PORT}`;
 let srv = null, out = "";
 const boards = [];
 
+// v0.23: the anti-affinity policy is on for this board. Cards claimed WITHOUT a runtime
+// (every section before §7) have no author family and are never held — so the policy
+// changes nothing for them, and §7 measures it with cards that name their runtime.
+const CFGR = join(TMP, "fleet.config.json");
+writeFileSync(CFGR, JSON.stringify({ review: { anti_affinity: "runtime" } }), "utf8");
 const commonEnv = {
   ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8",
   BOARD_PORT: String(PORT), BOARD_URL: BASE, BOARD_DATA_DIR: TMP,
   BOARD_DB: join(TMP, "t.db"), BOARD_ALLOW_UNPINNED: "1",   // isolated harness only
-  BOARD_VERIFY_REGISTRY: REGISTRY,
+  BOARD_VERIFY_REGISTRY: REGISTRY, BOARD_CONFIG: CFGR,
 };
 
 try {
@@ -147,7 +152,15 @@ try {
   {
     let av = []; try { av = JSON.parse(readFileSync(ARGVF, "utf8")); } catch {}
     const i = av.indexOf("--disallowedTools"); const rules = i >= 0 ? av.slice(i + 1) : [];
-    ok("R4b ⭐审阅的真 argv 带 --disallowedTools,覆盖数据目录与登记簿", i >= 0 && rules.some((r) => /\/\*\*\)$/.test(r)) && rules.some((r) => /verify_registry\.json\)$/.test(r)), rules.slice(0, 2).join(" ") || "(no argv)");
+    // v0.21.2: per-file rules, `//`-absolute on POSIX (see looptest ⑭ for the measurement).
+    const dataFwd = (process.platform === "win32" ? "" : "/") + TMP.replace(/\\/g, "/");
+    ok("R4b ⭐审阅的真 argv 带 --disallowedTools,钉住令牌与登记簿(逐文件,Read+Edit)",
+       i >= 0 && rules.includes(`Read(${dataFwd}/board_token)`) && rules.includes(`Edit(${dataFwd}/board_token)`)
+       && rules.some((r) => /verify_registry\.json\)$/.test(r)), rules.slice(0, 2).join(" ") || "(no argv)");
+    // (`review_token` legitimately shares the prefix — test the directory, not the substring.)
+    ok("R4c 判决目录 <data>/review 不被任何规则盖住(否则审阅写不出判决文件)",
+       rules.length > 0 && rules.every((r) => !r.includes(`${dataFwd}/review/`) && !r.endsWith(`${dataFwd}/review)`)
+                                               && !r.endsWith(`${dataFwd}/**)`) && !r.endsWith(`${dataFwd}/*)`)));
   }
 
   console.log(NL + "[§3 机器产出闸:验收要机器、证据纯散文、模型说 approve → 机械降 escalate]");
@@ -266,6 +279,30 @@ try {
   const rv2 = await api("POST", `/api/tasks/${idE}/resolve`,
                         { verdict: "approve", note: "", resolved_by: "human" }, RV);
   ok("R11 review 令牌冒充 human → 400(机器审阅不得冒充人)", rv2.status === 400, `HTTP ${rv2.status}`);
+
+  console.log(NL + "[§7 反亲和(v0.23):同家族交付的卡留给人,真审阅出声跳过;另一家族照审]");
+  {
+    // Claim BY ID with a runtime (operator token — claim-by-id is not on the worker's list).
+    const deliverAs = async (subject, runtime) => {
+      const id = (await api("POST", "/api/tasks", { subject, line: "alpha", humanGate: false })).body.task.id;
+      const c = await api("POST", `/api/tasks/${id}/claim`, { worker: "alpha", runtime });
+      if (c.status >= 400) console.log("  (claim failed:", c.status, JSON.stringify(c.body), ")");
+      await api("POST", `/api/tasks/${id}/report`, { worker: "alpha", outcome: "done", evidence: "rc=0 PASS 1" }, WK);
+      return id;
+    };
+    const same = await deliverAs("r-same-family", "claude");     // the stub reviewer runs as claude
+    const other = await deliverAs("r-other-family", "codex");
+    const log7 = runReviewer({ verdict: "reject", reason: "缺证据" });
+    const ts = (await api("GET", `/api/tasks/${same}`)).body.task;
+    const to = (await api("GET", `/api/tasks/${other}`)).body.task;
+    ok("R12 ⭐同家族的卡被跳过:仍在待验收、卡面 review_hold=same_family、日志说明原因(每卡一次)",
+       ts?.status === "waiting" && ts?.waiting_for === "review" && ts?.review_hold === "same_family" &&
+       new RegExp(`跳过 #${same}:`).test(log7) && (log7.match(new RegExp(`跳过 #${same}:`, "g")) || []).length === 1,
+       `status=${ts?.status}/${ts?.waiting_for} hold=${ts?.review_hold}`);
+    ok("R12b ⭐另一家族(codex 交付)的卡照审:被打回原线",
+       to?.status === "not_started" && to?.last_verdict === "reject", `status=${to?.status} verdict=${to?.last_verdict}`);
+    ok("R12c 审阅启动行写明反亲和已开", /反亲和=runtime/.test(log7));
+  }
 
 } catch (e) {
   console.error("harness itself fell over:", e);

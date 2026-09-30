@@ -22,18 +22,35 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   card text cannot close, re-scope or re-parent anything); `review_token` =
   ruling face, and only as `resolved_by=auto`. All three live in the data
   directory (gitignored) — that directory is **operator territory**.
-  **Measured 2026-09-07 with the real CLI (nine experiments, positive controls
-  included):** a Claude worker in `-p` mode can `Read` any absolute path on the
-  machine, inside or outside its working directory — so moving the data dir out
-  of the repo is *not* a barrier by itself. What held, against relative reads,
-  absolute reads and `Grep`, is the path-scoped deny rule the loops now pass:
-  `--disallowedTools Read/Edit/Write/Glob/Grep(<data>/**)` and the same for the
-  verify registry (v0.17.0). Same for the registry hole: a worker that could edit
-  `verify_registry.json` could nominate any command for the loop to run — the
-  Edit/Write deny closes it, measured. **The codex seat has no equivalent
-  mechanism**; there the boundary is the prompt, which is discipline, not
-  structure. On a shared machine run the fleet as its own OS user; `doctor` and
-  the server both say which case a deployment is in.
+  **Measured 2026-09-07 with the real CLI on Windows (nine experiments, positive
+  controls included):** a Claude worker in `-p` mode can `Read` any absolute path
+  on the machine, inside or outside its working directory — so moving the data
+  dir out of the repo is *not* a barrier by itself. What held, against relative
+  reads, absolute reads and `Grep`, is the path-scoped deny rule the loops pass
+  (`--disallowedTools`, v0.17.0). Same for the registry hole: a worker that could
+  edit `verify_registry.json` could nominate any command for the loop to run — the
+  Edit deny closes it, measured.
+  **Measured again 2026-09-28 on Linux (Claude Code 2.1.283, 20 controlled calls):**
+  the v0.17.0 spelling was inert on POSIX. A rule path with a single leading slash
+  is *project-root-relative* to the CLI; only `//abs/path` is absolute — so
+  `Read(/home/…/.data/**)` matched nothing and Read/Edit/Write/Grep all went
+  through, while the same rules spelled `//…` all held. Two more facts from the
+  same run shaped the fix (v0.21.2): `Write(path)` and `Glob(path)` rules are not
+  matched at all (the CLI says so; `Edit` covers every file-writing tool and
+  `Read` every file-reading tool), and a whole-directory `Read(//<data>/**)` deny
+  also refuses the model's *writes* into that directory — which would have blocked
+  the evidence file the worker must produce. The rules are therefore per file:
+  `Read`+`Edit` on each protected name (`PROTECTED` in `loops/verify_lib.py`:
+  tokens, `board.db*`, `accepted_rev`, settings, ledgers, probe outputs…) plus the
+  registry, leaving `<data>/evidence`, `<data>/review` and `<data>/decompose`
+  writable; `--prompt-selftest` scans the source for every file name written
+  under the data dir and goes red on one that is in neither list. `doctor`
+  checks the spelling this deployment would emit; the semantics can only be
+  measured with a live model call, and the Windows drive-letter form was not
+  re-measured in that run. **The codex seat has no equivalent mechanism**; there
+  the boundary is the prompt, which is discipline, not structure. On a shared
+  machine run the fleet as its own OS user; `doctor` and the server both say
+  which case a deployment is in.
 - **Card text is never a command line.** The worker refuses `.bat/.cmd` CLIs
   (CVE-2024-24576, "BatBadBut": cmd.exe re-parses arguments, so a card body
   could become an executable command line). The gate judges by extension on
