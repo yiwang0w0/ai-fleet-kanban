@@ -26,7 +26,7 @@ function fixture(runtime="claude"){
 const arg=(args,name)=>args[args.indexOf(name)+1];
 test("Claude uses exact native pins, subscription home, explicit tools and isolated configuration",()=>{
  const f=fixture(),p=prepareAdapter(f.input);assert.equal(validatePreparedAdapter(p),true);
- assert.equal(p.plan.env.CLAUDE_CONFIG_DIR,f.dirs.auth);
+ assert.equal(p.plan.env.CLAUDE_CONFIG_DIR,f.dirs.auth);assert.equal(p.plan.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY,"1");
  for(const key of ["ANTHROPIC_API_KEY","OPENAI_API_KEY","NODE_OPTIONS","ZCODE_TOKEN"])assert.equal(p.plan.env[key],undefined);
  assert.equal(p.plan.input,f.input.prompt);assert.equal(p.plan.args.includes(f.input.prompt),false);
  assert.equal(arg(p.plan.args,"--tools"),"");assert.equal(arg(p.plan.args,"--setting-sources"),"");assert.ok(p.plan.args.includes("--strict-mcp-config"));
@@ -35,7 +35,7 @@ test("Claude uses exact native pins, subscription home, explicit tools and isola
  const servers=JSON.parse(readFileSync(arg(p.plan.args,"--mcp-config"),"utf8"));assert.deepEqual(Object.keys(servers.mcpServers),["fleet"]);
  assert.deepEqual(servers.mcpServers.fleet.args,[f.input.mcp.bridge.path,"--url","http://127.0.0.1:43111/","--credential-file",f.input.mcp.credentialFile]);
  const settings=JSON.parse(readFileSync(arg(p.plan.args,"--settings"),"utf8"));
- assert.equal(settings.disableAllHooks,true);assert.equal(settings.syncClaudeAiPlugins,false);
+ assert.equal(settings.disableAllHooks,true);assert.equal(settings.autoMemoryEnabled,false);assert.equal(settings.syncClaudeAiPlugins,false);
  assert.deepEqual(p.plan.decoder.expectedTools,ROLE_TOOLS.implement.map(t=>"mcp__fleet__"+t));
  assert.ok(!JSON.stringify(p.manifest).includes("private-fixture"));assert.ok(!JSON.stringify(p.manifest).includes("private-api"));
  assert.equal(p.plan.containment.filesystem,"not_claimed");

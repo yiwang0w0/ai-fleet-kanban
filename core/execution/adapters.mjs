@@ -7,7 +7,7 @@ import {EXECUTION_CAPABILITIES,roleTools,loadPrincipalCredential,fail,exact} fro
 import {uuid} from "../federation/protocol.mjs";
 import {canonical} from "../federation/sync-store.mjs";
 
-export const ADAPTER_CONTRACTS=Object.freeze({claude:"2.1.247",codex:"0.149.1",zcode:"0.16.9"});
+export const ADAPTER_CONTRACTS=Object.freeze({claude:"2.1.284",codex:"0.149.1",zcode:"0.16.9"});
 const BASE_ENV=new Set(["systemroot","windir","appdata","localappdata","userprofile","home","homedrive","homepath","temp","tmp","path","pathext","lang","lc_all","http_proxy","https_proxy","all_proxy","no_proxy","ssl_cert_file","node_extra_ca_certs"]);
 const EFFORTS={claude:["low","medium","high","xhigh","max"],codex:["none","minimal","low","medium","high","xhigh","max"],zcode:ZCODE_EFFORTS};
 const configString=s=>JSON.stringify(s);
@@ -31,7 +31,7 @@ function filePin(pin){
 }
 function cleanWorkspace(workspace,runtime){
  // All mediated profiles use a fresh scratch directory. Provider settings are
- // disabled by argv or isolated in a private home; auth homes may hold settings.
+ // limited by argv or isolated in a private home; managed host policy still applies.
  // Also refuse ambient dotenv/MCP files anywhere above the scratch directory.
  if(readdirSync(workspace).length)fail("WORKSPACE_NOT_EMPTY","受控执行需要独立空白启动目录");
  let parent=workspace;
@@ -102,8 +102,8 @@ export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,pr
  try{
  const sessionId=dispatch.agent_instance_id;
  if(runtime==="claude"){
-  env.CLAUDE_CONFIG_DIR=authHome;env.DISABLE_AUTOUPDATER="1";
-  const settings=writePrivate(join(privateDir,"claude-settings.json"),{disableAllHooks:true,enabledPlugins:{},syncClaudeAiPlugins:false,permissions:{defaultMode:"dontAsk"}},created);
+  env.CLAUDE_CONFIG_DIR=authHome;env.DISABLE_AUTOUPDATER="1";env.CLAUDE_CODE_DISABLE_AUTO_MEMORY="1";
+  const settings=writePrivate(join(privateDir,"claude-settings.json"),{disableAllHooks:true,autoMemoryEnabled:false,enabledPlugins:{},syncClaudeAiPlugins:false,permissions:{defaultMode:"dontAsk"}},created);
   const servers=writePrivate(join(privateDir,"claude-mcp.json"),{mcpServers:{fleet:{command:node.path,args:argsBridge}}},created);
   pins.push(settings,servers);
   args=["--print","--verbose","--output-format","stream-json","--input-format","text","--model",role.model,"--effort",role.effort,

@@ -1,6 +1,6 @@
 # 本机执行适配、一次性运行与回执恢复
 
-已接通 Claude 2.1.247、Codex 0.149.1 和 Zcode 0.16.9 的显式本机启动配置、进程监管、一次性额度及持久化回执。入口为 dispatch execute，每次只处理一个已经领取的分派，不扫描队列。配置构造和输出解析均经过夹具测试；尚未用真实供应商完成该通道的模型任务。
+已接通 Claude 2.1.284、Codex 0.149.1 和 Zcode 0.16.9 的显式本机启动配置、进程监管、一次性额度及持久化回执。入口为 dispatch execute，每次只处理一个已经领取的分派，不扫描队列。配置构造和输出解析均经过夹具测试；尚未用真实供应商完成该通道的模型任务。
 
 当前支持明确的 capabilities: ["board-tools"] 或 ["workspace-files"]。角色登记与原生适配使用同一能力集合，执行角色只选一个配置；未知值、空配置或两者组合均拒绝，旧已存策略也须重新验证。后者通过受限 MCP 文件会话读写 UTF-8 源码并绑定 v2 启动记录；两种配置均限制原生命令入口；原生工具是否隐藏及拒绝写入的边界按下表核验，不自动升级为 shell 能力。详见 [文件会话与提交](workspace-files.md)。该配置不宣称实现 OS 文件隔离，也不满足完整 G04。Zcode 已接通单次启动和 stream-json 回执；安装包对本机假模型/MCP 的工具往返通过，真实订阅登录仍待验收，见 [接入记录](zcode.md)。
 
@@ -16,7 +16,7 @@ core/execution/adapters.mjs 从已登记的角色读取具体模型、推理档�
 
 | 运行时 | 显式配置 | 核验边界 |
 |---|---|---|
-| Claude | --tools ""；仅授权角色 MCP 工具；--strict-mcp-config；--setting-sources ""；设置 disableAllHooks、关闭插件同步/slash commands/Chrome；具体模型、effort、固定 session；stdin 提示；不持久化会话 | setting-sources 不排除 managed settings；内置插件/agent 与自动记忆仍需固定版本核验。初始化工具列表及输出校验属于事后拒绝，不能阻止初始化前的副作用；不声称这些参数已建立 OS 隔离 |
+| Claude | --tools ""；仅授权角色 MCP 工具；--strict-mcp-config；--setting-sources ""；设置 disableAllHooks、autoMemoryEnabled=false 和 CLAUDE_CODE_DISABLE_AUTO_MEMORY=1，关闭插件同步/slash commands/Chrome；具体模型、effort、固定 session；stdin 提示；不持久化会话 | setting-sources 不排除 managed settings；2.1.284 的本机假接口已核验 MCP 往返和记忆禁用；内置插件/agent 名称仍存在。初始化工具列表及输出校验属于事后拒绝，不能阻止初始化前的副作用；不声称这些参数已建立 OS 隔离 |
 | Codex | 忽略用户配置和规则；ephemeral；read-only sandbox；approval never；关闭 shell/unified exec、view_image、插件、hooks、apps、多 agent、目标和记忆功能；显式 fleet MCP 与 enabled_tools；stdin 提示 | 0.149.1 的假接口实测 features.view_image=false 有效。GPT-5.4 配置仍暴露 apply_patch；一次实际工具调用被 read-only sandbox 拒绝且未写文件。不是全部原生工具隐藏；JSONL 也不提供完整工具清单证明 |
 | Zcode | 固定中国版订阅 provider、单一 GLM-5.3/Flash 和 low/high/max 档位；私有 HOME/config/storage；plan 模式及完整原生工具 denylist；唯一角色 fleet MCP；stdin 启动器 | 实际安装包的本机假接口只观察到允许的 MCP；输出核验模型/工具数/每次工具调用；plan 可执行非破坏 MCP，授权由 broker 控制；真实账号兼容性尚未验收 |
 
@@ -32,7 +32,7 @@ CLI 管理策略及本机文件权限仍可能影响运行；夹具测试不会�
 {
   "installation": {
     "runtime": "claude",
-    "version": "2.1.247",
+    "version": "2.1.284",
     "program": {"path": "<固定原生程序绝对路径>", "sha256": "<核验后的64位摘要>"},
     "auth_home": "<现有CLI认证目录绝对路径>"
   },
@@ -87,4 +87,9 @@ Codex 0.149.1 使用空认证目录与本机假 Responses 接口进行配置探�
 
 features.apply_patch_freeform=false 也不能保证隐藏 GPT-5.4 的 apply_patch。最终配置保留 read-only sandbox 与 approval never；假接口发出一次在独立工作目录创建 fixture-write.txt 的 apply_patch 调用，CLI 返回只读拒绝，文件未产生。仍可见 update_plan/request_user_input。此实测不覆盖所有模型、内置功能、MCP 启动和受管理配置组合，也不代替 Windows OS 隔离或真实订阅验收。
 
-本机 Claude 文件已更新到 2.1.284，合同仍固定 2.1.247。没有为消除版本错误而直接放行新版；当前安装须先完成原生配置/工具及订阅兼容复核。新版帮助说明 --bare 不使用 OAuth，不能直接用于现有订阅接入；--safe-mode 仍应用 managed settings，不能当成独立权限边界。CLAUDE.md/.claude、自动记忆及 managed hooks 的边界仍属 M5 待办。依据见 [Claude 设置优先级](https://code.claude.com/docs/en/settings)与[Codex 配置 schema](https://developers.openai.com/codex/config-schema.json)，版本行为以本机探针为准，证据见 review-native-provider-evidence.json。
+上一轮发现本机 Claude 已由 2.1.247 更新到 2.1.284，当时保留旧合同待核验。本轮在原生配置、MCP 往返、记忆与解码探针通过后，将固定合同更新为 2.1.284；仍须登记实际程序摘要，旧安装配置不能直接沿用。真实订阅兼容性仍待验收。新版帮助说明 --bare 不使用 OAuth，不能直接用于现有订阅接入；--safe-mode 仍应用 managed settings，不能当成独立权限边界。managed hooks、其他 CLAUDE.md/.claude 布局及真实账号的受管理配置仍需结合部署环境核验。依据见 [Claude 设置优先级](https://code.claude.com/docs/en/settings)与[Codex 配置 schema](https://developers.openai.com/codex/config-schema.json)，版本行为以本机探针为准，证据见 review-native-provider-evidence.json。
+
+
+Claude 2.1.284 的 6 次空账号 / 本机假 Messages 接口探针中，基线只暴露指定 fleet MCP 工具并实际完成一次 get_task 往返；--safe-mode 会连显式 fleet MCP 一起关闭，未采用。指定一个包含已知标记的自动记忆目录后，旧配置确实把标记带入模型请求；同时设置 autoMemoryEnabled=false 与 CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 后，两轮请求均不带标记，工具往返保持正常。最终原生 stdout 交给看板现有解码器，session/model/工具集合/MCP 状态校验通过；real_model_call_confirmed 仍为 false。
+
+内置 agents-md 插件与 agent 名称仍出现在初始化信息中，不能称为插件和子 agent 完全不存在；它们不在本次模型请求工具集合内。两个 managed policy 注册表位置和默认系统 managed-settings.json 在本机探针前未找到，故此结果没有测试组织策略覆盖 hooks 等设置的情况。实际权限仍依赖原生 dontAsk/allowedTools 与 broker 授权；事后解码不能撤销已发生的副作用。证据见 review-claude-native-evidence.json。

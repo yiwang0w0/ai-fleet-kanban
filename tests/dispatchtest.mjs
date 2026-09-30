@@ -8,7 +8,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {execFileSync,spawn} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {prepareAdapter} from "../core/execution/adapters.mjs";
+import {prepareAdapter,ADAPTER_CONTRACTS} from "../core/execution/adapters.mjs";
 import {executionJournal} from "../core/execution/journal.mjs";
 import {executePreparedDispatch,reconcileExecutionJournal} from "../core/execution/runner.mjs";
 import {digest} from "../core/federation/sync-store.mjs";
@@ -423,7 +423,7 @@ function adapterFixture(){
  const w=prepare(f,assign(f,card(f,{capabilities:["board-tools"]})),{credentialFile:join(dirs.private,"principal.json")});
  // Node deliberately receives Claude flags and exits with an option error. No
  // provider executable, account credential or network is used by this test.
- const prepared=prepareAdapter({installation:{runtime:"claude",version:"2.1.247",program:pinFile(process.execPath),auth_home:dirs.auth},role,
+ const prepared=prepareAdapter({installation:{runtime:"claude",version:ADAPTER_CONTRACTS.claude,program:pinFile(process.execPath),auth_home:dirs.auth},role,
   dispatch:w.receipt,codeRoot:s.codeRoot,workspace:dirs.work,privateDirectory:dirs.private,
   mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile:w.credentialFile},prompt:"fixture only",
   environment:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase())))});

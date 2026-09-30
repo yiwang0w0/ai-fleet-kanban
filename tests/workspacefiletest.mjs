@@ -9,7 +9,7 @@ import {join,dirname} from "node:path";
 import {tmpdir} from "node:os";
 import {execFileSync,spawn} from "node:child_process";
 import {fileURLToPath,pathToFileURL} from "node:url";
-import {prepareAdapter} from "../core/execution/adapters.mjs";
+import {prepareAdapter,ADAPTER_CONTRACTS} from "../core/execution/adapters.mjs";
 import {executePreparedDispatch,reconcileExecutionJournal} from "../core/execution/runner.mjs";
 import {digest} from "../core/federation/sync-store.mjs";
 import {migratePeers} from "../core/federation/peers.mjs";
@@ -206,7 +206,7 @@ test("trusted adapter runner seals a v2 workspace launch, journals its real proc
  const f=setup({sourceInfo,executionMode:"provider"}),role=policy("engine","implement",{model:"claude-fixture-1",effort:"low"});putRole(f.db,role,1);
  const dirs=Object.fromEntries(["scratch","private","auth"].map(k=>{const p=path(k);mkdirSync(p);return [k,p];})),t=card(f),w=prepare(f,assign(f,t),{credentialFile:join(dirs.private,"principal.json")}),args={workspaceId:randomUUID(),poolId:f.pool.poolId,dispatchId:w.receipt.dispatch_id,baseCommit:f.r.base,writePaths:["src/"]};createTaskWorkspace(f.db,args);const descriptor=prepareWorkspaceSession(f.db,{workspaceId:args.workspaceId});
  // Node receives Claude flags and exits before any model/network connection.
- const prepared=prepareAdapter({installation:{runtime:"claude",version:"2.1.247",program:pinFile(process.execPath),auth_home:dirs.auth},role,dispatch:w.receipt,codeRoot:sourceInfo.codeRoot,workspace:dirs.scratch,privateDirectory:dirs.private,workspaceBinding:descriptor,mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile:w.credentialFile},prompt:"fixture only",environment:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase())))});
+ const prepared=prepareAdapter({installation:{runtime:"claude",version:ADAPTER_CONTRACTS.claude,program:pinFile(process.execPath),auth_home:dirs.auth},role,dispatch:w.receipt,codeRoot:sourceInfo.codeRoot,workspace:dirs.scratch,privateDirectory:dirs.private,workspaceBinding:descriptor,mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile:w.credentialFile},prompt:"fixture only",environment:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase())))});
  const pythonPath=execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c","import sys; print(sys.executable)"],{encoding:"utf8",windowsHide:true}).trim(),options={dispatchId:w.receipt.dispatch_id,sourceGate:sourceInfo.gate,prepared,python:pinFile(pythonPath),privateDirectory:dirs.private,timeoutMs:5000};
  const receipt=await executePreparedDispatch(f.db,options);assert.equal(receipt.phase,"settled");assert.equal(receipt.result.status,"failed");assert.equal(receipt.execution.observation.process.started,true);assert.equal(receipt.execution.observation.real_model_call_confirmed,false);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);assert.deepEqual(receipt.execution.launch.workspace,descriptor);assert.equal(receipt.execution.launch.format,"ai-fleet-process/v2");assert.equal(workspaceState(f.db,{workspaceId:args.workspaceId}).executor_bound,true);assert.equal(reconcileExecutionJournal(f.db,receipt.journal_file).phase,"settled");await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
 });
