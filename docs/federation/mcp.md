@@ -8,6 +8,8 @@ MCP 客户端启动 cli/mcp.mjs，使用 stdio 通信。该进程只接收回环
 
 内部 /local/v1/tools/list 与 /local/v1/tools/call 不是 MCP Streamable HTTP。代理仅允许 127.0.0.1 或 ::1；CLI 默认 127.0.0.1，端口必须显式指定。代理拒绝浏览器 Origin、重复 Authorization、未知接口/字段、压缩正文、非法 UTF-8 和超过 128 KiB 的请求。上传最长五秒；上传结束后在事务内重新鉴权。stdio 仅输出 JSON-RPC，诊断写 stderr。
 
+stdio 到 broker 的请求使用独立的 Node HTTP Agent，并显式关闭代理配置，不使用全局 fetch、全局 HTTP Agent 或环境代理。仅接受数字回环根地址，不跟随重定向；保留 10 秒请求期限、1 MiB 响应上限、严格 UTF-8 和节点/epoch 核对。参见 [Node 24 的代理配置说明](https://nodejs.org/docs/latest-v24.x/api/http.html#built-in-proxy-support)。这些是传输控制，不提供 OS 网络隔离。
+
 凭据绑定 node_id、node_epoch、principal_id、角色版本、项目集合；执行身份还绑定 agent_instance_id 和 run_id。代理不信任 clientInfo、工具参数或任务文本声明的身份。数据库只保存令牌 SHA-256；授权命令只输出非秘密身份信息，令牌写入新文件且不覆盖已有文件。角色策略修改、凭据撤销、节点退役/恢复换代、任务重新领取都会使不再匹配的身份失效。
 
 这是看板工具授权边界。同一个 OS 用户若仍可直接访问数据库、其他凭据或任意工作目录，可以绕过这层控制。tools=read-only 目前是工作区意图声明，不能据此声称文件系统已只读。Windows ACL、隔离用户/容器和执行器能力限制需要在 S04/S07 单独验收。
@@ -137,3 +139,6 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 授权、凭据认证及 dispatch prepare/launch 均重新验证已存策略的字段、能力、角色标识和摘要。未知旧能力（例如 code）不会自动转换为文件或 shell 权限，也不能因为此前已登记或已有凭据而继续执行。MCP list_roles 与候选选择只纳入有效角色，单个旧角色不会阻止其他合法角色被选中。
 
 修复须由本机管理员核对权限后，准备符合当前合同的角色 JSON，并使用 `role --db <路径> --policy-file <JSON> --version <所见角色版本>` 显式更新。旧版本或省略版本会拒绝；成功更新使旧凭据和旧分派策略失效，需要重新核对及授权，不自动重启任务。能力不满足的新旧任务仍停在 waiting_policy；任务的 required_capabilities 是匹配需求，不能扩展角色工具范围。已有任务登记保持不可变，不对旧 code 需求自动赋予新权限。
+
+
+审阅补充：输入 schema 明确检查 boolean，executable 只接受 true/false；字符串或数字不能在工具入口被宽松转换。运行身份查询或修改其他任务，与未知 task_uid 使用同一 NOT_FOUND / HTTP 404 正文，避免错误差异暴露任务存在性。角色无权使用某个工具仍返回 FORBIDDEN；该处理不承诺恒定时间响应。相关回归见 review-mcp-boundaries-evidence.json。

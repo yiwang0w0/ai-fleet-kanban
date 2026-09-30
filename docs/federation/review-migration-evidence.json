@@ -61,7 +61,18 @@
     "runtime_tests_rerun": false,
     "note": "Documentation/static contract checks only. Full exact-commit CI remains separate."
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": {
+    "commit": "70034ffcfcecac32f0e4a1d337f69d0ca93788d6",
+    "run_id": 36700029711,
+    "windows_job_id": 109837050879,
+    "gitleaks_job_id": 109837051279,
+    "status": "completed",
+    "conclusion": "success",
+    "main_pass": 1493,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0
+  },
   "complete_phase_gates": 0,
   "total_phase_gates": 12,
   "real_provider_calls": {

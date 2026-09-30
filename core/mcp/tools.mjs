@@ -69,6 +69,8 @@ export function validate(value,schema,path="arguments"){
   for(const [k,v] of Object.entries(value))validate(v,schema.properties[k],path+"."+k);
  }else if(schema.type==="string"){
   if(typeof value!=="string"||schema.minLength&&value.length<schema.minLength||schema.maxLength&&value.length>schema.maxLength||schema.pattern&&!new RegExp(schema.pattern).test(value))fail("BAD_INPUT",path+" 文本无效",400);
+ }else if(schema.type==="boolean"){
+  if(typeof value!=="boolean")fail("BAD_INPUT",path+" 必须为布尔值",400);
  }else if(schema.type==="integer"){
   if(!Number.isSafeInteger(value)||value<schema.minimum||value>schema.maximum)fail("BAD_INPUT",path+" 数字无效",400);
  }else if(schema.type==="array"){
@@ -87,8 +89,7 @@ function scoped(p,project){if(!p.projects.includes(project))fail("FORBIDDEN","�
 const marks=p=>p.projects.map(()=>"?").join(",");
 function localTask(db,p,taskUid){
  const t=db.prepare("SELECT t.*,p.project_id,p.work_kind,p.capabilities_json FROM tasks t JOIN broker_task_projects p ON p.task_id=t.id AND p.task_uid=t.task_uid WHERE t.task_uid=?").get(taskUid);
- if(!t||!p.projects.includes(t.project_id))fail("NOT_FOUND","授权范围内未找到该任务",404);
- if(p.run&&t.run_id!==p.run_id||p.run&&t.task_uid!==p.run.task_uid)fail("FORBIDDEN","执行身份只能操作自己的运行实例",403);
+ if(!t||!p.projects.includes(t.project_id)||p.run&&(t.run_id!==p.run_id||t.task_uid!==p.run.task_uid))fail("NOT_FOUND","授权范围内未找到该任务",404);
  return t;
 }
 const TASK_FIELDS=["id","task_uid","owner_node_id","subject","description","acceptance","status","waiting_for","kind","tree_mode","run_id","attempts","max_attempts","aggregate_version","result","created_at","updated_at"];

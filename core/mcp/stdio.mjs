@@ -1,5 +1,7 @@
 // MCP stdio transport contains no database path, administrator token, or process-launch tool.
 import {once} from "node:events";
+import {Agent,request} from "node:http";
+import {Readable} from "node:stream";
 import {loadPrincipalCredential,fail} from "./policy.mjs";
 const MAX_BYTES=128*1024,SUPPORTED=["2025-11-25","2025-06-18"];
 function endpoint(value){
@@ -7,7 +9,20 @@ function endpoint(value){
  if(u.protocol!=="http:"||!["127.0.0.1","[::1]"].includes(u.hostname)||u.username||u.password||u.search||u.hash||u.pathname!=="/")fail("BAD_ENDPOINT","MCP代理地址必须是显式回环 HTTP 根地址",400);
  return u.origin;
 }
-export function createBridge({url,credentialFile,fetchImpl=fetch}){
+// Own non-proxy agent: never use ambient fetch dispatchers or the global HTTP agent.
+// A new connection per call also avoids retaining a credential-bearing socket.
+function directLoopbackRequest(url,{method,headers,body,signal}){
+ return new Promise((resolve,reject)=>{
+  const agent=new Agent({keepAlive:false,proxyEnv:{}});
+  const req=request(url,{method,headers,signal,agent,maxHeaderSize:16384},res=>{
+   res.once("close",()=>agent.destroy());
+   if(res.statusCode>=300&&res.statusCode<400){res.destroy();reject(Error("redirect refused"));return;}
+   resolve({ok:res.statusCode>=200&&res.statusCode<300,body:Readable.toWeb(res)});
+  });
+  req.once("error",error=>{agent.destroy();reject(error);});req.end(body);
+ });
+}
+export function createBridge({url,credentialFile,fetchImpl=directLoopbackRequest}){
  const base=endpoint(url),credential=loadPrincipalCredential(credentialFile);
  let state="new";const usedIds=new Set();
  async function broker(path,body){

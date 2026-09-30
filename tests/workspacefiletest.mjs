@@ -217,3 +217,12 @@ test("schema one upgrades transactionally while preserving existing independent 
  assert.throws(()=>state(f,x),{code:"SCHEMA_INCOMPATIBLE"});assert.throws(()=>migrateWorkspaces(f.db),/fixture migration failure/);assert.equal(f.db.prepare("SELECT version FROM workspace_schema").get().version,1);assert.equal(f.db.prepare("SELECT 1 FROM sqlite_master WHERE name='workspace_sessions'").get(),undefined);
  f.db.exec("DROP TRIGGER fail_workspace_upgrade");migrateWorkspaces(f.db);assert.deepEqual(state(f,x),before);assert.equal(f.db.prepare("SELECT version FROM workspace_schema").get().version,2);migrateWorkspaces(f.db);assert.deepEqual(state(f,x),before);x.descriptor=prepareWorkspaceSession(f.db,{workspaceId:x.args.workspaceId});x.execution=executionFor(x);begin(f,x);assert.equal(read(f,x).content,"raw\r\n中文\r\n");
 });
+
+
+test("MCP rejects non-boolean executable before file mutations or replay receipts",()=>{
+ const f=setup(),x=activeFiles(f),before=count(f,"broker_requests");
+ for(const executable of ["yes","false",0,1,null,{},[]])assert.throws(()=>edit(f,x,{executable}),e=>e.code==="BAD_INPUT"&&e.message.includes("executable"));
+ assert.equal(info(f,x).revision,0);assert.equal(count(f,"workspace_file_events"),0);assert.equal(count(f,"broker_requests"),before);
+ edit(f,x,{executable:false});assert.equal(f.db.prepare("SELECT mode FROM workspace_files WHERE workspace_id=? AND path='src/generated.mjs'").get(x.args.workspaceId).mode,"100644");
+ edit(f,x,{path:"src/executable.mjs",executable:true});assert.equal(f.db.prepare("SELECT mode FROM workspace_files WHERE workspace_id=? AND path='src/executable.mjs'").get(x.args.workspaceId).mode,"100755");
+});

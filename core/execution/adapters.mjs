@@ -90,6 +90,12 @@ export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,pr
  if(!contains(privateDir,credentialPath))fail("UNSAFE_CREDENTIAL_PATH","运行凭据必须位于本次私有目录");
  const tools=roleTools(role),argsBridge=[bridge.path,"--url",url,"--credential-file",credentialPath];
  const baseEnv=Object.fromEntries(Object.entries(environment).filter(([k,v])=>BASE_ENV.has(k.toLowerCase())&&typeof v==="string"));
+ // A model process must not inherit proxy passwords from the operator environment.
+ // Preserve ordinary transport proxies; refuse credential-bearing or ambiguous URLs.
+ for(const [key,value] of Object.entries(baseEnv))if(["http_proxy","https_proxy","all_proxy"].includes(key.toLowerCase())&&value){
+  let proxy;try{proxy=new URL(value);}catch{fail("UNSAFE_PROXY_CONFIG","执行器代理需要无凭据的明确 URL",400);}
+  if(!["http:","https:","socks:","socks5:","socks5h:"].includes(proxy.protocol)||!proxy.hostname||proxy.username||proxy.password||proxy.search||proxy.hash||proxy.pathname&&proxy.pathname!=="/")fail("UNSAFE_PROXY_CONFIG","执行器代理不能包含凭据、查询或额外路径",400);
+ }
  if(Object.entries(baseEnv).some(([k,v])=>k.includes("\0")||v.includes("\0")))fail("BAD_INPUT","环境参数无效",400);
  let args,env={...baseEnv},pins=[node,bridge,pinFile(credentialPath)],decoder;
  const created=[];

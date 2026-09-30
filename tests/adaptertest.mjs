@@ -21,7 +21,7 @@ function fixture(runtime="claude"){
   role:{runtime,kind:"implement",tools:"write",model:runtime==="claude"?"claude-fixture-1":"gpt-fixture",effort:"low",capabilities:["board-tools"]},
   dispatch,codeRoot:dirs.root,workspace:dirs.work,privateDirectory:dirs.private,
   mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile},
-  prompt:"只读取任务，中文 $(literal) & text",environment:{SystemRoot:process.env.SystemRoot??"",PATH:process.env.PATH??process.env.Path??"",HTTPS_PROXY:"http://user:private-fixture@127.0.0.1:4321",ANTHROPIC_API_KEY:"private-api",OPENAI_API_KEY:"private-api",NODE_OPTIONS:"--require untrusted",CODEX_HOME:"untrusted",ZCODE_TOKEN:"private-api"}}};
+  prompt:"只读取任务，中文 $(literal) & text",environment:{SystemRoot:process.env.SystemRoot??"",PATH:process.env.PATH??process.env.Path??"",HTTPS_PROXY:"http://127.0.0.1:4321",ANTHROPIC_API_KEY:"private-api",OPENAI_API_KEY:"private-api",NODE_OPTIONS:"--require untrusted",CODEX_HOME:"untrusted",ZCODE_TOKEN:"private-api"}}};
 }
 const arg=(args,name)=>args[args.indexOf(name)+1];
 test("Claude uses exact native pins, subscription home, explicit tools and isolated configuration",()=>{
@@ -221,4 +221,16 @@ test("Zcode exclusive config failure removes only newly created directories and 
 
 test("Zcode changed installation or generated settings invalidate the one-use launch plan",{skip:process.platform!=="win32"},()=>{
  for(const which of ["bundle","original","settings","personal"]){const f=zFixture(),p=prepareAdapter(f.input);const path=which==="bundle"?f.input.installation.bundle.path:which==="original"?f.builtin:which==="settings"?join(p.plan.env.HOME,".zcode","cli","config.json"):join(f.dirs.private,"zcode-personal.json");writeFileSync(path,"{}");assert.throws(()=>validatePreparedAdapter(p),{code:"RUNTIME_CHANGED"});}
+});
+
+
+test("executor proxies preserve unauthenticated routes and reject credential-bearing or ambiguous URLs",()=>{
+ for(const key of ["HTTP_PROXY","https_proxy","ALL_PROXY"]){
+  const good=fixture();good.input.environment[key]="socks5://127.0.0.1:1080";const prepared=prepareAdapter(good.input);assert.equal(prepared.plan.env[key],good.input.environment[key]);assert.equal(validatePreparedAdapter(prepared),true);
+  for(const value of ["http://user:private-fixture@127.0.0.1:4321","http://private-fixture@127.0.0.1:4321","http://127.0.0.1:4321/?token=private-fixture","http://127.0.0.1:4321/#private-fixture","http://127.0.0.1:4321/private-fixture","127.0.0.1:4321","file:///private-fixture"]){
+   const f=fixture();f.input.environment[key]=value;
+   assert.throws(()=>prepareAdapter(f.input),e=>e.code==="UNSAFE_PROXY_CONFIG"&&!e.message.includes("private-fixture"));
+   assert.equal(existsSync(join(f.dirs.private,"claude-settings.json")),false);
+  }
+ }
 });

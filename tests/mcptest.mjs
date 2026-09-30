@@ -135,7 +135,7 @@ test("stale assignment requests cannot override an edited task and role changes 
 test("workers report only their bound run, cannot self-accept, and replay a lost report receipt safely",()=>{
  const f=fixture(),w=worker(f),other=create(f);
  assert.throws(()=>callTool(f.db,w.identity.auth,"create_task",createArgs()),{code:"FORBIDDEN"});
- assert.throws(()=>callTool(f.db,w.identity.auth,"get_task",{task_uid:other.task_uid}),{code:"FORBIDDEN"});
+ assert.throws(()=>callTool(f.db,w.identity.auth,"get_task",{task_uid:other.task_uid}),{code:"NOT_FOUND"});
  const args={request_id:randomUUID(),task_uid:w.task.task_uid,run_id:w.task.run_id,outcome:"done",evidence:"fixture result"};
  const result=callTool(f.db,w.identity.auth,"report_result",args);
  assert.equal(result.task.status,"waiting");assert.equal(result.task.waiting_for,"review");assert.equal(result.accepted,false);
@@ -249,7 +249,7 @@ test("coordinator and bound worker split only their current parent without depth
  assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",args(root)),{code:"CONFLICT"});
  const w=worker(f),own=callTool(f.db,w.identity.auth,"split_task",args(w.task)).task;
  assert.equal(own.parent_uid,w.task.task_uid);assert.equal(own.released,false);
- assert.throws(()=>callTool(f.db,w.identity.auth,"split_task",args(child)),{code:"FORBIDDEN"});
+ assert.throws(()=>callTool(f.db,w.identity.auth,"split_task",args(child)),{code:"NOT_FOUND"});
 });
 
 test("a lost report transaction preserves task, run, span and event state until a successful retry",()=>{
@@ -411,4 +411,69 @@ test("stored role JSON, identity and digest corruption fail closed but remain re
   assert.throws(()=>getRole(f.db,"engine"),{code:"POLICY_INVALID"});
   assert.equal(putRole(f.db,policy("engine","implement"),1).version,2);
  }
+});
+
+
+test("run credentials get identical HTTP absence for another task and an unknown UID",async()=>{
+ const f=fixture(),w=worker(f),other=create(f),n=await network(f),missing=f.node.node_id+"/"+randomUUID();
+ for(const name of ["get_task","heartbeat","split_task"]){
+  const args=uid=>name==="get_task"?{task_uid:uid}:name==="heartbeat"?{request_id:randomUUID(),task_uid:uid,run_id:w.task.run_id}:{...createArgs(),kind:undefined,parent_uid:uid,expected_version:1};
+  const replies=[];
+  for(const uid of [other.task_uid,missing]){
+   const r=await fetch(n.url+"/local/v1/tools/call",{method:"POST",headers:{Authorization:w.identity.auth,"Content-Type":"application/json"},body:JSON.stringify({name,arguments:args(uid)})});
+   assert.equal(r.status,404);replies.push(await r.json());
+  }
+  assert.deepEqual(replies[0],replies[1]);assert.equal(replies[0].code,"NOT_FOUND");
+ }
+ assert.equal(callTool(f.db,w.identity.auth,"get_task",{task_uid:w.task.task_uid}).task.task_uid,w.task.task_uid);
+ assert.equal(count(f,"tasks"),2);
+});
+
+test("independent stdio bypasses environment proxies and an ambient fetch override",async()=>{
+ const f=fixture(),n=await network(f);let intercepted=0;
+ const proxy=http.createServer((req,res)=>{intercepted++;res.writeHead(502);res.end();});servers.push(proxy);
+ await new Promise(r=>proxy.listen(0,"127.0.0.1",r));const proxyUrl="http://127.0.0.1:"+proxy.address().port;
+ const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/[a-z]*_proxy$|^node_options$|^node_use_env_proxy$/i.test(k)));
+ Object.assign(env,{HTTP_PROXY:proxyUrl,HTTPS_PROXY:proxyUrl,ALL_PROXY:proxyUrl,NO_PROXY:"",NODE_USE_ENV_PROXY:"1"});
+ const preload="data:text/javascript,"+encodeURIComponent('globalThis.fetch=()=>{throw Error("ambient fetch must not receive credentials")};');
+ const child=spawn(process.execPath,["--import",preload,join(ROOT,"cli/mcp.mjs"),"--url",n.url,"--credential-file",f.coord.file],{env,windowsHide:true,stdio:["pipe","pipe","pipe"]});children.push(child);
+ let stdout="",stderr="";child.stdout.on("data",b=>stdout+=b);child.stderr.on("data",b=>stderr+=b);const done=new Promise(r=>child.once("close",r));
+ child.stdin.end([
+  {jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2025-11-25",capabilities:{},clientInfo:{name:"proxy-fixture",version:"1"}}},
+  {jsonrpc:"2.0",method:"notifications/initialized"},
+  {jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"create_task",arguments:createArgs()}}
+ ].map(x=>JSON.stringify(x)).join("\n")+"\n");
+ let timer;try{const code=await Promise.race([done,new Promise((_,reject)=>timer=setTimeout(()=>reject(Error("proxy stdio timeout")),15000))]);assert.equal(code,0,stderr);}finally{clearTimeout(timer);if(child.exitCode===null)child.kill();await done;}
+ const replies=stdout.trim().split("\n").map(x=>JSON.parse(x));assert.equal(replies[0].result.serverInfo.name,"ai-fleet-board");assert.equal(replies[1].result.isError,false);
+ assert.equal(count(f,"tasks"),1);assert.equal(intercepted,0);assert.ok(!stdout.includes(f.coord.credential.token));assert.ok(!stderr.includes(f.coord.credential.token));
+});
+
+test("direct broker transport rejects redirects, oversized bodies, bad UTF-8 and identity changes",async()=>{
+ const f=fixture();let mode="redirect",followed=0;
+ const server=http.createServer((req,res)=>{
+  req.resume();if(req.url==="/stolen"){followed++;res.end("{}");return;}
+  if(mode==="redirect"){res.writeHead(307,{Location:"/stolen"});res.end();}
+  else if(mode==="large"){res.end(Buffer.alloc(1024*1024+1,65));}
+  else if(mode==="utf8"){res.end(Buffer.from([0xff]));}
+  else res.end(JSON.stringify({node_id:randomUUID(),node_epoch:f.node.sync_epoch,result:{tools:[]}}));
+ });servers.push(server);await new Promise(r=>server.listen(0,"127.0.0.1",r));
+ for(mode of ["redirect","large","utf8","identity"]){
+  const bridge=createBridge({url:"http://127.0.0.1:"+server.address().port,credentialFile:f.coord.file});
+  const reply=await bridge({jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2025-11-25",capabilities:{},clientInfo:{name:"fixture",version:"1"}}});
+  assert.equal(reply.error.code,-32000);assert.ok(!JSON.stringify(reply).includes(f.coord.credential.token));
+ }
+ assert.equal(followed,0);
+});
+
+
+test("direct broker transport supports IPv6 and aborts an incomplete response at its deadline",async()=>{
+ const f=fixture(),server=await listenBroker(f.db,{host:"::1",port:0});servers.push(server);
+ const initialize={jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2025-11-25",capabilities:{},clientInfo:{name:"ipv6-fixture",version:"1"}}};
+ const bridge=createBridge({url:"http://[::1]:"+server.address().port,credentialFile:f.coord.file});
+ assert.equal((await bridge(initialize)).result.serverInfo.name,"ai-fleet-board");
+ let closed;const socketClosed=new Promise(r=>closed=r);
+ const stalled=http.createServer((req,res)=>{req.resume();res.writeHead(200);res.write('{"partial":');res.once("close",closed);});servers.push(stalled);
+ await new Promise(r=>stalled.listen(0,"127.0.0.1",r));const waiting=createBridge({url:"http://127.0.0.1:"+stalled.address().port,credentialFile:f.coord.file});
+ const started=performance.now(),reply=await waiting(initialize);assert.equal(reply.error.code,-32000);assert.ok(performance.now()-started<14000);
+ let timer;try{await Promise.race([socketClosed,new Promise((_,reject)=>timer=setTimeout(()=>reject(Error("deadline did not close connection")),1000))]);}finally{clearTimeout(timer);}
 });
