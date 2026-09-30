@@ -23,6 +23,7 @@ stdio 到 broker 的请求使用独立的 Node HTTP Agent，并显式关闭代�
 | list_nodes | coordinate、observe | 本机身份与授权项目中已观察来源 |
 | list_roles | 四类身份 | 授权项目中的角色能力、策略版本和声明运行时 |
 | get_task | 四类身份 | 本机任务或只读远端投影；执行身份仅自己的任务 |
+| get_board_overview / list_tasks / get_task_context | coordinate、observe | 获准桌面总览、分页检索与上下文；仅本地登记任务及获准远端缓存，含来源时间和任务链接 |
 | get_sync_status | coordinate、observe | 项目游标、恢复/结构提交状态和最近 100 个路由请求 |
 | create_task | coordinate | 创建本机未放行任务或目标；不自动共享 |
 | split_task | coordinate、implement | 版本匹配的父任务下创建未放行子任务；执行身份父卡须仍在执行 |
@@ -142,3 +143,5 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 
 
 审阅补充：输入 schema 明确检查 boolean，executable 只接受 true/false；字符串或数字不能在工具入口被宽松转换。运行身份查询或修改其他任务，与未知 task_uid 使用同一 NOT_FOUND / HTTP 404 正文，避免错误差异暴露任务存在性。角色无权使用某个工具仍返回 FORBIDDEN；该处理不承诺恒定时间响应。相关回归见 review-mcp-boundaries-evidence.json。
+
+桌面查询、按身份绑定的 Markdown 版本导出及客户端接入示例见 [桌面聊天上下文](desktop-context.md)。serve 可选 --board-url <回环 HTTP 根地址>，仅用于生成无凭据的任务链接，不启动 UI，也不扩展其权限。

@@ -1,3 +1,4 @@
+import {boardURL} from "./context.mjs";
 import http from "node:http";
 import {localIdentity} from "../federation/peers.mjs";
 import {PeerError,keys} from "../federation/protocol.mjs";
@@ -17,8 +18,9 @@ async function readBody(req){
  try{return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks)));}catch{fail("BAD_INPUT","无效 UTF-8 JSON",400);}
 }
 /** Internal loopback API used by the stdio bridge; it is not an MCP HTTP transport. */
-export async function listenBroker(db,{host="127.0.0.1",port}){
+export async function listenBroker(db,{host="127.0.0.1",port,boardUrl=null}){
  if(!["127.0.0.1","::1"].includes(host)||!Number.isInteger(port)||port<0||port>65535)fail("UNSAFE_BIND","MCP代理仅接受显式回环端口",400);
+ boardUrl=boardURL(boardUrl);
  localIdentity(db);
  const server=http.createServer({maxHeaderSize:8192},async(req,res)=>{
   try{
@@ -34,7 +36,7 @@ export async function listenBroker(db,{host="127.0.0.1",port}){
    else{
     keys(body,["name","arguments"],"call");
     if(typeof body.name!=="string"||body.name.length>80)fail("BAD_INPUT","工具名称无效",400);
-    result=callTool(db,req.headers.authorization,body.name,body.arguments);
+    result=callTool(db,req.headers.authorization,body.name,body.arguments,{boardUrl});
    }
    const node=localIdentity(db);send(res,200,{node_id:node.node_id,node_epoch:node.sync_epoch,result});
   }catch(e){const known=e instanceof PeerError||["BAD_INPUT","CONFLICT","NOT_FOUND","INTERNAL"].includes(e.code);

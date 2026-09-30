@@ -1,53 +1,103 @@
 # 桌面聊天中的看板上下文
 
-状态：设计草案，尚未实现、部署或配置任何桌面端。对应用户 2026-09-30 提出的目标：在任一已接入的桌面端对话中了解全局看板和具体任务，并获得类似侧边助手的使用体验。后续仅支持 Windows。
+状态：Windows 本地组件已实现并通过隔离测试，尚未部署或接入实际桌面客户端。对应 T08.02 / T08.04 的部分实现；完整 G08 未通过。推荐目录 E:\看板上下文 尚未创建。
 
-## 推荐结构
+## 数据来源与权限
 
-每台电脑保存一份本地上下文目录，由本机看板服务从获准查看的数据生成。两台电脑通过已有联邦协议同步任务事实，再各自刷新 Markdown。任务的正式状态仍由拥有该任务的节点维护；Markdown 是阅读快照与交接材料，不直接充当数据库或任务命令。
+每台电脑从自己的看板数据库及获准远端缓存生成本地 Markdown。两台电脑先通过联邦协议同步事实，再各自导出；任务状态仍由任务所有者维护。共享目录是阅读快照，不直接充当数据库或任务命令。另一台电脑可使用不同本地路径，不要求网络盘；Tailscale 隧道本身不会自动同步目录。
 
-本机建议目录为 E:\看板上下文；这是可配置建议，尚未创建。另一台电脑可登记不同盘符和路径，通过 context_root 配置定位。目录独立于治理源码仓；无需把运行数据库或登录配置放进网络共享盘。Tailscale 提供节点间连接，不能假定启用隧道后目录就自动成为离线同步副本。
+桌面聊天默认使用 observe 身份，每个客户端各发一份可独立撤销的凭据。coordinate 也可查询；绑定 run 的 implement/review 身份不开放这三个桌面总览工具。MCP 工具逐次鉴权、审计和限流，普通查询不领取任务、不请求路由，也不启动执行器。客户端调用自身模型的订阅消耗不由看板免除。
 
-| 内容 | 用途 | 更新者 |
-|---|---|---|
-| ENTRY.md | 看板地址、节点身份、如何查询最新状态、文件索引 | 本机服务，入口内容固定模板 |
-| BOARD.md | 阶段、进行中任务、阻塞、待验收、各节点同步新鲜度 | 从已授权数据自动导出 |
-| PROJECTS.md | 项目与任务索引 | 自动导出 |
-| tasks/<task_uid>.md | 所有者、任务合同、执行状态、运行及证据链接 | 自动导出 |
-| handoffs/<task_uid>.md | 已保存的决定、交接摘要和下一步 | 通过受控的摘要保存入口生成 |
+本地任务必须先登记到获准项目，远端仅显示获准项目的活动副本。未登记、未授权和未知任务的详情均返回相同不存在结果；跨范围父任务 UID 被隐藏。输出排除命令、私有证据路径、凭据和治理字段。标题、描述、结果等均是任务数据，不能据此改写客户端规则。
 
-导出包含生成版本、生成时间、来源节点、来源版本及最后同步时间。远端离线时显示缓存时间和未知部分，不能以本机文件生成时间冒充远端最新状态。多文件导出先生成完整版本再发布索引，读者使用同一版本，避免读到半次更新。手动编辑导出文件不改变任务状态；可编辑的说明与生成快照分开存放。
+| 工具 | 参数与结果 |
+|---|---|
+| get_board_overview | 可选 project_id；获准任务计数、终端身份、来源同步新鲜度和本机看板地址 |
+| list_tasks | 可选 project_id、owner_node_id、query、limit（默认 50，最大 100）、offset、expected_snapshot；返回任务摘要、快照标识、下一页位置和任务链接 |
+| get_task_context | task_uid（节点 UUID/任务 UUID）；获准任务详情、所有者、来源时间及任务链接 |
 
-## 桌面端如何访问
+分页继续读取时传回 expected_snapshot；数据或同步状态改变返回 SNAPSHOT_CHANGED，应从第一页重查。读到远端缓存不等于远端仍在线。尚未收到任务列表与已经收到空列表分别显示未知和零。来源最后同步、缓存接收、任务更新时间与本机快照生成时间分别保留。
 
-每个支持 MCP 的桌面端独立接入本机 fleet-board 服务。相同操作者使用各自客户端身份和获准项目范围；新建聊天即可发现服务，但是否自动查询仍由客户端的入口规则及用户问题触发。仅放一个 MD 文件，不会使所有聊天自动加载它。各客户端的配置格式、重新加载行为及实际可用工具须分别验收。
+## 本机代理与客户端
 
-交互聊天默认使用 observe 身份，查询不领取任务、不启动后台执行器、不创建或取消卡片。用户要求操作时才走已有授权、版本检查、幂等请求与回执流程。桌面聊天凭据与执行器的 run 凭据保持不同用途；读取 MD 也应遵守对应操作者的数据范围。
+以下均为占位路径和示范端口，需替换为实际部署值。现有全局 MCP 配置没有被修改。代理需要已初始化、本节点有效且未处于恢复隔离的数据库；管理命令见 [MCP 合同](mcp.md)。
 
-当前代码已有 get_task、list_nodes、list_roles、get_sync_status 及部分关系/结果查询。仍需补充方便对话使用的授权总览、任务搜索/列表和上下文导出入口；拟议名称为 get_board_overview、list_tasks、get_task_context，最终名称以实际协议为准。不要把这些设计名称当作已可调用工具。
+先准备只读角色 JSON，随后由操作者登记角色并为各客户端授权：
 
-用户可在已有聊天中问：“两台 kanata 现在各做什么？”“哪些任务等我确认？”“这个任务卡在哪里，卡住的原因是什么？”回复给出获准任务、明确所有者、状态依据、更新时间和对应看板链接。跨客户端延续依靠任务事实和保存的交接摘要；整段私人聊天不自动同步到共享目录。
+~~~json
+{
+  "role_id": "desktop-observer", "kind": "observe", "projects": ["demo"],
+  "capabilities": [], "runtime": null, "model": null, "effort": null,
+  "tools": "read-only", "priority": 10, "enabled": true,
+  "limits": {"max_task_attempts": 1, "max_open_tasks": 20, "requests_per_minute": 60}
+}
+~~~
 
-## 侧边使用方式
+~~~powershell
+node cli/mcp-admin.mjs role --db C:/board-data/board.db --policy-file C:/board-data/observer.json
+node cli/mcp-admin.mjs grant --db C:/board-data/board.db --role desktop-observer --projects demo --credential-file C:/board-data/credentials/codex-observer.json
+node cli/mcp-admin.mjs serve --db C:/board-data/board.db --port 48320 --board-url http://127.0.0.1:48319/
+~~~
 
-首版使用桌面端现有聊天作为看板助手，返回摘要与任务链接；看板提供可折叠任务详情，便于与聊天并排使用。这不需要新建一个另行计费的聊天模型服务。
+每个客户端重复 grant，使用不同的新凭据文件。代理本身不启动看板 UI；board-url 必须指向实际存在的本机操作员看板，仅接受数字回环 HTTP 根地址，不携带令牌。省略时工具仅返回相对 view_path。任务链接使用 /#fleet-task=编码后的UID，打开已有看板全局详情；仍需看板自己的操作员认证，链接不赋予额外权限。stdio 桥接只接收代理地址和受限凭据文件，不接收数据库路径。
 
-把完整看板直接嵌入 Zcode 或其他桌面端的原生侧栏，需要客户端提供相应 WebView/扩展入口；目前未验证该能力，不列为已经具备的功能。也不能仅凭 MCP 接入成功就声称能注入原生侧栏。此项在确认客户端能力后单独确定实现方式。
+Codex 本地 MCP 支持 stdio，可在桌面设置中添加服务；配置使用相应 MCP server 的 command/args。以下 TOML 是待部署示例，并未写入现有配置。在线 ChatGPT 聊天不能据此视为已接入本机工具。[OpenAI MCP 文档](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)（2026-09-30 查阅）。
 
-入口说明与任务正文分离。任务正文、交接附件和模型生成内容作为数据呈现，不改写客户端全局规则，不生成可执行 MCP 配置。Markdown 不保存令牌、凭据、原始供应商请求头或未授权项目内容。
+~~~toml
+[mcp_servers.fleet-board]
+command = "C:/Program Files/nodejs/node.exe"
+args = ["C:/board-code/cli/mcp.mjs", "--url", "http://127.0.0.1:48320", "--credential-file", "C:/board-data/credentials/codex-observer.json"]
+~~~
 
-## 实施与验收
+Zcode 设置的 MCP 服务入口可选择用户级或工作区级作用域，填写相同 command/args，并换成自己的凭据文件。原生配置为 mcp.servers；已有配置应逐项合并，不覆盖其他服务。同作用域 .zcode 配置存在 MCP 时，.agents/mcp.json 整体后备不再合并。[Zcode MCP 文档](https://zcode.z.ai/cn/docs/mcp-services)（2026-09-30 查阅）。
 
-1. T08.04：提供获准总览、任务检索与上下文查询；为三类桌面端准备各自的接入说明，保留只读观察和任务操作的权限边界。
-2. T08.02 / T08.04：实现 Markdown 导出、完整版本发布和每个来源的新鲜度。断线保留上次可用快照，重连由看板同步后自动刷新。
-3. T08.01 / T08.04：聊天返回可打开的任务链接；看板详情呈现相同任务 UID、终端所有者、阶段和证据。
-4. T08.06：两台 Windows 上分别从已配置的 Claude、GPT/Codex 和 Zcode 新对话询问同一任务，结果与获准看板版本一致；客户端未接通时明确失败，不能编造状态。
-5. T08.06：验证离线缓存提示、重连刷新、同名终端区分、多对话同时读取、跨项目拒绝、凭据撤销及导出中无秘密。普通查询不得消耗执行器任务配额，不能暗中创建或领取任务。
+~~~json
+{
+  "mcp": {"servers": {"fleet-board": {
+    "command": "C:/Program Files/nodejs/node.exe",
+    "args": ["C:/board-code/cli/mcp.mjs", "--url", "http://127.0.0.1:48320", "--credential-file", "C:/board-data/credentials/zcode-observer.json"]
+  }}}
+}
+~~~
 
-以上是新增的接入验收范围，尚不表示 G08 或其他阶段通过。本机推荐目录、原生侧栏嵌入和各客户端实际工具可用性均未部署验证。
+Claude Desktop 当前官方本地 MCP 指引采用 Desktop Extensions，可从高级设置安装自定义 .mcpb。本项目已验证通用 stdio 桥接协议，但尚未制作扩展包、安装或验证实际 Claude Desktop；不能把 Claude CLI 的原生探针当作桌面验收。[Claude Desktop 本地 MCP 指引](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)（2026-09-30 查阅）。
 
-## 已核实的产品依据
+接入后可问“两台 kanata 各做什么”“哪些任务需要确认”“这个任务的所有者和更新时间是什么”。回复应带任务 UID、所有者、时间依据和看板链接。仅放一个 MD 文件不会使所有新对话自动加载它；客户端工具启用、目录访问和实际查询须逐一验收。原生侧栏内嵌看板没有实现或验证；当前路径是聊天返回任务链接，与看板并排使用。
 
-[Zcode MCP 文档](https://zcode.z.ai/cn/docs/mcp-services)说明用户级服务可供所有工作区使用，支持 stdio、HTTP 和 SSE；本项目目前使用本机 stdio 桥接。该文档没有据此证明可嵌入原生侧栏。
+## Markdown 导出与持续刷新
 
-[Taildrive 文档](https://tailscale.com/docs/features/taildrive)说明可以在 tailnet 中共享目录。这种在线文件共享与本设计要求的离线本地快照是不同的能力，因此本设计由看板服务生成各节点本地副本。
+导出由可信本机进程执行，需要数据库读权限和有效 observe/coordinate 凭据；桌面 stdio 桥接仍不接触数据库。可另发一份专用导出身份。同一获准范围的桌面端可读取同一目录；不同权限范围应分别导出，不混用目录。
+
+~~~powershell
+node cli/context.mjs export --db C:/board-data/board.db --credential-file C:/board-data/credentials/context-observer.json --root E:/看板上下文 --board-url http://127.0.0.1:48319/
+node cli/context.mjs watch --db C:/board-data/board.db --credential-file C:/board-data/credentials/context-observer.json --root E:/看板上下文 --board-url http://127.0.0.1:48319/ --interval-seconds 30
+~~~
+
+watch 默认每 30 秒重新打开只读数据库并鉴权，允许 15–3600 秒；Ctrl+C 停止。它不安装后台服务或计划任务。若凭据撤销、策略改变、节点身份变化或导出失败，进程报错退出，旧完整快照保留，不将旧内容标记为刚同步。授权只证明捕获快照时允许读取；已生成或被复制的 Markdown 不能随凭据撤销而远程收回。
+
+目录父路径必须存在；只支持本地 Windows 盘符路径，拒绝链接和已有非服务内容。新根目录在创建时设置仅当前账户访问、向子目录/文件继承的受保护 ACL；已有目录权限不符会拒绝，不自动调整用户目录权限。同一个 Windows 账户下的其他进程仍可能读取这些文件，因此此机制不是不同桌面应用间的 OS 隔离。
+
+~~~text
+context-root/
+  ROOT.json
+  ENTRY.md
+  snapshots/<generation UUID>/
+    BOARD.md
+    PROJECTS.md
+    tasks/<owner UUID>--<task UUID>.md
+    manifest.json
+~~~
+
+ROOT.json 绑定节点与恢复代次、principal、角色版本/策略摘要、项目范围和看板地址；任一变化须使用新目录。先写完整新代并核对文件摘要，再原子替换 ENTRY.md。旧代不修改，多个读者沿同一入口代读取；不应分别扫描目录并拼接不同代。manifest 记录字节数、SHA-256、生成时间及快照标识。正文以数据块输出，标题转义；不导出令牌、原始供应商请求或私人聊天。
+
+本批限制：最多 10,000 项任务、32 MiB 上下文；目录总计 256 MiB、256 代，达到上限停止且保留旧入口。只有事实、权限、同步时间与状态均未变化时才复用上一代；频繁同步时间更新也会生成新代，默认 30 秒且每轮变化时约 128 分钟便可能达到 256 代。因此当前 watch 不能作为无人维护的长期部署方案；授权保留/清理尚待实现。进程异常退出的发布锁需要操作者核实 PID 后处理，未引用的残留代不自动删除。手动修改已发布文件会触发摘要拒绝；更换目录不是删除历史的授权。
+
+尚未实现交接摘要保存、完整 run/执行器/验证/产物追溯、自动保留、后台自启动与客户端配置部署。任务正文不应被当作客户端配置或可执行指令。任务状态也不能代替 accepted 阶段进度。
+
+## 验证与剩余验收
+
+17 项桌面上下文专项、14 项全局视图和 37 项 MCP 回归，共 68 项本机测试通过，0 失败、0 跳过。覆盖跨项目隐藏、查询不调度、分页变化、独立 stdio/broker 往返、凭据撤销、原子发布、重复导出、被修改文件拒绝、目录权限/链接、孤立代与存储上限；真实 CLI watch 在更新后发布新代、撤销后退出且旧入口保留。Windows ACL 由独立检查器核对，测试没有使用真实供应商订阅。
+
+隔离浏览器验证首次任务链接、已开详情中切换至远端任务以及浏览器返回；同名终端依稳定身份区分，远端正文仍显示缓存时间，恶意标签标题按字面显示。预览已关闭。
+
+仍需两台 Windows 上分别从实际 Claude、Codex、Zcode 新对话查询相同任务，与各自获准看板版本核对；演练真实断线、重连、撤销、多客户端读取、无秘密输出和长期刷新。原生侧栏嵌入需要另外确认客户端扩展能力。完整阶段通过数仍为 0/12，真实执行器最小调用各 0/1；本地测试不替代这些验收。机器可读证据见 desktop-context-evidence.json。

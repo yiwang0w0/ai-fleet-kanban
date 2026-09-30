@@ -148,6 +148,8 @@ jobs:
           PYTHON: python
       - name: "fleetviewtest (operator reads, ownership and offline freshness)"
         run: bash hrun.sh node tests/fleetviewtest.mjs
+      - name: "desktopcontexttest (scoped reads, private Markdown and refresh)"
+        run: bash hrun.sh node tests/desktopcontexttest.mjs
       - name: "tltest (timeline drawing primitives + source shape)"
         run: bash hrun.sh node tests/tltest.mjs
 

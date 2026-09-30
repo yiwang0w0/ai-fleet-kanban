@@ -6,7 +6,7 @@
   "created_date": "2026-09-29",
   "timezone": "Asia/Tokyo",
   "source_document": "多终端共享看板-实施与验收计划.md",
-  "source_sha256": "96df6ba92d87e4304cbcdc69559faf951728c6e838c5c56e3c4678177173ac3e",
+  "source_sha256": "6102fe20b0b783b64f2075184817e74542247860a8a44332d40e176c990aae23",
   "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
   "status": "implementation_in_progress",
   "execution_authorized": true,
@@ -2330,10 +2330,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Operator-only cached fleet read model, per-node task trees and freshness; 14 data/HTTP tests plus 195 existing server checks and isolated browser inspection",
+        "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; 17 desktop + 14 fleet + 37 MCP local tests and isolated browser task-link checks",
         "pending": [
-          "Cross-terminal relation visualization and receipted remote actions",
-          "Desktop Markdown/MCP context and physical two-PC G08 acceptance"
+          "Full role/run/artifact trace and saved handoff summaries",
+          "Retention/long-running deployment and actual desktop client setup",
+          "Physical two-PC offline/reconnect G08 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2343,7 +2344,10 @@
       "implementation_evidence": [
         "docs/federation/fleet-view.md",
         "docs/federation/fleet-view-evidence.json",
-        "tests/fleetviewtest.mjs"
+        "tests/fleetviewtest.mjs",
+        "docs/federation/desktop-context.md",
+        "docs/federation/desktop-context-evidence.json",
+        "tests/desktopcontexttest.mjs"
       ]
     },
     {
@@ -2396,15 +2400,28 @@
       "evidence_required": [
         "traceability/visibility 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; 17 desktop + 14 fleet + 37 MCP local tests and isolated browser task-link checks",
+        "pending": [
+          "Full role/run/artifact trace and saved handoff summaries",
+          "Retention/long-running deployment and actual desktop client setup",
+          "Physical two-PC offline/reconnect G08 acceptance"
+        ]
+      },
       "acceptance_receipt": null,
       "design_references": [
         "docs/federation/desktop-context.md"
+      ],
+      "implementation_evidence": [
+        "docs/federation/desktop-context.md",
+        "docs/federation/desktop-context-evidence.json",
+        "tests/desktopcontexttest.mjs"
       ]
     },
     {
