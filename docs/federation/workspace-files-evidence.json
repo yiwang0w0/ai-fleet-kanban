@@ -85,7 +85,34 @@
     }
   },
   "ci": {
-    "status": "pending_exact_commit"
+    "tested_commit": "293d6de56c128b274f117ed279657f6d97836a6e",
+    "run_id": 36621602685,
+    "run_number": 83,
+    "status": "completed",
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109588097971,
+      "classic": 931,
+      "native": 532,
+      "main_suite_passed": 1373,
+      "failed": 0,
+      "skipped": 0,
+      "extra_classic_checks": 90
+    },
+    "linux": {
+      "job_id": 109588098085,
+      "classic": 928,
+      "native": 531,
+      "main_suite_passed": 1369,
+      "failed": 0,
+      "skipped": 1,
+      "extra_classic_checks": 90
+    },
+    "gitleaks": {
+      "job_id": 109588097781,
+      "conclusion": "success"
+    },
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36621602685"
   },
   "real_model_calls_used": {
     "claude": 0,

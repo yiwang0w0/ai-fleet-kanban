@@ -2,11 +2,11 @@
   "schema_version": "1.0",
   "artifact_type": "planning_manifest",
   "plan_id": "AFK-FED-001",
-  "plan_version": "1.1",
+  "plan_version": "1.2",
   "created_date": "2026-09-29",
   "timezone": "Asia/Tokyo",
   "source_document": "多终端共享看板-实施与验收计划.md",
-  "source_sha256": "3d1392e98a88b13eed56445058713d20c341b0adf4a022667ae8047adbe5847b",
+  "source_sha256": "89ccf487b31a2a5c45a9a9229dd1a29723980a109e4cde956af5fff26721afc4",
   "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
   "status": "implementation_in_progress",
   "execution_authorized": true,
@@ -72,6 +72,18 @@
         "S06",
         "S09",
         "S10"
+      ]
+    },
+    {
+      "id": "R08",
+      "text": "后续仅支持和验收 Windows；不再考虑 Linux 环境",
+      "phases": [
+        "S01",
+        "S03",
+        "S04",
+        "S09",
+        "S10",
+        "S11"
       ]
     }
   ],
@@ -3138,5 +3150,15 @@
     }
   ],
   "progress_record": "federation/PROGRESS.md",
-  "updated_date": "2026-09-30"
+  "updated_date": "2026-09-30",
+  "platform_scope": {
+    "decision_date": "2026-09-30",
+    "source": "explicit_user_instruction",
+    "supported_os": [
+      "Windows"
+    ],
+    "physical_nodes": "two kanata Windows computers connected by Tailscale",
+    "linux": "out_of_scope_for_future_implementation_ci_deployment_and_acceptance",
+    "historical_evidence": "preserved_as_record_only"
+  }
 }
