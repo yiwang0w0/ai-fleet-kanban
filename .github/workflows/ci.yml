@@ -49,6 +49,23 @@ jobs:
           exit $rc
           SH
 
+      - name: diagnose native Windows helper startup
+        run: |
+          node --input-type=module <<'JS'
+          import {spawnSync} from 'node:child_process';
+          import {join} from 'node:path';
+          const executable=join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
+          for(const profile of ['minimal','windows-user']){
+            const keys=['systemroot','windir','temp','tmp',...(profile==='windows-user'?['systemdrive','userprofile','appdata','localappdata','homedrive','homepath','username','userdomain']:[])];
+            const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>keys.includes(k.toLowerCase())));
+            for(const mode of ['start','eof','json-sid']){
+              const script='[Console]::Out.WriteLine("entered");'+(mode==='start'?'':'$v=[Console]::In.ReadToEnd();[Console]::Out.WriteLine("read");')+(mode==='json-sid'?'$p=$v|ConvertFrom-Json;$sid=[Security.Principal.WindowsIdentity]::GetCurrent().User;[Console]::Out.WriteLine("identity");':'');
+              const at=Date.now(),r=spawnSync(executable,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{env,input:'{"fixture":true}',encoding:'utf8',windowsHide:true,timeout:5000,maxBuffer:16384,stdio:['pipe','pipe','pipe']});
+              console.log(JSON.stringify({node:process.version,profile,mode,elapsed_ms:Date.now()-at,status:r.status,error:r.error?.code??null,markers:(r.stdout??'').split(/\r?\n/).filter(v=>['entered','read','identity'].includes(v)),stderr_bytes:Buffer.byteLength(r.stderr??'')}));
+            }
+          }
+          JS
+
       # Pure layers first: store, rulings, gates, prompt library.
       - name: selftest (store)
         run: bash hrun.sh node tests/selftest.mjs
