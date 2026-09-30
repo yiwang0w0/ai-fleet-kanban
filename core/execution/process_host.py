@@ -4,7 +4,6 @@ import ctypes
 import hashlib
 import json
 import os
-import signal
 import subprocess
 import sys
 import threading
@@ -59,41 +58,6 @@ def checked_request():
     if os.path.normcase(os.path.realpath(value["command"])) not in paths:
         raise ValueError("COMMAND_NOT_PINNED")
     return value
-
-
-class PosixProcess:
-    containment = "posix-process-group"
-
-    def __init__(self, request):
-        self.proc = subprocess.Popen([request["command"], *request["args"]], cwd=request["cwd"],
-                                     env=request["env"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE, start_new_session=True)
-        self.pid = self.proc.pid
-        self.stdin = self.proc.stdin
-        self.stdout = self.proc.stdout
-        self.stderr = self.proc.stderr
-
-    def poll(self):
-        return self.proc.poll()
-
-    def stop(self):
-        try:
-            os.killpg(self.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-
-    def cleanup(self):
-        self.stop()
-        self.proc.wait(timeout=5)
-        # No cgroup: detached descendants are outside this group's observation.
-        return "group_signalled"
-
-    def close(self):
-        for handle in (self.stdin, self.stdout, self.stderr):
-            try:
-                handle.close()
-            except OSError:
-                pass
 
 
 class WindowsProcess:
@@ -260,13 +224,16 @@ class WindowsProcess:
 
 
 def main():
+    if os.name != "nt":
+        emit({"kind": "host_error", "code": "WINDOWS_REQUIRED"})
+        return 1
     process = None
     finished = threading.Event()
     requested_stop = threading.Event()
     stream_error = threading.Event()
     try:
         request = checked_request()
-        process = WindowsProcess(request) if os.name == "nt" else PosixProcess(request)
+        process = WindowsProcess(request)
 
         def commands():
             while not finished.is_set():

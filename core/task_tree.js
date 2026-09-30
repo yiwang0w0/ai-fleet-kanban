@@ -45,8 +45,10 @@ function subtree(db,id){
  return {valid:true,reason:null,height,ids,active,mode:start.tree_mode};
 }
 function placement(db,{id,parentId}){
- const current=ancestry(db,id),branch=subtree(db,id);
- if(!current.valid)return current;if(!branch.valid)return branch;
+ // The old incoming edge is being replaced. Validate the resulting placement,
+ // so a missing former parent does not make an otherwise sound branch irreparable.
+ const branch=subtree(db,id);
+ if(!branch.valid)return branch;
  if(branch.active.length)return {...branch,valid:false,reason:"active_subtree"};
  if(parentId===null)return {...branch,depth:0};
  const target=ancestry(db,parentId);

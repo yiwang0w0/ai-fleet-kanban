@@ -5,10 +5,13 @@ import {PeerError,uuid,names,keys,version} from "./protocol.mjs";
 import {localIdentity,transaction} from "./peers.mjs";
 function safeDigest(x){try{return digest(x);}catch{return createHash("sha256").update("invalid-unserializable-batch").digest("hex");}}
 export const MAX_EVENT_BYTES=256*1024, MAX_BATCH_BYTES=1024*1024;
-export function canonical(x){
+export const MAX_CANONICAL_DEPTH=64;
+export function canonical(x){return canonicalValue(x,0);}
+function canonicalValue(x,depth){
+ if(depth>MAX_CANONICAL_DEPTH)throw new PeerError("BAD_INPUT","JSON 嵌套层数超过上限",400);
  if(x===null || typeof x!=="object")return JSON.stringify(x);
- if(Array.isArray(x))return "["+x.map(canonical).join(",")+"]";
- return "{"+Object.keys(x).sort().map(k=>JSON.stringify(k)+":"+canonical(x[k])).join(",")+"}";
+ if(Array.isArray(x))return "["+x.map(v=>canonicalValue(v,depth+1)).join(",")+"]";
+ return "{"+Object.keys(x).sort().map(k=>JSON.stringify(k)+":"+canonicalValue(x[k],depth+1)).join(",")+"}";
 }
 export const digest=x=>createHash("sha256").update(canonical(x)).digest("hex");
 const conflict=(code,message)=>new PeerError(code,message,409);
@@ -26,7 +29,7 @@ export function migrateSync(db){
    "INSERT OR IGNORE INTO federation_sync_schema VALUES(1,1);"
   ].join("\n"));
   const schemaVersion=db.prepare("SELECT version FROM federation_sync_schema").get().version;
-  if(![1,2,3].includes(schemaVersion))throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
+  if(![1,2,3,4].includes(schemaVersion))throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
   db.exec([
    "CREATE TABLE IF NOT EXISTS federation_shares(task_id INTEGER PRIMARY KEY,task_uid TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN(0,1)),revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991));",
    "CREATE TABLE IF NOT EXISTS federation_dirty(task_id INTEGER PRIMARY KEY);",
@@ -52,7 +55,11 @@ export function migrateSync(db){
    db.exec("INSERT OR REPLACE INTO federation_published SELECT o.project_id,json_extract(o.event_json,'$.aggregate_uid'),o.seq,o.event_json FROM federation_outbox o JOIN (SELECT project_id,json_extract(event_json,'$.aggregate_uid') AS uid,MAX(seq) AS seq FROM federation_outbox GROUP BY project_id,uid) latest ON o.project_id=latest.project_id AND o.seq=latest.seq");
   }
   migrateEpochState(db);
-  if(schemaVersion<3)db.exec("UPDATE federation_sync_schema SET version=3 WHERE singleton=1");
+  if(schemaVersion<4){
+   // Event UUIDs are chosen by independent sources. One peer must not reserve
+   // another peer's UUID; sequence and event reuse within a source still conflict.
+   db.exec("CREATE TABLE federation_inbox_v4(event_id TEXT NOT NULL,origin_node_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,project_id TEXT NOT NULL,seq INTEGER NOT NULL,event_digest TEXT NOT NULL,PRIMARY KEY(origin_node_id,event_id),UNIQUE(origin_node_id,origin_epoch,project_id,seq)); INSERT INTO federation_inbox_v4 SELECT * FROM federation_inbox; DROP TABLE federation_inbox; ALTER TABLE federation_inbox_v4 RENAME TO federation_inbox; UPDATE federation_sync_schema SET version=4 WHERE singleton=1");
+  }
  });
 }
 /** Explicit opt-in. A stable project prevents accidental cross-project relocation. */
@@ -184,7 +191,7 @@ export function applyBatch(db,{origin,epoch,projectId},batch){
    const {event_digest:eventDigest,...unsigned}=e;
    if(eventDigest!==digest(unsigned)||e.payload_digest!==digest(e.payload)||Buffer.byteLength(canonical(e))>MAX_EVENT_BYTES)throw conflict("CONTENT_MISMATCH","事件内容摘要不匹配");
    if(e.seq!==expected++ || e.seq>batch.head_seq)throw conflict("SEQUENCE_GAP","事件乱序或存在缺口");
-   const prior=db.prepare("SELECT * FROM federation_inbox WHERE event_id=? OR (origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=?)").all(e.event_id,origin,epoch,projectId,e.seq);
+   const prior=db.prepare("SELECT * FROM federation_inbox WHERE origin_node_id=? AND (event_id=? OR (origin_epoch=? AND project_id=? AND seq=?))").all(origin,e.event_id,epoch,projectId,e.seq);
    if(prior.length){if(prior.length!==1||prior[0].event_digest!==eventDigest)throw conflict("CONTENT_MISMATCH","相同事件身份出现不同内容");
     if(e.seq>current)throw conflict("SEQUENCE_GAP","本机游标与收件箱不一致");continue;}
    if(e.seq!==current+1)throw conflict("SEQUENCE_GAP","不能跳过未确认事件");

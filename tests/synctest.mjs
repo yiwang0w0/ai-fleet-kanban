@@ -10,7 +10,7 @@ import {spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {migratePeers,issueCredential,localIdentity,authenticate} from "../core/federation/peers.mjs";
 import {listenPeerServer} from "../core/federation/gateway.mjs";
-import {migrateSync,shareTask,exportBatch,acknowledge,applyBatch,listReplicas,syncStatus,cursor,digest} from "../core/federation/sync-store.mjs";
+import {migrateSync,shareTask,exportBatch,acknowledge,applyBatch,listReplicas,syncStatus,cursor,digest,canonical} from "../core/federation/sync-store.mjs";
 import {syncOnce,endpoint} from "../core/federation/sync-client.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
 const ROOT=fileURLToPath(new URL("../",import.meta.url)),TMP=mkdtempSync(join(tmpdir(),"fleet-sync-")),handles=[];
@@ -312,4 +312,43 @@ test("two local HTTP nodes converge to the authorized projection hashes in both 
    assert.equal(count(receiver.db,"federation_inbox"),2);
   }
  }));
+});
+
+test("three nodes isolate event UUIDs by source and preserve same-source conflict checks",()=>{
+ const f=pair(),c=node(),id=task(f.a);task(c);
+ const credentialFile=target("third-source")+".json";
+ issueCredential(c.db,{peerNodeId:f.b.identity.node_id,peerEpoch:f.b.identity.sync_epoch,scopes:["peer:handshake","sync:pull","sync:ack"],projects:["demo"],credentialFile});
+ const peer=authenticate(c.db,"Bearer "+JSON.parse(readFileSync(credentialFile,"utf8")).token);
+ const g={a:c,b:f.b,peer,projectId:"demo",source:{origin:c.identity.node_id,epoch:c.identity.sync_epoch,projectId:"demo"}};
+ const one=pull(f),other=pull(g);one.events[0].event_id=other.events[0].event_id;reseal(one.events[0]);one.checkpoint.event_digest=one.events[0].event_digest;
+ assert.equal(accept(f,one).applied,1);assert.equal(accept(g,other).applied,1);
+ assert.equal(accept(f,one).applied,0);assert.equal(accept(g,other).applied,0);
+ assert.equal(listReplicas(f.b.db).length,2);assert.equal(count(f.b.db,"federation_inbox"),2);
+ store.update(f.a.db,{id,description:"changed",expectedVersion:1});
+ const changed=pull(f,1);changed.events[0].event_id=one.events[0].event_id;reseal(changed.events[0]);changed.checkpoint.event_digest=changed.events[0].event_digest;
+ assert.throws(()=>accept(f,changed),{code:"CONTENT_MISMATCH"});
+ assert.equal(cursor(f.b.db,f.source.origin,f.source.epoch,"demo"),1);
+});
+
+test("inbox v3 upgrade preserves receipts and rolls back atomically on failure",()=>{
+ const f=pair();task(f.a);accept(f,pull(f));const db=f.b.db;
+ db.exec("ALTER TABLE federation_inbox RENAME TO fixture_inbox; CREATE TABLE federation_inbox(event_id TEXT PRIMARY KEY,origin_node_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,project_id TEXT NOT NULL,seq INTEGER NOT NULL,event_digest TEXT NOT NULL,UNIQUE(origin_node_id,origin_epoch,project_id,seq)); INSERT INTO federation_inbox SELECT * FROM fixture_inbox; DROP TABLE fixture_inbox; UPDATE federation_sync_schema SET version=3");
+ const before=db.prepare("SELECT * FROM federation_inbox").all();
+ db.exec("CREATE TRIGGER fail_inbox_migration BEFORE UPDATE ON federation_sync_schema BEGIN SELECT RAISE(ABORT,'inbox upgrade failure'); END");
+ assert.throws(()=>migrateSync(db),/inbox upgrade failure/);
+ assert.equal(db.prepare("SELECT version FROM federation_sync_schema").get().version,3);
+ assert.equal(db.prepare("PRAGMA table_info(federation_inbox)").all().find(c=>c.name==="origin_node_id").pk,0);
+ assert.deepEqual(db.prepare("SELECT * FROM federation_inbox").all(),before);
+ db.exec("DROP TRIGGER fail_inbox_migration");migrateSync(db);migrateSync(db);
+ assert.equal(db.prepare("SELECT version FROM federation_sync_schema").get().version,4);
+ assert.deepEqual(db.prepare("SELECT * FROM federation_inbox").all(),before);
+ assert.equal(accept(f,pull(f)).applied,0);
+});
+
+test("canonical JSON bounds nesting while preserving the existing byte contract",()=>{
+ assert.equal(canonical({z:[1,{b:true,a:null}],a:"plain"}),'{"a":"plain","z":[1,{"a":null,"b":true}]}');
+ let nested="end";for(let i=0;i<64;i++)nested={child:nested};assert.ok(canonical(nested));
+ nested={child:nested};assert.throws(()=>canonical(nested),{code:"BAD_INPUT",status:400});
+ const f=pair();task(f.a);const batch=pull(f);batch.events[0].payload=nested;
+ assert.throws(()=>accept(f,batch),{code:"BAD_INPUT",status:400});assert.equal(count(f.b.db,"federation_inbox"),0);
 });

@@ -59,13 +59,15 @@ execute 只接受 provider 额度。取消、配置篡改、Python 摘要不符�
 
 ## 持久化与恢复
 
-调度 schema 从 1 升至 2。升级前备份并停止旧调度进程；本次没有迁移运行部署。新增 broker_execution_records 保存不可修改的启动摘要及仅能写入一次的终态观察。
+调度 schema 当前为 3，支持从 1/2 原子升级。升级前备份并停止旧调度进程；本次没有迁移运行部署。新增 broker_execution_records 保存不可修改的启动摘要及仅能写入一次的终态观察。
 
 启动摘要、身份检查、额度消耗和许可在同一事务内提交。摘要绑定模型、effort、run/principal/agent 身份、程序与 Python 摘要、配置/环境/提示摘要和资源上限，不保存 API key、原始环境或提示正文。
 
 终态观察保留已解析证据、用量、供应商 session/turn/model、协议诊断、输出摘要与计数、退出码、进程清理状态和程序/Python/宿主摘要。原始 stdout/stderr 不入审计。观察结果、任务报告及分派结算一起提交；观察存储或任务报告任一失败，整个事务回滚。
 
-监管结束后先排他写入并 fsync 私有 execution-observation.json，再提交数据库结算。若数据库提交失败，reconcile 验证 dispatch 与启动摘要后重复补交同一终态；它不能启动任何进程。若宿主在形成完整回执前崩溃，或磁盘写入失败，状态保持已消费但结果未知，需要后续核对，不自动再跑。该日志不是跨节点传输协议。
+每次启动在消费许可的同一事务内生成独立的 256 位随机 journal_key，仅存于本机数据库，不出现在 dispatch 状态、启动参数或 MCP 响应中。监管结束后生成 ai-fleet-execution-journal/v2，以该密钥对 format、dispatch_id、launch_digest 和 observation 的规范 JSON 做 HMAC-SHA256，再排他写入并 fsync 私有 execution-observation.json。reconcile 在落库前做恒定时间签名比较、当前节点/epoch 和启动摘要校验；篡改、跨启动签名和无签名 v1 文件均不能用于恢复。旧启动不补发密钥，也不获得重跑许可。
+
+文件写入失败仍继续数据库结算及凭据撤销，返回 journal_file: null、journal_error: JOURNAL_WRITE_FAILED，不能把碰撞文件当作本次回执。数据库提交失败且签名文件已成功保存时，可重复 reconcile 补交同一终态；无法形成可信回执时保持额度已消费，需核对未知结果，不自动再跑。该日志仅用于本机恢复。HMAC 信任本机数据库及监管进程，不是抵御同一 Windows 用户读取数据库的 OS 权限隔离。
 
 相同回执可重复读取/补交，改变进程观察则拒绝。旧运行结果保留在历史中，不改写替代运行。所有自动回执仍为 accepted: false、real_model_call_confirmed: false；模型调用和业务验收需要独立证据。
 

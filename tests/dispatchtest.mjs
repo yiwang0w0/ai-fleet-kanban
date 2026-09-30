@@ -9,6 +9,7 @@ import {tmpdir} from "node:os";
 import {execFileSync,spawn} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {prepareAdapter} from "../core/execution/adapters.mjs";
+import {executionJournal} from "../core/execution/journal.mjs";
 import {executePreparedDispatch,reconcileExecutionJournal} from "../core/execution/runner.mjs";
 import {digest} from "../core/federation/sync-store.mjs";
 import {migratePeers} from "../core/federation/peers.mjs";
@@ -334,9 +335,9 @@ function recorded(f,w,execution=executionFor(w)){
 function settleObserved(f,w,observation){
  return finishDispatch(f.db,{dispatchId:w.receipt.dispatch_id,result:{status:observation.status,evidence:observation.evidence,usage:observation.usage},observation});
 }
-test("schema 2 migration is idempotent and keeps existing execution records",()=>{
+test("schema 3 migration is idempotent and keeps existing execution records",()=>{
  const f=fixture(),w=prepare(f,assign(f,card(f)));recorded(f,w);
- assert.equal(f.db.prepare("SELECT version FROM broker_dispatch_schema").get().version,2);
+ assert.equal(f.db.prepare("SELECT version FROM broker_dispatch_schema").get().version,3);
  f.db.exec("UPDATE broker_dispatch_schema SET version=1");migrateDispatch(f.db);migrateDispatch(f.db);
  assert.equal(count(f,"broker_execution_records"),1);
  assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).execution.launch_digest,digest(executionFor(w)));
@@ -387,7 +388,7 @@ test("failed model mismatch remains observable and an uncertain supervisor canno
 });
 test("journal reconciliation only retries terminal persistence after a rolled back database settlement",()=>{
  const f=fixture({limit:1}),w=prepare(f,assign(f,card(f))),x=executionFor(w),permit=recorded(f,w,x),o=observed(x),journal=path("execution-journal")+".json";
- writeFileSync(journal,JSON.stringify({format:"ai-fleet-execution-journal/v1",dispatch_id:w.receipt.dispatch_id,launch_digest:permit.execution.launch_digest,observation:o}));
+ writeFileSync(journal,JSON.stringify(executionJournal(f.db,{dispatchId:w.receipt.dispatch_id,observation:o})));
  f.db.exec("CREATE TRIGGER fail_execution_settle BEFORE INSERT ON broker_dispatch_events WHEN NEW.kind='settled' BEGIN SELECT RAISE(ABORT,'injected observation settle'); END");
  assert.throws(()=>reconcileExecutionJournal(f.db,journal),/injected observation settle/);
  assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).execution.observation,null);
@@ -401,6 +402,7 @@ test("journal reconciliation only retries terminal persistence after a rolled ba
 test("launch metadata and completed observation history are immutable",()=>{
  const f=fixture(),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);settleObserved(f,w,observed(x));
  assert.throws(()=>f.db.exec("UPDATE broker_execution_records SET launch_json='{}'"),/immutable/);
+ assert.throws(()=>f.db.exec("UPDATE broker_execution_records SET journal_key='changed'"),/immutable/);
  assert.throws(()=>f.db.exec("UPDATE broker_execution_records SET observation_json='{}'"),/immutable/);
  assert.throws(()=>f.db.exec("DELETE FROM broker_execution_records"),/append-only/);
 });
@@ -469,7 +471,8 @@ function zcodeDispatchFixture(mode="success"){
  const auth=join(dirs.auth,".zcode","v2");mkdirSync(auth,{recursive:true});
  const w=prepare(f,assign(f,card(f,{capabilities:["board-tools"]})),{credentialFile:join(dirs.private,"principal.json")});
  const bundle=join(dirs.install,"fixture.cjs"),builtin=join(dirs.install,"builtin.json");
- writeFileSync(bundle,`if(${JSON.stringify(mode)}==='fail')process.exit(7);
+ writeFileSync(bundle,`if(${JSON.stringify(mode)}==='collision')require('node:fs').writeFileSync(${JSON.stringify(join(dirs.private,"execution-observation.json"))},'untrusted precreation');
+if(${JSON.stringify(mode)}==='fail')process.exit(7);
 const input=process.argv[process.argv.indexOf('--prompt')+1],out=e=>process.stdout.write(JSON.stringify(e)+String.fromCharCode(10));
 const e=(type,seq,payload)=>({type,seq,eventId:'event'+seq,sessionId:'fixture',turnId:'turn',traceId:'trace',timestamp:seq,payload});
 out(e('turn.started',1,{input}));out(e('session.updated',2,{providerId:'account:bigmodel-individual-coding-plan',modelId:'GLM-5.3',messageCount:1,toolCount:5,iteration:0}));out(e('turn.completed',3,{resultType:'success',response:'local Zcode launch fixture'}));
@@ -493,4 +496,38 @@ test("Windows Zcode prepared adapter reaches the real runner and durable one-use
 test("Windows Zcode installed bundle tamper is rejected by the actual runner before spending its quota",{skip:process.platform!=="win32"},async()=>{
  const {f,bundle,options}=zcodeDispatchFixture();writeFileSync(bundle,"process.exit(0)");
  await assert.rejects(executePreparedDispatch(f.db,options),{code:"RUNTIME_CHANGED"});assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);assert.equal(count(f,"broker_execution_records"),0);
+});
+
+test("journal tampering, unsigned legacy data and cross-launch signatures cannot settle",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);
+ const journal=path("signed-journal")+".json",signed=executionJournal(f.db,{dispatchId:w.receipt.dispatch_id,observation:observed(x)});
+ const key=f.db.prepare("SELECT journal_key FROM broker_execution_records WHERE dispatch_id=?").get(w.receipt.dispatch_id).journal_key;
+ assert.equal(key.length,64);assert.ok(!JSON.stringify(dispatchStatus(f.db,w.receipt.dispatch_id)).includes(key));assert.ok(!JSON.stringify(signed).includes(key));
+ const g=fixture(),v=prepare(g,assign(g,card(g))),y=executionFor(v);recorded(g,v,y);
+ const other=executionJournal(g.db,{dispatchId:v.receipt.dispatch_id,observation:observed(y)});
+ for(const mutate of [j=>j.observation.evidence="forged",j=>j.signature="0".repeat(64),j=>{delete j.signature;j.format="ai-fleet-execution-journal/v1";},j=>j.signature=other.signature]){
+  const bad=structuredClone(signed);mutate(bad);writeFileSync(journal,JSON.stringify(bad));
+  assert.throws(()=>reconcileExecutionJournal(f.db,journal),{code:"JOURNAL_UNAUTHENTICATED"});
+  assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).phase,"launch_committed");
+  assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).execution.observation,null);
+ }
+ writeFileSync(journal,JSON.stringify(signed));assert.equal(reconcileExecutionJournal(f.db,journal).phase,"settled");
+});
+
+test("schema upgrade preserves legacy launches without authorizing unsigned recovery",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f)));recorded(f,w);
+ f.db.exec("DROP TRIGGER broker_execution_launch_immutable; ALTER TABLE broker_execution_records DROP COLUMN journal_key; UPDATE broker_dispatch_schema SET version=2");
+ migrateDispatch(f.db);migrateDispatch(f.db);
+ assert.equal(f.db.prepare("SELECT journal_key FROM broker_execution_records").get().journal_key,null);
+ assert.throws(()=>executionJournal(f.db,{dispatchId:w.receipt.dispatch_id,observation:observed(executionFor(w))}),{code:"JOURNAL_UNAUTHENTICATED"});
+ assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).phase,"launch_committed");assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+});
+
+test("a journal file created during execution cannot suppress settlement or credential revocation",async()=>{
+ const {f,w,options}=zcodeDispatchFixture("collision"),r=await executePreparedDispatch(f.db,options);
+ assert.equal(r.phase,"settled");assert.equal(r.result.status,"success");assert.equal(r.journal_file,null);assert.equal(r.journal_error,"JOURNAL_WRITE_FAILED");
+ assert.equal(f.db.prepare("SELECT status FROM broker_principals WHERE principal_id=?").get(w.receipt.principal_id).status,"revoked");
+ assert.equal(readFileSync(join(options.privateDirectory,"execution-observation.json"),"utf8"),"untrusted precreation");
+ assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
 });

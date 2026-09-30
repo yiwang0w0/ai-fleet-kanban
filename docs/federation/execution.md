@@ -68,3 +68,7 @@ Zcode 依据安装包内 0.16.9 的 zcode.cjs 静态协议 schema（SHA256 fad4c
 Windows 生命周期依据 Microsoft [Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[AssignProcessToJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject) 与 [Extended Limit Information](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)。
 
 本批不通过完整 G04。三个真实模型仍各0/1；真实配置生效、模型可用性、Zcode 授权及启动工具策略、Windows 文件隔离及独立验收是剩余工作。
+
+## Windows 执行边界（PR #2 审阅修复）
+
+供应商执行、普通命令监管及 Python 宿主入口均在非 Windows 环境提前拒绝（WINDOWS_REQUIRED）；执行入口在消费启动许可之前检查。已移除 Python 的 POSIX 进程组启动实现，Windows Job 为唯一启动与停止证明路径。测试在 Windows 子进程中替换平台标识，验证拒绝发生在配置读取和进程启动之前；这不构成 Linux 支持或 Linux 实机测试。

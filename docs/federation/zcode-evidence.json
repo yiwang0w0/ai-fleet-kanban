@@ -158,5 +158,19 @@
     "Windows OS permissions and independent full phase acceptance",
     "scheduler, global UI and operations",
     "two physical kanata Windows PCs over Tailscale"
-  ]
+  ],
+  "exact_commit_ci": {
+    "commit": "0f6935e67a2f044aa462ba37eb49910940130f3a",
+    "run_id": 36687268123,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36687268123",
+    "windows_job_id": 109795884681,
+    "gitleaks_job_id": 109795884528,
+    "conclusion": "success",
+    "main_pass": 1455,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0,
+    "source": "terminal GitHub job state and complete Windows job logs",
+    "historical_after_review_fixes": true
+  }
 }

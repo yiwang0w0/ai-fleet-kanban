@@ -361,3 +361,9 @@ test("MCP enrollment keeps a legacy tree and refuses legacy uplift instead of ch
  assert.throws(()=>callTool(f.db,f.coord.auth,"split_task",{...args,parent_uid:parent.task_uid,expected_version:parent.aggregate_version}),{code:"CHAIN_LIMIT"});
  assert.equal(count(f,"tasks"),before);assert.equal(store.get(f.db,parent.id).tree_mode,"legacy");
 });
+
+test("deep JSON tool arguments return BAD_INPUT over HTTP without writing a task",async()=>{
+ const f=fixture(),n=await network(f);let nested="end";for(let i=0;i<1000;i++)nested={child:nested};
+ const r=await fetch(n.url+"/local/v1/tools/call",{method:"POST",headers:{Authorization:f.coord.auth,"Content-Type":"application/json"},body:JSON.stringify({name:"create_task",arguments:createArgs({description:nested})})});
+ assert.equal(r.status,400);assert.equal((await r.json()).code,"BAD_INPUT");assert.equal(count(f,"tasks"),0);assert.equal(count(f,"broker_requests"),0);
+});

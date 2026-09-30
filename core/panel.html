@@ -2648,8 +2648,10 @@ ${r.memo}`);
   //   "confirm" into a reflex; the armed state at least demands a conscious second
   //   press, and disarming is the default direction (not pressing = nothing).
   if ((a === "approve" || a === "reject" || a === "archive") && b.dataset.armed !== "1") {
+    const version=byId.get(Number(id))?.aggregate_version;
+    if(!Number.isSafeInteger(version)||version<1){await refresh();alert("任务已变化，请刷新后核对再操作");return;}
     captureDraftVersion(id,b);
-    b.dataset.version=String(byId.get(Number(id))?.aggregate_version);
+    b.dataset.version=String(version);
     b.dataset.armed = "1";
     b.dataset.orig = b.textContent;
     b.classList.add("armed");
@@ -2693,6 +2695,9 @@ async function post(url, body){
     const id=Number(mutation[1]);
     body={...body,expected_version:mutation[2]==="resolve" && draftVersions.has(id)
       ? draftVersions.get(id) : byId.get(id)?.aggregate_version};
+  }
+  if(mutation && (!Number.isSafeInteger(body.expected_version)||body.expected_version<1)){
+    await refresh();throw new Error("任务版本不可用，已刷新；请核对后重新操作");
   }
   const r = await fetch(url, { method:"POST", headers: WH,
                                body: JSON.stringify(body) });

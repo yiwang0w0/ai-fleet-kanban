@@ -27,6 +27,19 @@ test("versions start at one, survive migration and ignore heartbeat/time-only wr
  assert.equal(store.get(db,id).aggregate_version,t.aggregate_version);
  store.bumpAttempt(db,{id,worker:"v",runId:t.run_id});assert.ok(store.get(db,id).aggregate_version>t.aggregate_version);
 });
+test("migration rebuilds semantic version coverage after columns are added",()=>{
+ const {db,id}=fixture();
+ db.exec("ALTER TABLE tasks ADD COLUMN future_semantic_field TEXT");
+ store.migrate(db);
+ const v=store.get(db,id).aggregate_version;
+ db.prepare("UPDATE tasks SET future_semantic_field='changed' WHERE id=?").run(id);
+ assert.equal(store.get(db,id).aggregate_version,v+1);
+ store.migrate(db);
+ db.prepare("UPDATE tasks SET future_semantic_field='again' WHERE id=?").run(id);
+ assert.equal(store.get(db,id).aggregate_version,v+2);
+ assert.equal(db.prepare("SELECT count(*) n FROM sqlite_schema WHERE type='trigger' AND name='task_content_version'").get().n,1);
+});
+
 test("same values do not advance a version; content and evidence changes do",()=>{
  const {db,id}=fixture(),a=store.get(db,id);
  store.update(db,{id,subject:a.subject,expectedVersion:a.aggregate_version});
@@ -193,9 +206,28 @@ test("HTTP requires versions, rejects stale controls and returns current version
   const cliTask=(await api("GET",path)).body.task;
   assert.equal(cliTask.aggregate_version,3);assert.equal(cliTask.acceptance,"CLI verified");
   const claim=await api("POST",path+"/claim",{worker:"v",expected_version:3});assert.equal(claim.status,200);
+  const running=claim.body.task;
+  const appended=await api("POST",path+"/update",{expected_version:running.aggregate_version,description:"new\nHTTP append"});
+  assert.equal(appended.status,200,JSON.stringify(appended.body));
+  assert.ok(appended.body.notice);
+  const afterAppend=(await api("GET",path)).body.task;
+  assert.equal(afterAppend.description,"new\nHTTP append");assert.equal(afterAppend.status,"in_progress");
+  assert.equal(afterAppend.run_id,running.run_id);assert.equal(afterAppend.worker,running.worker);
+  assert.ok(afterAppend.aggregate_version>running.aggregate_version);
+  assert.equal((await api("POST",path+"/update",{expected_version:running.aggregate_version,description:"new\nstale append"})).status,409);
+  assert.equal((await api("POST",path+"/update",{expected_version:afterAppend.aggregate_version,description:afterAppend.description+"\nextra",unknown_field:"no"})).status,409);
   const report=await api("POST",path+"/report",{worker:"v",run_id:claim.body.task.run_id,outcome:"done",evidence:"proof"});
   assert.equal(report.status,200);
   const waiting=(await api("GET",path)).body.task;
   assert.equal((await api("POST",path+"/resolve",{verdict:"approve",expected_version:waiting.aggregate_version})).status,200);
  }finally{if(p.exitCode===null){p.kill();await new Promise(r=>p.once("exit",r));}}
+});
+
+test("panel refreshes missing or malformed versions without posting or retrying",async()=>{
+ const source=readFileSync(join(ROOT,"core/panel.html"),"utf8"),a=source.indexOf("async function post(url, body){"),b=source.indexOf("// ⭐ v0.19",a);
+ let fetched=0,refreshed=0;const context={WH:{},byId:new Map(),draftVersions:new Map(),refresh:async()=>{refreshed++;},fetch:async()=>{fetched++;throw Error("unexpected POST");}};
+ vm.createContext(context);vm.runInContext(source.slice(a,b),context);
+ for(const version of [undefined,null,NaN,0,"undefined",Number.MAX_SAFE_INTEGER+1])
+  await assert.rejects(context.post("/api/tasks/1/archive",version===undefined?{}:{expected_version:version}),/版本不可用/);
+ assert.equal(fetched,0);assert.equal(refreshed,6);
 });

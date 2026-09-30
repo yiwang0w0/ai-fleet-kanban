@@ -147,7 +147,8 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
   //     load-bearing wall in this environment (a measured fact). Hence the mutation
   //     goes one level deeper: remove the TRANSACTION entirely (BEGIN/COMMIT/
   //     ROLLBACK all no-ops), which lets other processes interleave between SELECT
-  //     and UPDATE — double issue becomes possible.
+  //     and UPDATE. The run uniqueness index now prevents duplicate runs, but
+  //     failed claims can leave partial task writes (attempts/worker) committed.
   const src = readFileSync(join(__dirname, "..", "core", "store.js"), "utf8");
 
   // Mutants retain the real structural guard dependencies so startup errors cannot mask the race.
@@ -216,6 +217,13 @@ process.stdout.write(JSON.stringify({ v, margin, late: margin < 0 }));
   for (let i = 0; i < K && !broke; i++) {
     const r = await raceMutant(mNoTx, `NO-TX#${i + 1}`);
     rounds.push([r.win+"w",r.err+"err",r.late+"late",r.attempts+"attempts"].join("/"));
+    // ⭐ Historical criterion: "DOUBLE ISSUE happened" = win > 1. Two things it must NOT
+    //   be: win !== 1 (that counts win===0 — nobody got it — as "detected"), and
+    //   win>1 && err===0. An error in a THIRD process cannot mint a false winner.
+    //   The older CI mutant showed "2w/1err" and the assertion still failed when
+    //   that incorrect error-free clause rejected real proof. Keep this scar.
+    //   Fable5.1's PR #2 review (2026-09-30) reports 1w/11err/12attempts with
+    //   ux_task_runs_active: detection now also checks committed partial writes.
     // A run uniqueness constraint now also prevents a second successful receipt.
     // Without the transaction, losing writers still change attempts/worker before
     // their run insert fails. Count only observed double receipts or committed

@@ -132,13 +132,13 @@ export function revokePeer(db, {peerNodeId, expectedVersion}) {
   });
 }
 export function authenticate(db, authorization, scope) {
-  localIdentity(db);
   const m = typeof authorization === "string" && authorization.match(/^Bearer ([0-9a-f-]{36}\.[A-Za-z0-9_-]{43})$/);
   const token = m ? m[1] : "", keyId = token.split(".")[0];
   const p = db.prepare("SELECT * FROM federation_peers WHERE key_id=?").get(keyId);
   const expected = p?.status === "active" && /^[0-9a-f]{64}$/.test(p.secret_hash) ? Buffer.from(p.secret_hash,"hex") : Buffer.alloc(32);
   const equal = timingSafeEqual(hash(token),expected);
   if (!m || !p || p.status !== "active" || !equal) throw new PeerError("UNAUTHENTICATED","需要有效的独立对端凭据",401);
+  localIdentity(db); // Lifecycle state is disclosed only after credential verification.
   rejectRetiredPeer(db,p.peer_node_id,p.peer_epoch);
   const peer = publicPeer(p);
   if (scope && !peer.scopes.includes(scope)) throw new PeerError("FORBIDDEN","对端凭据不包含所需权限",403);

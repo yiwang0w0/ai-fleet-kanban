@@ -57,7 +57,7 @@ test("v1 migration rebuilds published state from the latest immutable event and 
  f.a.db.exec("DROP TABLE federation_published; UPDATE federation_sync_schema SET version=1");
  migrateSync(f.a.db);migrateSync(f.a.db);
  assert.equal(count(f.a.db,"federation_published"),1);assert.equal(start(f).head_seq,2);
- assert.equal(f.a.db.prepare("SELECT version FROM federation_sync_schema").get().version,3);
+ assert.equal(f.a.db.prepare("SELECT version FROM federation_sync_schema").get().version,4);
  assert.equal(install(f).records,1);assert.equal(listReplicas(f.b.db)[0].description,"newer");
 });
 
@@ -298,4 +298,19 @@ test("a second writer advancing the receive cursor during download discards the 
   assert.equal(snapshotStage(f.b.db,f.source),null);assert.equal(listReplicas(f.b.db).length,30);
   assert.equal(listReplicas(f.b.db).find(t=>t.task_uid===store.get(f.a.db,ids[0]).task_uid).description,"already received newer");
  });
+});
+
+test("a third source cannot poison a snapshot by reusing its event UUID",()=>{
+ const f=pair(),c=node();task(f.a);task(c);
+ const credentialFile=path("third-source")+".json";
+ issueCredential(c.db,{peerNodeId:f.b.identity.node_id,peerEpoch:f.b.identity.sync_epoch,scopes:["peer:handshake","sync:pull","sync:ack"],projects:["demo"],credentialFile});
+ const peer=authenticate(c.db,"Bearer "+JSON.parse(readFileSync(credentialFile,"utf8")).token);
+ const g={a:c,b:f.b,peer,source:{origin:c.identity.node_id,epoch:c.identity.sync_epoch,projectId:"demo"}};
+ flush(g);const m=start(g),p=page(g,m),batch=exportBatch(f.a.db,f.peer,{project_id:"demo",after_seq:0});
+ const first=JSON.parse(c.db.prepare("SELECT event_json FROM federation_published LIMIT 1").get().event_json);
+ batch.events[0].event_id=first.event_id;
+ const {event_digest,...unsigned}=batch.events[0];batch.events[0].event_digest=digest(unsigned);batch.checkpoint.event_digest=batch.events[0].event_digest;
+ applyBatch(f.b.db,f.source,batch);
+ beginSnapshot(f.b.db,g.source,m);assert.equal(receiveSnapshotPage(f.b.db,g.source,p).installed,true);
+ assert.equal(listReplicas(f.b.db).length,2);assert.equal(count(f.b.db,"federation_inbox"),2);
 });

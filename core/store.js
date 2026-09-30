@@ -583,7 +583,9 @@ function migrateTaskVersions(db) {
   const ignored = new Set(["aggregate_version","heartbeat_at","lease_until","updated_at","work_spans"]);
   const columns = db.prepare("PRAGMA table_info(tasks)").all().map(c=>c.name).filter(c=>!ignored.has(c));
   const changed = columns.map(c=>'OLD."' + c + '" IS NOT NEW."' + c + '"').join(" OR ");
-  db.exec("CREATE TRIGGER IF NOT EXISTS task_content_version AFTER UPDATE ON tasks WHEN " + changed +
+  // Rebuild inside the migration transaction: upgrades may add semantic columns.
+  db.exec("DROP TRIGGER IF EXISTS task_content_version");
+  db.exec("CREATE TRIGGER task_content_version AFTER UPDATE ON tasks WHEN " + changed +
     " BEGIN UPDATE tasks SET aggregate_version=aggregate_version+1 WHERE id=NEW.id; END;");
   const bad=db.prepare("SELECT id FROM tasks WHERE typeof(aggregate_version)<>'integer' OR aggregate_version<1 OR aggregate_version>9007199254740991 LIMIT 1").get();
   if(bad) throw err(ERR.CONFLICT,"任务版本损坏，拒绝启动: #" + bad.id);
@@ -2539,7 +2541,7 @@ function updateInner(db, fields) {
   //   adds an editable field and forgets that array, "description + the new field"
   //   smuggles an edit into a running card. Deriving it means an unknown key — new,
   //   misspelled, or hostile — falls on the refusing side by construction.
-  const NOT_A_FIELD = new Set(["id", "actor"]);   // routing/attribution, not card content
+  const NOT_A_FIELD = new Set(["id", "actor", "expected_version", "expectedVersion"]); // command metadata, not card content
   const oldDescription = String(t.description || "");
   const descriptionOnly = description !== undefined &&
     Object.keys(fields).every((k) => k === "description" || NOT_A_FIELD.has(k)

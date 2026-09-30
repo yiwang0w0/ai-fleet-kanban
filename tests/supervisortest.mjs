@@ -193,3 +193,13 @@ test("Windows cancelling the Zcode launcher stops launcher, vendor and vendor de
  assert.ok(existsSync(f.marker));const started=JSON.parse(readFileSync(f.marker,"utf8"));controller.abort();const out=await pending;
  assert.equal(out.status,"cancelled");assert.equal(out.process.cleanup,"job_empty");for(const pid of [out.process.pid,started.pid,started.descendant])assert.equal(await stopped(pid),true);
 });
+
+test("non-Windows execution entry points fail before configuration, quota or process work",()=>{
+ const supervisor=new URL("../core/execution/supervisor.mjs",import.meta.url).href,runner=new URL("../core/execution/runner.mjs",import.meta.url).href;
+ const code=`Object.defineProperty(process,'platform',{value:'linux'});const {superviseProcess,superviseCommand}=await import(${JSON.stringify(supervisor)});const {executePreparedDispatch}=await import(${JSON.stringify(runner)});for(const call of [()=>superviseProcess({}),()=>superviseCommand({}),()=>executePreparedDispatch(null,{})]){try{await call();throw Error('unexpected success');}catch(e){if(e.code!=='WINDOWS_REQUIRED')throw e;}}process.stdout.write('refused');`;
+ assert.equal(execFileSync(process.execPath,["--input-type=module","-e",code],{encoding:"utf8",windowsHide:true}).trim(),"refused");
+ const host=fileURLToPath(new URL("../core/execution/process_host.py",import.meta.url));
+ const probe="import runpy,sys; ns=runpy.run_path(sys.argv[1]); ns['os'].name='posix'; assert ns['main']()==1";
+ const output=execFileSync(pythonPath,["-I","-S","-X","utf8","-c",probe,host],{encoding:"utf8",windowsHide:true});
+ assert.equal(JSON.parse(output).code,"WINDOWS_REQUIRED");
+});

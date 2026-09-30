@@ -24,7 +24,10 @@ function verifyPin(pin){
  * permission elevation. Does not itself authorize models or isolate files.
  * The caller must commit a fresh dispatch permit before calling this function.
  */
-export async function superviseProcess(options){return supervise({...options,commandOutput:false});}
+export async function superviseProcess(options){
+ if(process.platform!=="win32")fail("WINDOWS_REQUIRED");
+ return supervise({...options,commandOutput:false});
+}
 /** Trusted local verification primitive: ordinary commands, never a provider dispatch. */
 export async function superviseCommand(options){
  if(process.platform!=="win32")fail("WINDOWS_REQUIRED");

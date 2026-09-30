@@ -137,7 +137,7 @@ function installSnapshot(db,m,events){
  archiveRecoveryProject(db,source,events);
  const now=new Date().toISOString(),insert=db.prepare("INSERT INTO federation_replicas VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(task_uid) DO UPDATE SET projection_version=excluded.projection_version,task_version=excluded.task_version,withdrawn=excluded.withdrawn,task_json=excluded.task_json,last_seq=excluded.last_seq,received_at=excluded.received_at");
  for(const e of events){
-  const seen=db.prepare("SELECT event_digest FROM federation_inbox WHERE event_id=? OR (origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=?)").all(e.event_id,m.origin_node_id,m.origin_epoch,m.project_id,e.seq);
+  const seen=db.prepare("SELECT event_digest FROM federation_inbox WHERE origin_node_id=? AND (event_id=? OR (origin_epoch=? AND project_id=? AND seq=?))").all(m.origin_node_id,e.event_id,m.origin_epoch,m.project_id,e.seq);
   if(seen.some(r=>r.event_digest!==e.event_digest))fail("CONTENT_MISMATCH","快照与已经接收的事件身份冲突");
   const prev=db.prepare("SELECT * FROM federation_replicas WHERE task_uid=?").get(e.aggregate_uid),t=e.payload.task??null;
   if(prev&&(prev.owner_node_id!==m.origin_node_id||prev.origin_epoch!==m.origin_epoch||prev.project_id!==m.project_id))fail("OWNER_MISMATCH","快照任务与其他来源冲突");

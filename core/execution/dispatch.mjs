@@ -1,6 +1,6 @@
 import {validateWorkspaceLaunch,bindWorkspaceLaunch} from "../artifacts/workspace-session.mjs";
 import {createRequire} from "node:module";
-import {randomUUID} from "node:crypto";
+import {randomUUID,randomBytes} from "node:crypto";
 import {basename,dirname,isAbsolute,relative,resolve,sep} from "node:path";
 import {realpathSync,unlinkSync} from "node:fs";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
@@ -35,15 +35,20 @@ export function migrateDispatch(db){
    "CREATE TRIGGER IF NOT EXISTS broker_dispatch_run_ended AFTER UPDATE OF state ON task_runs WHEN NEW.state='ended' AND OLD.state='running' BEGIN UPDATE broker_assignments SET state='ended',reason='bound run ended' WHERE assignment_id IN(SELECT assignment_id FROM broker_dispatches WHERE run_id=NEW.run_id) AND state='claimed'; UPDATE broker_dispatches SET phase='interrupted',reason='run ended; awaiting executor receipt',finished_at=NEW.ended_at WHERE run_id=NEW.run_id AND phase IN('prepared','launch_committed'); END;"
   ].join("\n"));
   const schema=db.prepare("SELECT version FROM broker_dispatch_schema").get().version;
-  if(![1,2].includes(schema))fail("SCHEMA_INCOMPATIBLE","调度存储版本不兼容");
+  if(![1,2,3].includes(schema))fail("SCHEMA_INCOMPATIBLE","调度存储版本不兼容");
   db.exec([
    "CREATE TABLE IF NOT EXISTS broker_execution_records(dispatch_id TEXT PRIMARY KEY REFERENCES broker_dispatches(dispatch_id),launch_digest TEXT NOT NULL,launch_json TEXT NOT NULL,observation_digest TEXT,observation_json TEXT,created_at TEXT NOT NULL,observed_at TEXT);",
    "CREATE TRIGGER IF NOT EXISTS broker_execution_launch_immutable BEFORE UPDATE OF dispatch_id,launch_digest,launch_json,created_at ON broker_execution_records BEGIN SELECT RAISE(ABORT,'execution launch is immutable'); END;",
    "CREATE TRIGGER IF NOT EXISTS broker_execution_observation_once BEFORE UPDATE OF observation_digest,observation_json,observed_at ON broker_execution_records WHEN OLD.observation_digest IS NOT NULL BEGIN SELECT RAISE(ABORT,'execution observation is immutable'); END;",
    "CREATE TRIGGER IF NOT EXISTS broker_execution_no_delete BEFORE DELETE ON broker_execution_records BEGIN SELECT RAISE(ABORT,'execution history is append-only'); END;"
   ].join("\n"));
+  // Legacy launches have no key and cannot authenticate an on-disk recovery journal.
+  // Never mint a key retroactively: that would authorize untrusted historical files.
+  if(!db.prepare("PRAGMA table_info(broker_execution_records)").all().some(c=>c.name==="journal_key"))
+   db.exec("ALTER TABLE broker_execution_records ADD COLUMN journal_key TEXT");
+  db.exec("DROP TRIGGER IF EXISTS broker_execution_launch_immutable; CREATE TRIGGER broker_execution_launch_immutable BEFORE UPDATE OF dispatch_id,launch_digest,launch_json,created_at,journal_key ON broker_execution_records BEGIN SELECT RAISE(ABORT,'execution launch is immutable'); END;");
   if(db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'cancellation_members\'").get())db.exec("CREATE TRIGGER IF NOT EXISTS cancellation_launch_hold BEFORE UPDATE OF launch_at ON broker_dispatches WHEN NEW.launch_at IS NOT NULL AND OLD.launch_at IS NULL AND "+cancellation.heldSQL("NEW.task_id")+" BEGIN SELECT RAISE(ABORT,\'CANCELLATION_PENDING: launch refused\'); END");
-  if(schema===1)db.prepare("UPDATE broker_dispatch_schema SET version=2").run();
+  if(schema<3)db.prepare("UPDATE broker_dispatch_schema SET version=3").run();
  });
 }
 function audit(db,{dispatchId=null,quotaId=null,kind,detail={}}){
@@ -169,7 +174,7 @@ export function authorizeLaunch(db,{dispatchId,sourceGate,execution=null}){
   const workspaceId=validateWorkspaceLaunch(db,{dispatchId,execution,policy:role.policy});
   if(execution){
    if(execution.runtime!==role.policy.runtime||execution.model!==role.policy.model||execution.effort!==role.policy.effort||execution.run_id!==d.run_id||execution.agent_instance_id!==d.agent_instance_id||execution.principal_id!==d.principal_id)fail("EXECUTION_MISMATCH","启动配置与领取的身份或策略不一致");
-   db.prepare("INSERT INTO broker_execution_records(dispatch_id,launch_digest,launch_json,created_at) VALUES(?,?,?,?)").run(dispatchId,digest(execution),canonical(execution),at());
+   db.prepare("INSERT INTO broker_execution_records(dispatch_id,launch_digest,launch_json,created_at,journal_key) VALUES(?,?,?,?,?)").run(dispatchId,digest(execution),canonical(execution),at(),randomBytes(32).toString("hex"));
   }
   bindWorkspaceLaunch(db,{workspaceId,dispatchId,execution});
   db.prepare("UPDATE broker_call_quotas SET used=used+1 WHERE quota_id=?").run(d.quota_id);

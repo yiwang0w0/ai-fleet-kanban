@@ -4,6 +4,7 @@ import {existsSync} from "node:fs";
 import {join} from "node:path";
 import {validatePreparedAdapter} from "./adapters.mjs";
 import {pinFile,superviseProcess} from "./supervisor.mjs";
+import {executionJournal,verifyExecutionJournal} from "./journal.mjs";
 import {launchReceipt} from "./receipts.mjs";
 import {authorizeLaunch,finishDispatch,dispatchStatus} from "./dispatch.mjs";
 import {digest} from "../federation/sync-store.mjs";
@@ -14,6 +15,7 @@ const require=createRequire(import.meta.url),store=require("../store.js");
 /** This entry point launches a provider. It never polls queues or restarts a committed dispatch. */
 export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared,python,privateDirectory,
  timeoutMs=60000,heartbeatMs=10000,stderrLimit=1048576,signal=null}){
+ if(process.platform!=="win32")fail("WINDOWS_REQUIRED","执行器仅支持 Windows；未领取启动许可");
  validatePreparedAdapter(prepared);
  const plan=prepared.plan,d=dispatchStatus(db,dispatchId);
  if(d.execution_mode!=="provider")fail("EXECUTION_MODE_MISMATCH","供应商适配器仅允许 provider 调用预算");
@@ -58,20 +60,19 @@ export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared
    observed:null,real_model_call_confirmed:false,process:{started:null,cleanup:"unconfirmed",containment:null}};
  }
  cancellation.close();
- const receipt={format:"ai-fleet-execution-journal/v1",dispatch_id:dispatchId,launch_digest:permit.execution.launch_digest,observation};
- // If disk/DB persistence fails, leave the spent permit spent; reconciliation only
- // submits this terminal receipt and cannot spawn another process.
- writeRecoveryJSON(journalFile,receipt);
+ const receipt=executionJournal(db,{dispatchId,observation});
+ // A secondary journal failure must not prevent the authoritative DB settlement
+ // and credential revocation. Only a successfully persisted file is advertised.
+ let journalWritten=false;
+ try{writeRecoveryJSON(journalFile,receipt);journalWritten=true;}catch{}
  const settled=finishDispatch(db,{dispatchId,result:{status:observation.status,evidence:observation.evidence,usage:observation.usage},observation});
- return {...settled,journal_file:journalFile};
+ return {...settled,journal_file:journalWritten?journalFile:null,journal_error:journalWritten?null:"JOURNAL_WRITE_FAILED"};
 }
 
 /** Local recovery only. Safe to repeat; it never invokes an executor. */
 export function reconcileExecutionJournal(db,journalFile){
  const journal=readRecoveryJSON(journalFile);
- exact(journal,["format","dispatch_id","launch_digest","observation"],"execution_journal");
- const d=dispatchStatus(db,journal.dispatch_id);
- if(journal.format!=="ai-fleet-execution-journal/v1"||!d.execution||journal.launch_digest!==d.execution.launch_digest)fail("EXECUTION_MISMATCH","回执不属于该已消费的启动配置");
- const observation=journal.observation;
+ dispatchStatus(db,journal.dispatch_id); // Enforce current local identity and epoch.
+ const observation=verifyExecutionJournal(db,journal);
  return finishDispatch(db,{dispatchId:journal.dispatch_id,result:{status:observation?.status,evidence:observation?.evidence,usage:observation?.usage},observation});
 }

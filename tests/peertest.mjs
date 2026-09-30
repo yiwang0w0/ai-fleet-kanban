@@ -268,3 +268,17 @@ test("independent gateway CLI serves only its explicit database",async()=>{
   assert.equal(store.list(f.db).tasks.length,0);
  }finally{clearTimeout(timer);if(p.exitCode===null)p.kill();await done;}
 });
+
+test("unauthenticated requests cannot distinguish retired or restored node state",async()=>{
+ for(const lifecycle of ["retired","restore_hold"]){
+  const f=fixture(),p=issue(f);
+  await running(f,async base=>{
+   if(lifecycle==="retired")f.db.exec("UPDATE board_lifecycle SET state='retired' WHERE singleton=1");
+   else f.db.exec("CREATE TABLE board_restore_hold(backup_id TEXT,restored_at TEXT)");
+   for(const token of [undefined,"invalid",p.token.slice(0,-1)+(p.token.endsWith("A")?"B":"A")]){
+    const r=await api(base,"/peer/v1/health",token);assert.equal(r.status,401);assert.equal(r.body.code,"UNAUTHENTICATED");
+   }
+   assert.equal((await api(base,"/peer/v1/health",p.token)).status,409);
+  });
+ }
+});

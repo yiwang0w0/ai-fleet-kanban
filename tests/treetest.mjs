@@ -173,3 +173,23 @@ test("subtree scans accept exactly 10000 nodes and refuse larger branches",()=>{
  const full=tree.subtree(db,1);assert.equal(full.valid,true);assert.equal(full.ids.length,10000);assert.equal(full.height,1);
  insert.run(tree.MAX_TREE_NODES+1,1);assert.equal(tree.subtree(db,1).reason,"size_limit");
 });
+
+for(const detached of [true,false])test("a broken incoming parent can be repaired by "+(detached?"detaching":"reparenting"),()=>{
+ const {db}=fixture(),ids=chain(db,2,{root:card(db)}),target=card(db,{kind:"goal"});
+ db.prepare("UPDATE tasks SET parent_id=999999 WHERE id=?").run(ids[0]);
+ assert.equal(claim(db,ids.at(-1)).ok,false);
+ const version=store.get(db,ids[0]).aggregate_version;
+ store.update(db,{id:ids[0],parentId:detached?null:target,expectedVersion:version});
+ assert.equal(store.get(db,ids[0]).parent_id,detached?null:target);
+ assert.equal(tree.ancestry(db,ids.at(-1)).valid,true);
+ assert.equal(claim(db,ids.at(-1)).ok,true);
+});
+
+test("repairing a broken incoming parent still refuses an active descendant",()=>{
+ const {db}=fixture(),ids=chain(db,2,{root:card(db)});
+ assert.equal(claim(db,ids.at(-1)).ok,true);
+ db.prepare("UPDATE tasks SET parent_id=999999 WHERE id=?").run(ids[0]);
+ const before=snapshot(db);
+ assert.throws(()=>store.update(db,{id:ids[0],parentId:null}),{code:"CONFLICT"});
+ assert.equal(snapshot(db),before);
+});

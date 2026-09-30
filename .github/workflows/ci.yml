@@ -42,7 +42,7 @@ jobs:
           "$@" 2>&1 | tee harness.log
           rc=$?
           if [ $rc -ne 0 ]; then
-            grep -a "FAIL" harness.log | head -10 | while IFS= read -r l; do
+            grep -a -E "FAIL|^not ok|^✖" harness.log | head -10 | while IFS= read -r l; do
               printf '::error::%s\n' "$l"
             done
           fi
