@@ -1,12 +1,16 @@
 # Invoked with a fixed encoded command. Destination and secret bytes arrive only on stdin.
 $ErrorActionPreference = 'Stop'
+$PSModuleAutoLoadingPreference = 'None'
 $credentialStream = $null
 $credentialCreated = $false
 $credentialPath = $null
 try {
-    $payload = [Console]::In.ReadToEnd() | ConvertFrom-Json
-    $credentialPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload.path))
-    $credentialBytes = [Convert]::FromBase64String($payload.content)
+    # Two base64 fields separated by a character outside the base64 alphabet.
+    # Use only .NET calls; avoid cmdlet/module resolution in the minimal environment.
+    $fields = ([Console]::In.ReadToEnd()).Split([char]124)
+    if ($fields.Length -ne 2) { throw 'Invalid credential frame' }
+    $credentialPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($fields[0]))
+    $credentialBytes = [Convert]::FromBase64String($fields[1])
     $ownerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
     $security = [Security.AccessControl.FileSecurity]::new()
     $security.SetOwner($ownerSid)

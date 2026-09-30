@@ -82,7 +82,18 @@
       "Unauthenticated proxy routes are preserved; URL userinfo, query, fragment, path and invalid syntax are rejected before config creation without echoing values."
     ]
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": {
+    "commit": "26a52d8139e01d158b93df34d13636bff4957ff0",
+    "run_id": 36703627906,
+    "windows_job_id": 109848619440,
+    "gitleaks_job_id": 109848619143,
+    "status": "completed",
+    "conclusion": "success",
+    "main_pass": 1504,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0
+  },
   "complete_phase_gates": 0,
   "total_phase_gates": 12,
   "real_provider_calls": {

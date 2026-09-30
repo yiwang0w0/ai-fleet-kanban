@@ -102,7 +102,19 @@
       "reason": "Seven paths caught a commit variable moved out of scope by the cleanup try block; two ACL inspections caught an incompatible inherited PowerShell module search path. Both corrected before final full rerun."
     }
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": {
+    "commit": "2d38141225a354a735c7a2ef08ff368f23da2c5d",
+    "run_id": 36705439781,
+    "windows_job_id": 109854461183,
+    "gitleaks_job_id": 109854460965,
+    "conclusion": "failure",
+    "gitleaks": "success",
+    "failed_suite": "peertest",
+    "suite_pass": 7,
+    "suite_fail": 20,
+    "observed_failure": "10-second PowerShell helper timeouts; local 134-pass result does not cover the CI environment",
+    "followup": "review-native-runtime-evidence.json"
+  },
   "complete_phase_gates": 0,
   "total_phase_gates": 12,
   "real_provider_calls": {

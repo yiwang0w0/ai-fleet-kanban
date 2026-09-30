@@ -27,7 +27,7 @@ permission to consume a real-model allowance.
 
 ## 0 · What you need
 
-- **node ≥ 22.5** (24+ recommended — the store runs on `node:sqlite`)
+- **Node ≥ 24.0.0** (use Node 24 LTS; the store requires `node:sqlite` and `DatabaseSync.isTransaction`)
 - **python 3** (the worker loop)
 - **Git for Windows >= 2.45.0** (revision checks and federation artifacts require `--no-lazy-fetch`; `npm run doctor` checks both the version and the flag)
 - optional but the point: **a local agent CLI** (e.g. Claude Code) for the real run
@@ -135,8 +135,8 @@ npm start                # = node cli/start.mjs — restarts the board in place 
                          # bare `node core/server.mjs` works too; an update then respawns detached and logs to <data>/board.log
 ```
 
-On a Node older than 22.5 this now stops with one readable sentence (the store
-runs on `node:sqlite`) instead of a module-resolution trace.
+On a Node older than 24 this stops with one readable sentence before loading the store.
+Doctor also checks real SQLite transaction state before, during and after a rollback.
 
 Open http://127.0.0.1:47824 — the panel is for your eyes; agents use the API.
 The tab title carries the waiting-card count, so a delivered card is visible

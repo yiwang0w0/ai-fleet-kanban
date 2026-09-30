@@ -48,7 +48,7 @@ evidence_path、verify_cmd、执行策略、文件内容和操作员令牌不在
 
 ## 本地操作与状态
 
-使用已验证的 Node 24；运行时必须具有 SQLite DatabaseSync.isTransaction，缺少时在安装同步表前明确拒绝。仓库基础命令的旧引擎声明不代表新联邦功能已在所有旧 Node 版本上通过。
+支持的最低版本统一为 Node 24.0.0，安装时使用 Node 24 LTS；package、服务启动检查、doctor 和快速入门保持一致。doctor 在内存数据库中实测事务前、BEGIN 后及 ROLLBACK 后的 isTransaction；缺少该接口的同步实例仍在安装同步表前拒绝。[官方 API 记录](https://nodejs.org/api/sqlite.html#databaseistransaction)显示该接口自 24.0.0 / 22.16.0 提供，但本项目不声明 Node 22 支持。CI 验证 Node 24 分支，不代表每个补丁版本都已逐一测试。
 
 在 A 登记读取者 B，凭据只写新文件，再经可信方式交付 B：
 

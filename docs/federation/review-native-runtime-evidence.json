@@ -1,0 +1,131 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-39-native-runtime",
+  "date": "2026-09-30",
+  "base_commit": "fa142b93f2b9f0b0f0cc24c7a520012fd7615acb",
+  "platform": "Windows",
+  "node_version": "24.21.0",
+  "normalization": "UTF-8 LF",
+  "code_and_document_files": [
+    {
+      "path": "core/private-json.mjs",
+      "sha256": "ed32b07b09eebbf8c387ee09d0ea396edf13f350270c24bd17a7f85a17455947",
+      "git_blob": "c5bcef1ab285bf47eef9802e514b211a44ad2b92"
+    },
+    {
+      "path": "core/private-json.ps1",
+      "sha256": "f54a9f756f3f79c77fed48f0744bc4d93699ee6c52acfe52614588e922f3d44d",
+      "git_blob": "b1af744857961682272ed392b32be92e7e7193fe"
+    },
+    {
+      "path": "tests/helpers/windows-acl.mjs",
+      "sha256": "c16aa87e95df6c135d42336666fb8fac41c663d66a083ba3a89d8f0819d7f9a8",
+      "git_blob": "c1b6a928e9d933b44ced62bc7cb11f3b3ed751aa"
+    },
+    {
+      "path": "core/env.mjs",
+      "sha256": "b2434557876661b7ad2bc1b142993ce15cb803acb2db704d779358f0efd70dc8",
+      "git_blob": "d2778f1999ad8694264bf7717cd50df4dc77a4ce"
+    },
+    {
+      "path": "core/server.mjs",
+      "sha256": "f1c32fed7c545a6ea40b855a1ff652f5f57815778bbdb6a6978b11770ed05bb9",
+      "git_blob": "708ce579c20a93dbd16a5d854d06ef69dac90aa4"
+    },
+    {
+      "path": "cli/doctor.mjs",
+      "sha256": "b6c668eb9568c2eea026cc51e6b28bfa9e149b33c1b3ebac391eabb818f6c1d9",
+      "git_blob": "839a53717b7aef7e949a4dc0b468b1a222c5ee37"
+    },
+    {
+      "path": "package.json",
+      "sha256": "dff470cd2237099872926746db39ca17db3de26b666ccdc814eb43187090f6e4",
+      "git_blob": "da2a63074342cbd083504e1d4b69b6d4b9f262ed"
+    },
+    {
+      "path": "tests/clitest.mjs",
+      "sha256": "8c75a130951613d5af828e00274f6b223596fc4931ddfd5f2f1f9adf939e8d88",
+      "git_blob": "ceb39db827260d272070712da75fa60c90e67eda"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "50a55ed51ba3cb9d4fa1251cfd76dba44d36393fd2e095e3604df275c163b68c",
+      "git_blob": "fbbdd4ccba7c9e739f74b8ab6aa8be495dfeabe7"
+    },
+    {
+      "path": "docs/QUICKSTART.md",
+      "sha256": "f28c6ad1cea37a7806afa12fe0eaab64f55ef1d7295046f125297040d93b11ae",
+      "git_blob": "49f8497787f51f4334ed4cc8a0c11938a15f7a28"
+    },
+    {
+      "path": "docs/federation/sync.md",
+      "sha256": "76bd59c7ce532c1c6bc8c0abc1c9716a710a84642058f959ce3fd02db88fc7a2",
+      "git_blob": "2e6c665a81d50cdf362ddbfb260f0d869738f92d"
+    }
+  ],
+  "local_validation": {
+    "pass": 108,
+    "failed": 0,
+    "skipped": 0,
+    "new_cases": 3,
+    "suites": {
+      "peertest": 27,
+      "mcptest": 37,
+      "clitest": 44
+    },
+    "log": ".data/review39-primary.log",
+    "duration_ms": 35614.3983,
+    "counting": "65 node:test passes include one wrapper for the CLI harness; 64 + 44 = 108 distinct checks",
+    "doctor": {
+      "pass": 9,
+      "warn": 2,
+      "fail": 0,
+      "exit_code": 0,
+      "sqlite_transaction_probe": "passed",
+      "configuration": "isolated paths, port 0",
+      "log": ".data/review39-doctor.log"
+    }
+  },
+  "diagnostic_ci": {
+    "commit": "fa142b93f2b9f0b0f0cc24c7a520012fd7615acb",
+    "run_id": 36706343197,
+    "windows_job_id": 109857382945,
+    "gitleaks_job_id": 109857382656,
+    "conclusion": "failure",
+    "gitleaks": "success",
+    "peertest": {
+      "pass": 7,
+      "fail": 20
+    },
+    "probe_profiles": [
+      "minimal",
+      "windows-user"
+    ],
+    "observations": "Both profiles reached entered/read markers; both JSON-plus-SID probes timed out at about 5 seconds without reaching identity. Startup and stdin EOF completed. Exact internal blocking call was not separately isolated."
+  },
+  "new_commit_ci": "pending",
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false,
+  "limitations": [
+    "CI runner fix awaits a full run of this commit; local results alone do not establish it.",
+    "The supported Node 24 floor is distinct from a claim that every patch version was tested.",
+    "ACL checks do not provide same-user, administrator or full OS containment.",
+    "Native CLI settings, authorized retention, global UI, background scheduling and real two-PC/provider acceptance remain incomplete."
+  ],
+  "references": [
+    "https://nodejs.org/api/sqlite.html#databaseistransaction"
+  ],
+  "node_probe_binary": {
+    "source": "https://nodejs.org/dist/v24.21.0/win-x64/node.exe",
+    "checksums": "https://nodejs.org/dist/v24.21.0/SHASUMS256.txt",
+    "sha256": "ba4e6d110e8c1592a1ecd390f6b05f3da124b13871a5be62b341a07a853c6c32",
+    "system_install_modified": false
+  }
+}

@@ -14,7 +14,7 @@ import { createServer } from "node:net";
 import { join, dirname, isAbsolute, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MIN_GIT_VERSION, probeGitVersion } from "../core/git-version.mjs";
-import { applyConfigDefaults } from "../core/env.mjs";
+import { applyConfigDefaults, nodeTooOld } from "../core/env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -34,14 +34,20 @@ const PORT_SRC = HAD_PORT_ENV ? "BOARD_PORT" : CFG0.port != null ? "fleet.config
 
 // ── ① node:sqlite — the store's engine ──────────────────────────────────────
 try {
+  if (nodeTooOld()) throw new Error("Unsupported Node version");
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(":memory:");
-  db.exec("CREATE TABLE t (x)");
-  db.close();
-  ok(`node:sqlite 可用(node ${process.version})`);
+  try {
+    if (db.isTransaction !== false) throw new Error("Missing SQLite transaction state");
+    db.exec("BEGIN; CREATE TABLE t (x)");
+    if (db.isTransaction !== true) throw new Error("SQLite transaction state did not advance");
+    db.exec("ROLLBACK");
+    if (db.isTransaction !== false) throw new Error("SQLite transaction state did not reset");
+  } finally { db.close(); }
+  ok(`node:sqlite 及事务状态接口可用(node ${process.version})`);
 } catch (e) {
   no(`node:sqlite 不可用(node ${process.version})`,
-     "需要 node >= 22.5(建议 24+)。nvm/官网安装后重试。");
+     "需要 Node >= 24.0.0 及正常的 SQLite isTransaction 接口。安装 Node 24 LTS 后重试。");
 }
 
 // ── ② python — the loops' runtime ───────────────────────────────────────────

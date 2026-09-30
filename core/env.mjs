@@ -37,12 +37,12 @@ export function applyConfigDefaults() {
   return cfg;
 }
 
-/** Node before 22.5 has no node:sqlite — the store's engine. The server asks this BEFORE
+/** Node 24 is the supported floor, including SQLite transaction introspection. The server asks this BEFORE
  *  loading the store, so a newcomer reads one sentence instead of a module-resolution
  *  trace. Unparseable input answers false: this is an availability check, not a safety
  *  gate, and a gate that refuses on garbage would block a machine we cannot diagnose. */
 export function nodeTooOld(version = process.version) {
   const [maj, min] = String(version).replace(/^v/, "").split(".").map(Number);
   if (!Number.isFinite(maj) || !Number.isFinite(min)) return false;
-  return !(maj > 22 || (maj === 22 && min >= 5));
+  return maj < 24;
 }
