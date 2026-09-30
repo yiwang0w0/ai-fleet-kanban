@@ -64,12 +64,13 @@ export function fleetRelations(db,allTasks,local,{matching=null,included=null,li
  return {format:"ai-fleet-relations/v1",modules,unverified_records:unverified,coverage:"locally_recorded_history",...page(items,limit)};
 }
 export function fleetTaskEvidence(db,allTasks,local,uid){
+ const catalog=uid===null,cap=catalog?10000:100,scopeCap=catalog?10000:1000;
  const tasks=new Map(allTasks.map(t=>[t.task_uid,t])),focus=tasks.get(uid),children=new Map();
  for(const t of allTasks)if(t.parent_uid&&tasks.get(t.parent_uid)?.project_id===t.project_id&&tasks.get(t.parent_uid)?.owner_node_id===t.owner_node_id){
   if(!children.has(t.parent_uid))children.set(t.parent_uid,[]);children.get(t.parent_uid).push(t.task_uid);
  }
- const scope=new Set(),queue=[uid];for(let i=0;i<queue.length&&scope.size<1000;i++){const u=queue[i];if(scope.has(u))continue;scope.add(u);queue.push(...(children.get(u)??[]));}
- const relations=fleetRelations(db,allTasks,local,{matching:scope,limit:100}),relationIds=new Set(relations.items.map(r=>r.relation_id).filter(Boolean));
+ const scope=new Set(),queue=catalog?[...tasks.keys()]:[uid];for(let i=0;i<queue.length&&scope.size<scopeCap;i++){const u=queue[i];if(scope.has(u))continue;scope.add(u);if(!catalog)queue.push(...(children.get(u)??[]));}
+ const relations=fleetRelations(db,allTasks,local,{matching:scope,limit:cap}),relationById=new Map(relations.items.filter(r=>r.relation_id).map(r=>[r.relation_id,r])),relationIds=new Set(relationById.keys());
  const state={runs:exists(db,"task_runs")?"available":"not_configured",dispatch:schema(db,"broker_dispatch_schema",3),results:schema(db,"result_schema",1),artifacts:schema(db,"artifact_schema",1),verification:schema(db,"verification_schema",1),integration:schema(db,"integration_schema",1),completion:schema(db,"completion_schema",1)};
  const runs=[],results=[],artifacts=[],verifications=[],integrations=[],completions=[],unverified={results:0,artifacts:0};
  const dispatches=state.dispatch==="available"?new Map(db.prepare("SELECT run_id,dispatch_id,phase,execution_mode,created_at,launch_at,finished_at,result_digest FROM broker_dispatches").all().map(r=>[r.run_id,r])):new Map();
@@ -78,7 +79,7 @@ export function fleetTaskEvidence(db,allTasks,local,uid){
   runs.push({...pick(r,["run_id","task_uid","executor_node_id","role_id","runtime","agent_instance_id","state","started_at","ended_at","terminal_task_status"]),model:text(policy?.context?.model),effort:text(policy?.context?.effort),policy_integrity:policy?"digest_checked":"unverified",dispatch:dispatch?pick(dispatch,["dispatch_id","phase","execution_mode","launch_at","finished_at","result_digest"]):null});
  }
  if(state.results==="available")for(const r of db.prepare("SELECT result_id,relation_id,project_id,task_uid,run_id,body_json,body_digest,created_at FROM delegation_results ORDER BY created_at DESC,result_id").iterate()){
-  if(!relationIds.has(r.relation_id)||r.project_id!==focus.project_id)continue;
+  if(!relationIds.has(r.relation_id)||r.project_id!==relationById.get(r.relation_id)?.project_id)continue;
   const b=json(r.body_json,r.body_digest);
   if(!b||b.result_id!==r.result_id||b.relation?.relation_id!==r.relation_id||b.execution?.run_id!==r.run_id||b.relation?.project_id!==r.project_id){unverified.results++;continue;}
   const task=endpoint(tasks,r.task_uid,r.project_id,scope);
@@ -108,11 +109,11 @@ export function fleetTaskEvidence(db,allTasks,local,uid){
  }
  if(state.completion==="available")for(const r of db.prepare("SELECT a.completion_id,a.relation_id,a.result_id,a.side,a.plan_json,a.plan_digest,a.created_at,s.receipt_json,s.receipt_digest FROM completion_plans a LEFT JOIN completion_settlements s USING(completion_id) ORDER BY a.created_at DESC,a.completion_id").iterate()){
   if(!relationIds.has(r.relation_id)||!resultIds.has(r.result_id))continue;const p=json(r.plan_json,r.plan_digest),v=json(r.receipt_json,r.receipt_digest);
-  const valid=!!p&&p.schema_version===1&&p.kind==="source_acceptance"&&p.completion_id===r.completion_id&&p.result_id===r.result_id&&p.relation?.relation_id===r.relation_id&&p.relation?.project_id===focus.project_id&&!!v&&v.schema_version===1&&v.kind==="completion_settled"&&v.completion_id===r.completion_id&&v.plan_digest===r.plan_digest&&v.side===r.side&&v.task_uid===p.relation[r.side+"_task_uid"]&&scope.has(v.task_uid)&&Number.isSafeInteger(v.task_version)&&v.task_version>0&&Number.isSafeInteger(v.fixture_runs)&&v.fixture_runs>=0&&v.fixture_runs===p.fixture_runs;
+  const valid=!!p&&p.schema_version===1&&p.kind==="source_acceptance"&&p.completion_id===r.completion_id&&p.result_id===r.result_id&&p.relation?.relation_id===r.relation_id&&p.relation?.project_id===relationById.get(r.relation_id)?.project_id&&!!v&&v.schema_version===1&&v.kind==="completion_settled"&&v.completion_id===r.completion_id&&v.plan_digest===r.plan_digest&&v.side===r.side&&v.task_uid===p.relation[r.side+"_task_uid"]&&scope.has(v.task_uid)&&Number.isSafeInteger(v.task_version)&&v.task_version>0&&Number.isSafeInteger(v.fixture_runs)&&v.fixture_runs>=0&&v.fixture_runs===p.fixture_runs;
   completions.push({completion_id:r.completion_id,relation_id:r.relation_id,result_id:r.result_id,created_at:r.created_at,receipt_state:r.receipt_json?valid?"digest_checked":"unverified":"not_recorded",
    historical_accepted:valid&&v.accepted===true,task_uid:valid?v.task_uid:null,accepted_task_version:valid?v.task_version:null,settled_at:valid?v.settled_at:null,fixture_runs:valid?v.fixture_runs:null});
  }
- return {format:"ai-fleet-task-evidence/v1",generated_at:new Date().toISOString(),coverage:"locally_recorded_history",modules:state,unverified_records:unverified,scope_tasks:scope.size,scope_truncated:queue.some(u=>!scope.has(u)),current_authorization_checked:false,
-  parent:focus.parent_uid?endpoint(tasks,focus.parent_uid,focus.project_id,scope):null,children:page((children.get(uid)??[]).map(u=>endpoint(tasks,u,focus.project_id,scope))),
-  relations,runs:page(runs),results:page(results),artifacts:page(artifacts),verifications:page(verifications),integrations:page(integrations),completions:page(completions)};
+ return {format:catalog?"ai-fleet-evidence-catalog/v1":"ai-fleet-task-evidence/v1",generated_at:new Date().toISOString(),coverage:"locally_recorded_history",modules:state,unverified_records:unverified,scope_tasks:scope.size,scope_truncated:queue.some(u=>!scope.has(u)),current_authorization_checked:false,
+  parent:focus?.parent_uid?endpoint(tasks,focus.parent_uid,focus.project_id,scope):null,children:page((children.get(uid)??[]).map(u=>endpoint(tasks,u,focus.project_id,scope))),
+  relations,runs:page(runs,cap),results:page(results,cap),artifacts:page(artifacts,cap),verifications:page(verifications,cap),integrations:page(integrations,cap),completions:page(completions,cap)};
 }

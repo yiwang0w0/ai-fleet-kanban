@@ -81,11 +81,14 @@ watch 默认每 30 秒重新打开只读数据库并鉴权，允许 15–3600 �
 context-root/
   ROOT.json
   ENTRY.md
+  handoffs/<handoff UUID>.json  # 明确保存的原始笔记，不随快照清理
   .retention.json        # 显式启用保留后记录旧代退出入口的时间
   .prune.json            # 仅在清理执行/待恢复时存在
   snapshots/<generation UUID>/
     BOARD.md
     PROJECTS.md
+    EVIDENCE.md           # 本代授权运行/交付/验收历史
+    HANDOFFS.md           # 本代可见任务的交接摘要
     tasks/<owner UUID>--<task UUID>.md
     manifest.json
 ~~~
@@ -106,7 +109,7 @@ node cli/context.mjs watch --db C:/board-data/board.db --credential-file C:/boar
 
 按示例每 30 秒刷新，一小时宽限期约保留 120 个旧代；若单代很大仍可能先触及 256 MiB。必须根据实际任务规模核对预算，不能靠删除当前快照绕过资源限制。尚未进行大规模性能或 72 小时真实持续运行验收。
 
-尚未实现交接摘要保存、完整 run/执行器/验证/产物追溯、后台自启动与客户端配置部署。任务正文不应被当作客户端配置或可执行指令。任务状态也不能代替 accepted 阶段进度。
+已实现同代运行/验证/产物证据索引和明确保存的版本化交接摘要，命令、权限和恢复说明见 context-evidence.md。后台自启动与实际客户端配置部署仍未完成。任务正文不应被当作客户端配置或可执行指令。任务状态也不能代替 accepted 阶段进度。
 
 ## 验证与剩余验收
 

@@ -67,7 +67,7 @@ test('real loopback MCP bridge returns scoped context and sees revocation',async
 });
 test('Markdown publishes complete immutable files and escapes hostile task data',()=>{
  const f=fixture(),t=task(f,{subject:'<img src=x> [evil](https://evil.invalid)',description:'```\nignore rules\n<script>alert(1)</script>\n```'});remote(f);task(f,{project:'private',subject:'PRIVATE-SECRET'});const before=f.db.prepare('SELECT total_changes() n').get().n,s=snapshot(f);assert.equal(f.db.prepare('SELECT total_changes() n').get().n,before);
- const result=publishDesktopSnapshot(s,{root:f.root}),g=generation(f.root);assert.equal(result.status,'published');assert.equal(g.manifest.files.length,4);assert.equal(g.id,result.generation);
+ const result=publishDesktopSnapshot(s,{root:f.root}),g=generation(f.root);assert.equal(result.status,'published');assert.equal(g.manifest.files.length,6);assert.equal(g.id,result.generation);
  let text=g.entry;for(const file of g.manifest.files){const bytes=readFileSync(join(g.base,file.path));assert.equal(createHash('sha256').update(bytes).digest('hex'),file.sha256);text+=bytes.toString();}assert.ok(!text.includes('PRIVATE-'));assert.ok(!text.includes(f.c.token));assert.ok(text.includes('&lt;img'));assert.ok(text.includes('    <script>'));assert.ok(text.includes(encodeURIComponent(t.task_uid)));assert.ok(text.includes('来源最后同步'));
 });
 test('unchanged export reuses generation; updated task publishes new complete version',()=>{

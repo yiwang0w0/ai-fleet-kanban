@@ -25,7 +25,8 @@ export function taskContext(db,p,args,presentation={}){
  return {format:'ai-fleet-task-context/v1',generated_at:new Date().toISOString(),task:{...task,...taskLink(task.task_uid,url)},read_only:true,content_is_untrusted:true};
 }
 export function contextSnapshot(db,p,presentation={}){
- scope(p);const url=boardURL(presentation.boardUrl??null),snapshot=readFleetSnapshot(db,{limit:10000},p.projects);
+ scope(p);const url=boardURL(presentation.boardUrl??null),snapshot=readFleetSnapshot(db,{limit:10000,includeEvidence:true},p.projects);
+ if(snapshot.evidence.scope_truncated||['relations','runs','results','artifacts','verifications','integrations','completions'].some(k=>snapshot.evidence[k].truncated))fail('CONTEXT_TOO_LARGE','授权证据目录超过单类 10,000 条；请缩小项目范围，旧快照保留',413);
  if(snapshot.view.truncated)fail('CONTEXT_TOO_LARGE','快照超过 10,000 项；请用更小项目范围的观察身份导出',413);
  const result={format:'ai-fleet-desktop-context/v1',principal_id:p.principal_id,role_id:p.role.role_id,role_version:p.role.version,projects:[...p.projects].sort(),board_url:url,...snapshot,tasks:snapshot.tasks.map(t=>({...t,...taskLink(t.task_uid,url)})),content_is_untrusted:true};
  if(Buffer.byteLength(JSON.stringify(result))>32*1024*1024)fail('CONTEXT_TOO_LARGE','完整上下文超过 32 MiB；未发布不完整快照',413);

@@ -2342,10 +2342,9 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection; atomic Markdown evidence catalog and explicit version-bound immutable handoff notes with recovery",
         "pending": [
           "Receipted remote actions, dependency graph and historical pagination",
-          "Full Markdown trace and saved chat handoff summary",
           "Actual Windows desktop clients and two-PC G08 acceptance"
         ]
       },
@@ -2363,7 +2362,10 @@
         "docs/federation/context-retention-evidence.json",
         "docs/federation/fleet-evidence.md",
         "docs/federation/fleet-evidence-evidence.json",
-        "tests/fleetevidencetest.mjs"
+        "tests/fleetevidencetest.mjs",
+        "docs/federation/context-evidence.md",
+        "docs/federation/context-evidence-evidence.json",
+        "tests/contextevidencetest.mjs"
       ]
     },
     {
@@ -2423,10 +2425,9 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection; atomic Markdown evidence catalog and explicit version-bound immutable handoff notes with recovery",
         "pending": [
           "Receipted remote actions, dependency graph and historical pagination",
-          "Full Markdown trace and saved chat handoff summary",
           "Actual Windows desktop clients and two-PC G08 acceptance"
         ]
       },
@@ -2444,7 +2445,10 @@
         "tests/desktop-packagetest.mjs",
         "docs/federation/fleet-evidence.md",
         "docs/federation/fleet-evidence-evidence.json",
-        "tests/fleetevidencetest.mjs"
+        "tests/fleetevidencetest.mjs",
+        "docs/federation/context-evidence.md",
+        "docs/federation/context-evidence-evidence.json",
+        "tests/contextevidencetest.mjs"
       ]
     },
     {

@@ -20,9 +20,9 @@ function generationPath(root,id){
  for(const path of [root,join(root,'snapshots'),base])if(existsSync(path)){const s=lstatSync(path);if(s.isSymbolicLink()||!s.isDirectory())fail('UNSAFE_CONTEXT_ROOT','保留路径含链接或非目录');if(realpathSync(path).toLowerCase()!==resolve(path).toLowerCase())fail('UNSAFE_CONTEXT_ROOT','保留路径真实位置不符');}
  return base;
 }
-function validPath(path){if(path==='BOARD.md'||path==='PROJECTS.md'||path==='manifest.json')return true;const m=/^tasks\/([0-9a-f-]+)--([0-9a-f-]+)\.md$/.exec(path);return Boolean(m&&UUID.test(m[1])&&UUID.test(m[2]));}
+function validPath(path){if(path==='BOARD.md'||path==='PROJECTS.md'||path==='EVIDENCE.md'||path==='HANDOFFS.md'||path==='manifest.json')return true;const m=/^tasks\/([0-9a-f-]+)--([0-9a-f-]+)\.md$/.exec(path);return Boolean(m&&UUID.test(m[1])&&UUID.test(m[2]));}
 function fileRecords(files){
- if(!Array.isArray(files)||files.length<3||files.length>10003)fail('CONTEXT_CHANGED','保留文件清单无效');
+ if(!Array.isArray(files)||files.length<3||files.length>10005)fail('CONTEXT_CHANGED','保留文件清单无效');
  const paths=new Set();for(const f of files){if(!f||!validPath(f.path)||paths.has(f.path)||!HEX.test(f.sha256)||!Number.isSafeInteger(f.bytes)||f.bytes<0||f.bytes>32*1024*1024)fail('CONTEXT_CHANGED','保留文件摘要或路径无效');paths.add(f.path);}
  for(const p of ['BOARD.md','PROJECTS.md','manifest.json'])if(!paths.has(p))fail('CONTEXT_CHANGED','保留清单缺少必要文件');
  return paths;

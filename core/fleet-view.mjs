@@ -69,7 +69,7 @@ function buildView(db,d,o){
 }
 export function readFleetView(db,query={},authorizedProjects=null){return snapshot(db,()=>buildView(db,data(db,authorizedProjects),options(query)));}
 const detail=t=>({...summary(t),description:t.description??"",acceptance:t.acceptance??"",result:t.result??null,verdict_note:t.verdict_note??null});
-export function readFleetSnapshot(db,query={},authorizedProjects=null){return snapshot(db,()=>{const d=data(db,authorizedProjects),view=buildView(db,d,options(query)),byUid=new Map([...d.localTasks,...d.remote].map(t=>[t.task_uid,t]));return {view,tasks:view.tasks.map(t=>detail(byUid.get(t.task_uid)))};});}
+export function readFleetSnapshot(db,query={},authorizedProjects=null){return snapshot(db,()=>{const d=data(db,authorizedProjects),view=buildView(db,d,options(query)),byUid=new Map([...d.localTasks,...d.remote].map(t=>[t.task_uid,t]));return {view,tasks:view.tasks.map(t=>detail(byUid.get(t.task_uid))),...(query.includeEvidence?{evidence:fleetTaskEvidence(db,[...d.localTasks,...d.remote],d.local,null)}:{})};});}
 export function readFleetTask(db,uid,authorizedProjects=null){
  if(typeof uid!=="string"||uid.length>100)throw new PeerError("BAD_INPUT","任务 UID 无效",400);
  return snapshot(db,()=>{const d=data(db,authorizedProjects),t=[...d.localTasks,...d.remote].find(t=>t.task_uid===uid);if(!t)throw new PeerError("NOT_FOUND","当前视图中未找到任务",404);return {...detail(t),evidence:fleetTaskEvidence(db,[...d.localTasks,...d.remote],d.local,uid)};});
