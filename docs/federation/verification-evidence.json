@@ -1,0 +1,106 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-26-independent-verification",
+  "date": "2026-09-30",
+  "supported_platform": "Windows",
+  "base_commit": "8de11d23318557a0864b57ef1965b04086580b44",
+  "code_sha256": {
+    ".github/workflows/ci.yml": "ffa61a7b9e78c8dcc6ab1fc783c035cec4f920283f77afdc1039c50342f29995",
+    "package.json": "53b4a43df39ad0ab43a1475477b3cd6daa0cb1b9f240144a25cc0a96033e9abd",
+    "cli/verification.mjs": "e6078a44beeba53222db00959dff0b9903106cb0f6766d2e9763a5d82ecc368c",
+    "core/artifacts/transfers.mjs": "73e07dd9f660b04f465c9e97fb4132289f36bf0c954e1bd40f07d1cb5d45a1e4",
+    "core/execution/command-output.mjs": "10db3e6ae5f94515f57f76f96296af4993fec28c8011c14df26dda7c4fed9441",
+    "core/execution/supervisor.mjs": "0d43327c934b7677d0c6e40e5d48b8f5dadf4267a8937827d62b53c508dc70d2",
+    "core/verification/workspace.mjs": "eb646bc9611fe93ff4db282731c5ee51112fe436e99a81e8f34539b610634f24",
+    "core/verification/service.mjs": "8ad31a2718bc192e7b0f03ab32a9f9a5da992557e3995a80506be974eda54442",
+    "tests/commandsupervisortest.mjs": "1cb88a274f8deca51e08717e55da10dd8e51399c87f4de5e06d13878a8573ed3",
+    "tests/verificationworkspacetest.mjs": "7642a19744fa9ee0ec59e39cd5bb7f5ffc40769280d6ab58cef8c686bbeec6e4"
+  },
+  "code_git_blobs": {
+    ".github/workflows/ci.yml": "ae1e1ee1cfe4126b5eff5b45db5a64a19dbcdd22",
+    "package.json": "c19c656b9d2c64c424d4bfae33252eeabc9dc4e8",
+    "cli/verification.mjs": "22d9bdce5cdc2a472d98990b57b2771bf146c6ca",
+    "core/artifacts/transfers.mjs": "e6bb4ca4e20e62a745bc628dd9f08b1f07ed242b",
+    "core/execution/command-output.mjs": "d5d971b63f16dac844c341a5db15f074c83b0dee",
+    "core/execution/supervisor.mjs": "4ba6171007ca6d5c501e0d2494719f0da8fa567b",
+    "core/verification/workspace.mjs": "fcff6bc8ab0fd5e1a4026c15b2274f327eee83fc",
+    "core/verification/service.mjs": "fa62b5c0d2a3f787406ee0625da4ae67ec4b1674",
+    "tests/commandsupervisortest.mjs": "33e86bc6ecb8272eb1502f42fc273e9760db78df",
+    "tests/verificationworkspacetest.mjs": "c2d6e8beab3a776becaa34c3fbbee2108f2b1e44"
+  },
+  "local_validation": {
+    "command_supervisor_and_existing": {
+      "passed": 22,
+      "failed": 0,
+      "scope": "initial command primitive plus existing provider supervisor"
+    },
+    "final_service_and_command": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "log": ".data/verification-service-tests-final.log"
+    },
+    "additional_path_swap": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "log": ".data/verification-path-swap.log"
+    },
+    "full_suite": {
+      "status": "passed",
+      "command": "npm test",
+      "exit": 0,
+      "classic_pass": 841,
+      "native_pass": 563,
+      "passed": 1404,
+      "failed": 0,
+      "skipped": 0,
+      "source_files_verified": 10,
+      "source_snapshot": ".data/verification-tested-source.json"
+    },
+    "staged_gitleaks": {
+      "version": "8.24.3",
+      "platform": "Windows",
+      "exit": 0,
+      "leaks_found": false
+    }
+  },
+  "exercised": [
+    "actual received module executed in independent reconstructed Git repository",
+    "Windows Job process cleanup and bounded stdout/stderr byte hashes",
+    "failed exit, timeout, cancellation, invalid UTF-8 and output limits",
+    "durable source-owned command profile, one-use launch and immutable receipt",
+    "source task version changes reject stale receipts",
+    "running profile revocation stops command",
+    "original input or index changes cannot hide behind command exit zero",
+    "database settlement failure and restart recover original observation without rerun",
+    "missing process observation retains consumed launch",
+    "partial input preparation never overwrites existing files",
+    "pinned local scripts and governance source gate",
+    "file-to-directory and directory-to-file reconstruction"
+  ],
+  "ci": {
+    "status": "pending_exact_commit_windows_run"
+  },
+  "acceptance": {
+    "accepted": false,
+    "accepted_phases": 0,
+    "total_phases": 12,
+    "filesystem_sandbox": false,
+    "physical_two_node_acceptance": false,
+    "real_provider_calls": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 0
+    },
+    "per_provider_authorized_limit": 1
+  },
+  "remaining": [
+    "Windows OS permission isolation and resource limits",
+    "source CAS merge, crash reconciliation and owner acceptance",
+    "relation retirement and parent advancement",
+    "scheduler, global UI and operations",
+    "Zcode Chinese Coding Plan adapter and actual provider tasks",
+    "two physical kanata Windows nodes over Tailscale"
+  ]
+}

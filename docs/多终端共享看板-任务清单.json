@@ -2098,7 +2098,6 @@
         "result": "local_component_passed",
         "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
         "pending": [
-          "exact-commit Windows CI",
           "independent verification runner and source acceptance",
           "two physical kanata artifact delivery and G07 acceptance"
         ]
@@ -2145,7 +2144,6 @@
         "result": "local_component_passed",
         "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
         "pending": [
-          "exact-commit Windows CI",
           "independent verification runner and source acceptance",
           "two physical kanata artifact delivery and G07 acceptance"
         ]
@@ -2180,13 +2178,28 @@
       "evidence_required": [
         "verify-receipt/merge 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Windows independent source command profiles, actual Git reconstruction, one-use launch and immutable verification receipts",
+        "pending": [
+          "exact-commit Windows CI",
+          "Windows OS permission isolation",
+          "source CAS merge and acceptance",
+          "two physical kanata validation and G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/verification.md",
+        "tests/commandsupervisortest.mjs",
+        "tests/verificationworkspacetest.mjs",
+        "docs/federation/verification-evidence.json"
+      ]
     },
     {
       "id": "T07.06",

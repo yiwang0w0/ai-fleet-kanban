@@ -93,6 +93,10 @@ jobs:
         run: bash hrun.sh node tests/gitpackagetest.mjs
       - name: artifacttransfertest (durable chunks, lost ACK, restart and local verification)
         run: bash hrun.sh node tests/artifacttransfertest.mjs
+      - name: commandsupervisortest (bounded test output and Windows process receipts)
+        run: bash hrun.sh node tests/commandsupervisortest.mjs
+      - name: verificationworkspacetest (independent source checks, one-use launch and recovery)
+        run: bash hrun.sh node tests/verificationworkspacetest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

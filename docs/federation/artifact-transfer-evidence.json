@@ -92,7 +92,13 @@
     "48 MiB binary recovery fingerprint under bounded V8 heap"
   ],
   "ci": {
-    "status": "pending_exact_commit_windows_run"
+    "status": "passed",
+    "commit": "8de11d23318557a0864b57ef1965b04086580b44",
+    "run_id": 36668888523,
+    "windows_main_pass": 1386,
+    "windows_main_fail": 0,
+    "gitleaks": "success",
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36668888523"
   },
   "acceptance": {
     "accepted": false,

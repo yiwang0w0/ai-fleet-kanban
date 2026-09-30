@@ -29,7 +29,7 @@ OS process, **not** a subagent. `docs/GLOSSARY.md` maps the two vocabularies, an
 
 ## Status
 
-Windows-only multi-terminal federation is being built on this branch. See the [implementation and acceptance plan](docs/多终端共享看板-实施与验收计划.md), [measured progress](docs/federation/PROGRESS.md), and [resumable artifact transfer commands](docs/federation/artifact-transfer.md). File receipt and content verification do not approve tasks; independent verification, physical two-machine integration, and provider acceptance remain in progress.
+Windows-only multi-terminal federation is being built on this branch. See the [implementation and acceptance plan](docs/多终端共享看板-实施与验收计划.md), [measured progress](docs/federation/PROGRESS.md), and [resumable artifact transfer commands](docs/federation/artifact-transfer.md), and [source-owned verification commands](docs/federation/verification.md). File receipt and content verification do not approve tasks; independent verification, physical two-machine integration, and provider acceptance remain in progress.
 
 **v0.23.1.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (650+ machine assertions) run here; Windows is the supported environment, with blocking Windows regression and secret-scanning checks; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 

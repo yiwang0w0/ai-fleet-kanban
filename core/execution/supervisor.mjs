@@ -1,3 +1,4 @@
+import {createCommandOutput} from "./command-output.mjs";
 import {spawn} from "node:child_process";
 import {createHash} from "node:crypto";
 import {readFileSync,realpathSync,statSync} from "node:fs";
@@ -23,7 +24,13 @@ function verifyPin(pin){
  * permission elevation. Does not itself authorize models or isolate files.
  * The caller must commit a fresh dispatch permit before calling this function.
  */
-export async function superviseProcess({python,command,args,cwd,env,input,pins,runtime,decoder={},timeoutMs=60000,
+export async function superviseProcess(options){return supervise({...options,commandOutput:false});}
+/** Trusted local verification primitive: ordinary commands, never a provider dispatch. */
+export async function superviseCommand(options){
+ if(process.platform!=="win32")fail("WINDOWS_REQUIRED");
+ return supervise({input:"",pins:[],stderrLimit:65536,...options,commandOutput:true});
+}
+async function supervise({python,command,args,cwd,env,input,pins,runtime,decoder={},commandOutput=false,stdoutLimit=65536,timeoutMs=60000,
  signal=null,heartbeat=null,heartbeatMs=10000,stderrLimit=1024*1024}){
  const py=verifyPin(python),exe=verifyPin(command);
  if(!Array.isArray(args)||args.length>200||args.some(x=>typeof x!=="string"||x.includes("\0")))fail("BAD_ARGS");
@@ -35,7 +42,7 @@ export async function superviseProcess({python,command,args,cwd,env,input,pins,r
  if(!Number.isSafeInteger(stderrLimit)||stderrLimit<1||stderrLimit>1024*1024)fail("BAD_LIMITS");
  if(!Array.isArray(pins)||pins.length>15)fail("BAD_PINS");
  const checkedPins=[exe,...pins.map(verifyPin)],hostPin=pinFile(HOST);
- const output=createOutputDecoder(runtime,decoder);
+ const output=commandOutput?createCommandOutput({stdoutLimit,stderrLimit}):createOutputDecoder(runtime,decoder);
  const request={command:exe.path,args,cwd:realpathSync(cwd),env,input,pins:checkedPins,timeout_ms:timeoutMs};
  const requestBytes=Buffer.from(JSON.stringify(request)+"\n");
  if(requestBytes.length>524288)fail("REQUEST_LIMIT");
@@ -65,7 +72,7 @@ export async function superviseProcess({python,command,args,cwd,env,input,pins,r
    if(!started||typeof e.data!=="string"||e.data.length>21848||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(e.data))throw Error();
    const b=Buffer.from(e.data,"base64");
    if(e.kind==="stdout"){if(!output.push(b))stop(["OUTPUT_LIMIT","LINE_LIMIT","EVENT_LIMIT","RESULT_TOO_LARGE"].includes(output.failure)?"output_limit":"invalid_output");}
-   else{stderrBytes+=b.length;if(stderrBytes<=stderrLimit){stderrHash.update(b);stderrHashedBytes+=b.length;}else stop("output_limit");}
+   else{stderrBytes+=b.length;if(stderrBytes<=stderrLimit){stderrHash.update(b);stderrHashedBytes+=b.length;}else stop("output_limit");if(commandOutput&&!output.pushError(b))stop("output_limit");}
   }else if(e.kind==="done"){
    if(!started||e.exit_code!==null&&(!Number.isSafeInteger(e.exit_code)||e.exit_code< -128)||
     ![null,"cancelled","timeout","parent_disconnected"].includes(e.stop_reason)||!["job_empty","group_signalled","unconfirmed"].includes(e.cleanup))throw Error();

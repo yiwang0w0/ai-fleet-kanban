@@ -123,7 +123,9 @@ export function verifyArtifact(db,{transferId}){
  verifyGitPackage(payload(db,t),{manifest:h.manifest,manifestDigest:h.manifest_digest,baseline,allowedPaths:a.repository.allowed_paths});
  return unit(db,()=>{incoming(db,null,transferId);target(db,t.result_id);saveReceipt(db,t,receiptFor(db,t,"artifact_content_verified",a.mapping_id));return artifactState(db,transferId);});
 }
-export function captureVerifiedArtifact(db,{transferId}){const t=incoming(db,null,transferId);if(!receipts(db,transferId).verification)fail("ARTIFACT_UNVERIFIED","实际内容尚未经本机核验");return {header:JSON.parse(t.header_json),bytes:payload(db,t),accepted:false};}
+/** Current local receiving authority, without rereading payload bytes on every heartbeat. */
+export function verifiedArtifactContext(db,{transferId}){const t=incoming(db,null,transferId),a=receipts(db,transferId),dest=target(db,t.result_id);if(!a.verification)fail("ARTIFACT_UNVERIFIED","实际内容尚未经本机核验");if(a.verification.mapping_id!==dest.mapping_id)fail("ARTIFACT_MISMATCH","验证记录的本机仓库不同");return {header:JSON.parse(t.header_json),header_digest:t.header_digest,mapping_id:dest.mapping_id,accepted:false};}
+export function captureVerifiedArtifact(db,{transferId}){const context=verifiedArtifactContext(db,{transferId}),t=row(db,transferId);return {...context,bytes:payload(db,t)};}
 export function artifactChunk(db,{transferId,index}){
  const t=row(db,transferId);pending(db,t.result_id,"target");if(t.side!=="target"||!Number.isSafeInteger(index)||index<0||index>=Math.ceil(t.payload_bytes/CHUNK_BYTES))fail("BAD_INPUT","发送分块位置无效",400);
  const bytes=Buffer.from(db.prepare("SELECT substr(payload,?,?) content FROM artifact_transfers WHERE transfer_id=?").get(index*CHUNK_BYTES+1,CHUNK_BYTES,transferId).content);if(bytes.length!==Math.min(CHUNK_BYTES,t.payload_bytes-index*CHUNK_BYTES))fail("ARTIFACT_CORRUPT","发送端分块存储不完整");return {transfer_id:transferId,header_digest:t.header_digest,chunk_index:index,sha256:contentHash(bytes),content:bytes.toString("base64")};
