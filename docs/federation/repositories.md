@@ -34,6 +34,13 @@ Git 使用固定程序路径、过滤后的环境和固定参数，禁用 lazy f
 
 返回 repository_content_snapshot 清单，绑定项目、repo_id、对象格式、基础/交付 commit 和 tree；文件条目包含相对路径、mode、blob_oid、size、sha256。清单规范摘要和实际 Buffer 内容同时返回可信本机调用者。它尚不是与 result/task/run 绑定的持久交付包，调用者仍须完成持久化及关联，不能只拿摘要声明文件送达。
 
+
+文件内容使用 [Git cat-file 批量协议](https://git-scm.com/docs/git-cat-file)读取：先对去重对象 ID 执行 batch-check，严格校验返回顺序、类型和规范大小；按每条逻辑文件计算总量，相同 blob 被多个路径引用也不会免除大小额度。确认整次请求未超限后，再按最多 128 个文件、16 MiB 逻辑内容分批读取原始 blob。
+
+每个批次严格匹配对象 ID、blob 类型、长度、二进制内容边界及结束换行，重新计算 Git 对象哈希；截断、多余输出、被替换字节和 LFS 指针均拒绝。单批内相同 blob 只传一次，交付给各文件的 Buffer 独立，避免调用者修改一个文件时影响另一个。原始提交与路径上的目录对象仍逐项验证，禁止隐式 fetch、filters、textconv 和替换对象的设置保持有效；总期限仍为 30 秒，单命令最多 10 秒。
+
+选择性 capture 只读取明确允许的文件；完整工作区 snapshot 则必须保持批准提交的全部目录树。工作区池另需 allow_full_history_copy 授权，不能把产物 allowlist 当成稀疏检出配置。若范围外存在无法安全物化的符号链接或子模块，完整 snapshot 明确拒绝，不能静默漏掉它们后声称工作区等于批准提交。稀疏工作区不在当前合同内。
+
 ## 本机 CLI
 
 ~~~text

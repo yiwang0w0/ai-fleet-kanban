@@ -7,8 +7,8 @@ import {DatabaseSync} from "node:sqlite";
 import {createRequire} from "node:module";
 import {createHash,randomUUID} from "node:crypto";
 import {execFileSync,spawn} from "node:child_process";
-import {existsSync,mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,realpathSync,chmodSync,symlinkSync} from "node:fs";
-import {join,dirname} from "node:path";
+import {existsSync,mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,realpathSync,statSync,chmodSync,symlinkSync} from "node:fs";
+import {join,dirname,basename,isAbsolute} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {deflateSync} from "node:zlib";
@@ -172,4 +172,76 @@ test("ordinary git directories are portable artifacts while metadata aliases sta
  const reader=repositoryReader({root:r.root,git}),result=reader.capture({baseCommit:r.base,commit:r.commit,paths:["git/readme.txt"],allowed:["git/"]});
  assert.equal(result.files[0].bytes.toString(),"ordinary source directory");
  const seen=[];reader.snapshot({commit:r.commit,consume:file=>seen.push(file.path)});assert.ok(seen.includes("git/readme.txt"));
+});
+
+
+function observedReader(r,transform=(args,bytes)=>bytes){
+ const calls=[],source=readFileSync(join(ROOT,"core/artifacts/git-reader.mjs"),"utf8").replace(/^import .*;$/gm,"").replace(/^export /gm,"");
+ const context=vm.createContext({Buffer,TextDecoder,performance,process,createHash,readFileSync,realpathSync,statSync,basename,dirname,isAbsolute,join,probeGitVersion,PeerError,
+  execFileSync:(path,args,options)=>{calls.push([...args]);return transform(args,execFileSync(path,args,options));}});
+ vm.runInContext(source,context);return {reader:context.repositoryReader({root:r.root,git}),calls};
+}
+
+test("batch object reads snapshot 600 files and capture 256 without per-file Git processes",t=>{
+ const r=repo(),expected=new Map();mkdirSync(join(r.root,"batch"));
+ for(let i=0;i<600;i++){
+  const name="batch/"+String(i).padStart(4,"0")+".bin",bytes=i%67===0?Buffer.alloc(0):Buffer.concat([Buffer.from("row "+i+"\0\r\n"),Buffer.from([0,255,10,13])]);
+  writeFileSync(join(r.root,name),bytes);expected.set(name,bytes);
+ }
+ g(r.root,["-c","core.autocrlf=false","add","batch/"]);g(r.root,["commit","-m","many exact blobs"]);r.commit=text(r.root,["rev-parse","HEAD"]);
+ const snapshot=observedReader(r),started=performance.now(),seen=new Map();
+ const full=snapshot.reader.snapshot({commit:r.commit,consume:(m,bytes)=>{if(expected.has(m.path)){assert.deepEqual(bytes,expected.get(m.path));assert.equal(m.sha256,hash(bytes));seen.set(m.path,bytes);}}});
+ assert.equal(seen.size,600);assert.equal(full.files.length,603);
+ assert.equal(snapshot.calls.filter(a=>a.includes("--batch-check")).length,1);assert.equal(snapshot.calls.filter(a=>a.includes("--batch")).length,5);
+ assert.equal(snapshot.calls.some(a=>a.includes("cat-file")&&a.includes("-s")),false);assert.ok(snapshot.calls.length<=16);
+ const snapshotMs=performance.now()-started,capture=observedReader(r),names=[...expected.keys()].slice(0,256);
+ const out=capture.reader.capture({baseCommit:r.base,commit:r.commit,paths:names,allowed:["batch/"]});assert.equal(out.files.length,256);
+ for(const file of out.files){assert.deepEqual(file.bytes,expected.get(file.path));assert.equal(file.sha256,hash(file.bytes));}
+ assert.equal(capture.calls.filter(a=>a.includes("--batch-check")).length,1);assert.equal(capture.calls.filter(a=>a.includes("--batch")).length,2);assert.ok(capture.calls.length<=16);
+ t.diagnostic(JSON.stringify({snapshot_files:603,snapshot_ms:Math.round(snapshotMs),snapshot_git_calls:snapshot.calls.length,capture_files:256,capture_git_calls:capture.calls.length}));
+});
+
+test("batch frames reject metadata, binary content and framing corruption before consuming files",()=>{
+ const r=repo();
+ for(const mode of ["metadata-type","metadata-size","metadata-missing","metadata-truncated","oid","type","size","high-bit-header","body","truncated","trailing"]){
+  let consumed=0;
+  const f=observedReader(r,(args,bytes)=>{
+   if(args.includes("--batch-check")&&mode.startsWith("metadata-")){
+    if(mode==="metadata-type")return Buffer.from(bytes.toString("latin1").replace(" blob "," tree "),"latin1");
+    if(mode==="metadata-size")return Buffer.from(bytes.toString("latin1").replace(/ blob [0-9]+/," blob "+(MAX_FILE_BYTES+1)),"latin1");
+    if(mode==="metadata-missing")return Buffer.from(bytes.toString("latin1").replace(/ blob [0-9]+/," missing"),"latin1");
+    return bytes.subarray(0,bytes.length-1);
+   }
+   if(!args.includes("--batch")||mode.startsWith("metadata-"))return bytes;
+   const changed=Buffer.from(bytes),newline=changed.indexOf(10);
+   if(mode==="oid")changed[0]=changed[0]===97?98:97;
+   if(mode==="type")return Buffer.concat([Buffer.from(changed.subarray(0,newline).toString("latin1").replace(" blob "," tree "),"latin1"),changed.subarray(newline)]);
+   if(mode==="size")return Buffer.concat([Buffer.from(changed.subarray(0,newline).toString("latin1").replace(/ [0-9]+$/," 999"),"latin1"),changed.subarray(newline)]);
+   if(mode==="high-bit-header")changed[0]|=128;
+   if(mode==="body")changed[newline+1]^=1;
+   if(mode==="truncated")return changed.subarray(0,changed.length-1);
+   if(mode==="trailing")return Buffer.concat([changed,Buffer.from("x")]);
+   return changed;
+  });
+  const code=mode==="metadata-size"?"WORKSPACE_CONTENT_LIMIT":mode==="metadata-missing"?"GIT_READ_FAILED":"OBJECT_CORRUPT";
+  assert.throws(()=>f.reader.snapshot({commit:r.commit,consume(){consumed++;}}),{code},mode);assert.equal(consumed,0,mode);
+  if(mode.startsWith("metadata-"))assert.equal(f.calls.some(a=>a.includes("--batch")),false);
+ }
+});
+
+test("content batches are bounded and deduplicated blobs retain independent file bytes",()=>{
+ const r=repo();mkdirSync(join(r.root,"large"));const expected=new Map();
+ for(const [name,value] of [["a",1],["a-copy",1],["b",2],["c",3]]){const bytes=Buffer.alloc(6*1024*1024,value);writeFileSync(join(r.root,"large",name),bytes);expected.set("large/"+name,bytes);}
+ g(r.root,["add","large/"]);g(r.root,["commit","-m","bounded chunks"]);r.commit=text(r.root,["rev-parse","HEAD"]);
+ const f=observedReader(r),out=f.reader.capture({baseCommit:r.base,commit:r.commit,paths:[...expected.keys()],allowed:["large/"]});
+ assert.equal(out.total_bytes,24*1024*1024);assert.equal(f.calls.filter(a=>a.includes("--batch")).length,2);
+ for(const file of out.files)assert.deepEqual(file.bytes,expected.get(file.path));
+ out.files[0].bytes[0]^=1;assert.equal(out.files[1].bytes[0],1,"two paths cannot alias a mutable returned buffer");
+});
+
+test("selected delivery paths and explicitly full workspace snapshots retain different scope contracts",()=>{
+ const r=repo(),link=text(r.root,["hash-object","-w","--stdin"],"elsewhere");
+ g(r.root,["update-index","--add","--cacheinfo","120000,"+link+",outside-link"]);g(r.root,["commit","-m","outside selected scope"]);r.commit=text(r.root,["rev-parse","HEAD"]);
+ const reader=repositoryReader({root:r.root,git});assert.equal(reader.capture({baseCommit:r.base,commit:r.commit,paths:["src/demo.txt"],allowed:["src/"]}).files.length,1);
+ let copied=0;assert.throws(()=>reader.snapshot({commit:r.commit,consume(){copied++;}}),{code:"FILE_TYPE_UNSUPPORTED"});assert.equal(copied,0);
 });

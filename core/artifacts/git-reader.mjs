@@ -51,9 +51,9 @@ export function gitEnvironment(executable){
 export function repositoryReader({root,git}){
  const deadline=performance.now()+30000,path=directory(root),pin=gitPin(git),env=gitEnvironment(pin.path),rootIdentity=statSync(path,{bigint:true});
  const sameRoot=value=>{try{const s=statSync(value,{bigint:true});return s.isDirectory()&&s.ino!==0n&&s.ino===rootIdentity.ino&&s.dev===rootIdentity.dev;}catch{return false;}};
- function run(args,limit=1024*1024){
+ function run(args,limit=1024*1024,input){
   const remaining=Math.floor(deadline-performance.now());if(remaining<=0)fail("REPOSITORY_READ_TIMEOUT","仓库读取超过 30 秒总期限");
-  try{return execFileSync(pin.path,["--no-pager","--no-lazy-fetch","--no-replace-objects","--no-optional-locks","-c","protocol.allow=never","-c","core.fsmonitor=false","-c","core.untrackedCache=false",...args],{cwd:path,env,windowsHide:true,timeout:Math.min(10000,remaining),maxBuffer:limit,stdio:["ignore","pipe","pipe"]});}
+  try{return execFileSync(pin.path,["--no-pager","--no-lazy-fetch","--no-replace-objects","--no-optional-locks","-c","protocol.allow=never","-c","core.fsmonitor=false","-c","core.untrackedCache=false",...args],{cwd:path,env,windowsHide:true,timeout:Math.min(10000,remaining),maxBuffer:limit,input,stdio:[input===undefined?"ignore":"pipe","pipe","pipe"]});}
   catch{fail("GIT_READ_FAILED","本机 Git 对象读取失败或超出资源限制；不自动获取远端对象");}
  }
  const text=(args,limit)=>new TextDecoder("utf-8",{fatal:true}).decode(run(args,limit)).trim();
@@ -65,6 +65,44 @@ export function repositoryReader({root,git}){
  function object(type,oid,max){
   objectId(oid,format);const bytes=run(["cat-file",type,oid],max+1),actual=createHash(format).update(type+" "+bytes.length+"\0").update(bytes).digest("hex");
   if(bytes.length>max||actual!==oid)fail("OBJECT_CORRUPT","Git 对象长度或内容地址不一致");return bytes;
+ }
+ // Check every logical file's size before reading payloads. Content processes
+ // are bounded by both count and bytes; repeated blob IDs never waive file limits.
+ function readBlobs(selected,maxTotal,limitCode,consume){
+  if(!selected.length)return 0;
+  const ids=[...new Set(selected.map(e=>objectId(e.oid,format)))],sizes=new Map();
+  const input=oids=>Buffer.from(oids.join("\n")+"\n","ascii");
+  const lines=run(["cat-file","--batch-check"],ids.length*128+1,input(ids)).toString("latin1").split("\n");
+  if(lines.length!==ids.length+1||lines.pop()!=="")fail("OBJECT_CORRUPT","批量对象信息未完整结束");
+  for(let i=0;i<ids.length;i++){
+   if(lines[i]===ids[i]+" missing")fail("GIT_READ_FAILED","本机缺少批量读取对象；不自动获取远端对象");
+   const fields=lines[i].split(" "),size=Number(fields[2]);
+   if(fields.length!==3||fields[0]!==ids[i]||fields[1]!=="blob"||!/^(?:0|[1-9][0-9]*)$/.test(fields[2])||!Number.isSafeInteger(size))fail("OBJECT_CORRUPT","批量对象身份、类型或长度无效");
+   sizes.set(ids[i],size);
+  }
+  let total=0;
+  for(const e of selected){const size=sizes.get(e.oid);total+=size;if(size>MAX_FILE_BYTES||total>maxTotal)fail(limitCode,"文件超过 8 MiB 或总内容超过本次读取上限");}
+  for(let start=0;start<selected.length;){
+   let end=start,logicalBytes=0;
+   while(end<selected.length&&end-start<128&&logicalBytes+sizes.get(selected[end].oid)<=16*1024*1024){logicalBytes+=sizes.get(selected[end].oid);end++;}
+   const chunk=selected.slice(start,end),oids=[...new Set(chunk.map(e=>e.oid))],records=new Map();
+   const expected=oids.reduce((n,oid)=>n+Buffer.byteLength(oid+" blob "+sizes.get(oid)+"\n")+sizes.get(oid)+1,0);
+   const output=run(["cat-file","--batch"],expected+1,input(oids));let offset=0;
+   for(const oid of oids){
+    const size=sizes.get(oid),newline=output.indexOf(10,offset);
+    if(newline<0||output.subarray(offset,newline).toString("latin1")!==oid+" blob "+size)fail("OBJECT_CORRUPT","批量内容头与已检查对象不匹配");
+    const end=newline+1+size;
+    if(end>=output.length||output[end]!==10)fail("OBJECT_CORRUPT","批量对象内容被截断或结束符无效");
+    const bytes=output.subarray(newline+1,end),actual=createHash(format).update("blob "+size+"\0").update(bytes).digest("hex");
+    if(actual!==oid)fail("OBJECT_CORRUPT","批量对象内容地址不一致");
+    if(/^version https:\/\/git-lfs\.github\.com\/spec\/v1\r?\n/.test(bytes.subarray(0,80).toString("utf8")))fail("LFS_CONTENT_REQUIRED","LFS 指针不是实际产物内容");
+    records.set(oid,{size,bytes,sha256:createHash("sha256").update(bytes).digest("hex")});offset=end+1;
+   }
+   if(offset!==output.length)fail("OBJECT_CORRUPT","批量输出含多余内容");
+   for(const e of chunk){const r=records.get(e.oid);consume({path:e.path,mode:e.mode,blob_oid:e.oid,size:r.size,sha256:r.sha256},Buffer.from(r.bytes));}
+   start=end;
+  }
+  return total;
  }
  const commits=new Map();
  function readCommit(oid,withTree=true){
@@ -119,17 +157,10 @@ export function repositoryReader({root,git}){
     if(!["100644","100755"].includes(e.mode))fail("FILE_TYPE_UNSUPPORTED","任务基线不支持符号链接或子模块");
     if(selected.length>=4096)fail("WORKSPACE_CONTENT_LIMIT","任务基线超过 4096 文件");selected.push({path,...e});
    }
-   const files=[];let total=0;
-   for(const e of selected.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0)){
-    const sizeText=text(["cat-file","-s",e.oid],128),size=Number(sizeText);
-    if(!/^(?:0|[1-9][0-9]*)$/.test(sizeText)||!Number.isSafeInteger(size))fail("OBJECT_CORRUPT","对象长度无效");
-    if(size>MAX_FILE_BYTES||total+size>256*1024*1024)fail("WORKSPACE_CONTENT_LIMIT","任务基线单文件超过 8 MiB 或总计超过 256 MiB");
-    const bytes=object("blob",e.oid,MAX_FILE_BYTES);
-    if(bytes.length!==size)fail("OBJECT_CORRUPT","对象长度改变");
-    if(/^version https:\/\/git-lfs\.github\.com\/spec\/v1\r?\n/.test(bytes.subarray(0,80).toString("utf8")))fail("LFS_CONTENT_REQUIRED","基线需要实际 LFS 内容");
-    const metadata={path:e.path,mode:e.mode,blob_oid:e.oid,size,sha256:createHash("sha256").update(bytes).digest("hex")};
-    consume(metadata,bytes);total+=size;files.push(metadata);
-   }
+   const files=[];
+   const total=readBlobs(selected.sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0),256*1024*1024,"WORKSPACE_CONTENT_LIMIT",(metadata,bytes)=>{
+    consume(metadata,bytes);files.push(metadata);
+   });
    gitPin(pin);return {object_format:format,commit:head.commit,tree:head.tree,total_bytes:total,files};
   },
   capture({baseCommit,commit:oid,paths,allowed}){
@@ -147,7 +178,7 @@ export function repositoryReader({root,git}){
    // Verify every tree object along selected paths ourselves. ls-tree alone
    // would trust a corrupt child object stored under another object's filename.
    const entries=treeReader();
-   const files=[];let total=0;
+   const selected=[];
    for(const name of wanted){
     let tree=head.tree,e;const parts=name.split("/");
     for(let i=0;i<parts.length;i++){
@@ -155,12 +186,9 @@ export function repositoryReader({root,git}){
      if(i<parts.length-1){if(e.mode!=="40000")fail("FILE_TYPE_UNSUPPORTED","不能穿越符号链接、子模块或非目录对象");tree=e.oid;}
     }
     if(!["100644","100755"].includes(e.mode))fail("FILE_TYPE_UNSUPPORTED","不接收符号链接、子模块或特殊文件");
-    const sizeText=text(["cat-file","-s",e.oid],128);if(!/^(?:0|[1-9][0-9]*)$/.test(sizeText))fail("OBJECT_CORRUPT","对象长度不规范");const size=Number(sizeText);
-    if(!Number.isSafeInteger(size)||size>MAX_FILE_BYTES||total+size>MAX_CAPTURE_BYTES)fail("CAPTURE_LIMIT","文件超过 8 MiB 或总内容超过 32 MiB");
-    const bytes=object("blob",e.oid,MAX_FILE_BYTES);if(bytes.length!==size)fail("OBJECT_CORRUPT","对象读取期间长度改变");
-    if(/^version https:\/\/git-lfs\.github\.com\/spec\/v1\r?\n/.test(bytes.subarray(0,80).toString("utf8")))fail("LFS_CONTENT_REQUIRED","LFS 指针不是实际产物内容");
-    total+=size;files.push({path:name,mode:e.mode,blob_oid:e.oid,size,sha256:createHash("sha256").update(bytes).digest("hex"),bytes});
+    selected.push({path:name,...e});
    }
+   const files=[],total=readBlobs(selected,MAX_CAPTURE_BYTES,"CAPTURE_LIMIT",(metadata,bytes)=>files.push({...metadata,bytes}));
    gitPin(pin);return {object_format:format,base_commit:base.commit,base_tree:base.tree,commit:head.commit,tree:head.tree,total_bytes:total,files};
   }
  };
