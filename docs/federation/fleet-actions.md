@@ -113,3 +113,48 @@ GET /api/fleet/actions[?project=demo] 返回当前协调身份获准的本地协
 这些命令继续使用同一操作 ID、事务、授权快照及持久队列。登记观察只保留有限的身份、代次、版本和结构摘要字段；对端附加字段不写入缓存。登记节点拒绝过期结构时保留失败回执和未确认绑定，不自动更新用户核对的关系。
 
 本轮验证见 [fleet-binding-actions-evidence.json](fleet-binding-actions-evidence.json)。尚未完成最终验证/合并/结案的页面入口、完整结构编辑器、历史翻页和队列保留运维，以及真实 Tailscale 两机验收。
+
+## 文件交付与来源独立检查
+
+在已有操作配置中可选增加 delivery。省略时保留前述委派与绑定功能；增加后，服务启动及实际处理均须通过与 verification CLI 相同的治理源码检查。approval_file 只从可信本机配置读取，源码根固定为正在运行的看板仓库；浏览器不能选择源码、验收文件、测试程序或本机路径。
+
+~~~json
+{
+  "approval_file": "C:/FleetRuntime/private/accepted_rev",
+  "receivers": [{
+    "project_id": "demo",
+    "mapping_id": "77777777-7777-4777-8777-777777777777",
+    "base_commit": "0123456789abcdef0123456789abcdef01234567",
+    "allow_full_baseline_read": true
+  }],
+  "verification_profiles": ["88888888-8888-4888-8888-888888888888"]
+}
+~~~
+
+这是 delivery 字段的内容，需要合并到既有配置。仓库映射、精确基线及验证 profile 应先通过本机 CLI 登记；每个映射至多配置一个本次接收基线。完整基线读取须在配置和面板确认中明确授权。验证 profile 固定测试程序、脚本摘要、环境、时限与独立副本位置，参见 [verification.md](verification.md)。profiles 只开放指定 UUID，仍须匹配当前项目、节点代次、接收仓库和有效授权。文件发送端的反向 peer 凭据还需 peer:handshake、delegation:result、artifact:write。
+
+操作流程：
+
+1. 执行端从候选点击「准备实际文件包」，捕获已封存工作区的真实 Git/文件内容；来源端选择已配置的仓库及基线，明确「授权接收文件」。
+2. 执行端在「文件与独立检查」发送或续传原包。队列每次最多发送 64 个分块；断线、丢 ACK、重启继续同一传输，更多分块自动续做。
+3. 来源端收齐后明确点击「核验接收内容」，对照本机批准基线检查实际文件、Git 对象和完整目录。内容核验不运行测试。
+4. 来源端选择匹配仓库的固定 profile，准备独立输入副本，再单独点击「执行本机独立检查」。准备与启动是两个可核对的动作。
+5. 已消费启动许可的检查只恢复已有观察；回执缺失时保持受阻，不重复执行。操作历史中可以明确「恢复原交付操作」，复用原意图、参数和权限版本。配置或任务已变化时，原请求仍拒绝。
+6. 检查通过显示「待合并与验收」。实际 Git 合并和双端结案继续使用现有 CLI；这两个阶段的面板入口仍待接入。
+
+新增严格参数：
+
+| command | arguments |
+|---|---|
+| register_artifact_target | result_id、mapping_id；基线取固定本机配置 |
+| prepare_artifact | result_id；传输编号由原 action_id 固定 |
+| send_artifact / verify_artifact | id 为传输 UUID |
+| prepare_verification | transfer_id、profile_id；验证编号由原 action_id 固定 |
+| run_verification / reconcile_verification | id 为验证 UUID |
+| resume_delivery | id 为当前协调身份的一条受阻交付操作 UUID |
+
+耗时文件读取、独立副本准备和测试均在操作意向提交后执行，不在 HTTP 入站写事务内执行；队列先保存冻结的候选摘要、任务版本和配置摘要。实际文件回执落盘事务内再次检查原协调权限。测试启动和心跳继续验证权限与治理源码；撤销后停止进程并保存真实失败观察。不同点击编号的同内容文件包/验证准备返回原操作，避免另建编号掩盖中断。
+
+本地文件/检查操作成功后的队列 state 为 applied；这仅说明本机该步骤已有记录。检查通过由 checks_passed 单列，不计入任务或阶段验收。目录显示受限元数据、固定程序/检查文件名及摘要，不输出本机绝对路径、凭据、原始测试正文。每类目标、传输和检查至多 100 项，截断会提示。
+
+独立副本与 Windows Job 仍不是操作系统文件/网络沙箱；本机管理者应只登记可信的固定检查。真实双机、客户端安装、模型调用、OS 隔离和长期运行仍按原计划分别验收。

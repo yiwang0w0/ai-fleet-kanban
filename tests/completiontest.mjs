@@ -106,7 +106,7 @@ const git=(dir,args)=>execFileSync("git",["-C",dir,...args],{encoding:"utf8",win
 const gitExecPath=execFileSync("git",["--exec-path"],{encoding:"utf8"}).trim(),gitPath=realpathSync.native(join(gitExecPath,"../../bin/git.exe")),pinnedGit={path:gitPath,sha256:contentHash(readFileSync(gitPath))};
 function observed(execution){return {status:"success",evidence:"fixture file session terminal",usage:null,diagnostic:"SUCCESS",real_model_call_confirmed:false,observed:{runtime:"claude",session_id:"fixture-session",turn_id:null,model:"fixture-model",terminal_status:"success",protocol_error:null,bytes:1024,events:2,stdout_sha256:"7".repeat(64)},process:{started:true,pid:123,containment:"windows-job",cleanup:"job_empty",host_sha256:"8".repeat(64),executable_sha256:execution.command_sha256,python_sha256:execution.python_sha256,exit_code:0,host_error:null,host_exit_code:0,stderr_bytes:0,stderr_hashed_bytes:0,stderr_sha256:"9".repeat(64)}};}
 
-function fileCandidate({register=true,receiveReport=true,objectFormat="sha1",...options}={}){
+function fileCandidate({register=true,receiveReport=true,prepareTransfer=true,objectFormat="sha1",...options}={}){
  const f=fullyBound(options),w=worker(f),root=join(TMP,"repo"+serial++);mkdirSync(root);mkdirSync(join(root,"src"));
  writeFileSync(join(root,"src","base.txt"),"original\r\n中文\r\n");writeFileSync(join(root,"private.txt"),"unchanged baseline; local full-read grant required\n");
  git(root,["init","--quiet","--template=","--object-format="+objectFormat]);git(root,["-c","core.autocrlf=false","add","."]);git(root,["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","--quiet","-m","approved base"]);const base=git(root,["rev-parse","HEAD"]),receiverRoot=join(TMP,"receiver"+serial++);
@@ -123,7 +123,7 @@ function fileCandidate({register=true,receiveReport=true,objectFormat="sha1",...
  migrateArtifacts(f.a.db);migrateArtifacts(f.b.db);
  if(receiveReport){const ack=receiveResult(f.a.db,ba.peer,r.body);recordResultReceipt(f.b.db,{resultId:r.result_id,receipt:ack});}
  const targetArgs={resultId:r.result_id,mappingId:receiverMapping.mapping_id,baseCommit:base,allowFullBaselineRead:true};if(register&&receiveReport)registerArtifactTarget(f.a.db,targetArgs);
- const t=prepareArtifact(f.b.db,{resultId:r.result_id,transferId:randomUUID()});return {...f,registrar:f.r,w,r,t,ba,root,base,receiverRoot,receiverMapping,targetArgs,workspaceId};
+ const t=prepareTransfer?prepareArtifact(f.b.db,{resultId:r.result_id,transferId:randomUUID()}):null;return {...f,registrar:f.r,w,r,t,ba,root,base,receiverRoot,receiverMapping,targetArgs,workspaceId};
 }
 function upload(f,h=f.t.header,bytes=null){receiveArtifactOffer(f.a.db,f.ba.peer,h);const n=Math.ceil(h.payload_bytes/CHUNK_BYTES);for(let i=0;i<n;i++){const chunk=bytes?{transfer_id:h.transfer_id,header_digest:digest(h),chunk_index:i,sha256:contentHash(bytes.subarray(i*CHUNK_BYTES,(i+1)*CHUNK_BYTES)),content:bytes.subarray(i*CHUNK_BYTES,(i+1)*CHUNK_BYTES).toString("base64")}:artifactChunk(f.b.db,{transferId:h.transfer_id,index:i});receiveArtifactChunk(f.a.db,f.ba.peer,chunk);}return sealArtifact(f.a.db,f.ba.peer,{transfer_id:h.transfer_id,header_digest:digest(h)});}
 const transferRows=db=>JSON.stringify(Object.fromEntries(["artifact_targets","artifact_transfers","artifact_chunks","artifact_receipts","artifact_events"].map(t=>[t,db.prepare("SELECT * FROM "+t+" ORDER BY rowid").all()])));
@@ -238,4 +238,76 @@ test("two-node layout co-locates registrar with source and completes over HTTP w
  assert.equal((await submitCompletion(f.a.db,{completionId})).delivery_state,"waiting_peer");const target=await submitCompletion(f.b.db,{completionId,url:sourceUrl,credentialFile:f.br.file});assert.equal(target.delivery_state,"acknowledged");assert.equal((await submitCompletion(f.a.db,{completionId,mode:"poll"})).phase,"retired");
  assert.equal(target.retirement.approved_by.find(v=>v.node_id===f.a.node.node_id).credential_version,0);assert.equal(target.retirement.approved_by.find(v=>v.node_id===f.b.node.node_id).credential_version,f.br.peer.credential_version);
  assert.equal(settleCompletion(f.a.db,{completionId,sourceGate:completeArgs.sourceGate}).accepted,true);assert.equal(settleCompletion(f.b.db,{completionId}).accepted,true);assert.equal(store.get(f.a.db,f.source.id).status,"done");assert.equal(store.get(f.b.db,f.target.id).status,"done");assert.equal(f.a.db.prepare("SELECT count(*) n FROM relation_completions").get().n,1);
+});
+
+import {openFleetActions} from "../core/fleet-actions.mjs";
+import {revokePrincipal} from "../core/mcp/policy.mjs";
+const fleetDeliveryControllers=[];
+after(async()=>{for(const c of fleetDeliveryControllers)await c.close();});
+function deliveryOperator(n,{receivers=[],profiles=[],peers=[],...options}={}){
+ const role_id="delivery"+serial++,principal_file=join(TMP,role_id+".json");
+ putRole(n.db,{role_id,kind:"coordinate",projects:["demo","other"],capabilities:[],runtime:null,model:null,effort:null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:1,max_open_tasks:100,requests_per_minute:300}});
+ const principal=issuePrincipal(n.db,{roleId:role_id,projects:["demo","other"],credentialFile:principal_file});
+ const config={format:"ai-fleet-actions/v1",node_id:n.node.node_id,node_epoch:n.node.sync_epoch,principal_file,peers,delivery:{approval_file:join(src,"approved-fixture-tree"),receivers,verification_profiles:profiles}};
+ const open=extra=>{const c=openFleetActions(n.db,{config,sourceGate,...options,...extra});fleetDeliveryControllers.push(c);return c;};
+ return {config,principal,open,actions:open()};
+}
+const deliveryRequest=(command,args,project_id="demo")=>({action_id:randomUUID(),project_id,command,arguments:args});
+async function deliveryDo(actions,request){const queued=actions.enqueue(request);await actions.tick();const result=actions.catalog(request.project_id).actions.find(a=>a.action_id===queued.action_id);assert.ok(result);return result;}
+
+test("panel delivery transfers actual bytes after lost ACK and restart, verifies a fixed command once, and does not accept tasks",async()=>{
+ const f=fileCandidate({register:false,prepareTransfer:false}),url=await network(f.a);let lost=false,clock=Date.now();
+ const target=deliveryOperator(f.b,{peers:[{node_id:f.a.node.node_id,node_epoch:f.a.node.sync_epoch,projects:["demo"],url,credential_file:f.ba.file}],now:()=>clock,fetchImpl:async(...args)=>{const r=await fetch(...args);if(!lost&&String(args[0]).endsWith("/artifact/chunk")){lost=true;await r.arrayBuffer();throw Error("lost ACK");}return r;}});
+ const prep=deliveryRequest("prepare_artifact",{result_id:f.r.result_id}),prepared=await deliveryDo(target.actions,prep);assert.equal(prepared.state,"applied");f.t=artifactState(f.b.db,prepared.result.transfer_id);
+ assert.equal(target.actions.enqueue({...prep,action_id:randomUUID()}).action_id,prep.action_id);assert.equal(f.b.db.prepare("SELECT count(*) n FROM artifact_transfers").get().n,1);
+ const marker=join(TMP,"panel-check-count-"+serial+++".txt"),v=localCheck(f,"import fs from 'node:fs';import {pathToFileURL} from 'node:url';import {join} from 'node:path';import assert from 'node:assert/strict';const {result}=await import(pathToFileURL(join(process.cwd(),'src/generated.mjs')));assert.equal(result,42);fs.appendFileSync("+JSON.stringify(marker)+",'once\\n');console.log('fixed check passed');");
+ const source=deliveryOperator(f.a,{profiles:[v.profileId],receivers:[{project_id:"demo",mapping_id:f.receiverMapping.mapping_id,base_commit:f.base,allow_full_baseline_read:true}]});
+ assert.throws(()=>source.actions.enqueue(deliveryRequest("register_artifact_target",{result_id:f.r.result_id,mapping_id:f.receiverMapping.mapping_id},"other")),{code:"NOT_FOUND"});
+ assert.throws(()=>source.actions.enqueue(deliveryRequest("register_artifact_target",{result_id:f.r.result_id,mapping_id:randomUUID()})),{code:"FORBIDDEN"});
+ const receiveRequest=deliveryRequest("register_artifact_target",{result_id:f.r.result_id,mapping_id:f.receiverMapping.mapping_id});source.actions.enqueue(receiveRequest);assert.equal(f.a.db.prepare("SELECT count(*) n FROM artifact_targets").get().n,0);await source.actions.tick();
+ const transfer=deliveryRequest("send_artifact",{id:f.t.transfer_id});assert.equal((await deliveryDo(target.actions,transfer)).state,"retry_pending");assert.equal(lost,true);
+ await target.actions.close();clock+=10000;target.actions=target.open({fetchImpl:fetch});await target.actions.tick();assert.equal(target.actions.catalog("demo").actions.find(a=>a.action_id===transfer.action_id).state,"acknowledged");
+ const verify=await deliveryDo(source.actions,deliveryRequest("verify_artifact",{id:f.t.transfer_id}));assert.equal(verify.result.state,"content_verified");
+ const prepare=deliveryRequest("prepare_verification",{transfer_id:f.t.transfer_id,profile_id:v.profileId}),verification=await deliveryDo(source.actions,prepare);assert.equal(verification.result.state,"ready");
+ assert.equal(source.actions.enqueue({...prepare,action_id:randomUUID()}).action_id,prepare.action_id);
+ const id=verification.result.verification_id,run=await deliveryDo(source.actions,deliveryRequest("run_verification",{id}));assert.equal(run.result.state,"checks_passed");assert.equal(run.result.checks_passed,true);
+ assert.equal((await deliveryDo(source.actions,deliveryRequest("run_verification",{id}))).result.state,"checks_passed");assert.equal(readFileSync(marker,"utf8"),"once\n");assert.equal(f.a.db.prepare("SELECT count(*) n FROM verification_launches").get().n,1);
+ const catalog=source.actions.catalog("demo").delivery;assert.equal(catalog.artifacts[0].state,"content_verified");assert.equal(catalog.verifications[0].checks_passed,true);assert.equal(catalog.profiles.length,1);
+ const encoded=JSON.stringify(catalog);for(const hidden of [marker,v.checker,source.config.principal_file,JSON.parse(readFileSync(source.config.principal_file,"utf8")).token])assert.equal(encoded.includes(hidden),false);
+ assert.equal(source.actions.catalog("other").delivery.artifacts.length,0);assert.equal(resultState(f.a.db,f.r.result_id).accepted,false);assert.notEqual(store.get(f.a.db,f.source.id).status,"done");
+});
+
+test("panel delivery reconciles a durable verification journal after database write failure without rerunning the check",async()=>{
+ const f=fileCandidate();upload(f);verifyArtifact(f.a.db,{transferId:f.t.transfer_id});
+ const marker=join(TMP,"panel-journal-"+serial+++".txt"),v=localCheck(f,"import fs from 'node:fs';fs.appendFileSync("+JSON.stringify(marker)+",'once\\n');console.log('retained observation');");prepareVerification(f.a.db,v);
+ const source=deliveryOperator(f.a,{profiles:[v.profileId]});
+ f.a.db.exec("CREATE TRIGGER fail_panel_verification_receipt BEFORE INSERT ON verification_receipts BEGIN SELECT RAISE(ABORT,'fixture receipt disk failure'); END");
+ const run=await deliveryDo(source.actions,deliveryRequest("run_verification",{id:v.verificationId}));assert.equal(run.state,"blocked");assert.equal(verificationState(f.a.db,v.verificationId).phase,"launch_committed");assert.equal(readFileSync(marker,"utf8"),"once\n");
+ f.a.db.exec("DROP TRIGGER fail_panel_verification_receipt");
+ await deliveryDo(source.actions,deliveryRequest("resume_delivery",{id:run.action_id}));assert.equal(source.actions.catalog("demo").actions.find(a=>a.action_id===run.action_id).result.state,"checks_passed");
+ const reconciled=await deliveryDo(source.actions,deliveryRequest("reconcile_verification",{id:v.verificationId}));assert.equal(reconciled.result.state,"checks_passed");assert.equal(readFileSync(marker,"utf8"),"once\n");assert.equal(f.a.db.prepare("SELECT count(*) n FROM verification_launches").get().n,1);
+ assert.equal(resultState(f.a.db,f.r.result_id).accepted,false);
+});
+
+test("panel delivery rejects changed configuration and candidate context before queued file effects",async()=>{
+ const f=fileCandidate();upload(f);let checkedInside=false;assert.throws(()=>verifyArtifact(f.a.db,{transferId:f.t.transfer_id,authorize(){checkedInside=f.a.db.isTransaction;throw Error("fixture authorization revoked before receipt");}}),/authorization revoked/);assert.equal(checkedInside,true);assert.equal(artifactState(f.a.db,f.t.transfer_id).state,"received");
+ const source=deliveryOperator(f.a),request=deliveryRequest("verify_artifact",{id:f.t.transfer_id});
+ f.a.db.exec("CREATE TRIGGER fail_panel_action_insert BEFORE INSERT ON fleet_operator_actions BEGIN SELECT RAISE(ABORT,'fixture queue failure'); END");
+ assert.throws(()=>source.actions.enqueue(request),/fixture queue failure/);assert.equal(f.a.db.prepare("SELECT count(*) n FROM fleet_operator_actions").get().n,0);assert.equal(artifactState(f.a.db,f.t.transfer_id).state,"received");f.a.db.exec("DROP TRIGGER fail_panel_action_insert");
+ source.actions.enqueue(request);await source.actions.close();
+ const original=source.config.delivery.approval_file;source.config.delivery.approval_file=join(src,"changed-approval-fixture");
+ source.actions=source.open();await source.actions.tick();const blocked=source.actions.catalog("demo").actions[0];assert.equal(blocked.last_error_code,"DELIVERY_CONFIG_CHANGED");assert.equal(artifactState(f.a.db,f.t.transfer_id).state,"received");
+ await source.actions.close();source.config.delivery.approval_file=original;source.actions=source.open();const later=deliveryRequest("verify_artifact",{id:f.t.transfer_id});source.actions.enqueue(later);
+ reject(f,f.r);await source.actions.tick();assert.equal(source.actions.catalog("demo").actions.find(x=>x.action_id===later.action_id).last_error_code,"RESULT_NOT_PENDING");assert.equal(f.a.db.prepare("SELECT count(*) n FROM artifact_receipts WHERE kind='artifact_content_verified'").get().n,0);
+});
+
+test("panel delivery principal revocation stops a running fixed check and preserves its failed observation",async()=>{
+ const f=fileCandidate();upload(f);verifyArtifact(f.a.db,{transferId:f.t.transfer_id});
+ const marker=join(TMP,"panel-running-"+serial+++".txt"),v=localCheck(f,"import fs from 'node:fs';fs.writeFileSync("+JSON.stringify(marker)+",'started');await new Promise(r=>setTimeout(r,30000));console.log('should not finish');",{timeout_ms:35000});
+ prepareVerification(f.a.db,v);const source=deliveryOperator(f.a,{profiles:[v.profileId]}),request=deliveryRequest("run_verification",{id:v.verificationId});
+ source.actions.enqueue(request);const running=source.actions.tick(),deadline=Date.now()+10000;
+ while(!existsSync(marker)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,25));
+ assert.equal(existsSync(marker),true);revokePrincipal(f.a.db,{principalId:source.principal.principal_id,expectedVersion:1});await running;
+ const state=verificationState(f.a.db,v.verificationId);assert.equal(state.phase,"settled");assert.equal(state.receipt.checks_passed,false);assert.equal(state.receipt.observation.process.cleanup,"job_empty");
+ assert.equal(f.a.db.prepare("SELECT count(*) n FROM verification_launches").get().n,1);assert.throws(()=>source.actions.catalog("demo"));assert.equal(resultState(f.a.db,f.r.result_id).accepted,false);
 });

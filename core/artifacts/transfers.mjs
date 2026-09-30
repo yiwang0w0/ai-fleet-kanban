@@ -44,11 +44,11 @@ function target(db,resultId){
  return {...t,repository:repositoryState(db,{mappingId:t.mapping_id})};
 }
 /** Local administration only. Each candidate is bound to a locally selected repo and base. */
-export function registerArtifactTarget(db,{resultId,mappingId,baseCommit,allowFullBaselineRead}){
+export function registerArtifactTarget(db,{resultId,mappingId,baseCommit,allowFullBaselineRead,authorize=()=>{}}){
  if(allowFullBaselineRead!==true)fail("BASELINE_READ_GRANT_REQUIRED","须明确允许读取完整批准基线以核对未修改文件");
  migrateArtifacts(db);const r=pending(db,resultId,"source"),mapping=repositoryState(db,{mappingId});
  if(mapping.project_id!==r.project_id)fail("PROJECT_BOUNDARY","接收仓库不属于交付项目");workspaceRepositorySource(db,{mappingId,baseCommit});
- return unit(db,()=>{pending(db,resultId,"source");repositoryState(db,{mappingId});const n=localIdentity(db),old=db.prepare("SELECT * FROM artifact_targets WHERE result_id=?").get(resultId);
+ return unit(db,()=>{authorize();pending(db,resultId,"source");repositoryState(db,{mappingId});const n=localIdentity(db),old=db.prepare("SELECT * FROM artifact_targets WHERE result_id=?").get(resultId);
   if(old){target(db,resultId);if(old.mapping_id!==mappingId||old.base_commit!==baseCommit)fail("REQUEST_CONFLICT","候选接收许可已固定");}
   else{db.prepare("INSERT INTO artifact_targets VALUES(?,?,?,?,?,?)").run(resultId,mappingId,n.node_id,n.sync_epoch,baseCommit,at());event(db,null,"target_registered",{result_id:resultId,mapping_id:mappingId,base_commit:baseCommit,allow_full_baseline_read:true});}
   return {result_id:resultId,mapping_id:mappingId,base_commit:baseCommit,allow_full_baseline_read:true,accepted:false};
@@ -67,14 +67,14 @@ function reserve(db,h,side,payload=null){
  if(db.prepare("SELECT coalesce(sum(payload_bytes+length(CAST(header_json AS BLOB))),0) bytes FROM artifact_transfers").get().bytes+h.payload_bytes+Buffer.byteLength(canonical(h))>MAX_ARTIFACT_STORAGE)fail("ARTIFACT_STORAGE_LIMIT","保留产物已达本机 256 MiB 容量上限");
  const n=localIdentity(db);db.prepare("INSERT INTO artifact_transfers VALUES(?,?,?,?,?,?,?,?,?,?)").run(h.transfer_id,h.result_id,side,n.node_id,n.sync_epoch,canonical(h),digest(h),h.payload_bytes,payload,at());event(db,h.transfer_id,side==="target"?"prepared":"offered",{header_digest:digest(h)});
 }
-export function prepareArtifact(db,{resultId,transferId}){
+export function prepareArtifact(db,{resultId,transferId,authorize=()=>{}}){
  uuid(transferId,"transfer_id");migrateArtifacts(db);const r=pending(db,resultId,"target"),old=db.prepare("SELECT result_id FROM artifact_transfers WHERE transfer_id=?").get(transferId);
  if(old){if(old.result_id!==resultId)fail("REQUEST_CONFLICT","传输号已绑定其他交付");return artifactState(db,transferId);}
  if(db.isTransaction)fail("TRANSACTION_CONTEXT","文件捕获需独立于调用事务");
  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name='task_workspaces'").get())fail("WORKSPACE_REQUIRED","候选运行没有实际任务工作区");
  const w=db.prepare("SELECT workspace_id FROM task_workspaces WHERE run_id=? AND dispatch_id=?").get(r.body.execution.run_id,r.body.execution.dispatch_id);if(!w)fail("WORKSPACE_REQUIRED","候选运行没有实际任务工作区");
  const p=captureWorkspacePackage(db,{workspaceId:w.workspace_id}),h={schema_version:1,kind:"workspace_artifact_offer",transfer_id:transferId,result_id:resultId,result_body_digest:r.body_digest,manifest:p.manifest,manifest_digest:p.manifest_digest,payload_sha256:contentHash(p.bytes),payload_bytes:p.bytes.length,chunk_size:CHUNK_BYTES};header(h,r);
- return unit(db,()=>{header(h,pending(db,resultId,"target"));const old=db.prepare("SELECT header_digest FROM artifact_transfers WHERE transfer_id=?").get(transferId);if(old){if(old.header_digest!==digest(h))fail("REQUEST_CONFLICT","并发传输内容不一致");}else reserve(db,h,"target",p.bytes);return artifactState(db,transferId);});
+ return unit(db,()=>{authorize();header(h,pending(db,resultId,"target"));const old=db.prepare("SELECT header_digest FROM artifact_transfers WHERE transfer_id=?").get(transferId);if(old){if(old.header_digest!==digest(h))fail("REQUEST_CONFLICT","并发传输内容不一致");}else reserve(db,h,"target",p.bytes);return artifactState(db,transferId);});
 }
 function counts(db,t){return db.prepare("SELECT count(*) next_chunk,coalesce(sum(length(content)),0) received_bytes FROM artifact_chunks WHERE transfer_id=?").get(t.transfer_id);}
 function receipts(db,id){const rows=db.prepare("SELECT kind,receipt_json FROM artifact_receipts WHERE transfer_id=?").all(id);return {receipt:JSON.parse(rows.find(r=>r.kind==="artifact_received")?.receipt_json??"null"),verification:JSON.parse(rows.find(r=>r.kind==="artifact_content_verified")?.receipt_json??"null")};}
@@ -116,12 +116,12 @@ export function sealArtifact(db,peer,body){return unit(db,()=>{
 });}
 export function peerArtifactStatus(db,peer,body){exact(body,["transfer_id","header_digest"]);const t=incoming(db,peer,body.transfer_id,false);if(t.header_digest!==body.header_digest)fail("ARTIFACT_MISMATCH","传输清单不匹配");return progress(db,t.transfer_id);}
 /** Local, potentially expensive Git reads run outside the HTTP handler and write transaction. */
-export function verifyArtifact(db,{transferId}){
+export function verifyArtifact(db,{transferId,authorize=()=>{}}){
  if(db.isTransaction)fail("TRANSACTION_CONTEXT","完整基线核验需独立于写事务");const t=incoming(db,null,transferId),h=JSON.parse(t.header_json),a=target(db,t.result_id);if(!receipts(db,transferId).receipt)fail("ARTIFACT_INCOMPLETE","先收齐并封存产物");
  const source=workspaceRepositorySource(db,{mappingId:a.mapping_id,baseCommit:a.base_commit}),g=repositoryReader({root:source.root,git:source.git}),baseline=g.snapshot({commit:a.base_commit,consume(){}});g.verify();
  if(baseline.tree!==source.base_tree||h.manifest.repo_id!==a.repository.repo_id)fail("BASE_MISMATCH","接收端批准基线已变化");
  verifyGitPackage(payload(db,t),{manifest:h.manifest,manifestDigest:h.manifest_digest,baseline,allowedPaths:a.repository.allowed_paths});
- return unit(db,()=>{incoming(db,null,transferId);target(db,t.result_id);saveReceipt(db,t,receiptFor(db,t,"artifact_content_verified",a.mapping_id));return artifactState(db,transferId);});
+ return unit(db,()=>{authorize();incoming(db,null,transferId);target(db,t.result_id);saveReceipt(db,t,receiptFor(db,t,"artifact_content_verified",a.mapping_id));return artifactState(db,transferId);});
 }
 /** Current local receiving authority, without rereading payload bytes on every heartbeat. */
 export function verifiedArtifactContext(db,{transferId}){const t=incoming(db,null,transferId),a=receipts(db,transferId),dest=target(db,t.result_id);if(!a.verification)fail("ARTIFACT_UNVERIFIED","实际内容尚未经本机核验");if(a.verification.mapping_id!==dest.mapping_id)fail("ARTIFACT_MISMATCH","验证记录的本机仓库不同");return {header:JSON.parse(t.header_json),header_digest:t.header_digest,mapping_id:dest.mapping_id,accepted:false};}
@@ -130,7 +130,8 @@ export function artifactChunk(db,{transferId,index}){
  const t=row(db,transferId);pending(db,t.result_id,"target");if(t.side!=="target"||!Number.isSafeInteger(index)||index<0||index>=Math.ceil(t.payload_bytes/CHUNK_BYTES))fail("BAD_INPUT","发送分块位置无效",400);
  const bytes=Buffer.from(db.prepare("SELECT substr(payload,?,?) content FROM artifact_transfers WHERE transfer_id=?").get(index*CHUNK_BYTES+1,CHUNK_BYTES,transferId).content);if(bytes.length!==Math.min(CHUNK_BYTES,t.payload_bytes-index*CHUNK_BYTES))fail("ARTIFACT_CORRUPT","发送端分块存储不完整");return {transfer_id:transferId,header_digest:t.header_digest,chunk_index:index,sha256:contentHash(bytes),content:bytes.toString("base64")};
 }
-export function recordArtifactProgress(db,{transferId,response}){return unit(db,()=>{
+export function recordArtifactProgress(db,{transferId,response,authorize=()=>{}}){return unit(db,()=>{
+ authorize();
  const t=row(db,transferId);pending(db,t.result_id,"target");if(t.side!=="target")fail("FORBIDDEN","仅发送端记录远端回执",403);
  exact(response,["transfer_id","result_id","header_digest","state","next_chunk","received_bytes","receipt","verification","accepted"]);
  if(response.transfer_id!==transferId||response.result_id!==t.result_id||response.header_digest!==t.header_digest||response.accepted!==false||!["receiving","received","content_verified","cancel_pending","rejected"].includes(response.state)||!Number.isSafeInteger(response.next_chunk)||response.next_chunk<0||!Number.isSafeInteger(response.received_bytes)||response.received_bytes!==Math.min(response.next_chunk*CHUNK_BYTES,t.payload_bytes)||response.next_chunk>Math.ceil(t.payload_bytes/CHUNK_BYTES))fail("RECEIPT_MISMATCH","远端分块进度不匹配");

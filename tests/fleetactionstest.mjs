@@ -331,3 +331,13 @@ test("registrar observation discards arbitrary response fields and rejects chang
  mode="identity";const sent=action(f.left,"refresh_registration",{id:"demo"});await f.left.tick();assert.deepEqual(f.a.db.prepare("SELECT * FROM fleet_registrar_observations").get(),before);
  assert.equal(f.a.db.prepare("SELECT last_error_code FROM fleet_operator_actions WHERE action_id=?").get(sent.action_id).last_error_code,"GRAPH_MISMATCH");
 });
+
+test("panel delivery configuration is explicitly opt-in and malformed configuration cannot disable its checks silently",async()=>{
+ const n=node(),c=openFleetActions(n.db,{config:n.config});controllers.push(c);
+ assert.equal(c.catalog("demo").delivery.enabled,false);
+ assert.throws(()=>c.enqueue({action_id:randomUUID(),project_id:"demo",command:"run_verification",arguments:{id:randomUUID()}}),{code:"DELIVERY_NOT_CONFIGURED"});
+ for(const delivery of [null,false,{}, {approval_file:"relative",receivers:[],verification_profiles:[]}]){
+  assert.throws(()=>openFleetActions(n.db,{config:{...n.config,delivery}}),{code:"BAD_INPUT"});
+ }
+ assert.equal(n.db.prepare("SELECT count(*) n FROM fleet_operator_actions").get().n,0);
+});

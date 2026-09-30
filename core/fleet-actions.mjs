@@ -14,6 +14,7 @@ import {migrateResults,listResults,resultState} from "./federation/results.mjs";
 import {deliverResult} from "./federation/result-client.mjs";
 import {listBindings,bindingState} from "./federation/bindings.mjs";
 import {BINDING_LOCAL,BINDING_NETWORK,migrateFleetBindings,fleetTopology,fleetBindingDraft,prepareFleetBinding,fleetBindingTransport,deliverFleetBinding} from "./fleet-binding-actions.mjs";
+import {DELIVERY_COMMANDS,openFleetDelivery} from "./fleet-delivery-actions.mjs";
 const LOCAL=new Set(["create_delegation","decide_delegation","request_cancellation","progress_cancellation","prepare_result","reject_result","release_delegation","decline_binding_proposal"]);
 const NETWORK={...BINDING_NETWORK,resend_delegation:["delegation","offer"],poll_delegation:["delegation","status"],resend_cancellation:["cancellation","send"],poll_cancellation:["cancellation","poll"],resend_result:["result","send"],poll_result:["result","poll"]};
 const fail=(code,message,status=409)=>{throw new PeerError(code,message,status);};
@@ -23,7 +24,7 @@ function unit(db,fn){if(!db.isTransaction)return atomic(db,fn);db.exec("SAVEPOIN
 function file(path){if(typeof path!=="string"||!isAbsolute(path))fail("BAD_INPUT","本机配置路径必须是绝对路径",400);return realpathSync(path);}
 export function loadFleetActionsConfig(path){path=file(path);if(statSync(path).size>65536)fail("BAD_INPUT","操作配置超过 64 KiB",400);try{return JSON.parse(readFileSync(path,"utf8"));}catch{fail("BAD_INPUT","操作配置须为 JSON",400);}}
 function normalizeConfig(c){
- exact(c,["format","node_id","node_epoch","principal_file","peers"],"fleet_actions_config");
+ exact(c,["format","node_id","node_epoch","principal_file","peers",...(Object.hasOwn(c??{},"delivery")?["delivery"]:[])],"fleet_actions_config");
  if(c.format!=="ai-fleet-actions/v1")fail("BAD_INPUT","操作配置版本无效",400);
  uuid(c.node_id,"node_id");uuid(c.node_epoch,"node_epoch");
  if(!Array.isArray(c.peers)||c.peers.length>64)fail("BAD_INPUT","最多配置 64 个对端",400);
@@ -38,10 +39,10 @@ function summary(state){
  const receipt=state.receipt??null;
  return {state:state.state??receipt?.state??(state.released===true?"released":receipt?.kind==="cancel_stopped"?"stopped":receipt?.kind==="cancel_received"?"received":state.decision?"decision_recorded":"prepared"),
   delegation_id:state.delegation_id??state.offer?.delegation_id??null,relation_id:state.relation_id??state.body?.relation?.relation_id??receipt?.relation_id??null,
-  result_id:state.result_id??state.body?.result_id??null,target_task_uid:receipt?.target_task_uid??null,
+  result_id:state.result_id??state.body?.result_id??null,transfer_id:state.transfer_id??null,verification_id:state.verification_id??null,checks_passed:state.checks_passed??null,target_task_uid:receipt?.target_task_uid??null,
   stopped:state.stopped===true||receipt?.kind==="cancel_stopped",blocker_count:state.blocker_count??state.blockers?.length??0,dispatch_started:false};
 }
-export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
+export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now,sourceGate}){
  const c=normalizeConfig(config),controller=new AbortController();let closed=false,running=null;
  function principal(){
   if(closed)fail("ACTIONS_CLOSED","操作服务已停止");
@@ -51,7 +52,7 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   if(p.role.policy.kind!=="coordinate"||p.run_id)fail("FORBIDDEN","面板操作需要独立协调身份",403);
   return {p,auth,credential};
  }
- const initial=principal();
+ const initial=principal(),delivery=openFleetDelivery(db,{config:c.delivery,sourceGate});
  migrateDelegation(db);migrateCancellations(db);migrateResults(db);migrateFleetBindings(db);
  atomic(db,()=>{
   db.exec("CREATE TABLE IF NOT EXISTS fleet_operator_actions(action_id TEXT PRIMARY KEY,node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,principal_id TEXT NOT NULL,credential_version INTEGER NOT NULL,role_version INTEGER NOT NULL,project_id TEXT NOT NULL,command TEXT NOT NULL,input_digest TEXT NOT NULL,transport_json TEXT,summary_json TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('pending','applied','acknowledged','retry_pending','blocked')),attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at INTEGER NOT NULL DEFAULT 0,last_error_code TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)");
@@ -82,17 +83,28 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   exact(input,["action_id","project_id","command","arguments"],"fleet_action");uuid(input.action_id,"action_id");names([input.project_id],"project_id",null,1);
   const context=principal(),{p,credential}=context;
   if(!p.projects.includes(input.project_id))fail("FORBIDDEN","协调身份未获准操作该项目",403);
-  if(!LOCAL.has(input.command)&&!BINDING_LOCAL.has(input.command)&&!Object.hasOwn(NETWORK,input.command))fail("BAD_INPUT","面板操作不在允许列表",400);
+  if(input.command!=="resume_delivery"&&!LOCAL.has(input.command)&&!BINDING_LOCAL.has(input.command)&&!DELIVERY_COMMANDS.has(input.command)&&!Object.hasOwn(NETWORK,input.command))fail("BAD_INPUT","面板操作不在允许列表",400);
   const requestHash=digest({project_id:input.project_id,command:input.command,arguments:input.arguments}),old=db.prepare("SELECT * FROM fleet_operator_actions WHERE action_id=?").get(input.action_id);
   if(old){authorized(old,context);if(old.input_digest!==requestHash)fail("REQUEST_CONFLICT","同一操作 ID 的内容不能改变");return publicRow(old);}
   // Repeated create from another tab keeps the same delegation, even with a new click ID.
-  if(input.command==="create_delegation"){
-   const prior=db.prepare("SELECT * FROM fleet_operator_actions WHERE principal_id=? AND node_id=? AND node_epoch=? AND command='create_delegation' AND input_digest=?").get(p.principal_id,c.node_id,c.node_epoch,requestHash);
+  if(["create_delegation","prepare_artifact","prepare_verification"].includes(input.command)){
+   const prior=db.prepare("SELECT * FROM fleet_operator_actions WHERE principal_id=? AND node_id=? AND node_epoch=? AND command=? AND input_digest=?").get(p.principal_id,c.node_id,c.node_epoch,input.command,requestHash);
    if(prior){authorized(prior,context);return publicRow(prior);}
   }
   if(db.prepare("SELECT count(*) n FROM fleet_operator_actions").get().n>=MAX_ACTIONS)fail("QUEUE_LIMIT","操作历史达到上限，需按保留规程处理");
   let v,binding=null,mode=null;
-  if(BINDING_LOCAL.has(input.command)){
+  if(input.command==="resume_delivery"){
+   exact(input.arguments,["id"],"resume_delivery");uuid(input.arguments.id,"id");
+   const original=db.prepare("SELECT * FROM fleet_operator_actions WHERE action_id=?").get(input.arguments.id);
+   if(!original||original.project_id!==input.project_id||!original.transport_json||JSON.parse(original.transport_json).kind!=="delivery")fail("NOT_FOUND","没有可恢复的交付操作",404);
+   authorized(original,context);if(original.state!=="blocked")fail("ACTION_NOT_BLOCKED","仅恢复已受阻的原交付请求");
+   if(!delivery)fail("DELIVERY_NOT_CONFIGURED","交付配置已关闭");
+   db.prepare("UPDATE fleet_operator_actions SET state=\'pending\',next_attempt_at=0,last_error_code=NULL,updated_at=? WHERE action_id=?").run(new Date(now()).toISOString(),original.action_id);v={state:"retry_scheduled"};
+  }else if(DELIVERY_COMMANDS.has(input.command)){
+   if(!delivery)fail("DELIVERY_NOT_CONFIGURED","尚未配置本机交付与验证");
+   binding=delivery.prepare({command:input.command,args:input.arguments,project:input.project_id,requestId:input.action_id});
+   if(binding.remote)route(binding.node_id,binding.node_epoch,input.project_id);v={state:"queued"};
+  }else if(BINDING_LOCAL.has(input.command)){
    const prepared=prepareFleetBinding(db,{command:input.command,args:input.arguments,project:input.project_id,requestId:input.action_id,auth:context.auth});
    v=prepared.v;mode=prepared.mode;({binding}=transport(prepared.kind,prepared.id,input.project_id,context));
   }else if(LOCAL.has(input.command)){
@@ -125,11 +137,12 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   let binding,context;
   try{context=authorized(row);binding=JSON.parse(row.transport_json);const localRegistrar=binding.node_id===c.node_id&&["registration","topology","binding"].includes(binding.kind);
    if(localRegistrar&&binding.node_epoch!==c.node_epoch)fail("EPOCH_CHANGED","登记节点代次已变化");
-   const peer=localRegistrar?null:route(binding.node_id,binding.node_epoch,row.project_id);
+   const localDelivery=binding.kind==="delivery"&&!binding.remote;
+   const peer=localRegistrar||localDelivery?null:route(binding.node_id,binding.node_epoch,row.project_id);
    const guardedFetch=(...args)=>{authorized(row);return fetchImpl(...args);};
    const options={url:peer?.url,credentialFile:peer?.credential_file,fetchImpl:guardedFetch,signal:controller.signal,mode:binding.mode};
-   const v=await (["registration","topology","binding","binding_message"].includes(binding.kind)?deliverFleetBinding(db,{binding,project:row.project_id,options,authorize:()=>authorized(row),now}):binding.kind==="delegation"?deliverIntent(db,{...options,delegationId:binding.id}):binding.kind==="cancellation"?deliverCancellation(db,{...options,relationId:binding.id}):deliverResult(db,{...options,resultId:binding.id}));
-   const state=["acknowledged","applied","cancelled","confirmed","completed"].includes(v.delivery_state)?"acknowledged":v.delivery_state==="retry_pending"?"retry_pending":"blocked";
+   const v=await (binding.kind==="delivery"?(delivery?delivery.execute(binding,{project:row.project_id,options,authorize:()=>authorized(row)}):fail("DELIVERY_NOT_CONFIGURED","交付配置已关闭")):["registration","topology","binding","binding_message"].includes(binding.kind)?deliverFleetBinding(db,{binding,project:row.project_id,options,authorize:()=>authorized(row),now}):binding.kind==="delegation"?deliverIntent(db,{...options,delegationId:binding.id}):binding.kind==="cancellation"?deliverCancellation(db,{...options,relationId:binding.id}):deliverResult(db,{...options,resultId:binding.id}));
+   const state=binding.kind==="delivery"&&v.delivery_state==="applied"?"applied":["acknowledged","applied","cancelled","confirmed","completed"].includes(v.delivery_state)?"acknowledged":v.delivery_state==="retry_pending"?"retry_pending":"blocked";
    const code=v.error_code??v.last_error_code??null;
    if(code!==null&&!/^[A-Z][A-Z0-9_]{0,63}$/.test(code))fail("BAD_RESPONSE","对端错误标识无效");
    atomic(db,()=>db.prepare("UPDATE fleet_operator_actions SET state=?,summary_json=?,last_error_code=?,next_attempt_at=?,updated_at=? WHERE action_id=?").run(state,canonical(summary(v)),state==="acknowledged"?null:code,now()+Math.min(30000,1000*2**Math.min(row.attempts,5)),new Date(now()).toISOString(),row.action_id));
@@ -187,7 +200,8 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now}){
   // Global ordering and cap, rather than 100 per project.
   const rows=db.prepare("SELECT * FROM fleet_operator_actions WHERE principal_id=? AND node_id=? AND node_epoch=? AND project_id IN("+selected.map(()=>"?").join(",")+") ORDER BY created_at DESC,action_id LIMIT 101").all(context.p.principal_id,c.node_id,c.node_epoch,...selected);
   collect("actions",rows.map(publicRow));
-  return {enabled:true,node_id:c.node_id,node_epoch:c.node_epoch,projects,peers:c.peers.filter(p=>p.projects.some(x=>selected.includes(x))).map(p=>({node_id:p.node_id,node_epoch:p.node_epoch,projects:p.projects.filter(x=>selected.includes(x))})),...groups,truncated,limit:100};
+  const deliveryCatalog=delivery?delivery.catalog(selected):{enabled:false};truncated=truncated||deliveryCatalog.truncated===true;
+  return {enabled:true,delivery:deliveryCatalog,node_id:c.node_id,node_epoch:c.node_epoch,projects,peers:c.peers.filter(p=>p.projects.some(x=>selected.includes(x))).map(p=>({node_id:p.node_id,node_epoch:p.node_epoch,projects:p.projects.filter(x=>selected.includes(x))})),...groups,truncated,limit:100};
  }
  return {enqueue,tick,catalog,async close(){closed=true;controller.abort();await running?.catch(()=>{});},principal_id:initial.p.principal_id};
 }
