@@ -100,7 +100,7 @@
     "executable_digest_rechecked_each_use": true,
     "installed_version_probe": "2.54.0"
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": "completed",
   "complete_phase_gates": 0,
   "total_phase_gates": 12,
   "real_provider_calls": {
@@ -122,5 +122,109 @@
     "scope": "staged diff",
     "exit_code": 0,
     "findings": 0
+  },
+  "exact_commit_ci": {
+    "commit": "dafddec6bbb7899b67e1ed49ef8e2be4db4ac0f4",
+    "run_id": 36696304917,
+    "run_url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36696304917",
+    "windows_job_id": 109824988441,
+    "gitleaks_job_id": 109824988103,
+    "status": "completed",
+    "conclusion": "success",
+    "main_pass": 1489,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0,
+    "counts": {
+      "native": [
+        15,
+        14,
+        18,
+        26,
+        20,
+        29,
+        21,
+        19,
+        18,
+        21,
+        26,
+        28,
+        35,
+        40,
+        24,
+        18,
+        24,
+        21,
+        19,
+        4,
+        8,
+        8,
+        10,
+        8,
+        14,
+        32,
+        44,
+        38,
+        22,
+        24
+      ],
+      "classic": [
+        [
+          402,
+          0
+        ],
+        [
+          25,
+          0
+        ],
+        [
+          29,
+          0
+        ],
+        [
+          27,
+          0
+        ],
+        [
+          41,
+          0
+        ],
+        [
+          20,
+          0
+        ],
+        [
+          57,
+          0
+        ],
+        [
+          13,
+          0
+        ],
+        [
+          72,
+          0
+        ],
+        [
+          195,
+          0
+        ],
+        [
+          22,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          23,
+          0
+        ]
+      ],
+      "native_total": 648,
+      "classic_total": 931
+    },
+    "additional_checks": "codex-selftest 20, prompt-selftest 57, verify_page 13; gates_lib and health alarm steps succeeded without numeric summaries"
   }
 }

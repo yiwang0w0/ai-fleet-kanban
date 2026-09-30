@@ -1,4 +1,4 @@
-# GLOSSARY — frozen at v0.1 (operator ruling R2, 2026-09-02)
+# GLOSSARY — machine terms frozen since v0.1 (operator ruling R2, 2026-09-02)
 
 The freeze rule: **renaming any `machine` term below is a breaking change** from
 v0.1 on — these are wire values, JSON keys, table/column names, env names and exit
@@ -6,9 +6,11 @@ codes that other people's configs, scripts and stored databases will depend on.
 `display` wordings (Chinese UI strings) may evolve, but each must keep the same
 referent — never reuse a listed word for a different concept.
 
-Every entry was grep-verified against the code at freeze time; nothing here is
-aspirational. Where a term is deliberately maintained in TWO places (noted below),
-a change must land in both or the harnesses go red.
+The original entries describe their named release. Additive contracts for the
+unreleased 0.24 development line are recorded below with owning objects and
+implementation links; they do not rename the frozen originals. Status/waiting
+labels have one source since v0.14.1. Migration is documented in
+[federation/migration-0.24.md](federation/migration-0.24.md).
 
 ## Status machine
 
@@ -71,7 +73,7 @@ a change must land in both or the harnesses go red.
 | `stop_reason` = `stopped-by-user` / `stopped-with-board` / `crash` / `exit-normal` | machine | recorded by the stop's INITIATOR before the tree kill; only `crash` triggers backoff restart |
 | 用户停止 / 随看板停止 / 崩溃 code=N / 正常结束 / 启动被拒绝 code=3 | display | `stopText` wordings (single mapping site in the server; the panel maps nothing) |
 | exit code `3` (`REFUSED_EXIT` js / `EXIT_REFUSED` py) | machine | a gate refusal — deterministic, never restarted, **paired across the two languages**: change one alone and refusals silently degrade to crashes |
-| error codes `NOT_FOUND` `CONFLICT` `BAD_INPUT` `INTERNAL` → 404/409/400/500 | machine | the whole error taxonomy; unclassified falls to 400 `typed:false` |
+| error codes `NOT_FOUND` `CONFLICT` `BAD_INPUT` `INTERNAL` → 404/409/400/500 | machine | the original board error taxonomy; unclassified falls to 400 `typed:false`. Peer/broker protocols have additional typed errors (see their qualified contracts below) |
 
 ## Handoff / ruling package
 
@@ -258,3 +260,112 @@ CLI — process supervision, routing, rulings — which the CLI has no opinion a
    though their content is generalized beyond SQL.
 
 面板视觉(颜色/字号/间距/圆角/焦点规则)的单一来源是 [`style-guide.md`](style-guide.md);CSS 只引用 token,不散写数值。
+
+## Federation contracts (0.24 development)
+
+These are implemented machine terms in `0.24.0-dev.1`, not physical fleet or
+provider acceptance claims. The [migration guide](federation/migration-0.24.md)
+covers intentional incompatibilities. Component schema numbers, package version,
+worker protocol, peer protocol and MCP protocol versions are independent.
+
+### Role domains: qualify the containing object
+
+| qualified term | allowed values / meaning | source |
+|---|---|---|
+| `fleet.config.json: lines[].role.kind` | `implement` / `review`; legacy line identity, still the original closed domain | `core/server.mjs` line-role validation |
+| `fleet.config.json: lines[].role.tools` | `write` / `read-only`; legacy loop tool profile | `core/server.mjs`, `loops/worker_loop.py` |
+| `broker_roles.policy_json.kind` (role registration JSON `kind`) | `coordinate` / `implement` / `review` / `observe`; local MCP broker policy, not a line-role extension | `core/mcp/policy.mjs: ROLE_KINDS` |
+| broker policy `role_id / projects / enabled / priority / limits` | registered role identity, project allowlist, availability, deterministic selection priority and local limits | [MCP](federation/mcp.md) |
+| broker policy `runtime / model / effort` | execution roles declare `claude` / `codex` / `zcode` and explicit model/effort; non-execution roles use null | `rolePolicy` |
+| broker policy `tools` | `read-only` / `write`; review/observe must be read-only; not an OS ACL proof | `rolePolicy` |
+| broker policy `capabilities` | supported profiles `board-tools` / `workspace-files`; implement/review selects exactly one, never an arbitrary skill or shell permission | `EXECUTION_CAPABILITIES`, [adapters](federation/adapters.md) |
+| broker `version / policy_digest` | stored policy version and canonical digest; registration updates require the observed version and invalidate old principals/dispatches | `getRole / putRole` |
+
+Both objects serialize a key named `kind`. They are separate qualified domains;
+there is no automatic conversion, union, or privilege upgrade between them.
+Unknown or damaged stored broker policies fail validation; local `mcp-admin roles`
+reports the version for an explicit administrator repair.
+
+### Identity, task versions and runs
+
+| machine term | meaning / boundary | source |
+|---|---|---|
+| `board_node.node_id`, `display_name`, `sync_epoch` | stable node UUID, renameable display label, durable recovery generation; same display names do not merge identities | [identity](federation/identity.md), [recovery](federation/recovery.md) |
+| `BOARD_NODE_NAME` | first-initialization display name only; later env changes do not rename stored identity | `core/store.js` |
+| `task_uid` | `<node_id>/<task_uuid>`; global task identity; existing local numeric `id` remains local | `core/store.js` |
+| `owner_node_id` | immutable owner of the local task; not inferred from current hostname, worker or connection | `core/store.js` |
+| `aggregate_version` / HTTP `expected_version` / CLI `--version` | stored semantic task version / the caller's observed version; stale control writes refuse, values may jump | [versions](federation/versions.md) |
+| `worker_protocol_version` | board worker write protocol, currently 2; worker-token claim requires it | [runs](federation/runs.md) |
+| `agent_instance_id` | per-process lowercase UUID v4 required for worker-token claims; not proof of a trusted process | `core/store.js: UUID_RE` |
+| `run_id`, `task_runs` | one claim's execution identity and immutable identity/policy history; attempts within that claim retain the run | [runs](federation/runs.md) |
+| `parent_run_id` | worker-created child must bind to its original active parent execution | `core/server.mjs` |
+| `executor_node_id / worker / role_id / runtime` on a run | execution-node identity, worker slot, role and declared runtime; distinct from owner | `core/store.js` |
+| run `policy_json / policy_sha256` | claim-time policy snapshot and digest; legacy `enforcement: unattested` is not an isolation attestation | [runs](federation/runs.md) |
+| `tree_mode` | `legacy` / `hierarchical`; existing two-level creation or explicit multi-level tree, no silent conversion | [trees](federation/trees.md), `core/task_tree.js` |
+| `parent_uid` | global parent reference in shared projections/topology; separate from legacy local numeric parent ID | [topology](federation/topology.md) |
+| `board_restore_hold`, `.incomplete` | quarantined backup/restore or unfinished filesystem work; migration success does not authorize activation | [backup](federation/backup.md) |
+
+### Peer authentication, replication and recovery
+
+| machine term | meaning / boundary | source |
+|---|---|---|
+| `peer_node_id / peer_epoch / credential_version` | credential-bound caller identity, generation and local grant version | [peers](federation/peers.md), `core/federation/peers.mjs` |
+| peer `scopes / projects`, `Authorization: Bearer` | receiver-issued scoped access; separate from `X-Board-Token`; IP/name/forwarding headers never identify a peer | `core/federation/protocol.mjs: SCOPES` |
+| hello `protocol.min / protocol.max / required_capabilities / required_extensions / extensions` | negotiated peer wire compatibility; optional extension data does not grant permissions | `core/federation/protocol.mjs: PROTOCOL / CAPABILITIES` |
+| `origin_node_id / origin_epoch / project_id / seq` | stream identity and sequence, scoped by node + generation + project | [sync](federation/sync.md) |
+| `event_id` | idempotent incoming event identity within its source node/epoch; another source cannot reserve it globally | `federation_inbox`, sync schema 4 |
+| `federation_outbox / federation_deliveries` | durable outgoing projections and per-peer delivery/ACK state | `core/federation/sync-store.mjs` |
+| `federation_inbox / federation_cursors / federation_replicas` | received events, durable progress and read-only remote tasks; never the local claim queue | `core/federation/sync-store.mjs` |
+| replica `read_only / source_epoch / source_seq / received_at / last_sync_at` | provenance and last observed state, not a claim that the source is currently online | [sync](federation/sync.md) |
+| `federation_quarantine` | rejected/inconsistent incoming data retained for diagnosis, not silently applied | `core/federation/sync-store.mjs` |
+| `snapshot_id`, `federation_snapshots / federation_snapshot_staging` | frozen authorized projection and resumable staged replacement | [snapshots](federation/snapshots.md) |
+| `federation_retention.floor_seq` | oldest available incremental history boundary; older receivers need approved snapshot recovery | [snapshots](federation/snapshots.md) |
+| source epoch recovery | explicit reviewed cutover to a new generation, not a lower-sequence overwrite or automatic ownership transfer | [source-recovery](federation/source-recovery.md) |
+
+Current peer protocol is 1. Supported capability values are `node-identity-v1`,
+`peer-health-v1`, `task-projection-sync-v1`, `task-snapshot-v1`,
+`source-epoch-recovery-v1`, `delegation-intents-v1`, `project-relations-v1`,
+`delegation-bindings-v1`, `delegation-cancellation-v1`, `delegation-results-v1`,
+`artifact-transfer-v1`, `delegation-completion-v1`. Required unknown values
+refuse; supported capability names do not grant their corresponding scopes.
+
+### MCP dispatch and execution
+
+| machine term | meaning / boundary | source |
+|---|---|---|
+| `principal_id / node_epoch / role_version` | local broker credential principal, issuing node generation and frozen policy version | `core/mcp/policy.mjs` |
+| principal `agent_instance_id / run_id` | execution credential is bound to one task execution, not just a role name | [MCP](federation/mcp.md) |
+| MCP `request_id` | mutation UUID; same principal/id/tool/arguments returns the original receipt, changed content conflicts | `broker_requests` |
+| `assignment_id` | deterministic route request; `waiting_executor` means selected but not launched | `broker_assignments` |
+| `dispatch_id` | local prepared execution binding task, route, role, source code and quota | [dispatch](federation/dispatch.md) |
+| dispatch `phase` | `prepared / launch_committed / settled / interrupted / abandoned`; status alone never authorizes another process launch | `core/execution/dispatch.mjs` |
+| `quota_id / execution_mode / used` | local launch allowance; a committed launch consumes one even if process startup fails; not token or dollar usage | [dispatch](federation/dispatch.md) |
+| `launch_permit` | returned only to the transaction that newly consumes the one-use launch permission; ordinary status returns false | `authorizeLaunch` |
+| `launch_digest / observation_digest` | bound startup intent and verified terminal observation; neither substitutes for human acceptance | `broker_execution_records` |
+| journal version 2 / dispatch schema 3 | per-launch local HMAC authenticates recovery observations; same-user access to its DB key remains a trust boundary | `core/execution/dispatch.mjs` |
+| `real_model_call_confirmed` | reserved confirmation field currently returned as false; local process success does not confirm a real model call; unknown usage remains unknown | [execution](federation/execution.md) |
+
+### Delegation, artifacts and completion
+
+| machine term | meaning / boundary | source |
+|---|---|---|
+| `delegation_id`, outgoing/incoming intents | bilateral fixed task contract; recipient creates its own owned execution task, not a writeable copy of the source card | [delegation](federation/delegation.md) |
+| `relation_graphs / relation_edges / relation_proposals / relation_approvals` | project registrar's versioned cross-node task graph and endpoint approvals | [relations](federation/relations.md) |
+| `placement_pending` | local parent/dependency change awaiting matching registrar commitment | [topology](federation/topology.md) |
+| `relation_id`, `delegation_bindings` | source/target endpoints tied to the accepted delegation and registrar relation | [bindings](federation/bindings.md) |
+| cancellation request / stop receipt | durable intent to stop versus observed termination; receipt delivery alone does not prove a process stopped | [cancellation](federation/cancellation.md) |
+| result candidate / rejection / rework | sealed delivery and source response; candidate arrival is not acceptance | [results](federation/results.md) |
+| `repo_id / mapping_id / base_commit / object_format` | authorized local repository mapping and approved immutable Git baseline; SHA-1/SHA-256 IDs retain their format | [repositories](federation/repositories.md) |
+| `pool_id / allow_full_history_copy` | independently registered task repository pool with explicit permission to copy full history | [workspaces](federation/workspaces.md) |
+| `workspace_id / dispatch_id / write_paths` | one independent task checkout bound to one dispatch and approved path prefixes | `task_workspaces` |
+| `workspace_sessions.workspace_id / revision` and file versions/digests | broker-mediated file access tied to a run; stale edits refuse | [workspace-files](federation/workspace-files.md) |
+| artifact manifest / Git package / chunk / seal | content-addressed transfer, complete Git tree validation, resumable chunks and explicit final verification | [artifact-transfer](federation/artifact-transfer.md) |
+| verification workspace / check receipt | independent source-side checks against bound candidate bytes, not a worker's self-reported pass | [verification](federation/verification.md) |
+| integration / ref CAS | source update requires the recorded old Git ref and verified target commit | [integration](federation/integration.md) |
+| completion contract / readiness / settlement | source acceptance, target readiness and registrar confirmation agree before local closing and parent re-review | [completion](federation/completion.md) |
+
+Each linked contract names its own errors and bounds. Peer/broker errors such as
+`UNAUTHENTICATED`, `FORBIDDEN`, `SCHEMA_INCOMPATIBLE`, `POLICY_INVALID` and
+`REQUEST_CONFLICT` extend those surfaces; they do not make UUIDs into secrets or
+turn failure into automatic retries. Full phase and real-provider evidence
+remains in [PROGRESS](federation/PROGRESS.md).

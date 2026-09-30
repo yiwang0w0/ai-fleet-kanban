@@ -8,14 +8,17 @@ believe is exploitable. You can expect an acknowledgement within a week.
 
 ## What this system trusts, and what it refuses to
 
-The threat model in one paragraph: the board supervises **agent processes that
-write code**, so the dangerous inputs are not network packets — they are card
-text, agent output, and the operator's own configuration. The standing defenses,
-each born from a named incident (see `docs/INCIDENTS.md`):
+The board supervises **agent processes that write code**. Untrusted inputs include
+card text, agent output, configuration, network requests and transferred Git
+objects. The 0.24 development branch adds separately authenticated peer and MCP
+surfaces described below. The original single-node defenses follow, each born
+from a named incident (see `docs/INCIDENTS.md`):
 
-- **Loopback only.** The server binds `127.0.0.1` and refuses to listen wider.
-  There is no auth story for exposure beyond the machine; do not reverse-proxy
-  the board onto a network. Writes require the `X-Board-Token` header.
+- **Local board UI/API only.** `core/server.mjs` binds `127.0.0.1` and refuses
+  to listen wider. Do not reverse-proxy this UI/API onto the tailnet or public
+  network. Its writes require `X-Board-Token`; its reads retain the local trust
+  boundary described below. The separate peer gateway is the only planned
+  tailnet-facing surface.
 - **Three credential classes** (v0.2, INCIDENT-12: an agent granted the board
   folder read the token and approved its own card). `board_token` = operator,
   full power; `worker_token` = execution face only (a worker compromised through
@@ -30,7 +33,7 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   (`--disallowedTools`, v0.17.0). Same for the registry hole: a worker that could
   edit `verify_registry.json` could nominate any command for the loop to run — the
   Edit deny closes it, measured.
-  **Measured again 2026-09-28 on Linux (Claude Code 2.1.283, 20 controlled calls):**
+  **Historical measurement, not a supported deployment target: 2026-09-28 on Linux (Claude Code 2.1.283, 20 controlled calls):**
   the v0.17.0 spelling was inert on POSIX. A rule path with a single leading slash
   is *project-root-relative* to the CLI; only `//abs/path` is absolute — so
   `Read(/home/…/.data/**)` matched nothing and Read/Edit/Write/Grep all went
@@ -47,7 +50,7 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   under the data dir and goes red on one that is in neither list. `doctor`
   checks the spelling this deployment would emit; the semantics can only be
   measured with a live model call, and the Windows drive-letter form was not
-  re-measured in that run. **The codex seat has no equivalent mechanism**; there
+  re-measured in that run. **The legacy Codex loop has no equivalent path-deny mechanism**; there
   the boundary is the prompt, which is discipline, not structure. On a shared
   machine run the fleet as its own OS user; `doctor` and the server both say
   which case a deployment is in.
@@ -56,10 +59,11 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   could become an executable command line). The gate judges by extension on
   every platform, and the test escape hatch (`WORKER_ALLOW_BATCH_CLI`) logs
   loudly when used.
-- **Workers hold no execution rights.** No Bash tool, no push rights; card-named
+- **Legacy loop tool profile.** The intended profile exposes no Bash or push tool; card-named
   verification runs through a key registry (`verify_registry.json`) — cards
   carry **keys**, never command strings, so a worker that can write files still
-  cannot nominate its own script for execution.
+  cannot nominate its own script for execution through that registry. This
+  statement is about exposed tools, not an OS restriction on the process.
 - **The fleet refuses to run unreviewed governance code.** The revision gate
   pins the gated tree's hash to an operator-blessed value and refuses startup
   from a dirty tree, with a dedicated exit code (3) so refusals are never
@@ -71,9 +75,60 @@ each born from a named incident (see `docs/INCIDENTS.md`):
   fleet config are gitignored; CI runs a full-history gitleaks scan on every
   push.
 
+## Federation and local broker boundaries (0.24 development)
+
+| surface | caller and credential | exposure |
+|---|---|---|
+| original board UI / `/api/*` | local operator/worker/review token classes; original reads remain unauthenticated | loopback only; do not proxy |
+| independent `/peer/v1/*` gateway | receiver-issued bearer bound to peer node, epoch, credential version, scope and project | explicit loopback port; only this port is intended for a Tailscale private HTTPS proxy |
+| `/local/v1/tools/list` and `/local/v1/tools/call` broker | per-principal bearer bound to local node epoch, role version and projects; execution principal also bound to agent/run | loopback only; internal HTTP, not a public MCP transport |
+| `cli/mcp.mjs` | desktop/agent MCP stdio bridge with a restricted credential file | JSON-RPC on stdio; diagnostics on stderr; no database path or operator token given to the bridge |
+
+All peer and broker requests authenticate before lifecycle state is disclosed;
+mutations recheck authorization under their transaction after body upload.
+Revocation, credential rotation, changed role versions and incompatible epochs
+refuse further requests. Peer protocol capability negotiation does not grant
+scopes. Display names, IP addresses, forwarding headers, tool arguments and
+`clientInfo` do not authenticate identities. Remote task projections stay in
+separate tables and cannot enter the local claim queue.
+
+The Tailscale deployment contract has two checks: private HTTPS plus device ACLs
+restrict reachability, and application bearer/project checks restrict actions.
+The gateway receives loopback connections from its proxy, so localhost is not
+proof of a trusted remote peer. Do not expose this through a public tunnel or
+proxy the original board API. Actual two-device routes, ACLs, certificates and
+revocation propagation still require deployment acceptance; current local
+loopback tests do not establish those facts. Anonymous-failure audit/rate limits
+and long-term retention remain review items in [review-fixes](docs/federation/review-fixes.md).
+
+Peer and broker secrets are written to explicitly chosen new credential files;
+the database stores token hashes. Keep these files outside agent-readable work
+repositories, Markdown context exports and Git. Exclusive creation and 0600
+mode do **not** establish a Windows ACL boundary. A same-user process with access
+to the database, HMAC keys or other principals' files can bypass the application
+boundary. Windows user/ACL containment and native CLI ambient configuration
+remain incomplete acceptance work; fixed argv, MCP allowlists, process Job
+termination and prompt rules do not supply a filesystem/network sandbox.
+
+Application resource checks bound request bodies, timeouts, canonical JSON
+depth and authorized tool rates. Artifact readers pin Git, verify object
+addresses and paths, and limit files, batch bytes and total content. Those
+checks do not imply unlimited hostile traffic or retained authorized data is
+safe; receiver storage and authenticated abuse need independent limits.
+
+Restored/cloned databases preserve identity until an explicit recovery flow
+changes epoch; a copy is not a new physical device. Restore holds, credential
+rotation and one-use launch permissions prevent silent resumption in supported
+paths. A locally signed execution journal authenticates a recovery observation
+against its stored key, not a physical stop or an uncompromised OS. Review the
+[migration guide](docs/federation/migration-0.24.md), [peer contract](docs/federation/peers.md),
+[broker contract](docs/federation/mcp.md), and [measured progress](docs/federation/PROGRESS.md)
+before treating this development branch as a deployed fleet.
+
 ## What it deliberately does not defend against
 
-- **Reads are unauthenticated.** Every `GET` answers without a token, by design:
+- **Local board reads are unauthenticated.** The original board UI/API `GET`
+  routes answer without a token, by design; this does not apply to peer or broker:
   loopback means "this machine", and this machine is the operator's trust
   domain. The consequence is worth stating plainly — **any process running as
   any user on the machine can read card faces, evidence text and rulings**,
@@ -96,7 +151,9 @@ exactly the kind of report we want.
 
 ## Supported versions
 
-Pre-1.0: only the latest release line receives fixes.
+Pre-1.0: only the latest release line receives fixes. `0.24.0-dev.1` is an
+unreleased development version; Windows is the only future supported runtime,
+CI and deployment target. Historical Linux measurements above remain historical.
 
 ## Panel accept / restart endpoints (v0.18)
 

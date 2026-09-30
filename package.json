@@ -1,6 +1,6 @@
 {
   "name": "ai-fleet-kanban",
-  "version": "0.23.1",
+  "version": "0.24.0-dev.1",
   "private": true,
   "description": "The acceptance-first kanban for mixed AI fleets.",
   "license": "Apache-2.0",

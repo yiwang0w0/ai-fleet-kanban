@@ -7,15 +7,15 @@
   $P show <id>
   $P create --file payload.json
   $P claim --as alpha                        # pick-a-card claim (routing/locks/deps decided server-side)
-  $P take  <id> --as coord                   # claim a SPECIFIC id (coordinator finishing one card)
-  $P edit  <id> --file payload.json          # rewrite the card face. An in-progress card accepts ONLY a
+  $P take  <id> --as coord --version <aggregate_version>                   # claim a SPECIFIC id (coordinator finishing one card)
+  $P edit  <id> --file payload.json --version <aggregate_version>          # rewrite the card face. An in-progress card accepts ONLY a
                                              #   tail-append to description, invisible to this round's worker
   $P done  <id> --as alpha --run <run_id> --file evidence.md   # -> waiting/review
   $P wait  <id> --as alpha --run <run_id> --file reason.md     # -> waiting/decision (own attempts exhausted)
-  $P approve|reject <id> [--file note.md] [--verify-ok]
-  $P reopen <id> [--line alpha]              # done/waiting -> not_started (attempts + ruling history kept)
-  $P release|hold <id>                       # release to workers / pull back into coordinator staging
-  $P archive <id> [--restore|--force]
+  $P approve|reject <id> [--file note.md] [--verify-ok] --version <aggregate_version>
+  $P reopen <id> [--line alpha] --version <aggregate_version>              # done/waiting -> not_started (attempts + ruling history kept)
+  $P release|hold <id> --version <aggregate_version>                       # release to workers / pull back into coordinator staging
+  $P archive <id> [--restore|--force] --version <aggregate_version>
   $P lines status|start <line|all>|stop <line|all>   # worker-loop supervisor
   $P bless                                   # accept THIS tree: write the gated subtree's hash to
                                              #   <data>/accepted_rev (the revision gate compares against it)
