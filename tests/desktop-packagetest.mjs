@@ -13,14 +13,14 @@ import {migrateBroker,putRole,issuePrincipal,revokePrincipal} from '../core/mcp/
 import {enrollTask} from '../core/mcp/tools.mjs';
 import {listenBroker} from '../core/mcp/gateway.mjs';
 const ROOT=fileURLToPath(new URL('../',import.meta.url)),TMP=mkdtempSync(join(tmpdir(),'fleet-desktop-package-')),PS=join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
-const store=createRequire(import.meta.url)('../core/store.js'),hash=b=>createHash('sha256').update(b).digest('hex');let kit,unpacked,db,server,credential,url,task,principal;
+const store=createRequire(import.meta.url)('../core/store.js'),hash=b=>createHash('sha256').update(b).digest('hex');let kit,unpacked,db,server,credential,url,task,principal,zipMetadata;
 function run(exe,args,input=''){
  return new Promise((resolve,reject)=>{const child=spawn(exe,args,{cwd:TMP,windowsHide:true,stdio:['pipe','pipe','pipe']}),timer=setTimeout(()=>{child.kill();reject(Error('child timed out'));},45000);let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);child.once('error',e=>{clearTimeout(timer);reject(e);});child.once('exit',code=>{clearTimeout(timer);resolve({code,stdout,stderr});});child.stdin.end(input);});
 }
 before(async()=>{
  kit=buildDesktopPackage(join(TMP,'接入 包 & kit'));unpacked=join(TMP,'解包 后 & separate');mkdirSync(unpacked);
- const script='import sys,zipfile,os,json\na,d=sys.argv[1:3]\nwith zipfile.ZipFile(a) as z:\n assert z.testzip() is None\n assert all(os.path.commonpath([d,os.path.abspath(os.path.join(d,n))])==d for n in z.namelist())\n z.extractall(d)\n print(json.dumps(z.namelist()))';
- const extracted=spawnSync(process.env.PYTHON||'python',['-c',script,join(kit.output,kit.archive),unpacked],{encoding:'utf8',windowsHide:true,maxBuffer:1024*1024});assert.equal(extracted.status,0,extracted.stderr);
+ const script='import sys,zipfile,os,json\na,d=sys.argv[1:3]\nwith zipfile.ZipFile(a) as z:\n assert z.testzip() is None\n assert all(os.path.commonpath([d,os.path.abspath(os.path.join(d,n))])==d for n in z.namelist())\n z.extractall(d)\n print(json.dumps([{\"path\":i.filename,\"bytes\":i.file_size,\"method\":i.compress_type,\"date\":i.date_time,\"flags\":i.flag_bits,\"extra\":len(i.extra),\"comment\":len(i.comment)} for i in z.infolist()]))';
+ const extracted=spawnSync(process.env.PYTHON||'python',['-c',script,join(kit.output,kit.archive),unpacked],{encoding:'utf8',windowsHide:true,maxBuffer:1024*1024});assert.equal(extracted.status,0,extracted.stderr);zipMetadata=JSON.parse(extracted.stdout);
  db=new DatabaseSync(join(TMP,'board.db'));store.migrate(db);migrateBroker(db);putRole(db,{role_id:'desktop-observe',kind:'observe',projects:['demo'],capabilities:[],runtime:null,model:null,effort:null,tools:'read-only',priority:10,enabled:true,limits:{max_task_attempts:1,max_open_tasks:10,requests_per_minute:300}});
  const id=store.add(db,{subject:'可查看任务',description:'PRIVATE-BODY-NOT-IN-CHECK-RECEIPT',acceptance:'fixture',treeMode:'hierarchical'});task=store.get(db,id);enrollTask(db,{id,projectId:'demo',workKind:'implement',capabilities:['board-tools'],expectedVersion:task.aggregate_version});
  credential=join(TMP,'观察者 凭据 & local.json');principal=issuePrincipal(db,{roleId:'desktop-observe',projects:['demo'],credentialFile:credential});server=await listenBroker(db,{port:0,boardUrl:'http://127.0.0.1:48319/'});url='http://127.0.0.1:'+server.address().port;
@@ -31,6 +31,38 @@ test('actual MCPB ZIP extracts independently and includes only the declared publ
  const files=JSON.parse(readFileSync(join(unpacked,'FILES.json'),'utf8'));assert.equal(files.files.length,10);assert.equal(existsSync(join(unpacked,'core/mcp/policy.mjs')),false);assert.equal(existsSync(join(unpacked,'core/store.js')),false);assert.equal(existsSync(join(kit.output,'.incomplete')),false);assert.equal(hash(readFileSync(join(kit.output,kit.archive))),kit.sha256);
  for(const f of files.files){const bytes=readFileSync(join(unpacked,f.path));assert.equal(bytes.length,f.bytes);assert.equal(hash(bytes),f.sha256);assert.ok(!f.path.includes('.data'));}
  const manifest=JSON.parse(readFileSync(join(unpacked,'manifest.json'),'utf8'));assert.equal(manifest.server.entry_point,'cli/mcp.mjs');assert.deepEqual(manifest.compatibility.platforms,['win32']);assert.equal(manifest.user_config.credential_file.type,'file');
+});
+
+
+test('ZIP metadata and independent Windows extraction match the staged public snapshot',async()=>{
+ const files=JSON.parse(readFileSync(join(unpacked,'FILES.json'),'utf8')),expected=[...files.files.map(f=>f.path),'FILES.json'].sort();
+ assert.deepEqual(zipMetadata.map(f=>f.path),expected);
+ for(const entry of zipMetadata){assert.equal(entry.method,entry.bytes?8:0);assert.deepEqual(entry.date,[2020,1,1,0,0,0]);assert.equal(entry.flags,0x800);assert.equal(entry.extra,0);assert.equal(entry.comment,0);}
+ const script=join(TMP,'read-archive.ps1'),destination=join(TMP,'Windows 解包 & output');
+ writeFileSync(script,[
+  'param([Parameter(Mandatory=$true)][string]$ArchivePath,[Parameter(Mandatory=$true)][string]$OutputPath)',
+  '$ErrorActionPreference = "Stop"',
+  'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+  '[System.IO.Compression.ZipFile]::ExtractToDirectory($ArchivePath, $OutputPath)',
+  'Write-Output "WINDOWS_ZIP_OK"'
+ ].join('\n')+'\n');
+ const result=await run(PS,['-NoLogo','-NoProfile','-NonInteractive','-File',script,'-ArchivePath',join(kit.output,kit.archive),'-OutputPath',destination]);
+ assert.equal(result.code,0,result.stderr);assert.equal(result.stdout.trim(),'WINDOWS_ZIP_OK');
+ for(const path of expected){
+  const staged=readFileSync(join(kit.output,'bundle',path)),python=readFileSync(join(unpacked,path)),windows=readFileSync(join(destination,path));
+  assert.deepEqual(python,staged,path+' Python bytes');assert.deepEqual(windows,staged,path+' Windows bytes');
+ }
+});
+
+test('building the package requires no PowerShell installation or PATH lookup',()=>{
+ const saved=new Map(['SystemRoot','windir','PATH'].map(key=>[key,process.env[key]]));let isolated;
+ try{
+  process.env.SystemRoot=join(TMP,'unavailable-windows');process.env.windir=process.env.SystemRoot;process.env.PATH='';
+  isolated=buildDesktopPackage(join(TMP,'without shell'));
+ }finally{
+  for(const [key,value] of saved){if(value===undefined)delete process.env[key];else process.env[key]=value;}
+ }
+ assert.equal(isolated.sha256,kit.sha256);assert.equal(existsSync(join(isolated.output,'.incomplete')),false);assert.equal(existsSync(join(TMP,'unavailable-windows')),false);
 });
 
 test('same source produces identical archive and existing output remains untouched',()=>{

@@ -2468,7 +2468,8 @@
         "tests/fleetevidencetest.mjs",
         "docs/federation/context-evidence.md",
         "docs/federation/context-evidence-evidence.json",
-        "tests/contextevidencetest.mjs"
+        "tests/contextevidencetest.mjs",
+        "docs/federation/desktop-package-native-evidence.json"
       ]
     },
     {

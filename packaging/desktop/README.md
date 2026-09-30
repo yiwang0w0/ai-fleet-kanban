@@ -8,7 +8,7 @@
 
     node cli/desktop-package.mjs --output C:/fleet-desktop
 
-构建只使用随仓库提供的公开文件和 Windows ZIP 支持，不需要 npm install。输出目录包含 ai-fleet-board.mcpb、bundle/ 和 RECEIPT.json。这个 README、preflight.ps1 与 cli/ 都位于 bundle/ 内；若只收到 .mcpb，它是 ZIP 格式，解包后直接在包含 manifest.json 的目录运行检查。归档未签名，SHA-256 用于核对传输完整性，不能单独证明发布者身份。
+构建使用 Node.js 24 内置压缩与校验组件生成 ZIP，只打包随仓库提供的公开文件，不启动 PowerShell 压缩进程，不需要 npm install。归档条目按路径排序，时间固定为 2020-01-01；同一 Node 运行时与相同源码重复构建的摘要一致，跨运行时版本仍应核对收到的 RECEIPT.json。输出目录包含 ai-fleet-board.mcpb、bundle/ 和 RECEIPT.json。这个 README、preflight.ps1 与 cli/ 都位于 bundle/ 内；若只收到 .mcpb，它是 ZIP 格式，解包后直接在包含 manifest.json 的目录运行检查。归档未签名，SHA-256 用于核对传输完整性，不能单独证明发布者身份。
 
 ## 包含内容
 
