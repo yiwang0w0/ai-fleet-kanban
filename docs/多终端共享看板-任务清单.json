@@ -1331,7 +1331,7 @@
         "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation",
         "pending": [
           "real provider MCP/tool/config behavior and model availability; Zcode subscription/transport integration",
-          "code-work capability, filesystem containment, stronger POSIX containment and independent G04 acceptance"
+          "code-work capability, Windows filesystem containment, independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1374,10 +1374,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "bounded provider terminal decoders, pinned native process supervision, ordinary descendant cleanup and committed-dispatch fixture integration",
+        "scope": "Zcode 0.16.9 headless stream decoder with prompt/provider/model/turn/summary binding; no-account native NDJSON and startup-failure probes; Windows job fixture cleanup",
         "pending": [
-          "actual provider invocation policies, subscription authentication and Zcode RPC transport",
-          "filesystem containment, stronger POSIX containment and independent G04 acceptance"
+          "supported subscription login, fixed model selection without fallback, actual MCP/tool scope and sealed launch adapter",
+          "Windows filesystem containment, real minimal provider task and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1386,7 +1386,9 @@
         "docs/federation/execution-evidence.json",
         "tests/outputtest.mjs",
         "tests/supervisortest.mjs",
-        "tests/dispatchtest.mjs"
+        "tests/dispatchtest.mjs",
+        "docs/federation/zcode.md",
+        "docs/federation/zcode-evidence.json"
       ]
     },
     {
@@ -1421,7 +1423,7 @@
         "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation",
         "pending": [
           "real provider MCP/tool/config behavior and model availability; Zcode subscription/transport integration",
-          "code-work capability, filesystem containment, stronger POSIX containment and independent G04 acceptance"
+          "code-work capability, Windows filesystem containment, independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1467,7 +1469,7 @@
         "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation",
         "pending": [
           "real provider MCP/tool/config behavior and model availability; Zcode subscription/transport integration",
-          "code-work capability, filesystem containment, stronger POSIX containment and independent G04 acceptance"
+          "code-work capability, Windows filesystem containment, independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,

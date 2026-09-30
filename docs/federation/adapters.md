@@ -2,7 +2,7 @@
 
 本批接通 Claude 2.1.247 和 Codex 0.149.1 的显式本机启动配置、进程监管、一次性额度及持久化回执。入口为 dispatch execute，每次只处理一个已经领取的分派，不扫描队列。配置构造和输出解析均经过夹具测试；尚未用真实供应商完成该通道的模型任务。
 
-当前支持明确的 capabilities: ["board-tools"] 或 ["workspace-files"]。后者通过受限 MCP 文件会话读写 UTF-8 源码并绑定 v2 启动记录；两种配置均关闭原生文件和命令工具，不自动升级为 shell 能力。详见 [文件会话与提交](workspace-files.md)。该配置不宣称实现 OS 文件隔离，也不满足完整 G04。Zcode 暂无启动配置，收到该运行时会明确拒绝。
+当前支持明确的 capabilities: ["board-tools"] 或 ["workspace-files"]。后者通过受限 MCP 文件会话读写 UTF-8 源码并绑定 v2 启动记录；两种配置均关闭原生文件和命令工具，不自动升级为 shell 能力。详见 [文件会话与提交](workspace-files.md)。该配置不宣称实现 OS 文件隔离，也不满足完整 G04。Zcode 已补单次 stream-json 结果合同，见 [接入记录](zcode.md)；其订阅、实际工具策略及启动配置仍未接通，prepareAdapter 收到该运行时仍明确拒绝。
 
 ## 启动配置
 
@@ -72,7 +72,7 @@ execute 只接受 provider 额度。取消、配置篡改、Python 摘要不符�
 
 本机测试覆盖固定配置、秘密环境过滤、工具范围、篡改、路径混用、配置写入回滚、许可/观察原子性、重连补交、预算不重用与历史不可变。端到端 runner 测试故意让 Node 接收不支持的 Claude 参数并退出，验证真实 OS 进程失败路径；它没有启动 Claude、Codex 或其他模型进程。
 
-剩余工作包括真实两种 CLI 的 MCP 初始化与最小任务、Zcode 桌面 OAuth 与受支持非交互接口的对应关系、Zcode 启动/传输合同、代码工作能力及文件隔离、较强 POSIX 约束、完整任务树与独立阶段验收。三种真实调用额度仍各 0/1。
+剩余工作包括真实两种 CLI 的 MCP 初始化与最小任务、Zcode 中国版订阅登录与固定模型/工具启动配置、Windows 文件权限隔离、后台调度和独立阶段验收。三种真实调用额度仍各 0/1。
 
 接口依据为本机固定版本帮助与实现，另参考 Claude 官方 [CLI reference](https://code.claude.com/docs/en/cli-reference)、[Settings reference](https://code.claude.com/docs/en/settings-reference) 及 Codex 官方 [Configuration reference](https://developers.openai.com/codex/config-reference/)。官方文档会变化；升级后不能沿用未核验的版本登记。
 结算成功同时撤销该 run 的临时 MCP 凭据；结算事务失败时撤销也回滚。已结束执行器不能继续用旧身份读取、拆分或交付任务。恢复补交使用本机受控日志，不依赖被撤销的 agent 凭据。

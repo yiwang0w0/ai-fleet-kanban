@@ -159,3 +159,100 @@ test("decoder rejects unsupported or malformed tool bindings instead of silently
  expectedTools.push("Bash");
  d.push(encode([{...init,tools:expectedTools},result]));assert.equal(d.finish({exitCode:0}).diagnostic,"TOOL_SCOPE_MISMATCH");
 });
+// ZCode 0.16.9 headless stream: mapped events followed by a distinct summary.
+// These successful streams are synthetic contract fixtures, not model receipts.
+const prompt="核验本次任务，不执行其他任务。",traceId="trace-fixture",provider="account:bigmodel-individual-coding-plan";
+const headlessOptions={expectedSessionId:null,expectedInputId:null,zcodeTransport:"headless-stream",expectedProvider:provider,expectedModel:"GLM-5.3",expectedPromptSha256:createHash("sha256").update(prompt).digest("hex")};
+const headlessEvent=(type,seq,payload)=>({...envelope(type,seq,payload),traceId,timestamp:1790750000000+seq});
+const headlessEvents=[headlessEvent("turn.started",3,{input:prompt,turnNumber:1}),headlessEvent("session.updated",4,{providerId:provider,modelId:"GLM-5.3",messageCount:2,toolCount:0,iteration:0}),headlessEvent("turn.completed",5,{resultType:"success",response:"中文完成"}),{type:"result",sessionId:sid,turnId:tid,traceId,response:"中文完成",eventCount:3,projection:{status:"completed",turnCount:1,totalTokenCount:14}}];
+const headless=(events=headlessEvents,extra={})=>decode("zcode",events,{...extra,decoder:{...headlessOptions,...extra.decoder}});
+
+test("Zcode headless binds prompt digest and observes its model, terminal and summary",()=>{
+ const out=headless();assert.equal(out.status,"success");assert.equal(out.evidence,"中文完成");assert.equal(out.observed.model,"GLM-5.3");assert.equal(out.observed.session_id,sid);assert.equal(out.observed.turn_id,tid);assert.equal(out.usage,null);assert.equal(out.real_model_call_confirmed,false);
+ const bytes=encode(headlessEvents),chunks=Array.from(bytes,b=>Buffer.from([b]));assert.equal(headless(headlessEvents,{chunks}).status,"success");
+ assert.ok(!JSON.stringify(out).includes(prompt));
+});
+
+test("Zcode headless transport requires explicit digest, provider and model, without RPC input binding",()=>{
+ for(const patch of [{expectedPromptSha256:null},{expectedPromptSha256:"not-sha256"},{expectedProvider:null},{expectedModel:null},{expectedSessionId:sid},{expectedInputId:iid}]){
+  assert.throws(()=>createOutputDecoder("zcode",{...headlessOptions,...patch}),{code:"BAD_BINDING"});
+ }
+ assert.throws(()=>createOutputDecoder("claude",{zcodeTransport:"headless-stream"}),{code:"UNSUPPORTED_BINDING"});
+ assert.throws(()=>createOutputDecoder("zcode",{...options("zcode"),expectedPromptSha256:headlessOptions.expectedPromptSha256}),{code:"UNSUPPORTED_BINDING"});
+ assert.throws(()=>createOutputDecoder("zcode",{...headlessOptions,zcodeTransport:"json"}),{code:"BAD_TRANSPORT"});
+ assert.throws(()=>createOutputDecoder("zcode",{...headlessOptions,expectedTools:["get_task"]}),{code:"UNSUPPORTED_TOOL_BINDING"});
+});
+
+test("Zcode headless cannot substitute a different prompt or control/background turn",()=>{
+ for(const patch of [{input:"other-private-task"},{input:prompt+" "},{input:null},{input:{text:prompt}},{executionKind:"controlOnly"},{inputVisibility:"model-only"},{workflowLaunch:{}},{backgroundSource:"worker"},{automationId:"another-job"},{offPeakTaskId:"background"},{attachments:[{path:"private"}]}]){
+  const out=headless([{...headlessEvents[0],payload:{...headlessEvents[0].payload,...patch}},...headlessEvents.slice(1)]);assert.equal(out.status,"failed");assert.ok(!JSON.stringify(out).includes("other-private-task"));
+ }
+});
+
+test("Zcode headless checks session, turn and trace on intermediate events and summary",()=>{
+ for(const index of [1,2,3])for(const patch of [{sessionId:"other"},{turnId:"other"},{traceId:"other"}]){
+  assert.equal(headless(headlessEvents.map((event,i)=>i===index?{...event,...patch}:event)).status,"failed");
+ }
+ const stream=headlessEvent("model.streaming",5,{kind:"text_delta",delta:"untrusted"});
+ assert.equal(headless([...headlessEvents.slice(0,2),{...stream,turnId:"child"}]).diagnostic,"TURN_MISMATCH");
+});
+
+test("Zcode headless verifies requested provider and model and does not infer a model call from success text",()=>{
+ for(const patch of [{providerId:"account:zai-coding-plan"},{modelId:"fallback-model"},{modelId:null}]){
+  assert.equal(headless(headlessEvents.map((event,i)=>i===1?{...event,payload:{...event.payload,...patch}}:event)).status,"failed");
+ }
+ for(const payload of [{},{modelSelection:{providerId:provider,modelId:"GLM-5.3"}},{providerId:provider,modelId:"GLM-5.3",messageCount:2,toolCount:0}]){
+  assert.equal(headless(headlessEvents.map((event,i)=>i===1?{...event,payload}:event)).diagnostic,"MODEL_NOT_OBSERVED");
+ }
+});
+
+test("Zcode headless requires both terminal and final summary, and forbids conflicting or extra summaries",()=>{
+ assert.equal(headless(headlessEvents.slice(0,3)).diagnostic,"MISSING_SUMMARY");
+ assert.equal(headless([headlessEvents[3]]).diagnostic,"SUMMARY_WITHOUT_TERMINAL");
+ for(const patch of [{response:"different"},{turnResponses:["another result"]},{eventCount:-1},{projection:{}},{projection:null}]){
+  assert.equal(headless(headlessEvents.map((event,i)=>i===3?{...event,...patch}:event)).status,"failed");
+ }
+ assert.equal(headless([...headlessEvents,headlessEvents[3]]).diagnostic,"OUTPUT_AFTER_SUMMARY");
+ assert.equal(headless([...headlessEvents,headlessEvent("session.updated",6,{})]).diagnostic,"OUTPUT_AFTER_SUMMARY");
+});
+
+test("Zcode headless terminal cancellation and errors are never upgraded by summary status",()=>{
+ for(const resultType of ["cancelled","error_max_turns","error_max_budget","error_during_execution","error_max_tool_calls"]){
+  const events=headlessEvents.map((event,i)=>i===2?{...event,payload:{resultType,response:""}}:i===3?{...event,response:""}:event);
+  assert.equal(headless(events).status,resultType==="cancelled"?"cancelled":"failed");
+ }
+ assert.equal(headless(headlessEvents.map((event,i)=>i===2?{...event,payload:{resultType:"future",response:"中文完成"}}:event)).diagnostic,"MALFORMED_TERMINAL");
+});
+
+test("Zcode headless startup failure observed from isolated installed runtime remains failed and sanitized",()=>{
+ // Actual no-account probe emitted a turn.failed before turn.started and exited 1.
+ const event=headlessEvent("turn.failed",1,{error:{type:"unknown_error",code:"CONFIGURATION_ERROR",message:"private-failure-detail",stack:"private-stack"},turnPhase:"model_creation"});
+ const out=headless([event],{exit:{exitCode:1}});assert.equal(out.status,"failed");assert.equal(out.observed.protocol_error,"PROVIDER_STARTUP_FAILED");assert.equal(out.observed.terminal_status,null);assert.ok(!JSON.stringify(out).includes("private-"));assert.equal(out.real_model_call_confirmed,false);
+ const failed=headless([...headlessEvents.slice(0,2),headlessEvent("turn.failed",5,{error:{message:"private-failure-detail"}})],{exit:{exitCode:1}});assert.equal(failed.status,"failed");assert.equal(failed.observed.terminal_status,"failed");assert.ok(!JSON.stringify(failed).includes("private-failure-detail"));
+});
+
+test("Zcode headless sequence gaps, duplicate event IDs and replay are rejected",()=>{
+ for(const patch of [{seq:6},{seq:3},{eventId:headlessEvents[0].eventId},{seq:-1},{eventId:null},{timestamp:"bad"}]){
+  assert.equal(headless(headlessEvents.map((event,i)=>i===1?{...event,...patch}:event)).status,"failed");
+ }
+ assert.equal(headless([headlessEvents[0],...headlessEvents]).diagnostic,"EVENT_SEQUENCE_GAP");
+});
+
+test("Zcode headless refuses second turns, resumed streams and unsupported workflow events",()=>{
+ for(const type of ["turn.started","session.resumed","turn.steerQueued","turn.steerDrained","rewind.triggered","workflow.progress"]){
+  assert.equal(headless([...headlessEvents.slice(0,3),headlessEvent(type,6,{input:prompt})]).status,"failed");
+ }
+ for(const type of ["model.streaming","tool.updated","permission.requested","message.upserted"]){
+  assert.equal(headless([...headlessEvents.slice(0,3),headlessEvent(type,6,{})]).diagnostic,"OUTPUT_OUTSIDE_TURN");
+ }
+});
+
+test("Zcode headless success cannot override nonzero exit, cancellation, timeout or resource limits",()=>{
+ for(const exit of [{exitCode:1},{exitCode:0,signal:"SIGTERM"},{exitCode:0,spawnError:true},{exitCode:0,stopReason:"cancelled"},{exitCode:0,stopReason:"timeout"}])assert.notEqual(headless(headlessEvents,{exit}).status,"success");
+ for(const limits of [{bytes:10},{line:10},{events:2},{evidence:2}])assert.equal(headless(headlessEvents,{decoder:{limits}}).status,"failed");
+});
+
+test("Zcode headless summary event counts and untyped usage are not reinterpreted as billing or proof",()=>{
+ const events=headlessEvents.map((event,i)=>i===3?{...event,eventCount:1,usage:{futureMetric:99},projection:{...event.projection,status:"idle"}}:event);
+ const out=headless(events);assert.equal(out.status,"success");assert.equal(out.usage,null);assert.equal(out.real_model_call_confirmed,false);
+});

@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync} from "node:fs";
@@ -118,4 +119,30 @@ test("the process host rechecks command pins independently before native creatio
  let out="";child.stdout.on("data",b=>out+=b);child.stderr.resume();const closed=new Promise(r=>child.once("close",r));
  child.stdin.end(JSON.stringify({command:command.path,args:[script,"success"],cwd:TMP,env,input:"",pins:[{...command,sha256:"0".repeat(64)}],timeout_ms:3000})+"\n");
  await closed;assert.equal(out.includes('"kind":"started"'),false);assert.equal(JSON.parse(out).kind,"host_error");
+});
+
+// Real Windows jobs with synthetic Zcode streams; no provider is invoked.
+const zcodeScript=join(TMP,"zcode stream fixture.mjs");
+writeFileSync(zcodeScript,`import {spawn} from 'node:child_process';import {writeFileSync} from 'node:fs';
+let input='';for await(const b of process.stdin)input+=b.toString('utf8');
+if(process.argv[2]==='hang'){const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});writeFileSync(process.argv[3],String(child.pid));setInterval(()=>{},1000);}
+process.stdout.write(input);`);
+const zPrompt="本次合成任务",zProvider="account:bigmodel-individual-coding-plan",zModel="GLM-5.3";
+const zDecoder={zcodeTransport:"headless-stream",expectedProvider:zProvider,expectedModel:zModel,expectedPromptSha256:createHash("sha256").update(zPrompt).digest("hex")};
+const zEvent=(type,seq,payload)=>({type,seq,eventId:"event-"+seq,sessionId:"session",turnId:"turn",traceId:"trace",timestamp:seq,payload});
+const zEvents=[zEvent("turn.started",1,{input:zPrompt}),zEvent("session.updated",2,{providerId:zProvider,modelId:zModel,messageCount:1,toolCount:0,iteration:0}),zEvent("turn.completed",3,{resultType:"success",response:"合成任务完成"}),{type:"result",sessionId:"session",turnId:"turn",traceId:"trace",response:"合成任务完成",eventCount:3,projection:{status:"completed",turnCount:1,totalTokenCount:0}}];
+const zRun=(events,extra={})=>run({runtime:"zcode",decoder:zDecoder,args:[zcodeScript],pins:[pinFile(zcodeScript)],input:events.map(e=>JSON.stringify(e)).join("\n")+"\n",...extra});
+
+test("Windows supervisor accepts a complete Zcode headless fixture without certifying a model call",{skip:process.platform!=="win32"},async()=>{
+ const out=await zRun(zEvents);assert.equal(out.status,"success",JSON.stringify(out));assert.equal(out.evidence,"合成任务完成");assert.equal(out.process.cleanup,"job_empty");assert.equal(out.observed.model,zModel);assert.equal(out.usage,null);assert.equal(out.real_model_call_confirmed,false);
+});
+
+test("Windows Zcode stream identity failure stops its root and child and never echoes the prompt",{skip:process.platform!=="win32"},async()=>{
+ const file=join(TMP,"zcode-wrong-prompt-child.pid");
+ const out=await zRun([{...zEvents[0],payload:{input:"private-wrong-task"}},...zEvents.slice(1)],{args:[zcodeScript,"hang",file]});
+ assert.equal(out.status,"failed");assert.equal(out.observed.protocol_error,"INPUT_MISMATCH");assert.equal(out.process.cleanup,"job_empty");assert.equal(await stopped(await waitFile(file)),true);assert.ok(!JSON.stringify(out).includes("private-wrong-task"));
+});
+
+test("Windows Zcode fixture with terminal but missing summary is not settled as successful",{skip:process.platform!=="win32"},async()=>{
+ const out=await zRun(zEvents.slice(0,3));assert.equal(out.status,"failed");assert.equal(out.diagnostic,"MISSING_SUMMARY");assert.equal(out.process.exit_code,0);assert.equal(out.process.cleanup,"job_empty");
 });

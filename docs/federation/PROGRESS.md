@@ -396,3 +396,15 @@ Git 已更新而 DB 事务回滚后，reconcile 只核对实际引用和绑定�
 三种模型调用仍各 0/1；完整阶段 0/12。本批不占用真实模型额度，未改部署、全局 MCP 或实际 accepted_rev。合同见 completion.md。后续继续 Windows OS 权限隔离及原生执行器、Zcode 中国版 Coding Plan、后台调度、全局 UI、运维、实体两机及独立全阶段验收。
 
 第二十八批增量验证完成：父任务与两节点 HTTP 布局 2 项通过；最终旧 schema 只读/迁移与已完成列表专项 2 项通过，绑定完整回归 40 项通过，均 0 失败、0 跳过。完成协议共 14 个不同用例已在这些运行中通过；不把重复运行叠加为新测试。18 份最终源码 LF SHA-256 与 Git blob 已记录；740 项相关回归之后的最终改动仅为绑定状态查询，已针对复测。完整最终提交主回归交由 Windows CI 执行，证据见 completion-evidence.json。
+
+第二十八批准确提交 CI 已核对：00c9a7c7c256b2458c3addc8b694857eb56bfd25 的运行 36680972340 全部通过，Windows 主套件 1426 项、0 失败，附加检查 90 项及 gitleaks 通过。终态证据已补入 completion-evidence.json，不再轮询该运行。
+
+## 第二十九批：Zcode 单次命令事件合同
+
+实测确认 Zcode app-server 使用自身 NDJSON，标准 JSON-RPC 字段会被拒绝；空会话可创建，但账号由桌面宿主提供。安装源码另有使用常规订阅登录的 --prompt stream-json 路径。无账号私有目录中的 /model 探测在模型创建阶段失败退出，不能当作有账号时的零调用预检；未发起模型请求。
+
+新增 headless-stream 解码：提示摘要、provider/model、session/turn/trace、连续事件、明确终态和最终摘要共同校验；摘要不独立证明成功，未知 usage 保持 null。RPC session-events 保留原合同。36 项输出测试通过，连同原适配及 Windows 监管回归共 71 项通过；其中 3 项新增真实 Windows Job 桩验证完整流、错误输入终止后代、缺失摘要不能成功，均非真实模型任务。
+
+启动适配仍拒绝 Zcode；账号复用、固定模型防回退和实际工具范围待核验。文档及当前任务清单移除未来 POSIX 工作，仅保留历史证据。三种真实调用均 0/1，完整阶段验收 0/12。详见 zcode.md / zcode-evidence.json。
+
+第二十九批追加调度/回执回归 38 项通过，与输出、适配和进程监管共 109 项相关测试通过，0 失败、0 跳过。保存的实际无账号失败流经新解码器重放，保留 PROCESS_FAILED / PROVIDER_STARTUP_FAILED，无需重新启动供应商。72 项计划、文档摘要及 166 条文件证据引用通过核对。最终提交的完整 Windows CI 仍待核验。

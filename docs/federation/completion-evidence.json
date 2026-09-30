@@ -120,12 +120,18 @@
     "two logical nodes, registrar co-located on source, complete through actual HTTP"
   ],
   "ci": {
-    "status": "pending_exact_commit_windows_ci",
-    "previous_verified_commit": "efaad6c33e00b0673b974611e37db48c92161dc7",
-    "previous_run_id": 36676659184,
-    "previous_windows_main_pass": 1412,
-    "previous_windows_main_fail": 0,
-    "previous_gitleaks": "success"
+    "status": "completed",
+    "tested_commit": "00c9a7c7c256b2458c3addc8b694857eb56bfd25",
+    "run_id": 36680972340,
+    "windows_job_id": 109776117324,
+    "windows_result": "success",
+    "windows_main_pass": 1426,
+    "windows_main_fail": 0,
+    "additional_checks_pass": 90,
+    "gitleaks_job_id": 109776116825,
+    "gitleaks": "success",
+    "basis": "terminal GitHub job states and complete decoded Windows job log; classic 931 plus native 585 minus 90 non-main checks",
+    "historical_ci_preserved_in": "integration-evidence.json"
   },
   "acceptance": {
     "local_fixture_settlement_supported": true,

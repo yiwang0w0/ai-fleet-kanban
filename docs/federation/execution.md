@@ -6,17 +6,20 @@
 
 ## 输出合同
 
-core/execution/output.mjs 接收 UTF-8 NDJSON。Zcode 输入必须是协议层已经解包的 session event envelope，不能直接把 app-server 的 JSON-RPC 帧传进来；其 RPC transport 仍待接入。
+core/execution/output.mjs 接收 UTF-8 NDJSON。Zcode 默认输入为已解包的 session event envelope，保持显式 sessionId/inputId 绑定；新增独立的 headless-stream 合同接收单次命令事件及最终摘要。实测 app-server 使用自身 NDJSON 帧，包含 jsonrpc 字段的标准 JSON-RPC 请求会被拒绝，不能直接传给事件解码器。完整启动适配仍待接入，详见 [Zcode Windows 接入记录](zcode.md)。
 
 | 运行时 | 成功的必要条件 | 失败处理 |
 |---|---|---|
 | Claude | 同一根 session 的 system/init；若指定 expectedModel 则实测模型一致；单个 result 的 subtype=success 且 is_error=false；非空 result；退出码0 | error subtype、is_error、串线、模型不符、重复终态均不能成功 |
 | Codex | thread.started、turn.started、最终 agent_message 和 turn.completed；退出码0 | error、turn.failed、缺少消息/终态、重复 turn 或非零退出不能成功 |
-| Zcode | 显式绑定 sessionId 与 inputId；turn.started 与同一 turnId 的 turn.completed；resultType=success；非空 response；退出码0 | cancelled 单独分类；预算/轮数/工具次数/执行错误明确失败；默认 headless JSON 不作为完成证明 |
+| Zcode session-events | 显式绑定 sessionId 与 inputId；turn.started 与同一 turnId 的 turn.completed；resultType=success；非空 response；退出码0 | cancelled 单独分类；预算/轮数/工具次数/执行错误明确失败；默认 headless JSON 不作为完成证明 |
+| Zcode headless-stream | 显式绑定提示 SHA256、providerId、modelId；从首次 turn.started 绑定 session/turn/trace；同一任务的模型请求元数据、成功终态及匹配的最终 result 摘要；退出码0 | 摘要不能独立证明成功；错模型、任务串线、缺少摘要、控制/后台任务、追加任务或不连续事件均失败 |
 
-Claude 子 agent 消息不充当根结果。系统信息可以在终态后继续出现，但不接受第二个结果或新的正文。Codex JSONL 不报告此解码器可核实的实际模型字段，因此 expectedModel 不能替代后续启动配置与供应商元数据核验。Zcode 顺序必须连续；仅允许最后一条完全相同的事件重放。后续 RPC transport 必须正确处理 subscribe/events 重叠、分页和序列缺口。
+headless-stream 不支持 RPC 重放或多 turnResponses；默认 session-events 的最近事件重放行为保持。解码器核验观察到的模型身份，不能在模型请求发生前阻止供应商内部回退；启动配置仍须单独限制模型和工具。目前 headless-stream 拒绝 expectedTools/expectedMcpServer，避免把尚未实现的实际工具清单验证当作支持。
 
-默认上限：stdout 32MiB、单行1MiB、100000事件、最终证据65536字符。非法 UTF-8、JSON、未知终态和超限均失败。诊断仅返回固定代码，不回显被拒绝的原文。stdout 保留已接收范围的摘要、计数和身份元数据，不保留完整原始文本；超出总字节上限的块不计入该摘要。未知事件可以忽略，但不能提供成功证明。
+Claude 子 agent 消息不充当根结果。系统信息可以在终态后继续出现，但不接受第二个结果或新的正文。Codex JSONL 不报告此解码器可核实的实际模型字段，因此 expectedModel 不能替代后续启动配置与供应商元数据核验。Zcode session-events 顺序必须连续；仅允许最后一条完全相同的事件重放。后续 RPC transport 必须正确处理 subscribe/events 重叠、分页和序列缺口。
+
+默认上限：stdout 32MiB、单行1MiB、100000事件、最终证据65536字符。非法 UTF-8、JSON、未知终态和超限均失败。诊断仅返回固定代码，不回显被拒绝的原文。stdout 保留已接收范围的摘要、计数和身份元数据，不保留完整原始文本；超出总字节上限的块不计入该摘要。默认供应商合同可忽略非终态的未知信息；Zcode headless-stream 拒绝未支持的协议事件类型。两者都不能由未知信息提供成功证明。
 
 Claude/Codex 的 usage 只映射供应商明确提供的 input_tokens / output_tokens；缺失为 null，非法数值拒绝。缓存输入、费用和计费口径没有在这两个字段中重新估算。Zcode 当前安装版本把 turn usage 声明为 unknown，本批保持 null，待真实合同核验后再映射。所有解析回执的 real_model_call_confirmed 均为 false：解析合成流不证明发生了模型调用。
 
@@ -42,11 +45,9 @@ Job 设置 KILL_ON_JOB_CLOSE。停止或主进程退出后终止 Job，查询 Ac
 
 Job 是生命周期管理能力，不是文件权限沙箱。通过其他服务代为创建的进程不一定属于该 Job；Microsoft 文档明确列出 Win32_Process.Create 的例外。此实现不能据此宣称恶意程序完全受隔离，或只读 agent 已无法修改治理文件。
 
-### Linux / POSIX
+### 平台范围
 
-用独立 session/process group 启动，取消和退出时给整个组发送 SIGKILL。回执为 group_signalled，不冒称等价于 Windows 的 Job 成员归零。
-
-主动 setsid 的后代或外部服务创建的进程不在此组内；宿主被强制杀死也没有内核级 kill-on-close 保证。cgroup/容器级清理与文件隔离仍待实现。因此该能力不能自动满足需要完整进程约束的角色声明。Linux CI 用于核实当前组管理合同，不代替更强的隔离验收。
+2026-09-30 起仅支持 Windows 实现、CI、部署和验收。仓库中已有 POSIX 分支和历史测试记录保留为历史，不承诺 Linux 支持，也不安排后续 POSIX 隔离工作。
 
 ## 与调度的衔接
 
@@ -66,4 +67,4 @@ Zcode 依据安装包内 0.16.9 的 zcode.cjs 静态协议 schema（SHA256 fad4c
 
 Windows 生命周期依据 Microsoft [Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[AssignProcessToJobObject](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject) 与 [Extended Limit Information](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_extended_limit_information)。
 
-本批不通过完整 G04。三个真实模型仍各0/1；真实配置生效、模型可用性、Zcode 授权/传输、文件隔离及独立验收是剩余工作。
+本批不通过完整 G04。三个真实模型仍各0/1；真实配置生效、模型可用性、Zcode 授权及启动工具策略、Windows 文件隔离及独立验收是剩余工作。
