@@ -1,10 +1,11 @@
+import {migrateCompletion,receiveCompletion} from "./completion.mjs";
 import {migrateArtifacts,receiveArtifactOffer,receiveArtifactChunk,sealArtifact,peerArtifactStatus,MAX_ARTIFACT_HEADER} from "../artifacts/transfers.mjs";
 import {migrateResults,receiveResult,peerResultStatus,MAX_RESULT_BYTES} from "./results.mjs";
 import {receiveCancellation,peerCancellationState} from "./cancellation.mjs";
 import {progressCancellation} from "./cancellation-service.mjs";
 import {migrateBindings,receiveBindingMessage} from "./bindings.mjs";
 import http from "node:http";
-import {migrateRelations,publishTopology,approveRelation,withdrawRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
+import {migrateRelations,publishTopology,approveRelation,withdrawRelation,completeRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
 import {migrateDelegation,receiveOffer,peerDelegationStatus} from "./delegation.mjs";
 import {sourceRecoveryMarker} from "./epoch-state.mjs";
 import {startSnapshot,snapshotPage} from "./snapshots.mjs";
@@ -46,7 +47,7 @@ async function bodyJSON(req,limit=8192) {
 }
 /** Separate authenticated node surface: explicit projections and delegation proposals; no operator UI, secrets or model execution. */
 function createPeerServer(db) {
-  localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateResults(db);migrateArtifacts(db);
+  localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateResults(db);migrateArtifacts(db);migrateCompletion(db);
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
@@ -91,6 +92,9 @@ function createPeerServer(db) {
         });
         return send(res,200,result);
       }
+      if(req.url==="/peer/v1/delegation/complete"&&req.method==="POST"){
+        const body=await bodyJSON(req,32768);const result=transaction(db,()=>receiveCompletion(db,authenticate(db,req.headers.authorization,"delegation:complete"),body));return send(res,200,result);
+      }
       if(["/peer/v1/delegation/result","/peer/v1/delegation/result-status"].includes(req.url)&&req.method==="POST"){
         const receiving=req.url.endsWith("/result"),body=await bodyJSON(req,receiving?MAX_RESULT_BYTES:8192);
         if(!receiving)keys(body,["result_id","project_id"],"result status");
@@ -117,11 +121,11 @@ function createPeerServer(db) {
         const result=transaction(db,()=>receiveBindingMessage(db,authenticate(db,req.headers.authorization,"delegation:binding"),body));
         return send(res,200,result);
       }
-      if (["/peer/v1/relations/publish","/peer/v1/relations/approve","/peer/v1/relations/status","/peer/v1/relations/withdraw"].includes(req.url) && req.method==="POST") {
-        const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="publish"?MAX_TOPOLOGY_BYTES+4096:8192);
+      if (["/peer/v1/relations/publish","/peer/v1/relations/approve","/peer/v1/relations/status","/peer/v1/relations/withdraw","/peer/v1/relations/complete"].includes(req.url) && req.method==="POST") {
+        const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="publish"?MAX_TOPOLOGY_BYTES+4096:action==="complete"?32768:8192);
         const result=transaction(db,()=>{
           const peer=authenticate(db,req.headers.authorization,action==="status"?"relations:read":action==="withdraw"?"relations:approve":"relations:"+action);
-          return action==="publish"?publishTopology(db,peer,body):action==="approve"?approveRelation(db,peer,body):action==="withdraw"?withdrawRelation(db,peer,body):relationStatus(db,peer,body);
+          return action==="publish"?publishTopology(db,peer,body):action==="approve"?approveRelation(db,peer,body):action==="withdraw"?withdrawRelation(db,peer,body):action==="complete"?completeRelation(db,peer,body):relationStatus(db,peer,body);
         });
         return send(res,200,result);
       }

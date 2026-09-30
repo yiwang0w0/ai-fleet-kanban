@@ -100,6 +100,8 @@ jobs:
         run: bash hrun.sh node tests/verificationworkspacetest.mjs
       - name: integrationtest (source ref CAS, bound commits and crash reconciliation)
         run: bash hrun.sh node tests/integrationtest.mjs
+      - name: completiontest (bilateral acceptance, retirement, parent review and recovery)
+        run: bash hrun.sh node tests/completiontest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

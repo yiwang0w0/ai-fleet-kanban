@@ -74,12 +74,13 @@ function scope(db,d){
 function receipt(r){const b=JSON.parse(r.body_json),d=b.relation;return {schema_version:1,kind:"result_received",result_id:r.result_id,relation_id:r.relation_id,body_digest:r.body_digest,sequence:r.sequence,source_node_id:d.source_node_id,source_epoch:d.source_epoch,target_node_id:d.target_node_id,target_epoch:d.target_epoch};}
 export function resultState(db,id){
  const r=row(db,id),decision=db.prepare("SELECT decision_json FROM result_decisions WHERE result_id=?").get(id),ack=db.prepare("SELECT receipt_json FROM result_receipts WHERE result_id=?").get(id);
+ const accepted=decision&&JSON.parse(decision.decision_json).kind==="result_accepted";
  const cancellation=db.prepare("SELECT state FROM delegation_cancellations WHERE relation_id=?").get(r.relation_id),body=JSON.parse(r.body_json);
- return {result_id:id,relation_id:r.relation_id,project_id:r.project_id,side:r.side,sequence:r.sequence,state:decision?"rejected":r.side==="source"?"received":ack?"delivered":"prepared",body,body_digest:r.body_digest,receipt:ack?JSON.parse(ack.receipt_json):r.side==="source"?receipt(r):null,decision:decision?JSON.parse(decision.decision_json):null,review_state:cancellation?"cancel_pending":decision?"rejected":body.process_result.status==="success"?"pending_evidence":"execution_unsuccessful",accepted:false,dispatch_started:false};
+ return {result_id:id,relation_id:r.relation_id,project_id:r.project_id,side:r.side,sequence:r.sequence,state:accepted?"accepted":decision?"rejected":r.side==="source"?"received":ack?"delivered":"prepared",body,body_digest:r.body_digest,receipt:ack?JSON.parse(ack.receipt_json):r.side==="source"?receipt(r):null,decision:decision?JSON.parse(decision.decision_json):null,review_state:accepted?"accepted":cancellation?"cancel_pending":decision?"rejected":body.process_result.status==="success"?"pending_evidence":"execution_unsuccessful",accepted:!!accepted,dispatch_started:false};
 }
 export function listResults(db,{projectId,limit=100}){
  names([projectId],"project",null,1);if(!Number.isInteger(limit)||limit<1||limit>100)fail("BAD_INPUT","列表上限无效",400);const n=localIdentity(db);
- return {results:db.prepare("SELECT r.result_id,r.relation_id,r.sequence,r.side,r.node_id=? AND r.node_epoch=? identity_current,CASE WHEN d.result_id IS NOT NULL THEN 'rejected' WHEN r.side='source' THEN 'received' WHEN a.result_id IS NOT NULL THEN 'delivered' ELSE 'prepared' END state FROM delegation_results r LEFT JOIN result_decisions d USING(result_id) LEFT JOIN result_receipts a USING(result_id) WHERE r.project_id=? ORDER BY r.rowid DESC LIMIT ?").all(n.node_id,n.sync_epoch,projectId,limit)};
+ return {results:db.prepare("SELECT r.result_id,r.relation_id,r.sequence,r.side,r.node_id=? AND r.node_epoch=? identity_current,CASE WHEN json_extract(d.decision_json,'$.kind')='result_accepted' THEN 'accepted' WHEN d.result_id IS NOT NULL THEN 'rejected' WHEN r.side='source' THEN 'received' WHEN a.result_id IS NOT NULL THEN 'delivered' ELSE 'prepared' END state FROM delegation_results r LEFT JOIN result_decisions d USING(result_id) LEFT JOIN result_receipts a USING(result_id) WHERE r.project_id=? ORDER BY r.rowid DESC LIMIT ?").all(n.node_id,n.sync_epoch,projectId,limit)};
 }
 export function prepareResult(db,{resultId,relationId,expectedTaskVersion}){
  uuid(resultId,"result_id");version(expectedTaskVersion);
@@ -96,7 +97,7 @@ export function prepareResult(db,{resultId,relationId,expectedTaskVersion}){
   if(runs.length>100000)fail("SCOPE_LIMIT","运行历史过大");
   const stopped=inspectStoppedRuns(db,{nodeId:n.node_id,nodeEpoch:n.sync_epoch,members,runs});
   if(stopped.blockers.length)fail("STOP_UNCONFIRMED","交付仍有未确认停止的运行");
-  if(db.prepare("SELECT 1 FROM delegation_bindings b WHERE b.side='source' AND b.state IN('prepared','confirmed') AND b.task_uid IN(SELECT value FROM json_each(?))").get(JSON.stringify(members.map(m=>m.task_uid))))fail("DOWNSTREAM_PENDING","下游委派尚未完成来源验收");
+  if(db.prepare("SELECT 1 FROM delegation_bindings b WHERE b.side='source' AND b.closed=0 AND b.state IN('prepared','confirmed') AND b.task_uid IN(SELECT value FROM json_each(?))").get(JSON.stringify(members.map(m=>m.task_uid))))fail("DOWNSTREAM_PENDING","下游委派尚未完成来源验收");
   const dispatch=has(db,"broker_dispatches")?db.prepare("SELECT * FROM broker_dispatches WHERE run_id=?").get(t.run_id):null;
   if(!dispatch||dispatch.phase!=="settled"||!dispatch.launch_at||dispatch.node_id!==n.node_id||dispatch.node_epoch!==n.sync_epoch)fail("OUTCOME_REQUIRED","需要当前受控执行终态");
   const process=JSON.parse(dispatch.result_json),assignment=db.prepare("SELECT policy_json FROM broker_assignments WHERE assignment_id=?").get(dispatch.assignment_id),policy=JSON.parse(assignment.policy_json),proof=stopped.proofs.find(p=>p.run_id===t.run_id);

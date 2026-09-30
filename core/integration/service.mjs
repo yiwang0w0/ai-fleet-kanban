@@ -74,3 +74,8 @@ export function reconcileIntegration(db,{integrationId,sourceGate}){
 export function captureAppliedIntegration(db,{integrationId,sourceGate}){
  outside(db);const r=row(db,integrationId),state=integrationState(db,integrationId);if(state.phase!=="settled"||state.receipt.source_applied!==true||state.receipt.current_at_observation!==true)fail("INTEGRATION_NOT_APPLIED","缺少有效来源合并回执");current(db,r,sourceGate);captureVerificationReceipt(db,{verificationId:r.verification_id,sourceGate});const x=preparedGit(db,r),now=observe(db,r,x,sourceGate);if(!now.current_at_observation)fail("INTEGRATION_STALE","来源合并的当前授权或工作区状态改变");return {integration_id:integrationId,receipt:state.receipt,receipt_digest:state.receipt_digest,currently_valid:true,accepted:false};
 }
+
+/** Short-transaction recheck after full capture; does not repeat file reconstruction. */
+export function assertAppliedIntegrationCurrent(db,{integrationId,receiptDigest,sourceGate}){
+ const r=row(db,integrationId),state=integrationState(db,integrationId);if(state.phase!=="settled"||state.receipt_digest!==receiptDigest||state.receipt.source_applied!==true||state.receipt.current_at_observation!==true)fail("INTEGRATION_NOT_APPLIED","固定来源合并回执不匹配");const p=current(db,r,sourceGate),b=JSON.parse(r.binding_json),o=objects(db,integrationId),source=sourceFor(db,p,b.base_commit),git=integrationGit({source,identities:o.source_identities,container:o.container});git.checkoutGuard(b.ref);if(git.refValue(b.ref)!==o.merge_commit)fail("INTEGRATION_STALE","来源引用已偏离验收提交");return state;
+}

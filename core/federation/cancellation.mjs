@@ -91,7 +91,7 @@ export function cancellationWork(db,relationId){
  const c=row(db,relationId);if(c.side!=="target")fail("FORBIDDEN","仅接收端检查本机取消范围",403);
  const members=db.prepare("SELECT task_id,task_uid FROM cancellation_members WHERE cancel_id=? ORDER BY task_uid").all(c.cancel_id);
  const runs=db.prepare("SELECT r.* FROM task_runs r JOIN cancellation_members m ON r.task_id=m.task_id AND r.task_uid=m.task_uid WHERE m.cancel_id=? ORDER BY r.run_id LIMIT 100001").all(c.cancel_id);if(runs.length>100000)fail("SCOPE_LIMIT","运行历史超过本次检查上限");
- const downstream=db.prepare("SELECT b.relation_id,b.task_id,b.task_uid,b.state FROM delegation_bindings b JOIN cancellation_members m ON b.task_id=m.task_id AND b.task_uid=m.task_uid WHERE m.cancel_id=? AND b.side='source' AND b.state IN('prepared','confirmed') ORDER BY b.relation_id").all(c.cancel_id);
+ const downstream=db.prepare("SELECT b.relation_id,b.task_id,b.task_uid,b.state FROM delegation_bindings b JOIN cancellation_members m ON b.task_id=m.task_id AND b.task_uid=m.task_uid WHERE m.cancel_id=? AND b.side='source' AND b.closed=0 AND b.state IN('prepared','confirmed') ORDER BY b.relation_id").all(c.cancel_id);
  return {c,members,runs,downstream};
 }
 export function confirmCancellationStopped(db,relationId){return unit(db,()=>{

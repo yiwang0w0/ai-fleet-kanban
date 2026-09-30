@@ -1935,12 +1935,12 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_partial_passed",
-        "scope": "sealed cross-node candidate report, authenticated immutable receipt and owner rejection with atomic native rework",
+        "result": "local_component_passed",
+        "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review",
         "pending": [
-          "artifact byte transfer, repository/workspace binding and independent verification",
-          "positive source acceptance, relation retirement and parent advancement",
-          "actual physical two-node delivery and independent G06 acceptance"
+          "exact-commit Windows CI",
+          "Windows OS permission isolation and native provider adapters",
+          "physical two-kanata Windows integration and independent full-phase acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1950,7 +1950,10 @@
         "tests/treetest.mjs",
         "docs/federation/results.md",
         "docs/federation/result-evidence.json",
-        "tests/resulttest.mjs"
+        "tests/resulttest.mjs",
+        "docs/federation/completion.md",
+        "docs/federation/completion-evidence.json",
+        "tests/completiontest.mjs"
       ]
     },
     {
@@ -2185,12 +2188,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Windows independent source verification plus actual bound Git integration, single-ref CAS and crash reconciliation",
+        "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review",
         "pending": [
           "exact-commit Windows CI",
-          "Windows OS permission isolation",
-          "source positive acceptance, relation retirement and parent advancement",
-          "two physical kanata validation and G07 acceptance"
+          "Windows OS permission isolation and native provider adapters",
+          "physical two-kanata Windows integration and independent full-phase acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2201,7 +2203,10 @@
         "docs/federation/verification-evidence.json",
         "docs/federation/integration.md",
         "docs/federation/integration-evidence.json",
-        "tests/integrationtest.mjs"
+        "tests/integrationtest.mjs",
+        "docs/federation/completion.md",
+        "docs/federation/completion-evidence.json",
+        "tests/completiontest.mjs"
       ]
     },
     {

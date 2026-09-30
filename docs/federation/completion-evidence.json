@@ -1,0 +1,150 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-28-bilateral-completion",
+  "date": "2026-09-30",
+  "supported_platform": "Windows",
+  "base_commit": "efaad6c33e00b0673b974611e37db48c92161dc7",
+  "normalization": "UTF-8 LF",
+  "code_sha256": {
+    ".github/workflows/ci.yml": "8c6e25c553d63e208db7de144c044296d0a5cb7432bf65858f2d5078127ddcc7",
+    "package.json": "28496a3b68082d54d2e5b45defb12e7f3bb2c4b8adcf6a1c5114b7f13d690f95",
+    "cli/completion.mjs": "a5c984ed6ef9fed1d9e5b5ffb4718418357d1013e58f7131e6e846c7ba18f950",
+    "core/delegation_guard.js": "37e0a0ed39b99e180ead33cf14e4f3674f67b392c68e9699aec9e1f5ebbe8f59",
+    "core/federation/bindings.mjs": "aca83bb3bafb2933d284a3abd8e8beb85aaa4d6a2a2d4cd5d00ac7038134d0a7",
+    "core/federation/cancellation.mjs": "4ada29d9e66747583cfdb63012fcc6f8de128fa04119987e32ff53be60899bb7",
+    "core/federation/completion-client.mjs": "04b30a2abf7fee2c05fa98209beb573c41d187fa85e2903ce8de008371ac5edb",
+    "core/federation/completion-contract.mjs": "40e8ae5d37e1521907f64024a103f947511b75dd327ff131361355db49270dc9",
+    "core/federation/completion.mjs": "a079313fb6fa69423697858c1fcad838d88079aa9c2c8478389199aecfa32667",
+    "core/federation/gateway.mjs": "76bb49b5d7e1f6047ed165ee027b797b5c4d43b6aebf1f88cc5b9f5cc86c8263",
+    "core/federation/protocol.mjs": "ab869175588c5d8e67ee28b1844d4dbf2484af2c2297bb6441fdaa6a26332b54",
+    "core/federation/relations.mjs": "29583bd0715bede1984b1b783d6068d08d5308d80f7f6f626712c9a235f4c008",
+    "core/federation/results.mjs": "89d85118de08a657bbc82c2b28180383cd36e66502ce9cad180f7a37febf0ace",
+    "core/integration/service.mjs": "575f48131367e023a81e7bc1182c06841d0be59d15fcd4b0644c8d966a9e47b8",
+    "core/mcp/tools.mjs": "2d29767063d83eed58856921d90438a7836f4fc404e953c2e33152abc4926de0",
+    "core/store.js": "5a8dc38f7aa39117b845896df83bfe801ac138b7121b2172f05d81149f1e224e",
+    "tests/bindingtest.mjs": "78294e8de631b2d6052e4ee5c3b3cf6361996a9d92a4341b51a6787c7e1eeb8e",
+    "tests/completiontest.mjs": "9b837a47ca38025000417d15b1b4bdcb8bad4fcebfb9e056472a66c2954eb0a0"
+  },
+  "code_git_blobs": {
+    ".github/workflows/ci.yml": "8761f5d707874d2e222afa6488ac2e39638ed737",
+    "package.json": "80f6a4b9662c4104509c65aa38445590422704ec",
+    "cli/completion.mjs": "5e1cafb5ea9348f4df73affbe2ed24104514e4e6",
+    "core/delegation_guard.js": "eaf2a879a9c86f2d4ee2da63fed0598a24439b35",
+    "core/federation/bindings.mjs": "80a51d388f66fa1f09848d923fc7df27328cf9ab",
+    "core/federation/cancellation.mjs": "a718ae6431c7dc321076c3cd9981b81e4462ff5a",
+    "core/federation/completion-client.mjs": "39b3b3ace47901c50b3468ca2cc15d9f677fa07b",
+    "core/federation/completion-contract.mjs": "a590fc3a2387b4992a9bcfc9fa2ec4ebeb0ba244",
+    "core/federation/completion.mjs": "c7a2e364f57835af812e08b3a511a0257cfb65f6",
+    "core/federation/gateway.mjs": "feab29d3503dba3a8523a8d2d8f36f98cb831339",
+    "core/federation/protocol.mjs": "55671d9eac2d48224d652b0b86f9bb0a238fb7ce",
+    "core/federation/relations.mjs": "d97f2bddfcd1570299e064c7e617373dc7556d35",
+    "core/federation/results.mjs": "1bf854bf57ec5bf76dd35397d57a9b4557cd8ab2",
+    "core/integration/service.mjs": "822c370f9c0263a178bb92073a86dd592571ca02",
+    "core/mcp/tools.mjs": "ccff54b20d5b5c42bb1dadb1627b232e18caa7a0",
+    "core/store.js": "621ce3285f6af7de40e9225f59e364658204ecfd",
+    "tests/bindingtest.mjs": "d3f7240aa79fc24f92d7d30b136f5b95502f9e42",
+    "tests/completiontest.mjs": "2b8a31f7e2d24183ef1511318a93ce4cd3ad2be2"
+  },
+  "local_validation": {
+    "related_regression": {
+      "exit": 0,
+      "classic_pass": 427,
+      "native_pass": 313,
+      "passed": 740,
+      "failed": 0,
+      "skipped": 0
+    },
+    "initial_completion_boundaries": {
+      "exit": 1,
+      "classic_pass": 0,
+      "native_pass": 12,
+      "passed": 12,
+      "failed": 1,
+      "skipped": 0
+    },
+    "corrected_parent_and_two_node_layout": {
+      "exit": 0,
+      "classic_pass": 0,
+      "native_pass": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "final_readonly_migration_and_completed_list": {
+      "exit": 0,
+      "classic_pass": 0,
+      "native_pass": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "final_binding_regression": {
+      "exit": 0,
+      "classic_pass": 0,
+      "native_pass": 40,
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
+    "completion_unique_cases_passed_across_runs": 14,
+    "test_note": "Initial failure read review_fp through a task projection that does not expose it; corrected to query actual SQLite field. Final binding-only projection fix checked by 2 focused tests and 40 binding cases. Complete final-commit suite remains required on Windows CI.",
+    "final_source_files": 18,
+    "staged_gitleaks": {
+      "status": "passed",
+      "version": "8.24.3",
+      "platform": "Windows",
+      "exit": 0,
+      "leaks_found": false
+    },
+    "documentation": {
+      "plan_version": "1.2",
+      "tasks": 72,
+      "source_document_hash_matches": true,
+      "verified_evidence_file_links": 164
+    }
+  },
+  "exercised": [
+    "actual transferred Git module and independent check precede source acceptance",
+    "bilateral authenticated retirement before atomic endpoint settlement",
+    "lost target readiness and registrar final ACK, reopened databases and durable same request",
+    "both endpoint transaction faults roll back decisions, tasks, binding closure and permits",
+    "immutable committed subtree, no cancellation or rejection after fixed acceptance",
+    "revoked and rotated registrar credentials require current votes; forged single-vote final proof refused",
+    "moved source Git ref and revoked integration policy cannot consume acceptance",
+    "parent and oneof sibling remain subject to independent review; explicit human gate preserved",
+    "closed binding retained and cannot regain dispatch through old readiness replay",
+    "old schema v2 without lifecycle column supports read-only status and migration rollback",
+    "actual backup restore and node epoch activation retain history but reject old completion",
+    "credential revoked during actual HTTP upload cannot create target readiness",
+    "two independent processes settle the same completion once",
+    "two logical nodes, registrar co-located on source, complete through actual HTTP"
+  ],
+  "ci": {
+    "status": "pending_exact_commit_windows_ci",
+    "previous_verified_commit": "efaad6c33e00b0673b974611e37db48c92161dc7",
+    "previous_run_id": 36676659184,
+    "previous_windows_main_pass": 1412,
+    "previous_windows_main_fail": 0,
+    "previous_gitleaks": "success"
+  },
+  "acceptance": {
+    "local_fixture_settlement_supported": true,
+    "accepted_phases": 0,
+    "total_phases": 12,
+    "filesystem_sandbox": false,
+    "physical_two_node_acceptance": false,
+    "real_provider_calls": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 0
+    },
+    "per_provider_authorized_limit": 1
+  },
+  "remaining": [
+    "Windows OS permission isolation and native provider adapters",
+    "Zcode Chinese Coding Plan and three real provider minimal tasks",
+    "scheduler, global UI and operations",
+    "two physical kanata Windows nodes over Tailscale",
+    "protected branch publishing and independent full-phase acceptance"
+  ]
+}

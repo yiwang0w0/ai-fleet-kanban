@@ -1937,7 +1937,7 @@ function resolve(db, args) {
 
 function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verifyOk = undefined,
                        selectedOption = null, sqlArchive = null,
-                       disposition = null, sqlReceipt = null }) {
+                       disposition = null, sqlReceipt = null, cascadeVerified = true }) {
   if (!["approve", "reject"].includes(verdict)) throw err(ERR.BAD_INPUT, "verdict 必须是 approve 或 reject");
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
@@ -2068,7 +2068,7 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
   }
 
   let cascade = null;
-  if (next === "done" && vok) {
+  if (next === "done" && vok && cascadeVerified) {
     const fresh = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
     cascade = cascadeClose(db, fresh,
       `依据: 本卡的机器验证(${fresh.verify_cmd || "verify"})通过,裁定者=${resolvedBy}。`);
@@ -2377,16 +2377,18 @@ function completeGoals(db) {
  * A periodic sweep, not a hook on resolve: one road, and anything a crash missed is
  * picked up next cycle.
  */
-function rearmDone(db) {
+function rearmDone(db, {parentId=null}={}) {
+  if(parentId!==null&&(!Number.isSafeInteger(parentId)||parentId<1))throw err(ERR.BAD_INPUT,"parentId invalid");
   const rows = db.prepare(
     `SELECT p.id FROM tasks p
       WHERE p.status='waiting' AND p.archived_at IS NULL
+        AND (? IS NULL OR p.id=?) AND p.human_gate=0
         AND p.auto_review_at IS NOT NULL
         AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL)
         AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id
                           AND c.archived_at IS NULL AND c.status<>'done')
         AND p.auto_review_at < (SELECT MAX(c.updated_at) FROM tasks c
-                                  WHERE c.parent_id=p.id AND c.archived_at IS NULL)`).all().filter(r=>!topologyGuard.finishHeld(db,r.id)&&!delegationGuard.sourceHeld(db,r.id));
+                                  WHERE c.parent_id=p.id AND c.archived_at IS NULL)`).all(parentId,parentId).filter(r=>!topologyGuard.finishHeld(db,r.id)&&!delegationGuard.sourceHeld(db,r.id));
   for (const r of rows) {
     const kids = db.prepare(
       "SELECT id FROM tasks WHERE parent_id=? AND archived_at IS NULL").all(r.id).map((x) => Number(x.id));
