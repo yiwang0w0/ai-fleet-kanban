@@ -115,3 +115,7 @@ node cli/context.mjs watch --db C:/board-data/board.db --credential-file C:/boar
 隔离浏览器验证首次任务链接、已开详情中切换至远端任务以及浏览器返回；同名终端依稳定身份区分，远端正文仍显示缓存时间，恶意标签标题按字面显示。预览已关闭。
 
 仍需两台 Windows 上分别从实际 Claude、Codex、Zcode 新对话查询相同任务，与各自获准看板版本核对；演练真实断线、重连、撤销、多客户端读取、无秘密输出和长期刷新。原生侧栏嵌入需要另外确认客户端扩展能力。完整阶段通过数仍为 0/12，真实执行器最小调用各 0/1；本地测试不替代这些验收。原始桌面接入证据见 desktop-context-evidence.json。本批保留机制完成完整桌面回归 26 项（原有 17 项和新增 9 项），0 失败、0 跳过，见 context-retention-evidence.json；260 次变化使用加速时钟，实际完成文件读写、摘要核对和清理，不替代 72 小时实测。
+
+## 可携带的 Windows 桌面接入包
+
+运行 `npm run desktop:package -- --output C:/fleet-desktop` 可生成不含凭据或数据库的 MCPB 与独立 stdio 文件。构建、第二台电脑只读检查及各客户端配置示例见 [接入包说明](../../packaging/desktop/README.md)。读取工具沿用本机身份权限；`desktop:check` 只返回总览查询结果的身份和数量，不启动任务。解包后的独立运行、Windows 中文/空格路径、权限拒绝与撤销已验证；真实客户端安装、双机应用连通与长期运行仍须另行验收，见 desktop-package-evidence.json。

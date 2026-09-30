@@ -150,6 +150,10 @@ jobs:
         run: bash hrun.sh node tests/fleetviewtest.mjs
       - name: "desktopcontexttest (scoped reads, private Markdown and refresh)"
         run: bash hrun.sh node tests/desktopcontexttest.mjs
+      - name: "desktop-packagetest (portable MCPB, independent extraction and Windows preflight)"
+        run: bash hrun.sh node tests/desktop-packagetest.mjs
+        env:
+          PYTHON: python
       - name: "tltest (timeline drawing primitives + source shape)"
         run: bash hrun.sh node tests/tltest.mjs
 

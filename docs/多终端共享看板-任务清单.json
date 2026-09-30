@@ -2408,7 +2408,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; 17 desktop + 14 fleet + 37 MCP local tests and isolated browser task-link checks",
+        "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; explicit retention with reader grace and resumable cleanup; portable Windows MCPB and extracted stdio bridge with read-only preflight. Local tests only; actual desktop installation unverified.",
         "pending": [
           "Full role/run/artifact trace and saved handoff summaries",
           "Long-running deployment, actual desktop setup and operational recovery",
@@ -2423,7 +2423,10 @@
         "docs/federation/desktop-context.md",
         "docs/federation/desktop-context-evidence.json",
         "tests/desktopcontexttest.mjs",
-        "docs/federation/context-retention-evidence.json"
+        "docs/federation/context-retention-evidence.json",
+        "packaging/desktop/README.md",
+        "docs/federation/desktop-package-evidence.json",
+        "tests/desktop-packagetest.mjs"
       ]
     },
     {

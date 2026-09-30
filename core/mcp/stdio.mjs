@@ -2,7 +2,7 @@
 import {once} from "node:events";
 import {Agent,request} from "node:http";
 import {Readable} from "node:stream";
-import {loadPrincipalCredential,fail} from "./policy.mjs";
+import {loadPrincipalCredential,fail} from "./credential.mjs";
 const MAX_BYTES=128*1024,SUPPORTED=["2025-11-25","2025-06-18"];
 function endpoint(value){
  let u;try{u=new URL(value);}catch{fail("BAD_ENDPOINT","MCP代理地址无效",400);}

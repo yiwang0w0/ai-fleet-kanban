@@ -1,0 +1,61 @@
+{
+  "manifest_version": "0.3",
+  "name": "ai-fleet-board",
+  "display_name": "AI Fleet 看板",
+  "version": "0.24.0-dev.1",
+  "description": "连接本机获准看板工具，查询终端任务和同步状态。",
+  "long_description": "连接已经配置的本机看板代理。权限由独立凭据决定，桌面查询建议使用 observe 身份。此扩展不安装看板服务、不保存模型订阅、不自动启动执行器。",
+  "author": {
+    "name": "AI Fleet Kanban contributors"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban"
+  },
+  "license": "Apache-2.0",
+  "server": {
+    "type": "node",
+    "entry_point": "cli/mcp.mjs",
+    "mcp_config": {
+      "command": "${user_config.node_binary}",
+      "args": [
+        "${__dirname}/cli/mcp.mjs",
+        "--url",
+        "${user_config.broker_url}",
+        "--credential-file",
+        "${user_config.credential_file}"
+      ]
+    }
+  },
+  "tools_generated": true,
+  "compatibility": {
+    "platforms": [
+      "win32"
+    ],
+    "runtimes": {
+      "node": ">=24.0.0"
+    }
+  },
+  "user_config": {
+    "node_binary": {
+      "type": "file",
+      "title": "Node.js 程序",
+      "description": "请选择已安装且可信的 Node.js 24 或更新版本 node.exe。",
+      "required": true,
+      "default": "C:/Program Files/nodejs/node.exe"
+    },
+    "broker_url": {
+      "type": "string",
+      "title": "本机看板代理地址",
+      "description": "仅支持数字回环 HTTP 根地址；填写 MCP 代理端口，不是看板网页端口。",
+      "required": true,
+      "default": "http://127.0.0.1:48320"
+    },
+    "credential_file": {
+      "type": "file",
+      "title": "本客户端的受限凭据",
+      "description": "选择由本机看板 grant 生成的新客户端凭据，桌面查看使用 observe 身份；不是供应商 API key。",
+      "required": true
+    }
+  }
+}
