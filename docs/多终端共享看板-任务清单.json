@@ -2297,17 +2297,21 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Operator-only cached fleet read model, per-node task trees and freshness; 14 data/HTTP tests plus 195 existing server checks and isolated browser inspection",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection",
         "pending": [
-          "Cross-terminal relation visualization and receipted remote actions",
-          "Desktop Markdown/MCP context and physical two-PC G08 acceptance"
+          "Receipted remote actions, dependency graph and historical pagination",
+          "Full Markdown trace and saved chat handoff summary",
+          "Actual Windows desktop clients and two-PC G08 acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/fleet-view.md",
         "docs/federation/fleet-view-evidence.json",
-        "tests/fleetviewtest.mjs"
+        "tests/fleetviewtest.mjs",
+        "docs/federation/fleet-evidence.md",
+        "docs/federation/fleet-evidence-evidence.json",
+        "tests/fleetevidencetest.mjs"
       ]
     },
     {
@@ -2338,11 +2342,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; 17 desktop + 14 fleet + 37 MCP local tests and isolated browser task-link checks",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection",
         "pending": [
-          "Full role/run/artifact trace and saved handoff summaries",
-          "Long-running deployment, actual desktop setup and operational recovery",
-          "Physical two-PC offline/reconnect G08 acceptance"
+          "Receipted remote actions, dependency graph and historical pagination",
+          "Full Markdown trace and saved chat handoff summary",
+          "Actual Windows desktop clients and two-PC G08 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2356,7 +2360,10 @@
         "docs/federation/desktop-context.md",
         "docs/federation/desktop-context-evidence.json",
         "tests/desktopcontexttest.mjs",
-        "docs/federation/context-retention-evidence.json"
+        "docs/federation/context-retention-evidence.json",
+        "docs/federation/fleet-evidence.md",
+        "docs/federation/fleet-evidence-evidence.json",
+        "tests/fleetevidencetest.mjs"
       ]
     },
     {
@@ -2416,11 +2423,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; explicit retention with reader grace and resumable cleanup; portable Windows MCPB and extracted stdio bridge with read-only preflight. Local tests only; actual desktop installation unverified.",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection",
         "pending": [
-          "Full role/run/artifact trace and saved handoff summaries",
-          "Long-running deployment, actual desktop setup and operational recovery",
-          "Physical two-PC offline/reconnect G08 acceptance"
+          "Receipted remote actions, dependency graph and historical pagination",
+          "Full Markdown trace and saved chat handoff summary",
+          "Actual Windows desktop clients and two-PC G08 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2434,7 +2441,10 @@
         "docs/federation/context-retention-evidence.json",
         "packaging/desktop/README.md",
         "docs/federation/desktop-package-evidence.json",
-        "tests/desktop-packagetest.mjs"
+        "tests/desktop-packagetest.mjs",
+        "docs/federation/fleet-evidence.md",
+        "docs/federation/fleet-evidence-evidence.json",
+        "tests/fleetevidencetest.mjs"
       ]
     },
     {

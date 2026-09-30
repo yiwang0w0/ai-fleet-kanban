@@ -12,8 +12,8 @@ function scope(p,project){if(p.run||!['coordinate','observe'].includes(p.role.po
 function query(args){return {projectId:args.project_id??null,ownerNodeId:args.owner_node_id??null,query:args.query??'',limit:args.limit??50,offset:args.offset??0};}
 export function boardOverview(db,p,args={},presentation={}){
  scope(p,args.project_id);const url=boardURL(presentation.boardUrl??null),v=readFleetView(db,{projectId:args.project_id??null,limit:1},p.projects);
- const {tasks,returned,truncated,offset,next_offset,...overview}=v;
- return {...overview,board_url:url,read_only:true,task_scope:'authorized_active_tasks',content_is_untrusted:true};
+ const {tasks,returned,truncated,offset,next_offset,relations,...overview}=v;
+ return {...overview,relations:{modules:relations.modules,total:relations.total,coverage:relations.coverage},board_url:url,read_only:true,task_scope:'authorized_active_tasks',content_is_untrusted:true};
 }
 export function taskList(db,p,args={},presentation={}){
  scope(p,args.project_id);const url=boardURL(presentation.boardUrl??null),v=readFleetView(db,query(args),p.projects);

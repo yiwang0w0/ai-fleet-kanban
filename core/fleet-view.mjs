@@ -4,6 +4,7 @@ import {createRequire} from "node:module";
 import {listReplicas,syncStatus} from "./federation/sync-store.mjs";
 import {PeerError,names} from "./federation/protocol.mjs";
 import {createHash} from "node:crypto";
+import {fleetRelations,fleetTaskEvidence} from "./fleet-evidence.mjs";
 const store=createRequire(import.meta.url)("./store.js");
 const exists=(db,name)=>!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
 function snapshot(db,work){if(db.isTransaction)return work();db.exec("BEGIN");try{return work();}finally{db.exec("ROLLBACK");}}
@@ -14,8 +15,9 @@ function options({projectId=null,ownerNodeId=null,query="",limit=1000,offset=0,n
 function data(db,authorizedProjects=null){
  const scope=authorizedProjects===null?null:new Set(names(authorizedProjects,"projects",null,1));
  const local=store.localNode(db),shares=new Map(exists(db,"federation_shares")?db.prepare("SELECT task_id,project_id FROM federation_shares").all().map(r=>[r.task_id,r.project_id]):[]);
+ const admittedProjects=new Map(exists(db,"broker_task_projects")?db.prepare("SELECT task_uid,project_id FROM broker_task_projects").all().map(t=>[t.task_uid,t.project_id]):[]);
  const parents=new Map(db.prepare("SELECT id,task_uid FROM tasks").all().map(t=>[t.id,t.task_uid]));
- let localTasks=store.list(db).tasks.map(t=>({...t,parent_uid:t.parent_id===null?null:parents.get(t.parent_id)??null,project_id:shares.get(t.id)??null,read_only:false,owner_name:local.display_name,recovery_state:null}));
+ let localTasks=store.list(db).tasks.map(t=>({...t,parent_uid:t.parent_id===null?null:parents.get(t.parent_id)??null,project_id:shares.get(t.id)??admittedProjects.get(t.task_uid)??null,read_only:false,owner_name:local.display_name,recovery_state:null}));
  const schema=exists(db,"federation_sync_schema")?db.prepare("SELECT version FROM federation_sync_schema WHERE singleton=1").get()?.version:null;
  const ready=schema===4,sync=ready?syncStatus(db):{sources:[],cursors:[],attempts:[],epoch_projects:[],snapshot_staging:[],pending:[],deliveries:[]};
  let remote=ready?listReplicas(db).filter(t=>!t.archived_at):[];
@@ -39,7 +41,7 @@ function freshness(p,now){
  if(p.recovery)return "recovery";if(p.error_code)return "failed";if(p.has_more)return "syncing";if(!p.last_sync_at)return "unknown";
  const at=Date.parse(p.last_sync_at);if(!Number.isFinite(at)||at>now+60000)return "clock_unknown";return now-at>60000?"stale":"recent";
 }
-function buildView(d,o){
+function buildView(db,d,o){
   const nodes=new Map(),projects=new Set();
   nodes.set(d.local.node_id,{node_id:d.local.node_id,display_name:d.local.display_name,local:true,projects:[],last_seen_at:null,peer_status:null});
   const node=id=>{if(!nodes.has(id))nodes.set(id,{node_id:id,display_name:id,local:false,projects:[],last_seen_at:null,peer_status:null});return nodes.get(id);};
@@ -59,14 +61,16 @@ function buildView(d,o){
   const visibleNodes=[...nodes.values()].filter(n=>!o.ownerNodeId||n.node_id===o.ownerNodeId).sort((a,b)=>Number(b.local)-Number(a.local)||a.display_name.localeCompare(b.display_name)||a.node_id.localeCompare(b.node_id));
   for(const n of visibleNodes){const relevant=n.projects.filter(p=>!o.projectId||p.project_id===o.projectId),received=n.local||relevant.some(p=>p.received||p.last_sync_at);n.counts=received?(totals.get(n.node_id)??{total:0,not_started:0,in_progress:0,waiting:0,done:0}):null;n.projects=relevant;n.connection_state=n.local?"local":["recovery","failed","syncing","clock_unknown","unknown","stale","recent"].find(state=>relevant.some(p=>p.state===state))??"unknown";}
   matching.sort((a,b)=>a.task_uid.localeCompare(b.task_uid));
-  const snapshot_id=createHash("sha256").update(JSON.stringify({matching,nodes:visibleNodes})).digest("hex");
   const selected=matching.slice(o.offset,o.offset+o.limit),included=new Set(selected.map(t=>t.task_uid));
-  return {format:"ai-fleet-view/v1",snapshot_id,offset:o.offset,next_offset:o.offset+selected.length<matching.length?o.offset+selected.length:null,generated_at:new Date(o.now).toISOString(),local_node_id:d.local.node_id,sync_state:d.syncState,projects:[...projects].sort(),nodes:visibleNodes,tasks:selected.map(t=>({...t,parent_in_view:!!t.parent_uid&&included.has(t.parent_uid)})),total_matching:matching.length,returned:selected.length,truncated:o.offset+selected.length<matching.length,pending_publications:d.sync.pending.reduce((n,p)=>n+p.tasks,0),pending_acknowledgements:d.sync.deliveries.filter(p=>p.offered_seq>p.acked_seq).length};
+  const relations=fleetRelations(db,[...d.localTasks,...d.remote],d.local,{matching:new Set(matching.map(t=>t.task_uid)),included});
+  const stableRelations={...relations,items:relations.items.map(r=>({...r,source:r.source?{...r.source,in_view:undefined}:null,target:r.target?{...r.target,in_view:undefined}:null}))};
+  const snapshot_id=createHash("sha256").update(JSON.stringify({matching,nodes:visibleNodes,relations:stableRelations})).digest("hex");
+  return {format:"ai-fleet-view/v1",relations,snapshot_id,offset:o.offset,next_offset:o.offset+selected.length<matching.length?o.offset+selected.length:null,generated_at:new Date(o.now).toISOString(),local_node_id:d.local.node_id,sync_state:d.syncState,projects:[...projects].sort(),nodes:visibleNodes,tasks:selected.map(t=>({...t,parent_in_view:!!t.parent_uid&&included.has(t.parent_uid)})),total_matching:matching.length,returned:selected.length,truncated:o.offset+selected.length<matching.length,pending_publications:d.sync.pending.reduce((n,p)=>n+p.tasks,0),pending_acknowledgements:d.sync.deliveries.filter(p=>p.offered_seq>p.acked_seq).length};
 }
-export function readFleetView(db,query={},authorizedProjects=null){return snapshot(db,()=>buildView(data(db,authorizedProjects),options(query)));}
+export function readFleetView(db,query={},authorizedProjects=null){return snapshot(db,()=>buildView(db,data(db,authorizedProjects),options(query)));}
 const detail=t=>({...summary(t),description:t.description??"",acceptance:t.acceptance??"",result:t.result??null,verdict_note:t.verdict_note??null});
-export function readFleetSnapshot(db,query={},authorizedProjects=null){return snapshot(db,()=>{const d=data(db,authorizedProjects),view=buildView(d,options(query)),byUid=new Map([...d.localTasks,...d.remote].map(t=>[t.task_uid,t]));return {view,tasks:view.tasks.map(t=>detail(byUid.get(t.task_uid)))};});}
+export function readFleetSnapshot(db,query={},authorizedProjects=null){return snapshot(db,()=>{const d=data(db,authorizedProjects),view=buildView(db,d,options(query)),byUid=new Map([...d.localTasks,...d.remote].map(t=>[t.task_uid,t]));return {view,tasks:view.tasks.map(t=>detail(byUid.get(t.task_uid)))};});}
 export function readFleetTask(db,uid,authorizedProjects=null){
  if(typeof uid!=="string"||uid.length>100)throw new PeerError("BAD_INPUT","任务 UID 无效",400);
- return snapshot(db,()=>{const d=data(db,authorizedProjects),t=[...d.localTasks,...d.remote].find(t=>t.task_uid===uid);if(!t)throw new PeerError("NOT_FOUND","当前视图中未找到任务",404);return detail(t);});
+ return snapshot(db,()=>{const d=data(db,authorizedProjects),t=[...d.localTasks,...d.remote].find(t=>t.task_uid===uid);if(!t)throw new PeerError("NOT_FOUND","当前视图中未找到任务",404);return {...detail(t),evidence:fleetTaskEvidence(db,[...d.localTasks,...d.remote],d.local,uid)};});
 }
