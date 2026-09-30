@@ -1,6 +1,6 @@
 # 受控领取、调用预算与启动许可
 
-对应 T04.02 / T04.06 的调度存储部分。MCP 协调工具的路由请求现在可以由本地管理命令转换为真实 task_runs 记录和受限运行凭据。启动许可和终态回执接口供后续执行器监督进程使用；当前 CLI 已新增 Claude/Codex board-tools 单次 execute 与终态 reconcile（见 adapters.md）；Zcode 尚不支持，不自动处理整个队列。
+对应 T04.02 / T04.06 的调度存储部分。MCP 协调工具的路由请求现在可以由本地管理命令转换为真实 task_runs 记录和受限运行凭据。启动许可和终态回执接口供后续执行器监督进程使用；当前 CLI 支持 Claude/Codex/Zcode 单次 execute 与终态 reconcile（见 adapters.md）；持续队列入口见 scheduler.md。
 
 这不是完整执行器验收。固定程序参数、供应商输出解析、进程树终止、工作区隔离和真实调用仍在后续批次。所有本批测试使用临时数据库、Git 夹具和 stdio 桩进程；真实三模型仍各 0/1。
 
@@ -89,3 +89,5 @@ MCP get_sync_status 在该项目授权范围内显示分派阶段和原因，不
 ## 证据
 
 npm run test:dispatch 覆盖原生闸、版本/授权变化、源代码闸、预算保留和 CAS、两个独立进程争抢、嵌套事务拒绝、提交失败回滚、旧 run 回执、MCP 先交付、独立 stdio 进程、租约回收和本地管理 CLI。源文件摘要及完整回归/CI 结果见 dispatch-evidence.json。阶段 G04 仍未通过。
+
+持续调度现已接通本机已授权 provider 请求、受限预算、私有启动目录及登记工作区，并保留一次性许可与进程停止证明。命令、停止及回执恢复流程见 [scheduler.md](scheduler.md)。这个接线不替代真实订阅、OS 隔离或 G04/G10 验收。

@@ -1,0 +1,144 @@
+import test,{after} from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {createRequire} from 'node:module';
+import {randomUUID} from 'node:crypto';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,cpSync,readdirSync,realpathSync,unlinkSync} from 'node:fs';
+import {join,relative,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+import {execFileSync} from 'node:child_process';
+import {setTimeout as delay} from 'node:timers/promises';
+import {migrateSync} from '../core/federation/sync-store.mjs';
+import {localIdentity} from '../core/federation/peers.mjs';
+import {migrateDispatch,putQuota,quotaStatus} from '../core/execution/dispatch.mjs';
+import {putRole,issuePrincipal,revokePrincipal} from '../core/mcp/policy.mjs';
+import {callTool} from '../core/mcp/tools.mjs';
+import {openScheduler} from '../core/execution/scheduler.mjs';
+import {createSourceGate} from '../core/execution/source-gate.mjs';
+import {pinFile} from '../core/execution/supervisor.mjs';
+import {registerRepository} from '../core/artifacts/repositories.mjs';
+import {migrateWorkspaces,registerWorkspacePool} from '../core/artifacts/workspaces.mjs';
+const store=createRequire(import.meta.url)('../core/store.js'),ROOT=fileURLToPath(new URL('../',import.meta.url)),TMP=mkdtempSync(join(tmpdir(),'fleet-scheduler-'));
+const dbs=[],schedulers=[],git=(root,args)=>execFileSync('git',['-C',root,...args],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();
+const source=join(TMP,'governance');mkdirSync(source);for(const d of ['core','cli'])cpSync(join(ROOT,d),join(source,d),{recursive:true});
+git(source,['init','--quiet','--template=']);git(source,['config','core.autocrlf','false']);git(source,['add','.']);git(source,['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','fixture']);
+const approval=join(TMP,'accepted-fixture');writeFileSync(approval,git(source,['rev-parse','HEAD:']));
+const gate=createSourceGate({codeRoot:source,approvalFile:approval});
+const python=pinFile(execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||'python',['-I','-S','-X','utf8','-c','import sys; print(sys.executable)'],{encoding:'utf8',windowsHide:true}).trim());
+const environment=Object.fromEntries(Object.entries(process.env).filter(([k])=>['systemroot','windir','temp','tmp'].includes(k.toLowerCase())));
+after(()=>{for(const s of schedulers)try{s.close();}catch{}for(const d of dbs)try{d.close();}catch{}const rel=relative(resolve(tmpdir()),resolve(TMP));assert.ok(rel&&!rel.startsWith('..'));rmSync(TMP,{recursive:true,force:true});});
+function fixture({limit=5,max=1,wait=0,capability='board-tools'}={}){
+ const base=mkdtempSync(join(TMP,'case-')),dbPath=join(base,'board.db'),db=new DatabaseSync(dbPath);dbs.push(db);store.migrate(db);migrateSync(db);migrateDispatch(db);
+ const limits={max_task_attempts:2,max_open_tasks:100,requests_per_minute:300};
+ putRole(db,{role_id:'coordinator',kind:'coordinate',projects:['demo'],capabilities:[],runtime:null,model:null,effort:null,tools:'write',priority:10,enabled:true,limits});
+ putRole(db,{role_id:'engine',kind:'implement',projects:['demo'],capabilities:[capability],runtime:'zcode',model:'GLM-5.3',effort:'low',tools:'write',priority:10,enabled:true,limits});
+ const coordFile=join(base,'coord.json'),principal=issuePrincipal(db,{roleId:'coordinator',projects:['demo'],credentialFile:coordFile}),auth='Bearer '+JSON.parse(readFileSync(coordFile,'utf8')).token;
+ const q=putQuota(db,{quota_id:randomUUID(),runtime:'zcode',execution_mode:'provider',projects:['demo'],limit_total:limit,enabled:true});
+ const authHome=join(base,'auth','.zcode','v2');mkdirSync(authHome,{recursive:true});
+ const bundle=join(base,'synthetic.cjs'),builtin=join(base,'builtin.json'),marker=join(base,'started.log');
+ writeFileSync(bundle,"const fs=require('node:fs');fs.appendFileSync("+JSON.stringify(marker)+",String(process.pid)+'\\n');const input=process.argv[process.argv.indexOf('--prompt')+1],out=e=>process.stdout.write(JSON.stringify(e)+'\\n'),e=(type,seq,payload)=>({type,seq,eventId:'event'+seq,sessionId:'fixture',turnId:'turn',traceId:'trace',timestamp:seq,payload});out(e('turn.started',1,{input}));out(e('session.updated',2,{providerId:'account:bigmodel-individual-coding-plan',modelId:'GLM-5.3',messageCount:1,toolCount:5,iteration:0}));setTimeout(()=>{out(e('turn.completed',3,{resultType:'success',response:'synthetic only'}));out({type:'result',sessionId:'fixture',turnId:'turn',traceId:'trace',response:'synthetic only',eventCount:3,projection:{status:'completed',turnCount:1,totalTokenCount:0}});},"+wait+");");
+ writeFileSync(builtin,JSON.stringify({schemaVersion:1,revision:30,config:{providerConfigRules:{templateRules:[],providerRules:[{providerId:'account:bigmodel-individual-coding-plan',config:{group:'bigmodel-family',builtinModelIds:['GLM-5.3'],access:{type:'zhipu-account',accountType:'bigmodel',mode:'individual-coding-plan'},api:{type:'anthropic-messages',baseUrl:'https://open.bigmodel.cn/api/anthropic'}}}]},modelConfigRules:{modelRules:[],modelApiRules:[],providerSiteRules:[],templateModelRules:[],builtinProviderModelRules:[]}}}));
+ const n=localIdentity(db),config={format:'ai-fleet-scheduler/v1',node_id:n.node_id,node_epoch:n.sync_epoch,root:join(base,'运行 根 & private'),max_active:max,poll_ms:1000,profiles:[{project_id:'demo',role_id:'engine',quota_id:q.quota_id,installation:{runtime:'zcode',version:'0.16.9',program:pinFile(process.execPath),bundle:pinFile(bundle),builtin_config:pinFile(builtin),auth_home:authHome},python,node:pinFile(process.execPath),mcp_url:'http://127.0.0.1:43111',timeout_ms:10000,workspace:null}]};
+ return {base,db,dbPath,auth,principal,q,config,marker,capability,events:[]};
+}
+function card(f,{release=true}={}){
+ const c=callTool(f.db,f.auth,'create_task',{request_id:randomUUID(),project_id:'demo',kind:'task',subject:'synthetic task',description:'PRIVATE-TASK-BODY',acceptance:'synthetic receipt only',work_kind:'implement',required_capabilities:[f.capability]}).task;
+ if(release)store.setReleased(f.db,{id:c.id,expectedVersion:c.aggregate_version,released:true});
+ const t=store.get(f.db,c.id),a=callTool(f.db,f.auth,'request_assignment',{request_id:randomUUID(),task_uid:t.task_uid,expected_version:t.aggregate_version});return {t,a};
+}
+function open(f,extra={}){const s=openScheduler(f.db,{dbPath:f.dbPath,sourceGate:gate,config:f.config,environment,onEvent:e=>f.events.push(e),...extra});schedulers.push(s);return s;}
+const used=f=>quotaStatus(f.db,f.q.quota_id).used;
+const launches=f=>f.db.prepare('SELECT count(*) n FROM broker_execution_records').get().n;
+async function started(f){const deadline=Date.now()+10000;while(!existsSync(f.marker)){if(Date.now()>deadline)throw Error('Synthetic process did not start');await delay(30);}}
+
+test('queue request reaches an actual supervised synthetic process once and remains awaiting acceptance',async()=>{
+ const f=fixture({limit:1}),{t}=card(f),s=open(f),r=await s.tick();assert.equal(r.results[0].phase,'settled');assert.equal(used(f),1);assert.equal(launches(f),1);
+ const d=f.db.prepare('SELECT * FROM broker_dispatches').get(),o=JSON.parse(f.db.prepare('SELECT observation_json FROM broker_execution_records').get().observation_json);
+ assert.equal(o.process.cleanup,'job_empty');assert.equal(o.real_model_call_confirmed,false);assert.equal(store.get(f.db,t.id).waiting_for,'review');assert.equal(JSON.parse(d.result_json).accepted,false);
+ await s.tick();s.close();const next=open(f);await next.tick();assert.equal(used(f),1);assert.equal(launches(f),1);assert.ok(!JSON.stringify(f.events).includes('PRIVATE-TASK-BODY'));next.close();
+});
+test('bounded concurrent batch consumes only available explicit quota and leaves excess request pending',async()=>{
+ const f=fixture({limit:2,max:2,wait:300});for(let i=0;i<3;i++)card(f);const s=open(f),r=await s.tick();
+ assert.equal(r.results.length,2);assert.equal(used(f),2);assert.equal(launches(f),2);assert.equal(r.inflight,0);
+ await s.tick();assert.equal(used(f),2);assert.equal(f.db.prepare("SELECT count(*) n FROM broker_assignments WHERE state='waiting_executor'").get().n,1);s.close();
+});
+test('watch observes a later MCP request without restarting and drains on requested stop',async()=>{
+ const f=fixture({limit:2}),stop=new AbortController();card(f);let settled=0;
+ const s=open(f,{onEvent:e=>{f.events.push(e);if(e.kind==='settled'){settled++;if(settled===1)card(f);else stop.abort();}}});
+ const timeout=setTimeout(()=>stop.abort(),15000);try{await s.watch({stopSignal:stop.signal});}finally{clearTimeout(timeout);}
+ assert.equal(settled,2);assert.equal(used(f),2);assert.equal(f.events.at(-1).kind,'stopped');s.close();
+});
+test('disabled quota waits without claiming; explicit quota enable permits the same request',async()=>{
+ const f=fixture({limit:1});card(f);putQuota(f.db,{quota_id:f.q.quota_id,runtime:'zcode',execution_mode:'provider',projects:['demo'],limit_total:1,enabled:false},1);
+ const s=open(f);await s.tick();assert.equal(used(f),0);assert.equal(launches(f),0);assert.equal(readdirSync(f.config.root).length,1);
+ putQuota(f.db,{quota_id:f.q.quota_id,runtime:'zcode',execution_mode:'provider',projects:['demo'],limit_total:1,enabled:true},2);
+ await s.tick();assert.equal(used(f),1);s.close();
+});
+test('unreleased tasks and revoked coordinators never become runnable by polling',async()=>{
+ const f=fixture();card(f,{release:false});card(f);const s=open(f);revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});
+ await s.tick();await s.tick();assert.equal(used(f),0);assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);assert.equal(f.events.filter(e=>e.code==='AUTHORIZATION_CHANGED').length,1);s.close();
+});
+test('dirty governance and altered node configuration fail without consuming model quota',async()=>{
+ const f=fixture();card(f);const bad=structuredClone(f.config);bad.node_id=randomUUID();assert.throws(()=>open(f,{config:bad}),{code:'EPOCH_CHANGED'});
+ const s=open(f),dirty=join(source,'dirty.txt');writeFileSync(dirty,'fixture change');try{await assert.rejects(s.tick(),{code:'SOURCE_DIRTY'});}finally{unlinkSync(dirty);}
+ assert.equal(used(f),0);assert.equal(launches(f),0);s.close();
+});
+test('canonical database singleton lock rejects another root and preserves the existing owner',()=>{
+ const f=fixture(),s=open(f),other=structuredClone(f.config);other.root=join(f.base,'other-root');
+ const next=new DatabaseSync(f.dbPath);dbs.push(next);
+ assert.throws(()=>openScheduler(next,{dbPath:f.dbPath,sourceGate:gate,config:other,environment}),{code:'SCHEDULER_BUSY'});assert.equal(existsSync(other.root),false);s.close();
+});
+test('stop requested after preparation drains the launched task and leaves the next task pending',async()=>{
+ const f=fixture({max:2,wait:300}),stop=new AbortController();card(f);card(f);
+ const s=open(f,{onEvent:e=>{f.events.push(e);if(e.kind==='prepared')stop.abort();}});
+ const r=await s.tick({stopSignal:stop.signal});assert.equal(used(f),1);assert.equal(r.results.length,1);assert.equal(r.results[0].phase,'settled');assert.equal(f.events.find(e=>e.kind==='settled').result,'success');s.close();
+});
+test('explicit active cancellation observes native Job cleanup without refunding its permit',async()=>{
+ const f=fixture({wait:9000}),cancel=new AbortController();card(f);const s=open(f),running=s.tick({cancelSignal:cancel.signal});
+ await started(f);cancel.abort();await running;
+ const o=JSON.parse(f.db.prepare('SELECT observation_json FROM broker_execution_records').get().observation_json);
+ assert.equal(o.status,'cancelled');assert.equal(o.process.cleanup,'job_empty');assert.equal(used(f),1);s.close();
+});
+test('settlement failure preserves journal and blocks another start until explicit reconciliation',async()=>{
+ const f=fixture({limit:2}),one=card(f);card(f);const s=open(f);
+ f.db.exec("CREATE TRIGGER reject_settle BEFORE INSERT ON broker_dispatch_events WHEN NEW.kind='settled' BEGIN SELECT RAISE(ABORT,'fixture database failure'); END");
+ const r=await s.tick();assert.equal(r.results[0].phase,'attention');assert.equal(used(f),1);assert.equal(r.inflight,1);
+ await s.tick();assert.equal(used(f),1);f.db.exec('DROP TRIGGER reject_settle');
+ assert.equal(s.reconcile(one.a.assignment_id).launched,false);assert.equal(s.reconcile(one.a.assignment_id).phase,'settled');assert.equal(used(f),1);
+ await s.tick();assert.equal(used(f),2);s.close();
+});
+test('prelaunch adapter refusal abandons only the unlaunched reservation and retains its files',async()=>{
+ const f=fixture();const {t,a}=card(f),s=open(f);writeFileSync(join(f.config.root,'.env'),'fixture marker');
+ const r=await s.tick();assert.equal(r.results[0].code,'STARTUP_CONFIG_PRESENT');assert.equal(used(f),0);assert.equal(launches(f),0);
+ assert.equal(f.db.prepare('SELECT phase FROM broker_dispatches').get().phase,'abandoned');assert.equal(store.get(f.db,t.id).waiting_for,'decision');
+ assert.equal(existsSync(join(f.config.root,a.assignment_id,'private','principal.json')),true);s.close();
+});
+test('workspace profile provisions the registered Git baseline and binds its file session to the launch',async()=>{
+ const f=fixture({capability:'workspace-files'}),repo=join(f.base,'repository'),pool=join(f.base,'pool');mkdirSync(repo);mkdirSync(pool);mkdirSync(join(repo,'src'));writeFileSync(join(repo,'src','example.txt'),'original');
+ git(repo,['init','--quiet','--template=']);git(repo,['-c','core.autocrlf=false','add','.']);git(repo,['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','base']);const commit=git(repo,['rev-parse','HEAD']);
+ const execPath=execFileSync('git',['--exec-path'],{encoding:'utf8',windowsHide:true}).trim(),gitPin=pinFile(realpathSync.native(join(execPath,'../../bin/git.exe')));
+ const mapping=registerRepository(f.db,{mappingId:randomUUID(),projectId:'demo',repoId:'app',root:repo,git:gitPin,baseCommit:commit,paths:['src/']});migrateWorkspaces(f.db);const poolId=randomUUID();registerWorkspacePool(f.db,{poolId,mappingId:mapping.mapping_id,root:pool,allowFullHistoryCopy:true});
+ f.config.profiles[0].workspace={pool_id:poolId,base_commit:commit,write_paths:['src/']};card(f);const s=open(f),r=await s.tick();
+ assert.equal(r.results[0].phase,'settled',JSON.stringify(r));assert.equal(used(f),1);assert.equal(f.db.prepare('SELECT count(*) n FROM workspace_sessions').get().n,1);assert.equal(f.db.prepare('SELECT count(*) n FROM workspace_launches').get().n,1);assert.equal(f.db.prepare('SELECT written_bytes FROM workspace_sessions').get().written_bytes,0);s.close();
+});
+
+test('actual scheduler CLI executes a queued synthetic task with the same source gate and receipt contract',()=>{
+ const f=fixture({limit:1});card(f);const configFile=join(f.base,'scheduler.json');writeFileSync(configFile,JSON.stringify(f.config));
+ const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>['systemroot','windir','temp','tmp','path','pathext','pythonutf8'].includes(k.toLowerCase())));
+ const out=execFileSync(process.execPath,[join(source,'cli','scheduler.mjs'),'once','--db',f.dbPath,'--config-file',configFile,'--accepted-rev',approval],{env,encoding:'utf8',windowsHide:true,timeout:20000});
+ const rows=out.trim().split('\n').map(x=>JSON.parse(x));assert.ok(rows.some(x=>x.kind==='settled'));assert.equal(used(f),1);assert.equal(launches(f),1);assert.ok(!out.includes('PRIVATE-TASK-BODY'));
+});
+test('removing the root identity while running cannot silently initialize a new binding',async()=>{
+ const f=fixture();card(f);const s=open(f);unlinkSync(join(f.config.root,'ROOT.json'));await assert.rejects(s.tick(),{code:'SCHEDULER_BINDING_CHANGED'});assert.equal(used(f),0);s.close();
+});
+test('malformed or duplicate profiles and changed runtime pins fail before making a private root',()=>{
+ const f=fixture();for(const mutate of [c=>c.profiles.push(structuredClone(c.profiles[0])),c=>c.max_active=0,c=>c.profiles[0].node.sha256='0'.repeat(64),c=>c.profiles[0].mcp_url='http://192.0.2.1:43111']){
+  const c=structuredClone(f.config);mutate(c);assert.throws(()=>open(f,{config:c}));assert.equal(existsSync(c.root),false);
+ }assert.equal(used(f),0);
+});
+test('existing private files after a gate refusal are retained and cannot be reused for an automatic start',async()=>{
+ const f=fixture(),{a}=card(f),s=open(f);revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});await s.tick();
+ const file=join(f.config.root,a.assignment_id,'private','sentinel.txt');writeFileSync(file,'keep');await s.tick();
+ assert.equal(readFileSync(file,'utf8'),'keep');assert.equal(used(f),0);assert.equal(f.events.at(-1).code,'ORPHANED_PREPARATION');s.close();
+});

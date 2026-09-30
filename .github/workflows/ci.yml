@@ -112,6 +112,10 @@ jobs:
         run: bash hrun.sh node tests/supervisortest.mjs
       - name: adaptertest (explicit provider profiles, scoped tools and sealed configuration)
         run: bash hrun.sh node tests/adaptertest.mjs
+      - name: schedulertest (continuous local queue, native receipts and no relaunch)
+        run: bash hrun.sh node tests/schedulertest.mjs
+        env:
+          PYTHON: python
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)

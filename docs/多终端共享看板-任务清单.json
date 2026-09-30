@@ -1293,10 +1293,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "atomic native claim, role-bound MCP identity, reserved call quotas, one-use launch permit and terminal/late receipt lifecycle; sealed Windows Zcode one-model subscription configuration and stdin launcher; actual installed bundle with local fake model/MCP; synthetic complete launch/settlement and cancellation tests",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers.",
         "pending": [
-          "real subscription compatibility and authorized minimal provider tasks",
-          "Windows filesystem permissions, complete orchestration and independent G04 acceptance"
+          "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
+          "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
+          "Complete operator visibility, independent G04 acceptance and long-running operations"
         ]
       },
       "acceptance_receipt": null,
@@ -1310,7 +1311,10 @@
         "docs/federation/zcode.md",
         "docs/federation/zcode-evidence.json",
         "tests/adaptertest.mjs",
-        "tests/supervisortest.mjs"
+        "tests/supervisortest.mjs",
+        "docs/federation/scheduler.md",
+        "docs/federation/scheduler-evidence.json",
+        "tests/schedulertest.mjs"
       ]
     },
     {
@@ -1482,10 +1486,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation; sealed Windows Zcode one-model subscription configuration and stdin launcher; actual installed bundle with local fake model/MCP; synthetic complete launch/settlement and cancellation tests",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers.",
         "pending": [
-          "real subscription compatibility and authorized minimal provider tasks",
-          "Windows filesystem permissions, complete orchestration and independent G04 acceptance"
+          "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
+          "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
+          "Complete operator visibility, independent G04 acceptance and long-running operations"
         ]
       },
       "acceptance_receipt": null,
@@ -1501,7 +1506,10 @@
         "docs/federation/adapter-evidence.json",
         "tests/adaptertest.mjs",
         "docs/federation/zcode.md",
-        "docs/federation/zcode-evidence.json"
+        "docs/federation/zcode-evidence.json",
+        "docs/federation/scheduler.md",
+        "docs/federation/scheduler-evidence.json",
+        "tests/schedulertest.mjs"
       ]
     },
     {

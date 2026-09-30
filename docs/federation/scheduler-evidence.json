@@ -1,0 +1,126 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-46-continuous-scheduler",
+  "date": "2026-09-30",
+  "base_commit": "cdaeadd572b4eafcaf9fa48dd74beda36e933a69",
+  "platform": "win32",
+  "node": "v24.16.0",
+  "normalization": "UTF-8 LF",
+  "files": [
+    {
+      "path": "core/execution/scheduler.mjs",
+      "sha256": "044f218fc16927896e011cb45fdd16532f076303bb4ca83c1b18fe3443f4549c"
+    },
+    {
+      "path": "cli/scheduler.mjs",
+      "sha256": "7d1043019de49abecf558b7855e74ecfc8aebdaa97877200967204c87b561485"
+    },
+    {
+      "path": "tests/schedulertest.mjs",
+      "sha256": "e6c65cac247bd0065be5cfb938c0af0c4abcaecd9ac797633a9655ba503fc4e0"
+    },
+    {
+      "path": "package.json",
+      "sha256": "fbb437e9d154b1d72e84100a6489a9c685d3ba4e5a57977615b0d6b5d7142cdd"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "5debcf3cadded9fa9e9d2917b729f5d305741e0842ca83472c64a61e530c00bb"
+    },
+    {
+      "path": "docs/federation/scheduler.md",
+      "sha256": "f9f98491e32c8a8a5f850aca5a4b2fb67e8fd920ca2b296e60dcc8e537fa3015"
+    },
+    {
+      "path": "docs/federation/dispatch.md",
+      "sha256": "274e86cbbb30fb024944b814cd750d944811719676ea9accd422b3933c09388a"
+    },
+    {
+      "path": "docs/federation/PROGRESS.md",
+      "sha256": "dfb362f26e8c9a96d3638fc4d233686690c2927f54af313ca9637107d6453a52"
+    },
+    {
+      "path": "docs/多终端共享看板-任务清单.json",
+      "sha256": "733989526bcec3134df19c781b11258d303d70db2574f9f575109af630c288cd"
+    }
+  ],
+  "tests": {
+    "command": "node --test tests/schedulertest.mjs tests/dispatchtest.mjs tests/adaptertest.mjs",
+    "pass": 85,
+    "fail": 0,
+    "skip": 0,
+    "scheduler_cases": 16,
+    "dispatch_cases": 44,
+    "adapter_cases": 25,
+    "duration_ms": 80044.8867,
+    "log_sha256": "a693acf2e8d53a3e3e2c459131e0b0ec7aa7a88953708d373a2297baa7f7b7a7",
+    "initial_subset": {
+      "pass": 12,
+      "fail": 0,
+      "skip": 0,
+      "counted_in_final": true,
+      "log_sha256": "8f20236efd7d5fd72893ae40630f29918bea7ca395c349b3f1302abafbea0f32"
+    },
+    "process": "Actual Windows Job and installed Node/Python; synthetic no-account Zcode bundle; no provider API used",
+    "coverage": [
+      "MCP request -> native supervised process -> durable terminal, never automatic acceptance",
+      "Persistent loop sees a later MCP request without restarting",
+      "Two concurrent dispatches respect explicit total quota",
+      "Disabled quota waits; explicit enable permits existing request",
+      "Unreleased tasks and revoked coordinators never claim",
+      "Dirty source, wrong node identity and malformed profile/pins refused",
+      "Canonical database lock rejects a second configuration root",
+      "Graceful drain and explicit active cancellation with actual Job cleanup",
+      "Failed DB settlement retains journal; explicit signed reconciliation never relaunches/refunds",
+      "Prelaunch error abandons only unspent reservation and retains private files",
+      "Registered Git workspace and file session are bound to process launch",
+      "Actual CLI once uses source approval and native receipt path",
+      "Missing root identity and orphaned private files refuse automatic reuse"
+    ]
+  },
+  "governance": {
+    "approval_file_written": false,
+    "actual_accepted_rev_changed": false,
+    "release_mutated": false,
+    "role_or_quota_created_by_scheduler": false,
+    "source_and_native_dispatch_gates_reused": true
+  },
+  "previous_ci": [
+    {
+      "commit": "6301e4dcbb62d1bbc998d11e9cbd832f9c27f756",
+      "run_id": 36718712287,
+      "windows_job_id": 109898020877,
+      "gitleaks_job_id": 109898020350,
+      "status": "success"
+    },
+    {
+      "commit": "cdaeadd572b4eafcaf9fa48dd74beda36e933a69",
+      "run_id": 36722450876,
+      "windows_job_id": 109910754222,
+      "gitleaks_job_id": 109910753897,
+      "status": "in_progress",
+      "gitleaks": "success",
+      "last_observed_step": "bindingtest"
+    }
+  ],
+  "current_ci": "pending after commit",
+  "limitations": [
+    "Actual client setup, real provider tasks and physical two-PC offline/reconnect unverified",
+    "Batches drain before replenishment; synchronous source/workspace preparation and full current-epoch run scan have not passed load/heartbeat-latency acceptance",
+    "No Windows service/autostart installation, daily/token budget windows or automatic evidence cleanup",
+    "Hard termination leaves a lock requiring original-process verification; no automatic takeover or relaunch",
+    "Existing current-account file ACL is not complete OS isolation",
+    "No 72-hour observation or independent G04 acceptance"
+  ],
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "accepted_tasks": 0,
+  "total_tasks": 72,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false
+}
