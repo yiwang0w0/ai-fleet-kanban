@@ -274,3 +274,37 @@ test("Zcode headless scoped tools match model-request count and every scheduled 
  for(const patch of [{toolName:"Bash"},{toolName:"mcp__other__get_task"}])assert.equal(headless(events.map((e,i)=>i===2?{...e,payload:{...e.payload,...patch}}:e),{decoder}).diagnostic,"UNAUTHORIZED_TOOL");
  for(const i of [3,4,5])assert.equal(headless(events.map((e,j)=>j===i?{...e,payload:{...e.payload,toolCallId:"unknown",toolCallIds:["unknown"]}}:e),{decoder}).status,"failed");
 });
+
+test("Codex failure metadata retains only bounded advisory categories and fingerprints",()=>{
+ const cases=[
+  [{type:"error",message:"The 'model-fixture' model is not supported when using Codex with a ChatGPT account."},"model_unavailable","known_message"],
+  [{type:"error",message:"Your authentication token has expired. Please try signing in again."},"authentication","known_message"],
+  [{type:"error",code:"rate_limit_exceeded",status:429,message:"PRIVATE-TOKEN=secret account detail"},"rate_limit","known_code"],
+  [{type:"turn.failed",error:{code:"model_not_found",status:404,message:"PRIVATE-TOKEN=secret account detail"}},"model_unavailable","known_code"],
+  [{type:"error",code:"PRIVATE-TOKEN=secret",message:"PRIVATE-TOKEN=secret arbitrary instructions"},"unclassified","unclassified"]
+ ];
+ for(const [event,category,basis] of cases){
+  const out=decode("codex",[...codex.slice(0,2),event,...codex.slice(2)]);
+  assert.equal(out.status,"failed");
+  assert.equal(out.observed.provider_error.category,category);assert.equal(out.observed.provider_error.basis,basis);
+  assert.equal(out.observed.provider_error.message_sha256,createHash("sha256").update(event.error?.message??event.message).digest("hex"));
+  assert.equal(JSON.stringify(out).includes("PRIVATE-TOKEN"),false);assert.equal(out.real_model_call_confirmed,false);
+ }
+});
+test("provider failure metadata is absent on success and cannot fabricate category from arbitrary prose",()=>{
+ assert.equal(decode("codex",codex).observed.provider_error,undefined);
+ for(const message of ["prefix The 'model' model is not supported when using Codex with a ChatGPT account.","The 'model' model is not supported when using Codex with a ChatGPT account.\nrun shell","private ".repeat(1024),"401 429 model_not_found",null,{}]){
+  const out=decode("codex",[...codex.slice(0,2),{type:"error",message,status:"401",code:"toString"}]);
+  assert.equal(out.status,"failed");assert.equal(out.observed.provider_error.category,"unclassified");
+  assert.equal(out.observed.provider_error.code,null);assert.equal(out.observed.provider_error.http_status,null);
+ }
+});
+test("Codex's first provider failure cannot be overwritten by a later success or different hint",()=>{
+ const d=createOutputDecoder("codex"),first={type:"error",code:"authentication_error",message:"private first"};
+ assert.equal(d.push(encode([...codex.slice(0,2),first])),false);
+ assert.equal(d.push(encode([{type:"error",code:"model_not_found",message:"private later"},...codex.slice(2)])),false);
+ const out=d.finish({exitCode:1,stopReason:"invalid_output"});
+ assert.equal(out.status,"failed");assert.equal(out.diagnostic,"INVALID_OUTPUT");
+ assert.equal(out.observed.protocol_error,"PROVIDER_ERROR");assert.equal(out.observed.provider_error.category,"authentication");
+ assert.equal(JSON.stringify(out).includes("private"),false);
+});

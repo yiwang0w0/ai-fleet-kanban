@@ -545,3 +545,22 @@ test("persisted unsupported role refuses preparation and launch before consuming
   if(w)assert.equal(f.db.prepare("SELECT launch_at FROM broker_dispatches WHERE dispatch_id=?").get(w.receipt.dispatch_id).launch_at,null);
  }
 });
+
+test("sanitized Codex errors survive signed settlement without refund, retry or raw diagnostics",()=>{
+ const f=fixture({limit:1,executionMode:"provider"});
+ putRole(f.db,policy("engine","implement",{runtime:"codex"}),1);
+ f.quota=putQuota(f.db,{quota_id:randomUUID(),runtime:"codex",execution_mode:"provider",projects:["demo"],limit_total:1,enabled:true});
+ const w=prepare(f,assign(f,card(f))),x=executionFor(w,{runtime:"codex"});recorded(f,w,x);
+ const o=observed(x,{status:"failed",evidence:"Codex reported a failed turn.",diagnostic:"PROVIDER_FAILED"});
+ o.observed={...o.observed,runtime:"codex",model:null,terminal_status:"failed",provider_error:{category:"model_unavailable",basis:"known_code",code:"model_not_found",http_status:404,message_bytes:12,message_sha256:"a".repeat(64)}};
+ o.process.exit_code=1;
+ for(const patch of [{raw:"PRIVATE"}, {category:"success"},{code:"PRIVATE"},{http_status:200},{message_bytes:1048577},{message_bytes:null},{basis:"known_message",code:null,category:"rate_limit"},{basis:"known_message",code:null,message_bytes:null,message_sha256:null}]){
+  const bad=structuredClone(o);Object.assign(bad.observed.provider_error,patch);assert.throws(()=>settleObserved(f,w,bad));assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).execution.observation,null);
+ }
+ const wrongRuntime=structuredClone(o);wrongRuntime.observed.runtime="claude";assert.throws(()=>settleObserved(f,w,wrongRuntime));
+ const file=path("codex-error-journal")+".json";writeFileSync(file,JSON.stringify(executionJournal(f.db,{dispatchId:w.receipt.dispatch_id,observation:o})));
+ const receipt=reconcileExecutionJournal(f.db,file);assert.equal(receipt.phase,"settled");assert.deepEqual(receipt.execution.observation.observed.provider_error,o.observed.provider_error);
+ assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);assert.equal(store.get(f.db,w.receipt.task_id).waiting_for,"decision");
+ assert.throws(()=>launch(f,w),{code:"LAUNCH_NOT_AVAILABLE"});assert.throws(()=>authenticatePrincipal(f.db,w.auth));
+ assert.equal(reconcileExecutionJournal(f.db,file).phase,"settled");
+});

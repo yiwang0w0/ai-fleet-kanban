@@ -1,3 +1,4 @@
+import {providerErrorMetadata} from "./provider-error.mjs";
 import {createHash} from "node:crypto";
 
 export class OutputError extends Error {
@@ -44,7 +45,7 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
  const seenEvents=new Set();
  const bound=limitsFor(limits),hash=createHash("sha256"),utf8=new TextDecoder("utf-8",{fatal:true});
  let chunks=[],pending=0,bytes=0,events=0,closed=false,failure=null,cached=null;
- let session=null,turn=null,model=null,started=false,terminal=null,lastText="",lastSeq=null,lastEvent=null,lastEventHash=null;
+ let session=null,turn=null,model=null,started=false,terminal=null,lastText="",lastSeq=null,lastEvent=null,lastEventHash=null,providerError=null;
  let trace=null,summarySeen=false,modelRequestSeen=false,terminalResponse=null,openingTurn=null,openingTrace=null;
  const toolCalls=new Map();
  const reject=code=>{failure??=code;return false;};
@@ -105,8 +106,10 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
   }else if(event.type==="turn.completed"){
    finishTurn("success",text(lastText),usageFrom(event.usage));
   }else if(event.type==="turn.failed"){
+   providerError??=providerErrorMetadata(event.error);
    finishTurn("failed","Codex reported a failed turn.");
   }else if(event.type==="error"){
+   providerError??=providerErrorMetadata(event);
    fail("PROVIDER_ERROR");
   }
  }
@@ -255,7 +258,7 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
   else if(!code&&headless&&terminal.status==="success"&&!summarySeen)code="MISSING_SUMMARY";
   else if(!code){status=terminal.status;code=status==="success"?"SUCCESS":"PROVIDER_"+status.toUpperCase();}
   evidence=code==="SUCCESS"?terminal.evidence:"Executor did not complete successfully ("+code+").";
-  cached={status,evidence,usage,diagnostic:code,observed:{runtime,session_id:session,turn_id:turn,model,terminal_status:terminal?.status??null,protocol_error:failure,bytes,events,stdout_sha256:hash.digest("hex")},real_model_call_confirmed:false};
+  cached={status,evidence,usage,diagnostic:code,observed:{runtime,...(providerError?{provider_error:providerError}:{}),session_id:session,turn_id:turn,model,terminal_status:terminal?.status??null,protocol_error:failure,bytes,events,stdout_sha256:hash.digest("hex")},real_model_call_confirmed:false};
   return structuredClone(cached);
  }
  return Object.freeze({push,finish,get failure(){return failure;}});

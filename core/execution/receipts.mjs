@@ -1,3 +1,4 @@
+import {isProviderErrorMetadata} from "./provider-error.mjs";
 import {exact,fail} from "../mcp/policy.mjs";
 import {canonical} from "../federation/sync-store.mjs";
 import {uuid} from "../federation/protocol.mjs";
@@ -26,7 +27,9 @@ export function processObservation(value,{result,launch}){
  if(o===null){
   if(value.status==="success"||value.diagnostic!=="SUPERVISOR_ERROR")bad();
  }else{
-  exact(o,["runtime","session_id","turn_id","model","terminal_status","protocol_error","bytes","events","stdout_sha256"],"execution_observed");
+  const providerError=o!==null&&typeof o==="object"&&Object.hasOwn(o,"provider_error");
+  exact(o,["runtime","session_id","turn_id","model","terminal_status","protocol_error","bytes","events","stdout_sha256",...(providerError?["provider_error"]:[])],"execution_observed");
+  if(providerError&&(o.runtime!=="codex"||value.status==="success"||!isProviderErrorMetadata(o.provider_error)))bad();
   if(o.runtime!==launch.runtime||!count(o.bytes)||o.bytes>33554432||!count(o.events)||o.events>100001||!hash(o.stdout_sha256))bad();
   for(const k of ["session_id","turn_id","model","protocol_error"])if(o[k]!==null&&!text(o[k]))bad();
   if(value.status==="success"&&o.model!==null&&o.model!==launch.model)bad();

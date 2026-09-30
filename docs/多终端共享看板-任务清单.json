@@ -1344,10 +1344,10 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation",
+        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation; actual Claude subscription board task succeeded; actual Codex dispatch failed before reading task, provider root cause unknown",
         "pending": [
-          "real provider MCP/tool/config behavior and model availability; Zcode subscription/transport integration",
-          "code-work capability, Windows filesystem containment, independent G04 acceptance"
+          "Codex successful real task and exact failed-provider diagnosis; additional attempt requires new authorization",
+          "Windows filesystem containment, full code-work capability and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1359,7 +1359,9 @@
         "tests/dispatchtest.mjs",
         "docs/federation/adapters.md",
         "docs/federation/adapter-evidence.json",
-        "tests/adaptertest.mjs"
+        "tests/adaptertest.mjs",
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
       ]
     },
     {
@@ -1392,8 +1394,8 @@
         "result": "local_partial_passed",
         "scope": "Zcode 0.16.9 headless stream decoder with prompt/provider/model/turn/summary binding; no-account native NDJSON and startup-failure probes; Windows job fixture cleanup; sealed Windows Zcode one-model subscription configuration and stdin launcher; actual installed bundle with local fake model/MCP; synthetic complete launch/settlement and cancellation tests",
         "pending": [
-          "real subscription compatibility and authorized minimal provider tasks",
-          "Windows filesystem permissions, complete orchestration and independent G04 acceptance"
+          "Correct China BigModel subscription login path; no provider call made under detected foreign account",
+          "Real subscription compatibility, Windows filesystem permissions and independent G04 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -1406,7 +1408,9 @@
         "docs/federation/zcode.md",
         "docs/federation/zcode-evidence.json",
         "tests/adaptertest.mjs",
-        "docs/federation/zcode-headless-evidence.json"
+        "docs/federation/zcode-headless-evidence.json",
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
       ]
     },
     {
@@ -2744,8 +2748,19 @@
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "preliminary_isolated_probe_partial",
+        "scope": "Explicitly authorized minimal task before full grey rollout; Claude passed, Codex failed; stages not accepted",
+        "pending": [
+          "Codex success",
+          "Artifact-producing tasks, full rollout dependencies and G10 evidence"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
+      ]
     },
     {
       "id": "T10.03",
@@ -2771,8 +2786,19 @@
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "not_started_auth_path_unresolved",
+        "scope": "China account record not found in selected home; cached China plan unavailable; not a live subscription-entitlement check",
+        "pending": [
+          "User identifies correct China account home or signs in",
+          "One authorized real task remains unused"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
+      ]
     },
     {
       "id": "T10.04",
@@ -3274,10 +3300,12 @@
       "date": "2026-09-29",
       "scope": "Claude、Codex、Zcode 各 1 个最小真实任务，使用现有订阅",
       "calls_consumed": {
-        "claude": 0,
-        "codex": 0,
+        "claude": 1,
+        "codex": 1,
         "zcode": 0
-      }
+      },
+      "consumption_basis": "One supervised dispatch task; failed launches count; not the number of underlying inference requests",
+      "evidence": "docs/federation/real-provider-evidence.json"
     },
     {
       "date": "2026-09-30",
@@ -3291,7 +3319,7 @@
     }
   ],
   "progress_record": "federation/PROGRESS.md",
-  "updated_date": "2026-09-30",
+  "updated_date": "2026-10-01",
   "platform_scope": {
     "decision_date": "2026-09-30",
     "source": "explicit_user_instruction",
