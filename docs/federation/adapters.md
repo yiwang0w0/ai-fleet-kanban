@@ -1,14 +1,14 @@
 # 本机执行适配、一次性运行与回执恢复
 
-本批接通 Claude 2.1.247 和 Codex 0.149.1 的显式本机启动配置、进程监管、一次性额度及持久化回执。入口为 dispatch execute，每次只处理一个已经领取的分派，不扫描队列。配置构造和输出解析均经过夹具测试；尚未用真实供应商完成该通道的模型任务。
+已接通 Claude 2.1.247、Codex 0.149.1 和 Zcode 0.16.9 的显式本机启动配置、进程监管、一次性额度及持久化回执。入口为 dispatch execute，每次只处理一个已经领取的分派，不扫描队列。配置构造和输出解析均经过夹具测试；尚未用真实供应商完成该通道的模型任务。
 
-当前支持明确的 capabilities: ["board-tools"] 或 ["workspace-files"]。后者通过受限 MCP 文件会话读写 UTF-8 源码并绑定 v2 启动记录；两种配置均关闭原生文件和命令工具，不自动升级为 shell 能力。详见 [文件会话与提交](workspace-files.md)。该配置不宣称实现 OS 文件隔离，也不满足完整 G04。Zcode 已补单次 stream-json 结果合同，见 [接入记录](zcode.md)；其订阅、实际工具策略及启动配置仍未接通，prepareAdapter 收到该运行时仍明确拒绝。
+当前支持明确的 capabilities: ["board-tools"] 或 ["workspace-files"]。后者通过受限 MCP 文件会话读写 UTF-8 源码并绑定 v2 启动记录；两种配置均关闭原生文件和命令工具，不自动升级为 shell 能力。详见 [文件会话与提交](workspace-files.md)。该配置不宣称实现 OS 文件隔离，也不满足完整 G04。Zcode 已接通单次启动和 stream-json 回执；安装包对本机假模型/MCP 的工具往返通过，真实订阅登录仍待验收，见 [接入记录](zcode.md)。
 
 ## 启动配置
 
 core/execution/adapters.mjs 从已登记的角色读取具体模型、推理档位及身份工具集。固定原生程序、Node 桥接程序、MCP 凭据与生成配置均记录 SHA256，启动前重验。安装版本是可信本机登记输入，须由管理员用同一路径的 --version 事先核验；填写版本字符串本身不是程序身份验证。程序摘要变化后必须重新核验登记。
 
-执行目录必须为空，位于治理仓、认证目录及本次私有运行目录之外；祖先含 .env 或 .mcp.json 时拒绝。认证配置不复制进运行目录。MCP 凭据须属于该节点代次与分派 principal，并放在本次私有目录；桥接代码来自同一治理仓，地址只接受带显式端口的 http://127.0.0.1/ 根地址。
+执行目录必须为空，位于治理仓、认证目录及本次私有运行目录之外；祖先含 .env 或 .mcp.json 时拒绝；Zcode 另外拒绝 zcode.json 和 .zcode/config.json。认证配置不复制进运行目录。MCP 凭据须属于该节点代次与分派 principal，并放在本次私有目录；桥接代码来自同一治理仓，地址只接受带显式端口的 http://127.0.0.1/ 根地址。
 
 生成配置使用排他新建，不覆盖已有文件；部分写入失败时仅删除本次已创建的配置。环境只继承所需的系统路径、代理及证书设置，剔除 API key、自定义 Node 注入及无关供应商环境。认证使用现有 CLI 认证目录，不切换到 API key。代理等环境内容不写进公开摘要，只记录整体哈希。
 
@@ -18,8 +18,9 @@ core/execution/adapters.mjs 从已登记的角色读取具体模型、推理档�
 |---|---|---|
 | Claude | --tools ""；仅授权角色 MCP 工具；--strict-mcp-config；--setting-sources ""；禁用 hooks、插件同步、slash commands 和 Chrome；具体模型、effort、固定 session；stdin 提示；不持久化会话 | 初始化工具列表须与授权集完全一致，唯一 fleet MCP 须 connected；额外工具调用或子 agent 输出拒绝；仍需真实运行验证供应商是否遵守配置 |
 | Codex | 忽略用户配置和规则；ephemeral；read-only sandbox；approval never；关闭 shell/unified exec、插件、hooks、apps、多 agent、目标和记忆功能；显式 fleet MCP 与 enabled_tools；stdin 提示 | JSONL 暂无等价的完整实际工具清单或实际模型字段核验；请求模型、启动策略与 MCP 请求审计分别保留，不能假定 JSONL 已证明全部实际权限 |
+| Zcode | 固定中国版订阅 provider、单一 GLM-5.3/Flash 和 low/high/max 档位；私有 HOME/config/storage；plan 模式及完整原生工具 denylist；唯一角色 fleet MCP；stdin 启动器 | 实际安装包的本机假接口只观察到允许的 MCP；输出核验模型/工具数/每次工具调用；plan 可执行非破坏 MCP，授权由 broker 控制；真实账号兼容性尚未验收 |
 
-CLI 管理策略及本机文件权限仍可能影响运行；夹具测试不会证明真实登录、模型可用性或供应商内部权限配置已生效。现有两种 CLI 的配置/帮助核验与真实模型验收分别记录。
+CLI 管理策略及本机文件权限仍可能影响运行；夹具测试不会证明真实登录、模型可用性或供应商内部权限配置已生效。三种 CLI 的配置/帮助核验与真实模型验收分别记录。
 
 ## CLI
 
@@ -45,7 +46,7 @@ CLI 管理策略及本机文件权限仍可能影响运行；夹具测试不会�
 }
 ~~~
 
-这些值由本机操作者核验提供，远程 MCP 工具不能传入 shell、程序路径或该配置。模板中的占位值不可执行。Codex 改为对应 runtime、版本、程序及认证目录；模型和 effort 始终取该分派的角色策略，配置文件不能覆盖。
+这些值由本机操作者核验提供，远程 MCP 工具不能传入 shell、程序路径或该配置。模板中的占位值不可执行。Codex 改为对应 runtime、版本、程序及认证目录；模型和 effort 始终取该分派的角色策略，配置文件不能覆盖。Zcode 还需 installation.bundle 与 installation.builtin_config 两个文件摘要，auth_home 为现有 .zcode/v2，program 为固定 Node；具体配置和提示 argv 边界见 zcode.md。
 
 ~~~text
 node cli/dispatch.mjs execute --db <数据库> --dispatch <分派ID> --config-file <配置JSON> --prompt-file <UTF-8提示文件> --accepted-rev <治理树验收文件>

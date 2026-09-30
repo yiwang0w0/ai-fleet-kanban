@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {createRequire} from "node:module";
 import {randomUUID} from "node:crypto";
-import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync} from "node:fs";
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync,cpSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {execFileSync,spawn} from "node:child_process";
@@ -455,4 +455,42 @@ test("settlement revokes the finished executor credential in the same transactio
  assert.throws(()=>authenticatePrincipal(f.db,w.auth),{code:"UNAUTHENTICATED"});
  assert.equal(f.db.prepare("SELECT action FROM broker_auth_events WHERE principal_id=? ORDER BY id DESC LIMIT 1").get(w.receipt.principal_id).action,"dispatch_settled");
  assert.equal(finish(f,w).phase,"settled");
+});
+
+function zcodeDispatchFixture(mode="success"){
+ const s=source();cpSync(join(ROOT,"core"),join(s.codeRoot,"core"),{recursive:true});
+ const bridge=join(s.codeRoot,"bridge.mjs");writeFileSync(bridge,"// local fixture never contacts a broker\n");
+ git(s.codeRoot,["add","."]);git(s.codeRoot,["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","--quiet","-m","Zcode launcher fixture"]);
+ writeFileSync(s.approvalFile,git(s.codeRoot,["rev-parse","HEAD:"]));s.gate=createSourceGate({codeRoot:s.codeRoot,approvalFile:s.approvalFile});
+ const f=fixture({sourceInfo:s,limit:1,executionMode:"provider"});
+ f.quota=putQuota(f.db,{quota_id:randomUUID(),runtime:"zcode",execution_mode:"provider",projects:["demo"],limit_total:1,enabled:true});
+ const role=policy("engine","implement",{runtime:"zcode",capabilities:["board-tools"],model:"GLM-5.3",effort:"low"});putRole(f.db,role,1);
+ const dirs=Object.fromEntries(["work","private","auth","install"].map(k=>{const p=path(k);mkdirSync(p);return [k,p];}));
+ const auth=join(dirs.auth,".zcode","v2");mkdirSync(auth,{recursive:true});
+ const w=prepare(f,assign(f,card(f,{capabilities:["board-tools"]})),{credentialFile:join(dirs.private,"principal.json")});
+ const bundle=join(dirs.install,"fixture.cjs"),builtin=join(dirs.install,"builtin.json");
+ writeFileSync(bundle,`if(${JSON.stringify(mode)}==='fail')process.exit(7);
+const input=process.argv[process.argv.indexOf('--prompt')+1],out=e=>process.stdout.write(JSON.stringify(e)+String.fromCharCode(10));
+const e=(type,seq,payload)=>({type,seq,eventId:'event'+seq,sessionId:'fixture',turnId:'turn',traceId:'trace',timestamp:seq,payload});
+out(e('turn.started',1,{input}));out(e('session.updated',2,{providerId:'account:bigmodel-individual-coding-plan',modelId:'GLM-5.3',messageCount:1,toolCount:5,iteration:0}));out(e('turn.completed',3,{resultType:'success',response:'local Zcode launch fixture'}));
+out({type:'result',sessionId:'fixture',turnId:'turn',traceId:'trace',response:'local Zcode launch fixture',eventCount:3,projection:{status:'completed',turnCount:1,totalTokenCount:0}});`);
+ writeFileSync(builtin,JSON.stringify({schemaVersion:1,revision:30,config:{providerConfigRules:{templateRules:[],providerRules:[{providerId:"account:bigmodel-individual-coding-plan",config:{group:"bigmodel-family",builtinModelIds:["GLM-5.3"],access:{type:"zhipu-account",accountType:"bigmodel",mode:"individual-coding-plan"},api:{type:"anthropic-messages",baseUrl:"https://open.bigmodel.cn/api/anthropic"}}}]},modelConfigRules:{modelRules:[],modelApiRules:[],providerSiteRules:[],templateModelRules:[],builtinProviderModelRules:[]}}}));
+ const prepared=prepareAdapter({installation:{runtime:"zcode",version:"0.16.9",program:pinFile(process.execPath),bundle:pinFile(bundle),builtin_config:pinFile(builtin),auth_home:auth},role,dispatch:w.receipt,codeRoot:s.codeRoot,workspace:dirs.work,privateDirectory:dirs.private,mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile:w.credentialFile},prompt:"local fixture only",environment:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase())))});
+ const pythonPath=execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c","import sys; print(sys.executable)"],{encoding:"utf8",windowsHide:true}).trim();
+ return {f,w,bundle,options:{dispatchId:w.receipt.dispatch_id,sourceGate:s.gate,prepared,python:pinFile(pythonPath),privateDirectory:dirs.private,timeoutMs:5000}};
+}
+
+test("Windows Zcode prepared adapter reaches the real runner and durable one-use settlement with a synthetic vendor",{skip:process.platform!=="win32"},async()=>{
+ for(const mode of ["success","fail"]){
+  const {f,w,options}=zcodeDispatchFixture(mode),r=await executePreparedDispatch(f.db,options);
+  assert.equal(r.phase,"settled");assert.equal(r.result.status,mode==="success"?"success":"failed",JSON.stringify(r));assert.equal(r.execution.observation.process.cleanup,"job_empty");assert.equal(r.execution.observation.real_model_call_confirmed,false);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+  assert.equal(reconcileExecutionJournal(f.db,r.journal_file).execution.observation_digest,r.execution.observation_digest);
+  assert.equal(store.get(f.db,w.receipt.task_id).waiting_for,mode==="success"?"review":"decision");
+  await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
+ }
+});
+
+test("Windows Zcode installed bundle tamper is rejected by the actual runner before spending its quota",{skip:process.platform!=="win32"},async()=>{
+ const {f,bundle,options}=zcodeDispatchFixture();writeFileSync(bundle,"process.exit(0)");
+ await assert.rejects(executePreparedDispatch(f.db,options),{code:"RUNTIME_CHANGED"});assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);assert.equal(count(f,"broker_execution_records"),0);
 });

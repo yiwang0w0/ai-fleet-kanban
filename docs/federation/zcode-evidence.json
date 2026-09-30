@@ -1,95 +1,136 @@
 {
   "plan_id": "AFK-FED-001",
-  "batch": "foundation-29-zcode-headless-output",
+  "batch": "foundation-30-zcode-windows-launch",
   "date": "2026-09-30",
   "supported_platform": "Windows",
-  "base_commit": "00c9a7c7c256b2458c3addc8b694857eb56bfd25",
+  "base_commit": "1a4ed45e87c659ce2c8d5395e8593aa067ae4420",
   "normalization": "UTF-8 LF",
   "code_sha256": {
-    "core/execution/output.mjs": "eb3c636afadf1c4ff3a55e7c9ee2498d79b0dfaa5dfb9fb5ea1c5671e978586e",
-    "tests/outputtest.mjs": "c735dc4630eb84303e3f77ef4261304eef9b2ded1f5777c1d5821c092a603251",
-    "tests/supervisortest.mjs": "350de201f8a4862ee2166d24d68821059d98bc21093c66d8a16a56f6ea342b43"
+    "core/execution/adapters.mjs": "cc2a9c36bb060ba1b7f098efc49a4678506aac767ef6ad73b956489fc3f8582d",
+    "core/execution/output.mjs": "adae7cc43465da4835eddc15f437c5cddc10599ff28a412f973205406cd7898a",
+    "core/execution/zcode-launch.mjs": "8bf3a8223ff049641e5ef082a1f83937455c30fef6842e9e81b83cf81757b8e2",
+    "core/execution/zcode-profile.mjs": "980ba4ed9fa642532fd88505e49abe9300d9b5ec55fc586b0ef1c6741740eabe",
+    "tests/adaptertest.mjs": "9cdc141b71c508c7d471c02c121b863438b6c6dbe47e5e7a15e74fe58fba63a0",
+    "tests/outputtest.mjs": "c51514a9183a8366b619ac4efe9d6c9b13486a3a04a701dea0c1391f910fa90b",
+    "tests/supervisortest.mjs": "fcf4c91acc2e231598b1c5443346f488a7185ea04fc3c11c72da0e916c65db91",
+    "tests/dispatchtest.mjs": "f84a37b28e45a238f83876de1a042e53e9f51084bcefde69eec3ece1ddeab9fc"
   },
   "code_git_blobs": {
-    "core/execution/output.mjs": "c680a7e2c6f8a202fa8e8ac6595ca6ed1e4bb74e",
-    "tests/outputtest.mjs": "3ef238d723e8f0f4ee24cb81717774e5740099d4",
-    "tests/supervisortest.mjs": "e1fafca7d67817a72af63042f289da1180b781bd"
+    "core/execution/adapters.mjs": "561c097dd1dfe23543f0e49cddbbcec7d129c7cb",
+    "core/execution/output.mjs": "b072a325adadfdcccae22a3f4d51f767aafd9703",
+    "core/execution/zcode-launch.mjs": "215f54b3bef0fef2ae1bdee11e8341d682df3077",
+    "core/execution/zcode-profile.mjs": "5ce181f760e7a862d5294b2c23b48d9a92ad695b",
+    "tests/adaptertest.mjs": "fd584286ca9e6cc013ab35bec4993925fbd47c93",
+    "tests/outputtest.mjs": "60650651a9d4b56eb79475adc9ecafcd4eab47e1",
+    "tests/supervisortest.mjs": "56110170b000fed81cc124e8fc7bfcd0da05a078",
+    "tests/dispatchtest.mjs": "557c67a9661c4a95c10bae2e6b0d88df5394e7a4"
   },
   "local_validation": {
-    "command": "node --test tests/outputtest.mjs tests/supervisortest.mjs tests/adaptertest.mjs",
-    "passed": 71,
+    "command": "node --test tests/outputtest.mjs tests/adaptertest.mjs tests/supervisortest.mjs; node --test tests/dispatchtest.mjs",
+    "passed": 123,
     "failed": 0,
     "skipped": 0,
-    "output_tests": 36,
-    "supervisor_tests": 17,
-    "adapter_tests": 18,
-    "new_cases": 15,
-    "scope": "synthetic contract streams and actual Windows process fixtures; no model process in automated tests",
+    "output_tests": 38,
+    "adapter_tests": 24,
+    "supervisor_tests": 21,
+    "dispatch_tests": 40,
+    "new_cases": 14,
+    "scope": "synthetic event streams and actual Windows processes/Job/SQLite/Git; native vendor probe listed separately",
+    "initial_dispatch_result": {
+      "passed": 39,
+      "failed": 1,
+      "cause": "new assertion expected review after a failed task; correct existing behavior is decision; corrected test passed final full dispatch run"
+    },
     "planning_manifest": {
       "tasks": 72,
       "source_document_hash_matches": true,
-      "verified_evidence_file_links": 166
+      "verified_evidence_file_links": 176,
+      "non_file_notes": 1
     },
-    "dispatch_regression": {
-      "passed": 38,
-      "failed": 0,
-      "skipped": 0
-    },
-    "related_total_passed": 109,
-    "actual_startup_failure_stream_replay": {
-      "passed": true,
-      "diagnostic": "PROCESS_FAILED",
-      "protocol_error": "PROVIDER_STARTUP_FAILED",
-      "provider_process_restarted": false
+    "secret_scan": {
+      "tool": "gitleaks",
+      "version": "8.24.3",
+      "platform": "Windows",
+      "scope": "staged Git diff",
+      "result": "no_findings"
     }
   },
   "installed_runtime": {
     "version": "0.16.9",
     "bundle_sha256": "fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f",
-    "evidence": "live SHA256, installed implementation and isolated no-account probes"
+    "builtin_schema": 1,
+    "builtin_revision": 30,
+    "builtin_sha256": "884da3b9c54f578245f4df3a9e7071f7feff457054cc99d400764ee6a1f56d89"
   },
-  "native_probes": {
-    "account_scope": "fresh private empty credential home, isolated CLI config/storage/database; installed public provider config",
-    "app_server": {
-      "request_framing": "NDJSON without jsonrpc field",
-      "methods": [
-        "runtime/capabilities",
-        "session/create"
-      ],
-      "send_invoked": false,
-      "independent_plan_state": true,
-      "protocol": {
-        "name": "ZCode Protocol",
-        "version": 1
+  "native_probe": {
+    "kind": "actual installed Zcode and current stdin launcher with local fake model and MCP",
+    "account_scope": "fresh empty isolated credential home; no existing credentials loaded/copied/decrypted",
+    "transport": "headless stream-json",
+    "requested_mode": "plan",
+    "public_profile_builder_used": true,
+    "fixture_only_provider_override": "fixture:local with dummy API key and IPv4 loopback; production adapter continues to require the official Chinese subscription endpoint",
+    "requests": [
+      {
+        "path": "/v1/messages",
+        "model": "GLM-5.3",
+        "stream": true,
+        "tools": [
+          "mcp__fleet__ping"
+        ],
+        "hasMcpResult": false
       },
-      "requested_mode": "plan",
-      "observed_mode": "build",
-      "available_models": 0,
-      "process_exit_code": 0,
-      "cleanup": "job_empty"
+      {
+        "path": "/v1/messages",
+        "model": "GLM-5.3",
+        "stream": true,
+        "tools": [
+          "mcp__fleet__ping"
+        ],
+        "hasMcpResult": true
+      }
+    ],
+    "mcp_tool_calls": [
+      "ping"
+    ],
+    "mcp_annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false
     },
-    "initial_invalid_jsonrpc_probe": {
-      "result": "request rejected, harness timeout",
-      "cleanup": "job_empty",
-      "model_calls": 0
+    "events": 32,
+    "decoder_status": "success",
+    "stdout_sha256": "794581b77216abe696078be63a569522fe097b3450df2db2d201c42a292f7aef",
+    "stderr": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "headless": {
-      "invocation": "--prompt /model --mode plan --output-format stream-json",
-      "provider_child_exit_code": 1,
-      "event_type": "turn.failed",
-      "turn_phase": "model_creation",
-      "provider_error_code": "CONFIGURATION_ERROR",
-      "model_request_observed": false,
-      "final_summary_observed": false,
-      "probe_harness_exit_code": 0,
+    "child_exit": {
+      "code": 0,
+      "signal": null
+    },
+    "process": {
+      "started": true,
+      "pid": 19084,
+      "containment": "windows-job",
       "cleanup": "job_empty",
-      "raw_logs_published": false,
-      "interpretation": "configuration failure before model request; /model must not be used as an authenticated no-call preflight"
-    }
+      "host_sha256": "1e742eb6e3b0ef78a6f6ebdbdd1ab5360faba6e990f909f72a9e922b1cc5f152",
+      "executable_sha256": "b3094d0b49f9ad602262a9921551737bb97637c05dd357a06ae98188d7290aa3",
+      "python_sha256": "372c2eae555b344520bf147be0096e009069aeca4e7f78d6aecea6d53158056a",
+      "exit_code": 0,
+      "host_error": null,
+      "host_exit_code": 0,
+      "stderr_bytes": 0,
+      "stderr_hashed_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "usage": null,
+    "real_provider_calls": 0,
+    "raw_logs_published": false,
+    "earlier_build_mode_result": "allowedTools alone did not permit the MCP call; no such permission guarantee is claimed",
+    "complete_prepare_execute_chain": "separately verified with a synthetic vendor; native probe assembles profile/settings/launcher without weakening the production endpoint contract"
   },
   "acceptance": {
-    "zcode_launch_adapter_enabled": false,
-    "tool_scope_verified": false,
+    "zcode_launch_adapter_enabled": true,
+    "tool_scope_verified": "only inspected 0.16.9 registry and actual loopback MCP fixture; live subscription tool configuration not accepted",
     "subscription_login_verified": false,
     "filesystem_sandbox": false,
     "real_provider_calls": {
@@ -104,17 +145,18 @@
   },
   "ci": {
     "status": "pending_exact_commit_windows_ci",
-    "previous_verified_commit": "00c9a7c7c256b2458c3addc8b694857eb56bfd25",
-    "previous_run_id": 36680972340,
-    "previous_windows_main_pass": 1426,
+    "previous_verified_commit": "1a4ed45e87c659ce2c8d5395e8593aa067ae4420",
+    "previous_run_id": 36683551231,
+    "previous_windows_main_pass": 1441,
     "previous_windows_main_fail": 0,
     "previous_additional_checks_pass": 90,
-    "previous_gitleaks": "success"
+    "previous_gitleaks": "success",
+    "historical_evidence": "zcode-headless-evidence.json"
   },
   "remaining": [
-    "Zcode subscription startup, exact provider/model without fallback and real MCP/tool scope",
-    "sealed adapter and one authorized minimal real task for each provider",
-    "Windows OS permissions, scheduler, global UI and operations",
-    "two physical kanata Windows PCs over Tailscale and independent phase acceptance"
+    "real Zcode Chinese Coding Plan credential compatibility and authorized minimal provider tasks",
+    "Windows OS permissions and independent full phase acceptance",
+    "scheduler, global UI and operations",
+    "two physical kanata Windows PCs over Tailscale"
   ]
 }

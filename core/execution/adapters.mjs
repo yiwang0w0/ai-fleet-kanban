@@ -1,14 +1,15 @@
-import {writeFileSync,realpathSync,readdirSync,statSync,unlinkSync} from "node:fs";
+import {writeFileSync,realpathSync,readdirSync,statSync,unlinkSync,mkdirSync,rmdirSync} from "node:fs";
 import {isAbsolute,join,relative,sep,dirname} from "node:path";
 import {createHash} from "node:crypto";
+import {ZCODE_PROVIDER,ZCODE_EFFORTS,zcodeAuthBase,zcodeProviderProfile,zcodeSettings,zcodeArguments} from "./zcode-profile.mjs";
 import {pinFile} from "./supervisor.mjs";
 import {roleTools,loadPrincipalCredential,fail,exact} from "../mcp/policy.mjs";
 import {uuid} from "../federation/protocol.mjs";
 import {canonical} from "../federation/sync-store.mjs";
 
-export const ADAPTER_CONTRACTS=Object.freeze({claude:"2.1.247",codex:"0.149.1"});
+export const ADAPTER_CONTRACTS=Object.freeze({claude:"2.1.247",codex:"0.149.1",zcode:"0.16.9"});
 const BASE_ENV=new Set(["systemroot","windir","appdata","localappdata","userprofile","home","homedrive","homepath","temp","tmp","path","pathext","lang","lc_all","http_proxy","https_proxy","all_proxy","no_proxy","ssl_cert_file","node_extra_ca_certs"]);
-const EFFORTS={claude:["low","medium","high","xhigh","max"],codex:["none","minimal","low","medium","high","xhigh","max"]};
+const EFFORTS={claude:["low","medium","high","xhigh","max"],codex:["none","minimal","low","medium","high","xhigh","max"],zcode:ZCODE_EFFORTS};
 const configString=s=>JSON.stringify(s);
 const preparedPlans=new WeakMap();
 const hash=value=>createHash("sha256").update(canonical(value)).digest("hex");
@@ -28,14 +29,14 @@ function filePin(pin){
  exact(pin,["path","sha256"],"file_pin");const actual=pinFile(pin.path);
  if(actual.sha256!==pin.sha256)fail("RUNTIME_CHANGED","桥接代码已变化");return actual;
 }
-function cleanWorkspace(workspace){
- // Both mediated profiles use a fresh scratch directory. Provider settings are
- // explicitly disabled by argv; authentication homes may contain user settings.
+function cleanWorkspace(workspace,runtime){
+ // All mediated profiles use a fresh scratch directory. Provider settings are
+ // disabled by argv or isolated in a private home; auth homes may hold settings.
  // Also refuse ambient dotenv/MCP files anywhere above the scratch directory.
  if(readdirSync(workspace).length)fail("WORKSPACE_NOT_EMPTY","受控执行需要独立空白启动目录");
  let parent=workspace;
  while(true){
-  for(const name of [".env",".mcp.json"]){
+  for(const name of [".env",".mcp.json",...(runtime==="zcode"?["zcode.json",join(".zcode","config.json")]:[])]){
    try{statSync(join(parent,name));}catch(e){if(e.code==="ENOENT"||e.code==="ENOTDIR")continue;throw e;}
    fail("STARTUP_CONFIG_PRESENT","执行目录或祖先存在自动加载配置");
   }
@@ -63,7 +64,7 @@ function serializablePlan(plan){
  * operator inputs, never derived from task text or exposed as remote MCP args.
  */
 export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,privateDirectory,mcp,prompt,environment=process.env,workspaceBinding=null}){
- exact(installation,["runtime","version","program","auth_home"],"installation");
+ exact(installation,["runtime","version","program","auth_home",...(installation?.runtime==="zcode"?["bundle","builtin_config"]:[])],"installation");
  if(!record(role)||!record(dispatch)||!record(mcp)||!record(environment))fail("BAD_INPUT","需要完整的角色、分派与本机配置",400);
  for(const k of ["principal_id","node_id","node_epoch","run_id","agent_instance_id"])uuid(dispatch[k],k);
  const runtime=installation.runtime;
@@ -80,7 +81,7 @@ export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,pr
  if(typeof prompt!=="string"||!prompt.trim()||Buffer.byteLength(prompt)>131072||prompt.includes("\0"))fail("BAD_INPUT","提示内容无效或超限",400);
  const root=directory(codeRoot,"治理仓"),cwd=directory(workspace,"执行目录"),privateDir=directory(privateDirectory,"私有运行目录"),authHome=directory(installation.auth_home,"认证目录");
  if([cwd,privateDir,authHome].some(p=>contains(root,p))||contains(cwd,privateDir)||contains(privateDir,cwd)||contains(cwd,authHome)||contains(privateDir,authHome)||contains(authHome,cwd)||contains(authHome,privateDir))fail("UNSAFE_RUNTIME_PATH","执行、凭据、认证与治理目录不能互相混用");
- cleanWorkspace(cwd);
+ cleanWorkspace(cwd,runtime);
  const command=checkedPin(installation.program),node=checkedPin(mcp.node),bridge=filePin(mcp.bridge),url=loopback(mcp.url);
  if(!contains(root,bridge.path))fail("BRIDGE_UNVERIFIED","MCP桥接代码必须来自当前治理仓");
  const credential=loadPrincipalCredential(mcp.credentialFile);
@@ -104,6 +105,23 @@ export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,pr
    "--allowedTools",tools.map(t=>"mcp__fleet__"+t).join(","),"--disable-slash-commands","--no-chrome",
    "--setting-sources","","--settings",settings.path,"--strict-mcp-config","--mcp-config",servers.path];
   decoder={expectedSessionId:sessionId,expectedModel:role.model,expectedTools:tools.map(t=>"mcp__fleet__"+t),expectedMcpServer:"fleet"};
+ }else if(runtime==="zcode"){
+  if(process.platform!=="win32")fail("WINDOWS_REQUIRED","Zcode 启动合同仅支持 Windows");
+  if(prompt.trimStart().startsWith("/")||prompt.length>12000)fail("BAD_INPUT","Zcode 提示不能是 slash 命令，且不得超过 12000 个 UTF-16 单元",400);
+  const bundle=filePin(installation.bundle),originalBuiltin=filePin(installation.builtin_config),profile=zcodeProviderProfile(originalBuiltin.path,role.model,role.effort),authBase=zcodeAuthBase(authHome);
+  zcodeArguments(command.path,bundle.path,cwd,prompt);
+  const entry=pinFile(join(root,"core","execution","zcode-launch.mjs")),profileModule=pinFile(join(root,"core","execution","zcode-profile.mjs")),supervisorModule=pinFile(join(root,"core","execution","supervisor.mjs"));
+  const makeDir=path=>{mkdirSync(path);created.push({directory:path});return path;};
+  const home=makeDir(join(privateDir,"zcode-home")),zdir=makeDir(join(home,".zcode")),cli=makeDir(join(zdir,"cli")),storage=makeDir(join(privateDir,"zcode-storage")),temp=makeDir(join(home,"temp"));
+  const appdata=makeDir(join(home,"AppData")),roaming=makeDir(join(appdata,"Roaming")),local=makeDir(join(appdata,"Local"));
+  const names=tools.map(t=>"mcp__fleet__"+t);
+  const settings=writePrivate(join(cli,"config.json"),zcodeSettings(node.path,argsBridge,names),created),builtin=writePrivate(join(privateDir,"zcode-builtin.json"),profile.builtin,created),personal=writePrivate(join(privateDir,"zcode-personal.json"),profile.personal,created);
+  const launch=writePrivate(join(privateDir,"zcode-launch.json"),{node:command,bundle,cwd,prompt_sha256:createHash("sha256").update(prompt).digest("hex")},created);
+  pins.push(bundle,originalBuiltin,entry,profileModule,supervisorModule,settings,builtin,personal,launch);
+  env=Object.fromEntries(Object.entries(env).filter(([k])=>!["home","userprofile","homedrive","homepath","appdata","localappdata","temp","tmp"].includes(k.toLowerCase())));
+  Object.assign(env,{HOME:home,USERPROFILE:home,HOMEDRIVE:home.slice(0,2),HOMEPATH:home.slice(2),APPDATA:roaming,LOCALAPPDATA:local,TEMP:temp,TMP:temp,ZCODE_DATA_BASE_DIR:authBase,ZCODE_STORAGE_DIR:storage,ZCODE_SESSION_DB_PATH:join(storage,"session.sqlite"),ZCODE_BUILTIN_PROVIDER_CONFIG_FILE:builtin.path,ZCODE_PERSONAL_PROVIDER_CONFIG_FILE:personal.path});
+  args=[entry.path,launch.path];
+  decoder={zcodeTransport:"headless-stream",expectedProvider:ZCODE_PROVIDER,expectedModel:role.model,expectedPromptSha256:createHash("sha256").update(prompt).digest("hex"),expectedTools:names};
  }else{
   env.CODEX_HOME=authHome;
   const mcpValue="{fleet={command="+configString(node.path)+",args=["+argsBridge.map(configString).join(",")+"],enabled=true,required=true,enabled_tools=["+tools.map(configString).join(",")+"],startup_timeout_sec=30,tool_timeout_sec=30,default_tools_approval_mode=\"approve\"}}";
@@ -123,7 +141,7 @@ export function prepareAdapter({installation,role,dispatch,codeRoot,workspace,pr
  const prepared={plan,manifest,manifestDigest:hash(manifest)};
  preparedPlans.set(prepared,prepared.manifestDigest);
  return prepared;
- }catch(e){for(const path of created){try{unlinkSync(path);}catch{}}throw e;}
+ }catch(e){for(const path of created.reverse()){try{if(typeof path==="string")unlinkSync(path);else rmdirSync(path.directory);}catch{}}throw e;}
 }
 
 /** Recheck just before consuming the one-use permit. No returned snapshot grants a restart. */
@@ -133,7 +151,7 @@ export function validatePreparedAdapter(prepared){
  if(manifestDigest!==preparedPlans.get(prepared))fail("ADAPTER_PLAN_CHANGED","启动配置身份已改变");
  if(createHash("sha256").update(canonical(manifest)).digest("hex")!==manifestDigest||canonical(serializablePlan(plan))!==canonical(manifest))fail("ADAPTER_PLAN_CHANGED","启动合同已改变");
  if(createHash("sha256").update(plan.input).digest("hex")!==plan.promptHash)fail("ADAPTER_PLAN_CHANGED","任务提示已改变");
- cleanWorkspace(plan.cwd);checkedPin(plan.command);
+ cleanWorkspace(plan.cwd,plan.runtime);checkedPin(plan.command);
  for(const pin of plan.pins)filePin(pin);
  return true;
 }

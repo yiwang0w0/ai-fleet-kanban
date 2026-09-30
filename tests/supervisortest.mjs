@@ -1,11 +1,12 @@
 import {createHash} from "node:crypto";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
-import {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync} from "node:fs";
+import {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync,realpathSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {spawn,execFileSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
+import {ZCODE_NATIVE_TOOLS} from "../core/execution/zcode-profile.mjs";
 import {pinFile,superviseProcess} from "../core/execution/supervisor.mjs";
 const TMP=mkdtempSync(join(tmpdir(),"fleet process 中文 "));
 const pythonPath=execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c","import sys; print(sys.executable)"],{encoding:"utf8",windowsHide:true}).trim();
@@ -145,4 +146,50 @@ test("Windows Zcode stream identity failure stops its root and child and never e
 
 test("Windows Zcode fixture with terminal but missing summary is not settled as successful",{skip:process.platform!=="win32"},async()=>{
  const out=await zRun(zEvents.slice(0,3));assert.equal(out.status,"failed");assert.equal(out.diagnostic,"MISSING_SUMMARY");assert.equal(out.process.exit_code,0);assert.equal(out.process.cleanup,"job_empty");
+});
+
+
+// Exercise the actual stdin launcher, with a local synthetic vendor bundle.
+const zLauncher=pinFile(fileURLToPath(new URL("../core/execution/zcode-launch.mjs",import.meta.url)));
+function launchFixture({prompt='中文 "quotes" \\path\\\n$(literal) & value',mode="success"}={}){
+ const dir=mkdtempSync(join(TMP,"zlaunch ")),marker=join(dir,"started.json"),bundle=join(dir,"vendor.cjs"),config=join(dir,"launch.json");
+ const source=`const {spawn}=require('node:child_process'),{writeFileSync}=require('node:fs');
+const args=process.argv.slice(2),get=n=>args[args.indexOf(n)+1],prompt=get('--prompt');
+if(args.length!==10||get('--mode')!=='plan'||get('--output-format')!=='stream-json'||get('--cwd')!==process.cwd()||get('--disallowed-tools')!==${JSON.stringify(ZCODE_NATIVE_TOOLS.join(','))})process.exit(9);
+let descendant=null;if(${JSON.stringify(mode)}==='hang'){descendant=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'}).pid;setInterval(()=>{},1000);}
+writeFileSync(${JSON.stringify(marker)},JSON.stringify({pid:process.pid,descendant,prompt}));
+if(${JSON.stringify(mode)}!=='hang'){
+const e=(type,seq,payload)=>({type,seq,eventId:'e'+seq,sessionId:'session',turnId:'turn',traceId:'trace',timestamp:seq,payload});
+for(const event of [e('turn.started',1,{input:prompt}),e('session.updated',2,{providerId:${JSON.stringify(zProvider)},modelId:${JSON.stringify(zModel)},messageCount:1,toolCount:0,iteration:0}),e('turn.completed',3,{resultType:'success',response:'launcher fixture'}),{type:'result',sessionId:'session',turnId:'turn',traceId:'trace',response:'launcher fixture',eventCount:3,projection:{status:'completed',turnCount:1,totalTokenCount:0}}])process.stdout.write(JSON.stringify(event)+'\\n');
+if(${JSON.stringify(mode)}==='nonzero')process.exitCode=7;
+}`;
+ writeFileSync(bundle,source.replaceAll("+'\\\\n'","+'\\n'"));
+ const value={node:command,bundle:pinFile(bundle),cwd:realpathSync(dir),prompt_sha256:createHash("sha256").update(prompt).digest("hex")};
+ const save=()=>writeFileSync(config,JSON.stringify(value));save();
+ const execute=extra=>run({runtime:"zcode",decoder:{...zDecoder,expectedPromptSha256:createHash("sha256").update(prompt).digest("hex"),expectedTools:[]},args:[zLauncher.path,config],pins:[zLauncher,pinFile(config)],cwd:dir,input:prompt,...extra});
+ return {dir,marker,bundle,value,save,execute,prompt};
+}
+
+test("Windows Zcode stdin launcher preserves Unicode and literal quoting and propagates child failure",{skip:process.platform!=="win32"},async()=>{
+ for(const mode of ["success","nonzero"]){
+  const f=launchFixture({mode}),out=await f.execute();assert.equal(out.process.cleanup,"job_empty");assert.equal(readFileSync(f.marker,"utf8").includes('$(literal)'),true);assert.equal(JSON.parse(readFileSync(f.marker,"utf8")).prompt,f.prompt);
+  assert.equal(out.status,mode==="success"?"success":"failed",JSON.stringify(out));assert.equal(out.process.exit_code,mode==="success"?0:7);assert.equal(out.real_model_call_confirmed,false);
+ }
+});
+
+test("Windows Zcode launcher rejects changed bundle, digest, node and cwd before creating a vendor child",{skip:process.platform!=="win32"},async()=>{
+ for(const mutate of [f=>writeFileSync(f.bundle,"process.exit(0)"),f=>f.value.prompt_sha256="0".repeat(64),f=>f.value.node={...command,sha256:"0".repeat(64)},f=>f.value.cwd=realpathSync(TMP),f=>f.value.extra=true]){
+  const f=launchFixture();mutate(f);f.save();const out=await f.execute();assert.equal(out.status,"failed");assert.equal(out.process.exit_code,1);assert.equal(out.process.cleanup,"job_empty");assert.equal(existsSync(f.marker),false);assert.ok(!JSON.stringify(out).includes(f.prompt));
+ }
+});
+
+test("Windows Zcode launcher independently rejects slash and overlong prompts",{skip:process.platform!=="win32"},async()=>{
+ for(const prompt of ["  /model","x".repeat(12001)]){const f=launchFixture({prompt}),out=await f.execute();assert.equal(out.status,"failed");assert.equal(out.process.exit_code,1);assert.equal(existsSync(f.marker),false);assert.equal(out.process.cleanup,"job_empty");}
+});
+
+test("Windows cancelling the Zcode launcher stops launcher, vendor and vendor descendant",{skip:process.platform!=="win32"},async()=>{
+ const f=launchFixture({mode:"hang"}),controller=new AbortController(),pending=f.execute({signal:controller.signal});
+ for(let i=0;i<100&&!existsSync(f.marker);i++)await delay(20);
+ assert.ok(existsSync(f.marker));const started=JSON.parse(readFileSync(f.marker,"utf8"));controller.abort();const out=await pending;
+ assert.equal(out.status,"cancelled");assert.equal(out.process.cleanup,"job_empty");for(const pid of [out.process.pid,started.pid,started.descendant])assert.equal(await stopped(pid),true);
 });

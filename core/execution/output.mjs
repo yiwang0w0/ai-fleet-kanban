@@ -38,13 +38,15 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
  }
  if(expectedTools!==null&&(!Array.isArray(expectedTools)||expectedTools.some(t=>!id(t))||new Set(expectedTools).size!==expectedTools.length))fail("BAD_TOOL_BINDING");
  if(expectedMcpServer!==null&&!id(expectedMcpServer))fail("BAD_TOOL_BINDING");
- if((expectedTools!==null||expectedMcpServer!==null)&&runtime!=="claude")fail("UNSUPPORTED_TOOL_BINDING");
+ if(expectedMcpServer!==null&&runtime!=="claude"||expectedTools!==null&&runtime!=="claude"&&!headless)fail("UNSUPPORTED_TOOL_BINDING");
+ if(headless&&expectedTools!==null&&(expectedTools.length>128||expectedTools.some(t=>!/^mcp__fleet__[a-z_][a-z0-9_]*$/.test(t))))fail("BAD_TOOL_BINDING");
  const allowedTools=expectedTools===null?null:new Set(expectedTools);
  const seenEvents=new Set();
  const bound=limitsFor(limits),hash=createHash("sha256"),utf8=new TextDecoder("utf-8",{fatal:true});
  let chunks=[],pending=0,bytes=0,events=0,closed=false,failure=null,cached=null;
  let session=null,turn=null,model=null,started=false,terminal=null,lastText="",lastSeq=null,lastEvent=null,lastEventHash=null;
- let trace=null,summarySeen=false,modelRequestSeen=false,terminalResponse=null;
+ let trace=null,summarySeen=false,modelRequestSeen=false,terminalResponse=null,openingTurn=null,openingTrace=null;
+ const toolCalls=new Map();
  const reject=code=>{failure??=code;return false;};
  function text(value){
   if(typeof value!=="string"||!value.trim())fail("EMPTY_RESULT");
@@ -126,7 +128,19 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
   if(seenEvents.has(event.eventId))fail("EVENT_ID_REUSED");seenEvents.add(event.eventId);lastSeq=event.seq;
   if(!["session.created","session.updated","session.titleUpdated","session.closed","turn.started","turn.completed","turn.failed","message.upserted","model.streaming","tool.updated","permission.requested","permission.resolved","checkpoint.created","streamRecovery.updated"].includes(event.type))fail("UNSUPPORTED_SESSION_EVENT");
   const p=event.payload;
+  // The installed CLI emits a local title update for this turn before its start.
+  // It may bind identity, but can never substitute for the prompt or a model call.
+  if(!started&&event.type==="session.titleUpdated"){
+   if(event.turnId!==undefined){
+    if(!id(event.turnId)||openingTurn&&event.turnId!==openingTurn)fail("TURN_MISMATCH");
+    if(openingTrace&&event.traceId!==openingTrace)fail("TRACE_MISMATCH");
+    openingTurn=event.turnId;openingTrace=event.traceId;
+   }
+   return;
+  }
   if(event.type==="turn.started"){
+   if(openingTurn&&event.turnId!==openingTurn)fail("TURN_MISMATCH");
+   if(openingTrace&&event.traceId!==openingTrace)fail("TRACE_MISMATCH");
    if(started||terminal||!id(event.turnId))fail("DUPLICATE_START");
    if(p.executionKind!==undefined&&p.executionKind!=="agent")fail("CONTROL_ONLY_TURN");
    if(p.inputVisibility==="model-only"||p.backgroundSource!==undefined||p.workflowLaunch!==undefined||p.automationId!==undefined||p.offPeakTaskId!==undefined||p.attachments?.length)fail("UNEXPECTED_CHILD_OUTPUT");
@@ -141,9 +155,22 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
    if(!started||terminal||event.turnId!==turn)fail("OUTPUT_OUTSIDE_TURN");
    if(p.providerId!==expectedProvider)fail("PROVIDER_MISMATCH");
    observeModel(p.modelId);
-   if(count(p.messageCount)&&count(p.toolCount)&&count(p.iteration))modelRequestSeen=true;
+   if(count(p.messageCount)&&count(p.toolCount)&&count(p.iteration)){
+    if(allowedTools&&p.toolCount!==allowedTools.size)fail("TOOL_SCOPE_MISMATCH");
+    modelRequestSeen=true;
+   }
   }
   if(["model.streaming","tool.updated","permission.requested","permission.resolved","message.upserted"].includes(event.type)&&(!started||terminal||event.turnId!==turn))fail("OUTPUT_OUTSIDE_TURN");
+  if(allowedTools&&event.type==="tool.updated"){
+   if(!["scheduled","started","progress","result","error","batch"].includes(p.kind))fail("MALFORMED_TOOL_EVENT");
+   if(p.kind==="scheduled"){
+    if(!id(p.toolCallId)||toolCalls.has(p.toolCallId))fail("MALFORMED_TOOL_EVENT");
+    if(!allowedTools.has(p.toolName))fail("UNAUTHORIZED_TOOL");
+    toolCalls.set(p.toolCallId,p.toolName);
+   }else if(p.kind==="batch"){
+    if(!Array.isArray(p.toolCallIds)||p.toolCallIds.some(t=>!toolCalls.has(t)))fail("MALFORMED_TOOL_EVENT");
+   }else if(!toolCalls.has(p.toolCallId)||p.toolName!==undefined&&p.toolName!==toolCalls.get(p.toolCallId))fail("UNAUTHORIZED_TOOL");
+  }
   if(["turn.completed","turn.failed"].includes(event.type)){
    if(!started||event.turnId!==turn)fail("TURN_MISMATCH");
    if(event.type==="turn.failed"){finishTurn("failed","Zcode reported a failed turn.");return;}

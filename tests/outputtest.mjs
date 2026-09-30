@@ -180,7 +180,8 @@ test("Zcode headless transport requires explicit digest, provider and model, wit
  assert.throws(()=>createOutputDecoder("claude",{zcodeTransport:"headless-stream"}),{code:"UNSUPPORTED_BINDING"});
  assert.throws(()=>createOutputDecoder("zcode",{...options("zcode"),expectedPromptSha256:headlessOptions.expectedPromptSha256}),{code:"UNSUPPORTED_BINDING"});
  assert.throws(()=>createOutputDecoder("zcode",{...headlessOptions,zcodeTransport:"json"}),{code:"BAD_TRANSPORT"});
- assert.throws(()=>createOutputDecoder("zcode",{...headlessOptions,expectedTools:["get_task"]}),{code:"UNSUPPORTED_TOOL_BINDING"});
+ assert.throws(()=>createOutputDecoder("zcode",{...headlessOptions,expectedTools:["Bash"]}),{code:"BAD_TOOL_BINDING"});
+ assert.throws(()=>createOutputDecoder("zcode",{...headlessOptions,expectedMcpServer:"fleet"}),{code:"UNSUPPORTED_TOOL_BINDING"});
 });
 
 test("Zcode headless cannot substitute a different prompt or control/background turn",()=>{
@@ -255,4 +256,21 @@ test("Zcode headless success cannot override nonzero exit, cancellation, timeout
 test("Zcode headless summary event counts and untyped usage are not reinterpreted as billing or proof",()=>{
  const events=headlessEvents.map((event,i)=>i===3?{...event,eventCount:1,usage:{futureMetric:99},projection:{...event.projection,status:"idle"}}:event);
  const out=headless(events);assert.equal(out.status,"success");assert.equal(out.usage,null);assert.equal(out.real_model_call_confirmed,false);
+});
+
+test("Zcode installed headless title prelude binds identity without substituting for task start",()=>{
+ const prelude=headlessEvent("session.titleUpdated",2,{title:"fixture"});
+ assert.equal(headless([prelude,...headlessEvents]).status,"success");
+ for(const patch of [{turnId:"wrong"},{traceId:"wrong"},{sessionId:"wrong"}])assert.equal(headless([{...prelude,...patch},...headlessEvents]).status,"failed");
+ assert.equal(headless([prelude,headlessEvents[3]]).diagnostic,"SUMMARY_WITHOUT_TERMINAL");
+});
+test("Zcode headless scoped tools match model-request count and every scheduled call",()=>{
+ const name="mcp__fleet__get_task",decoder={expectedTools:[name]},start=headlessEvents.slice(0,2).map((e,i)=>i===1?{...e,payload:{...e.payload,toolCount:1}}:e);
+ const scheduled=headlessEvent("tool.updated",5,{kind:"scheduled",toolCallId:"tool1",toolName:name});
+ const tail=[{...headlessEvents[2],seq:9,eventId:"event-9"},headlessEvents[3]];
+ const events=[...start,scheduled,headlessEvent("tool.updated",6,{kind:"started",toolCallId:"tool1",toolName:name}),headlessEvent("tool.updated",7,{kind:"result",toolCallId:"tool1",result:{success:true}}),headlessEvent("tool.updated",8,{kind:"batch",toolCallIds:["tool1"]}),...tail];
+ assert.equal(headless(events,{decoder}).status,"success");
+ assert.equal(headless(headlessEvents,{decoder}).diagnostic,"TOOL_SCOPE_MISMATCH");
+ for(const patch of [{toolName:"Bash"},{toolName:"mcp__other__get_task"}])assert.equal(headless(events.map((e,i)=>i===2?{...e,payload:{...e.payload,...patch}}:e),{decoder}).diagnostic,"UNAUTHORIZED_TOOL");
+ for(const i of [3,4,5])assert.equal(headless(events.map((e,j)=>j===i?{...e,payload:{...e.payload,toolCallId:"unknown",toolCallIds:["unknown"]}}:e),{decoder}).status,"failed");
 });

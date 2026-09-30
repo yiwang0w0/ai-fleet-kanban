@@ -1,41 +1,44 @@
 # Zcode Windows 接入记录
 
-当前安装版本为 0.16.9，代码包 zcode.cjs 的 SHA256 为 fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f。以下区分安装源码、实际无账号探测和合成流测试；尚未形成 Zcode 可执行调度适配，也没有调用真实模型。
+已接通 Zcode 0.16.9 的单次启动适配、角色 MCP、进程监管和一次性调度回执。安装 bundle 的 SHA256 为 fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f，公开供应商配置为 schema 1 / revision 30。实际安装包已与本机假模型接口及 MCP 服务完成一次工具往返；现有订阅登录和真实模型任务尚未验收。
 
-## 两种接口的差别
+## 启动合同
 
-app-server --stdio 使用 `{id,method,params}` / `{id,result}` 或 `{id,error}` 的自身 NDJSON 协议。实际 runtime/capabilities 返回 independentPlanState=true；session/create 返回 ZCode Protocol v1 的空会话。第一轮错误地带上 jsonrpc 字段，请求被拒绝并超时；修正后进程正常退出，Windows Job 已清空。两个探测均没有提交 session/send。
+运行配置使用现有 dispatch execute 入口。installation.runtime 为 zcode、version 为 0.16.9；program 是固定 Node 原生程序，另需 bundle 和 builtin_config 两个 {path,sha256}。auth_home 指向常规登录目录 .zcode/v2；不读取、复制或解密令牌。安装版本及文件摘要由本机操作者核验，版本字符串本身不能证明程序身份。
 
-安装源码显示 app-server 的账号由桌面宿主的 provider/updateAccountConfig 提供；仅改变用户目录不能自动复用桌面登录。普通 --prompt 路径则通过 standalone provider registry 使用常规共享登录仓，并支持 --output-format stream-json。此参数在该版本帮助中未列出，使用前必须固定安装摘要，不能套用于任意升级版本。
+角色模型明确为 GLM-5.3 或 GLM-5.3-Flash，effort 为 low、high 或 max。这两个具体模型的公开规则覆盖了通用 disabled/enabled 规则，不能按通用规则映射。生成配置只保留 account:bigmodel-individual-coding-plan、一个模型和一个 reasoningLevel 值，个人模型/供应商列表为空，从注册表范围限制默认模型回退。只接受中国版订阅账号类型和公开官方端点，拒绝 API key、额外认证字段或端点覆盖。
 
-单次命令输出先给出映射后的 session events，最后附一个独立的 type=result 摘要；它没有 resultType，单独收到摘要不能判定成功。已增加独立 headless-stream 解码合同；原有 session-events 合同与 RPC inputId 绑定保持。
+用户 HOME、USERPROFILE、AppData、临时目录、CLI 配置、存储及会话 DB 均在本次新建私有目录。ZCODE_DATA_BASE_DIR 单独指向现有常规账号仓的根；该路径的真实登录兼容性仍待最小真实任务验证。执行目录须为空，祖先含 .env、.mcp.json、zcode.json 或 .zcode/config.json 时拒绝。生成文件排他新建，失败时只清理本次新建内容。
 
-## 结果合同
+CLI 显式使用 --mode plan --output-format stream-json，并按已检查的完整原生工具注册表传入 --disallowed-tools，包含文件、命令、浏览器、子 agent 和 workflow 工具。禁用插件、skills、hooks、memory、compact 和 rewind，仅配置 fleet MCP。模型任务不能选择程序路径、配置或额外服务器。
 
-调用方必须给出 zcodeTransport=headless-stream、expectedPromptSha256、expectedProvider 和 expectedModel；不能同时提供 RPC 的预期 session/input ID。首次 turn.started 的输入必须与提示摘要完全匹配，随后固定 session、turn、trace。连续事件序列不能重放、跳号或复用 ID。
+本机假接口观察到的工具列表只有指定的 mcp__fleet__ping；Zcode 实际调用了该工具，并在第二次本机请求中带回结果。该工具被标记 readOnlyHint=false / destructiveHint=false，证明 plan 模式允许此类 MCP 操作；角色权限由看板 broker 的实际授权和工具过滤决定，不能把 plan 名称当成只读屏障。先前 build 模式探测即使配置 allowedTools 仍拒绝该工具，因此不以 allowedTools 单独声称权限已生效。
 
-模型请求元数据须属于同一 turn，并匹配指定 providerId/modelId；至少观察到包含 messageCount、toolCount、iteration 的主任务请求。成功需要明确 resultType=success、非空 response，以及匹配身份和正文的最终摘要。摘要 eventCount 不是整个 observer 的回调计数，因此不假设二者相等。usage 未完成真实映射，保留 null。
+## Windows 启动与停止
 
-控制任务、后台任务、续接/steer、第二轮任务、多 turnResponses、错模型、未知终态、缺少摘要、非零退出和中断均不能成功。成功回执仍 real_model_call_confirmed=false；这是解析结果，不是账单或真实调用证明。解析器也不是请求前的模型权限屏障，供应商内部模型回退仍须由启动配置限制。
+可信 zcode-launch.mjs 从 stdin 读取提示，在启动安装 bundle 前再次检查 Node、bundle、cwd 和提示摘要。禁止 slash 命令，提示最多 12000 个 UTF-16 单元，并检查保守的 Windows 参数总长预算。完整提示不写入启动摘要；供应商仅提供 --prompt 入口，因此提示仍会出现在其本机子进程 argv 中。启动使用固定程序和参数，不经过 shell。
 
-目前不支持通过 headless-stream 证明完整实际工具清单；传入 expectedTools 或 expectedMcpServer 会明确拒绝。prepareAdapter 仍不开放 Zcode，避免把事件解码完成误报成完整执行器已就绪。
+准备配置、公开配置、bundle、启动器及配置模块摘要随一次性许可绑定。篡改在许可消费前拒绝；许可提交后的启动失败、非零退出、超时和取消均占用额度，不自动重试。原始网络事件可能含请求头，不发布原始日志；回执只保存规定字段和摘要。
 
-## 实际无账号探测
+Windows Job 管理启动器、供应商及普通后代。测试覆盖配置/提示篡改时不创建供应商子进程，Unicode 和引号传递，供应商退出码传播，以及取消时三层进程全部停止。Job 确认 job_empty 只证明该 Job 内的进程清理，不提供文件或网络权限隔离。
 
-探测把 HOME、USERPROFILE、CLI 配置、存储、会话 DB 和 ZCODE_DATA_BASE_DIR 全部放在新的私有目录，使用安装包的公开 provider 配置，个人 provider 配置为空。未读取、复制或解密现有 credentials.json。插件、skills、subagent、memory、hooks 和 MCP 在探测配置中关闭。
+## 输出合同
 
---prompt /model --mode plan --output-format stream-json 在模型创建阶段产生 turn.failed，然后退出 1；错误码为 CONFIGURATION_ERROR，阶段为 model_creation。该探测没有可用模型或账号，没有到达模型请求。/model 因而不能作为带真实账号的零调用预检。外层探测宿主退出 0 只表示收集完成，不能把子进程退出 1 改写为成功。
+headless-stream 必须提供 expectedPromptSha256、expectedProvider 和 expectedModel；不能与 RPC session/input 绑定混用。安装包会在 turn.started 前发 session.titleUpdated，解码器记录其身份，再与正式任务开始核对；标题事件不能提供任务成功证据。任务提示、session、turn、trace、连续序号和唯一 eventId 均受检查。
 
-app-server 空会话曾请求 mode=plan，但 snapshot 的 mode.current 与 permission.mode 均显示 build。因此没有据此证明 plan 已生效。全部探测最后由 Windows Job 确认 job_empty；它证明进程清理，不证明文件系统沙箱。
+成功需要同一任务的模型请求元数据、明确 resultType=success、非空 response、身份和正文匹配的最终 type=result 摘要及退出码 0。摘要 eventCount 不等同于整个 observer 回调数。控制/后台任务、steer、第二任务、缺少摘要、错模型、未知事件、重放和跳号拒绝。
 
-## 启动适配的剩余条件
+expectedTools 可绑定 fleet 工具集：模型请求的工具数必须匹配，每次 scheduled 调用必须在允许列表内，后续工具事件必须引用已观察到的同一调用。数量匹配本身不证明请求里的完整工具名称；请求前约束来自固定注册表和本机 MCP 授权。expectedMcpServer 不适用于此协议。usage 尚无完整真实映射，保留 null；解析回执 real_model_call_confirmed=false，不充当实际调用或计费证明。
 
-- 复用中国版 Coding Plan 的常规登录路径，隔离运行配置、日志和会话数据；不提取或传播账号令牌。
-- 固定当前 provider 与具体模型。安装源码的默认模型选择在不可用时可能回退首个可用模型，不能仅设置 defaultModelSelection 就声称模型已固定。
-- GLM 的 reasoningLevel 为 disabled/enabled；与看板角色档位的映射需要明确合同。
-- 核验实际 MCP 初始化、原生工具禁用、插件及项目配置合并、Windows 权限边界。CLI 的 disallowed-tools 是整个工具名过滤，不是 shell 命令模式过滤。
-- 固定 Node、安装 bundle、公共配置及生成文件摘要，经一次性许可启动，保持失败占额度、不可自动重试。完成这些条件后再执行已授权的一个最小真实任务。
+## 验证记录
 
-目前三种供应商调用均为 0/1，完整阶段验收 0/12。此后只安排 Windows 实现、CI、部署和两台 kanata 的 Tailscale 联调。
+- 自动回归：输出 38、适配 24、Windows 进程监管 21、调度/回执 40，共 123 项通过，0 失败、0 跳过。14 项为本批新增。完整最终提交回归交由 Windows CI。
+- 实际 Zcode 0.16.9 + 新启动器：空账号仓、本机回环假 Anthropic SSE 接口和 stdio MCP，2 次本机请求、1 次工具调用、32 条事件、子进程退出 0，Windows Job 清空。既无真实模型请求，也未复用现有凭据。生产配置仍只允许官方端点，假端点仅存在于私有探测脚本。
+- 完整 prepareAdapter → executePreparedDispatch → Windows 子进程 → 持久回执和额度链使用合成供应商验证，覆盖成功、失败、篡改拒绝和不可重启。不能将它写成真实供应商的完整调度验收。
+- 上一批准确提交 1a4ed45 的 Windows CI 已通过 1441 项主测试、90 项附加检查及 gitleaks；历史证据保留在 zcode-headless-evidence.json。当前证据见 zcode-evidence.json。
 
-官方产品登录说明见 [账号与模型配置](https://zcode.z.ai/cn/docs/configuration)，MCP 产品说明见 [MCP 服务](https://zcode.z.ai/cn/docs/mcp-services)。具体 CLI transport 和字段依据上述固定安装包及本机探测；产品页面不能替代 CLI 合同验收。
+先前 app-server 空会话及无账号 /model 启动失败的记录仍保留。app-server 账号由桌面宿主提供，普通 --prompt 使用 standalone 常规登录仓。/model 在带账号时会走模型创建，不能作为零调用预检；app-server 请求 plan 后曾观察到 build，也不作为本次 headless 权限依据。
+
+当前真实调用 Claude/Codex/Zcode 均为 0/1，完整阶段验收 0/12。剩余为真实订阅兼容、授权模型任务、Windows 权限隔离及两台 kanata 的完整联调；后续仅支持 Windows。
+
+产品说明见 [账号与模型配置](https://zcode.z.ai/cn/docs/configuration) 和 [MCP 服务](https://zcode.z.ai/cn/docs/mcp-services)。具体 CLI 行为以固定安装包和上述本机测量为依据。

@@ -1,12 +1,12 @@
 # 执行器终态与进程监督合同
 
-本批提供三种输出解码器和可信本地进程监督原语，对应 T04.03–T04.06 的一部分。已通过真实 OS 子进程桩测试，并串通“单次启动许可 → 本机心跳 → 子进程 → 原生待审阅回执”。后续已接入 Claude/Codex 的 board-tools 启动配置与显式单次执行入口，见 [适配与回执合同](adapters.md)；三种真实模型的完整适配及队列入口仍未完成。
+本批提供三种输出解码器和可信本地进程监督原语，对应 T04.03–T04.06 的一部分。已通过真实 OS 子进程桩测试，并串通“单次启动许可 → 本机心跳 → 子进程 → 原生待审阅回执”。后续已接入 Claude/Codex/Zcode 的受限 MCP 启动配置与显式单次执行入口，见 [适配与回执合同](adapters.md)；三种真实模型的完整适配及队列入口仍未完成。
 
 所有新增自动化验证均使用合成供应商事件与临时脚本。没有把桩响应记为模型调用，没有修改全局 MCP、登录或部署配置。
 
 ## 输出合同
 
-core/execution/output.mjs 接收 UTF-8 NDJSON。Zcode 默认输入为已解包的 session event envelope，保持显式 sessionId/inputId 绑定；新增独立的 headless-stream 合同接收单次命令事件及最终摘要。实测 app-server 使用自身 NDJSON 帧，包含 jsonrpc 字段的标准 JSON-RPC 请求会被拒绝，不能直接传给事件解码器。完整启动适配仍待接入，详见 [Zcode Windows 接入记录](zcode.md)。
+core/execution/output.mjs 接收 UTF-8 NDJSON。Zcode 默认输入为已解包的 session event envelope，保持显式 sessionId/inputId 绑定；新增独立的 headless-stream 合同接收单次命令事件及最终摘要。实测 app-server 使用自身 NDJSON 帧，包含 jsonrpc 字段的标准 JSON-RPC 请求会被拒绝，不能直接传给事件解码器。单次启动适配已接入，真实订阅尚待验收，详见 [Zcode Windows 接入记录](zcode.md)。
 
 | 运行时 | 成功的必要条件 | 失败处理 |
 |---|---|---|
@@ -15,7 +15,7 @@ core/execution/output.mjs 接收 UTF-8 NDJSON。Zcode 默认输入为已解包�
 | Zcode session-events | 显式绑定 sessionId 与 inputId；turn.started 与同一 turnId 的 turn.completed；resultType=success；非空 response；退出码0 | cancelled 单独分类；预算/轮数/工具次数/执行错误明确失败；默认 headless JSON 不作为完成证明 |
 | Zcode headless-stream | 显式绑定提示 SHA256、providerId、modelId；从首次 turn.started 绑定 session/turn/trace；同一任务的模型请求元数据、成功终态及匹配的最终 result 摘要；退出码0 | 摘要不能独立证明成功；错模型、任务串线、缺少摘要、控制/后台任务、追加任务或不连续事件均失败 |
 
-headless-stream 不支持 RPC 重放或多 turnResponses；默认 session-events 的最近事件重放行为保持。解码器核验观察到的模型身份，不能在模型请求发生前阻止供应商内部回退；启动配置仍须单独限制模型和工具。目前 headless-stream 拒绝 expectedTools/expectedMcpServer，避免把尚未实现的实际工具清单验证当作支持。
+headless-stream 不支持 RPC 重放或多 turnResponses；默认 session-events 的最近事件重放行为保持。解码器核验观察到的模型身份，不能在模型请求发生前阻止供应商内部回退；启动配置仍须单独限制模型和工具。headless-stream 现支持 expectedTools，检查请求工具数和实际调用名称/ID；不将工具数量当作完整名称清单证明。expectedMcpServer 仍拒绝。
 
 Claude 子 agent 消息不充当根结果。系统信息可以在终态后继续出现，但不接受第二个结果或新的正文。Codex JSONL 不报告此解码器可核实的实际模型字段，因此 expectedModel 不能替代后续启动配置与供应商元数据核验。Zcode session-events 顺序必须连续；仅允许最后一条完全相同的事件重放。后续 RPC transport 必须正确处理 subscribe/events 重叠、分页和序列缺口。
 
@@ -51,7 +51,7 @@ Job 是生命周期管理能力，不是文件权限沙箱。通过其他服务�
 
 ## 与调度的衔接
 
-新增集成测试使用真实临时数据库、原生 claim、单次许可、独立 Node 桩进程和本机 heartbeat；将观察到的 status/evidence/usage 交给 finishDispatch。结果进入 waiting/review、额度消耗一次、重复 launch 拒绝。进程元数据由 supervisor 返回，完整元数据的原子持久化、Claude/Codex 显式单次执行及恢复补交现已接入，详见 adapters.md；真实供应商最小任务尚未执行。
+新增集成测试使用真实临时数据库、原生 claim、单次许可、独立 Node 桩进程和本机 heartbeat；将观察到的 status/evidence/usage 交给 finishDispatch。结果进入 waiting/review、额度消耗一次、重复 launch 拒绝。进程元数据由 supervisor 返回，完整元数据的原子持久化、Claude/Codex 显式单次执行及恢复补交现已接入，详见 adapters.md；真实供应商最小任务尚未执行。Zcode 完整一次性调度链也已通过合成供应商验证，实际安装包与本机假模型/MCP 的测量见 zcode.md。
 
 当前 CLI 提供受限角色配置的 execute 与只补交终态的 reconcile，不接受远程任意程序。调用者不能根据已存在的 launch_committed 记录补启动；失败或不确定的启动仍占用已消费额度。
 

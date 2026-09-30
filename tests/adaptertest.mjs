@@ -4,6 +4,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {randomUUID} from "node:crypto";
+import {ZCODE_PROVIDER,ZCODE_NATIVE_TOOLS,zcodeProviderProfile} from "../core/execution/zcode-profile.mjs";
 import {prepareAdapter,validatePreparedAdapter,ADAPTER_CONTRACTS} from "../core/execution/adapters.mjs";
 import {pinFile} from "../core/execution/supervisor.mjs";
 import {ROLE_TOOLS,WORKSPACE_READ_TOOLS,WORKSPACE_WRITE_TOOLS} from "../core/mcp/policy.mjs";
@@ -55,7 +56,7 @@ test("review role receives its exact MCP tool subset",()=>{
 });
 test("unsupported provider, unverified version, runtime mismatch and unresolved model fail before writing config",()=>{
  for(const [mutate,code] of [
-  [f=>f.input.installation.runtime="zcode","ADAPTER_UNAVAILABLE"],
+  [f=>f.input.installation.runtime="other-provider","ADAPTER_UNAVAILABLE"],
   [f=>f.input.installation.version="999","ADAPTER_VERSION_UNVERIFIED"],
   [f=>f.input.role.runtime="codex","POLICY_MISMATCH"],
   [f=>f.input.role.model="sonnet","MODEL_UNRESOLVED"],
@@ -168,4 +169,56 @@ test("missing or malformed workspace bindings and board profile upgrades fail be
   assert.throws(()=>prepareAdapter(f.input));assert.equal(existsSync(join(f.dirs.private,"claude-settings.json")),false);
  }
  const f=fixture();f.input.workspaceBinding=fileBinding();assert.throws(()=>prepareAdapter(f.input),{code:"WORKSPACE_ADAPTER_REQUIRED"});
+});
+
+function zFixture(){
+ const f=fixture("zcode"),auth=join(f.dirs.auth,".zcode","v2");mkdirSync(auth,{recursive:true});f.input.installation.auth_home=auth;f.input.role.model="GLM-5.3";
+ const helper=join(f.dirs.root,"core","execution");mkdirSync(helper,{recursive:true});
+ for(const name of ["zcode-launch.mjs","zcode-profile.mjs","supervisor.mjs"])writeFileSync(join(helper,name),"// config fixture only\n");
+ const bundle=join(f.base,"zcode.cjs"),builtin=join(f.base,"builtin.json");writeFileSync(bundle,"// never executed fixture bundle\n");
+ const config={schemaVersion:1,revision:30,config:{providerConfigRules:{templateRules:[],providerRules:[{providerId:ZCODE_PROVIDER,config:{group:"bigmodel-family",builtinModelIds:["GLM-5.3","GLM-5.3-Flash"],access:{type:"zhipu-account",mode:"individual-coding-plan",accountType:"bigmodel"},api:{type:"anthropic-messages",baseUrl:"https://open.bigmodel.cn/api/anthropic"}}},{providerId:"unused",config:{}}]},modelConfigRules:{modelRules:[],modelApiRules:[],providerSiteRules:[],templateModelRules:[],builtinProviderModelRules:[]}}};
+ writeFileSync(builtin,JSON.stringify(config));Object.assign(f.input.installation,{bundle:pinFile(bundle),builtin_config:pinFile(builtin)});return {...f,builtin,config};
+}
+const zRead=(p,name)=>JSON.parse(readFileSync(join(p.plan.privateDirectory,name),"utf8"));
+
+test("Windows Zcode plan fixes one Chinese subscription model and reasoning level without a fallback",{skip:process.platform!=="win32"},()=>{
+ const f=zFixture(),p=prepareAdapter(f.input);assert.equal(validatePreparedAdapter(p),true);
+ assert.equal(p.plan.env.ZCODE_DATA_BASE_DIR,f.dirs.auth);assert.notEqual(p.plan.env.HOME,f.input.installation.auth_home);assert.equal(p.plan.env.HOME,p.plan.env.USERPROFILE);
+ assert.ok(p.plan.env.HOME.startsWith(f.dirs.private));assert.ok(p.plan.env.TEMP.startsWith(f.dirs.private));assert.equal(p.plan.env.ZCODE_TOKEN,undefined);assert.equal(p.plan.env.NODE_OPTIONS,undefined);
+ const builtin=zRead(p,"zcode-builtin.json"),personal=zRead(p,"zcode-personal.json");
+ assert.deepEqual(builtin.config.providerConfigRules.providerRules.map(r=>r.providerId),[ZCODE_PROVIDER]);assert.deepEqual(builtin.config.providerConfigRules.providerRules[0].config.builtinModelIds,["GLM-5.3"]);
+ assert.deepEqual(personal.config.defaultModelSelection,{providerId:ZCODE_PROVIDER,modelId:"GLM-5.3",options:{reasoningLevel:"low"}});
+ assert.deepEqual(builtin.config.modelConfigRules.builtinProviderModelRules[0].config.optionSpecs.reasoningLevel.values,["low"]);
+ assert.deepEqual(personal.config.providerConfigRules.providerRules,[]);assert.deepEqual(personal.config.modelConfigRules.manualProviderModelRules,[]);
+ assert.equal(p.plan.args.length,2);assert.ok(p.plan.args[0].endsWith("zcode-launch.mjs"));assert.equal(p.plan.input,f.input.prompt);assert.ok(!JSON.stringify(p.manifest).includes(f.input.prompt));assert.ok(!JSON.stringify(p.manifest).includes("private-fixture"));
+ const settings=JSON.parse(readFileSync(join(p.plan.env.HOME,".zcode","cli","config.json"),"utf8"));
+ assert.equal(settings.permission.mode,"plan");assert.deepEqual(settings.permission.disallowedTools,[...ZCODE_NATIVE_TOOLS]);assert.equal(settings.plugins.enabled,false);assert.equal(settings.features.subagent,false);assert.equal(settings.features.memory,false);assert.equal(settings.skills.enabled,false);assert.equal(settings.hooks.enabled,false);assert.deepEqual(Object.keys(settings.mcp.servers),["fleet"]);
+ assert.deepEqual(p.plan.decoder.expectedTools,ROLE_TOOLS.implement.map(t=>"mcp__fleet__"+t));assert.equal(p.plan.decoder.expectedProvider,ZCODE_PROVIDER);
+});
+
+test("Zcode review workspace exposes no write tools and binds the same workspace descriptor",{skip:process.platform!=="win32"},()=>{
+ const f=zFixture();f.input.role.kind="review";f.input.role.tools="read-only";f.input.role.capabilities=["workspace-files"];f.input.role.model="GLM-5.3-Flash";f.input.role.effort="max";
+ f.input.workspaceBinding={workspace_id:randomUUID(),descriptor_digest:"a".repeat(64),baseline_digest:"b".repeat(64),base_commit:"c".repeat(40),access:"mcp-files-v1"};
+ const p=prepareAdapter(f.input);assert.equal(p.plan.scope,"workspace-files");assert.deepEqual(p.plan.workspaceBinding,f.input.workspaceBinding);assert.ok(p.plan.decoder.expectedTools.includes("mcp__fleet__read_workspace_file"));assert.ok(!p.plan.decoder.expectedTools.includes("mcp__fleet__edit_workspace_file"));assert.equal(zRead(p,"zcode-personal.json").config.defaultModelSelection.options.reasoningLevel,"max");
+});
+
+test("Zcode rejects wrong subscription endpoints, account type, implicit model and reasoning before creating private files",{skip:process.platform!=="win32"},()=>{
+ for(const mutate of [f=>f.config.config.providerConfigRules.providerRules[0].config.api.baseUrl="https://example.invalid",f=>f.config.config.providerConfigRules.providerRules[0].config.api.headers={Authorization:"fixture"},f=>f.config.config.providerConfigRules.providerRules[0].config.access.accountType="zai",f=>f.config.config.providerConfigRules.providerRules[0].config.access.entitled=true,f=>f.config.config.providerConfigRules.providerRules[0].config.access.token="fixture",f=>f.config.config.providerConfigRules.providerRules[0].config.api.apiKey="fixture",f=>f.config.config.providerConfigRules.providerRules[0].config.builtinModelIds=["other"]]){
+  const f=zFixture();mutate(f);writeFileSync(f.builtin,JSON.stringify(f.config));f.input.installation.builtin_config=pinFile(f.builtin);assert.throws(()=>prepareAdapter(f.input),{code:"BAD_PROVIDER_CONFIG"});assert.equal(existsSync(join(f.dirs.private,"zcode-home")),false);
+ }
+ for(const patch of [{model:"GLM-4.7"},{effort:"medium"}]){const f=zFixture();Object.assign(f.input.role,patch);assert.throws(()=>prepareAdapter(f.input));assert.equal(existsSync(join(f.dirs.private,"zcode-home")),false);}
+});
+
+test("Zcode rejects slash commands, oversized command prompts, invalid auth homes and ambient project config",{skip:process.platform!=="win32"},()=>{
+ for(const prompt of ["/model","  /help","x".repeat(12001)]){const f=zFixture();f.input.prompt=prompt;assert.throws(()=>prepareAdapter(f.input),{code:"BAD_INPUT"});}
+ const f=zFixture();f.input.installation.auth_home=f.dirs.auth;assert.throws(()=>prepareAdapter(f.input),{code:"BAD_AUTH_HOME"});
+ for(const name of ["zcode.json",join(".zcode","config.json")]){const g=zFixture();if(name.includes(".zcode"))mkdirSync(join(g.base,".zcode"));writeFileSync(join(g.base,name),"{}");assert.throws(()=>prepareAdapter(g.input),{code:"STARTUP_CONFIG_PRESENT"});}
+});
+
+test("Zcode exclusive config failure removes only newly created directories and preserves existing files",{skip:process.platform!=="win32"},()=>{
+ const f=zFixture(),existing=join(f.dirs.private,"zcode-personal.json");writeFileSync(existing,"preserve");assert.throws(()=>prepareAdapter(f.input));assert.equal(readFileSync(existing,"utf8"),"preserve");assert.equal(existsSync(join(f.dirs.private,"zcode-home")),false);assert.equal(existsSync(join(f.dirs.private,"zcode-storage")),false);assert.equal(existsSync(join(f.dirs.private,"zcode-builtin.json")),false);
+});
+
+test("Zcode changed installation or generated settings invalidate the one-use launch plan",{skip:process.platform!=="win32"},()=>{
+ for(const which of ["bundle","original","settings","personal"]){const f=zFixture(),p=prepareAdapter(f.input);const path=which==="bundle"?f.input.installation.bundle.path:which==="original"?f.builtin:which==="settings"?join(p.plan.env.HOME,".zcode","cli","config.json"):join(f.dirs.private,"zcode-personal.json");writeFileSync(path,"{}");assert.throws(()=>validatePreparedAdapter(p),{code:"RUNTIME_CHANGED"});}
 });
