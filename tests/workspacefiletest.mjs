@@ -1,9 +1,10 @@
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
-import {createRequire} from "node:module";
+import {createRequire,syncBuiltinESMExports} from "node:module";
+import childProcess from "node:child_process";
 import {createHash,randomUUID} from "node:crypto";
-import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync,realpathSync,statSync,renameSync,symlinkSync,openSync,ftruncateSync,closeSync} from "node:fs";
+import {mkdtempSync,mkdirSync,readdirSync,readFileSync,writeFileSync,rmSync,existsSync,realpathSync,statSync,renameSync,symlinkSync,openSync,ftruncateSync,closeSync} from "node:fs";
 import {join,dirname} from "node:path";
 import {tmpdir} from "node:os";
 import {execFileSync,spawn} from "node:child_process";
@@ -149,10 +150,10 @@ test("stopped run produces actual Git file bytes, deletions and executable modes
  const root=directory(f,x);writeFileSync(join(root,"src/demo.txt"),"preserve user dirty file");writeFileSync(join(root,"untracked.txt"),"preserve untracked");const result=commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),manifest=result.manifest;
  assert.equal(manifest.base_commit,f.r.base);assert.equal(git(root,["rev-parse",manifest.commit+"^"]),f.r.base);assert.equal(git(root,["show",manifest.commit+":src/generated.mjs"]),"export const result=42;");assert.equal(git(root,["ls-tree",manifest.commit,"src/demo.txt"]),"");assert.match(git(root,["ls-tree",manifest.commit,"src/generated.mjs"]),/^100755/);
  assert.equal(git(root,["rev-parse","HEAD"]),f.r.base);assert.equal(readFileSync(join(root,"src/demo.txt"),"utf8"),"preserve user dirty file");assert.equal(readFileSync(join(root,"untracked.txt"),"utf8"),"preserve untracked");assert.equal(result.accepted,false);assert.equal(manifest.fixture_runs,1);assert.equal(manifest.run_id,x.w.receipt.run_id);
- const capture=captureWorkspaceCommit(f.db,{workspaceId:x.args.workspaceId}),independent=path("independent")+".mjs";writeFileSync(independent,capture.files[0].bytes);assert.equal(execFileSync(process.execPath,["--input-type=module","-e","import {result} from "+JSON.stringify(pathToFileURL(independent).href)+"; console.log(result)"],{encoding:"utf8",windowsHide:true}).trim(),"42");assert.deepEqual(commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),result);assert.throws(()=>info(f,x),{code:"UNAUTHENTICATED"});
+ const capture=captureWorkspaceCommit(f.db,{workspaceId:x.args.workspaceId}),independent=path("independent")+".mjs";writeFileSync(independent,capture.files[0].bytes);assert.equal(execFileSync(process.execPath,["--input-type=module","-e","import {result} from "+JSON.stringify(pathToFileURL(independent).href)+"; console.log(result)"],{encoding:"utf8",windowsHide:true}).trim(),"42");assert.deepEqual(commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),result);assert.deepEqual(readdirSync(dirname(root)).filter(n=>n.startsWith("commit-")),[]);assert.throws(()=>info(f,x),{code:"UNAUTHENTICATED"});
 });
 test("commit audit failure preserves deterministic Git objects and retries without duplicating history",()=>{
- const f=setup(),x=activeFiles(f);edit(f,x);settle(f,x);f.db.exec("CREATE TRIGGER fail_file_commit BEFORE INSERT ON workspace_events WHEN NEW.kind='delivery_commit' BEGIN SELECT RAISE(ABORT,'fixture delivery audit'); END");assert.throws(()=>commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),/fixture delivery audit/);assert.equal(count(f,"workspace_commits"),0);const oid=git(directory(f,x),["rev-parse","refs/fleet/workspaces/"+x.args.workspaceId]);f.db.exec("DROP TRIGGER fail_file_commit");assert.equal(commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}).manifest.commit,oid);assert.equal(count(f,"workspace_commits"),1);
+ const f=setup(),x=activeFiles(f);edit(f,x);settle(f,x);f.db.exec("CREATE TRIGGER fail_file_commit BEFORE INSERT ON workspace_events WHEN NEW.kind='delivery_commit' BEGIN SELECT RAISE(ABORT,'fixture delivery audit'); END");assert.throws(()=>commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),/fixture delivery audit/);assert.equal(count(f,"workspace_commits"),0);assert.deepEqual(readdirSync(dirname(directory(f,x))).filter(n=>n.startsWith("commit-")),[]);const oid=git(directory(f,x),["rev-parse","refs/fleet/workspaces/"+x.args.workspaceId]);f.db.exec("DROP TRIGGER fail_file_commit");assert.equal(commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}).manifest.commit,oid);assert.equal(count(f,"workspace_commits"),1);
 });
 test("ending native task execution closes file edits before a process receipt arrives",()=>{
  const f=setup(),x=activeFiles(f);tool(f,x,"report_result",{request_id:randomUUID(),run_id:x.w.receipt.run_id,outcome:"done",evidence:"file tools closed"});assert.throws(()=>edit(f,x),{code:"WORKSPACE_RUN_CHANGED"});assert.throws(()=>commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),{code:"WORKSPACE_EXECUTION_INCOMPLETE"});settle(f,x);assert.equal(commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}).manifest.files.length,0);
@@ -225,4 +226,29 @@ test("MCP rejects non-boolean executable before file mutations or replay receipt
  assert.equal(info(f,x).revision,0);assert.equal(count(f,"workspace_file_events"),0);assert.equal(count(f,"broker_requests"),before);
  edit(f,x,{executable:false});assert.equal(f.db.prepare("SELECT mode FROM workspace_files WHERE workspace_id=? AND path='src/generated.mjs'").get(x.args.workspaceId).mode,"100644");
  edit(f,x,{path:"src/executable.mjs",executable:true});assert.equal(f.db.prepare("SELECT mode FROM workspace_files WHERE workspace_id=? AND path='src/executable.mjs'").get(x.args.workspaceId).mode,"100755");
+});
+
+
+test("failed Git delivery removes only its temporary index and preserves existing refs and files",()=>{
+ const f=setup(),x=activeFiles(f);edit(f,x);settle(f,x);const root=directory(f,x),parent=dirname(root),ref="refs/fleet/workspaces/"+x.args.workspaceId;
+ const old=join(parent,"commit-older");mkdirSync(old);writeFileSync(join(old,"index"),"operator-retained");
+ git(root,["update-ref",ref,f.r.base]);
+ assert.throws(()=>commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),{code:"WORKSPACE_REF_CHANGED"});
+ assert.equal(git(root,["rev-parse",ref]),f.r.base);assert.equal(count(f,"workspace_commits"),0);
+ assert.deepEqual(readdirSync(parent).filter(n=>n.startsWith("commit-")),["commit-older"]);assert.equal(readFileSync(join(old,"index"),"utf8"),"operator-retained");
+ git(root,["update-ref","-d",ref]);assert.ok(commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}).manifest.commit);
+ assert.deepEqual(readdirSync(parent).filter(n=>n.startsWith("commit-")),["commit-older"]);
+});
+
+test("unexpected temporary content is retained and stops delivery before its database receipt",()=>{
+ const f=setup(),x=activeFiles(f);edit(f,x);settle(f,x);let extra;
+ const original=childProcess.execFileSync;
+ childProcess.execFileSync=(program,args,options)=>{
+  const result=original(program,args,options);
+  if(args.includes("read-tree")&&options.env?.GIT_INDEX_FILE){extra=join(dirname(options.env.GIT_INDEX_FILE),"keep.txt");writeFileSync(extra,"unknown file must survive");}
+  return result;
+ };syncBuiltinESMExports();
+ try{assert.throws(()=>commitWorkspaceSession(f.db,{workspaceId:x.args.workspaceId}),{code:"WORKSPACE_COMMIT_CLEANUP_FAILED"});}finally{childProcess.execFileSync=original;syncBuiltinESMExports();}
+ assert.equal(readFileSync(extra,"utf8"),"unknown file must survive");assert.equal(existsSync(join(dirname(extra),"index")),true);assert.equal(count(f,"workspace_commits"),0);
+ assert.match(git(directory(f,x),["rev-parse","refs/fleet/workspaces/"+x.args.workspaceId]),/^[0-9a-f]{40}$/);
 });

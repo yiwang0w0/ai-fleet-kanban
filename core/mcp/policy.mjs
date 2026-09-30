@@ -5,7 +5,7 @@ import {isAbsolute} from "node:path";
 import {localIdentity} from "../federation/peers.mjs";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {PeerError,keys,names,uuid,version} from "../federation/protocol.mjs";
-import {writeRecoveryJSON} from "../recovery.mjs";
+import {writePrivateJSON} from "../private-json.mjs";
 export const EXECUTION_CAPABILITIES=Object.freeze(["board-tools","workspace-files"]);
 export const ROLE_KINDS=["coordinate","implement","review","observe"];
 export const READ_TOOLS=["get_repository","list_repositories","list_nodes","list_roles","get_task","get_sync_status","get_delegation","list_bindings","get_binding","get_binding_proposal","get_cancellation","list_cancellations","get_result","list_results"];
@@ -126,7 +126,7 @@ export function issuePrincipal(db,{roleId,projects,runId=null,credentialFile}){
   const token=principal_id+"."+randomBytes(32).toString("base64url"),now=new Date().toISOString();
   db.prepare("INSERT INTO broker_principals VALUES(?,?,?,?,?,?,?,?,?,1,'active',?)").run(principal_id,node.node_id,node.sync_epoch,roleId,role.version,JSON.stringify(projects),agent_instance_id,runId,createHash("sha256").update(token).digest("hex"),now);
   db.prepare("INSERT INTO broker_auth_events(principal_id,role_id,action,version,at) VALUES(?,?,'issue',1,?)").run(principal_id,roleId,now);
-  writeRecoveryJSON(credentialFile,{format:"ai-fleet-mcp-credential/v1",node_id:node.node_id,node_epoch:node.sync_epoch,principal_id,credential_version:1,token});created=true;
+  writePrivateJSON(credentialFile,{format:"ai-fleet-mcp-credential/v1",node_id:node.node_id,node_epoch:node.sync_epoch,principal_id,credential_version:1,token});created=true;
   return {...principal,role_id:roleId,role_version:role.version,credential_version:1,node_id:node.node_id,node_epoch:node.sync_epoch};
  });}catch(e){if(created){try{unlinkSync(credentialFile);}catch{}}throw e;}
 }

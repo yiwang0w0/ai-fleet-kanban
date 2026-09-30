@@ -107,8 +107,14 @@ data retention remains a review item in [review-fixes](docs/federation/review-fi
 
 Peer and broker secrets are written to explicitly chosen new credential files;
 the database stores token hashes. Keep these files outside agent-readable work
-repositories, Markdown context exports and Git. Exclusive creation and 0600
-mode do **not** establish a Windows ACL boundary. A same-user process with access
+repositories, Markdown context exports and Git. New peer and MCP credentials use
+Windows CreateNew with a protected DACL allowing only the issuing account. The
+writer verifies that DACL on its unshared handle before writing secret bytes,
+then flushes the file. Unavailable native protection fails closed; existing
+files are never overwritten or automatically re-permissioned. This requires
+a local drive and an ACL-capable filesystem. Copies must have their receiving
+account and permissions checked separately. An interrupted writer may leave a
+protected, unissued file for local inspection. A same-user process with access
 to the database, HMAC keys or other principals' files can bypass the application
 boundary. Windows user/ACL containment and native CLI ambient configuration
 remain incomplete acceptance work; fixed argv, MCP allowlists, process Job

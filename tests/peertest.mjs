@@ -1,3 +1,4 @@
+import {allowInheritedRead,inspectAcl} from "./helpers/windows-acl.mjs";
 import {createAuthFailureGuard,listAuthFailures,AUTH_FAILURE_LIMITS} from "../core/federation/auth-failures.mjs";
 import test, {after} from "node:test";
 import assert from "node:assert/strict";
@@ -355,4 +356,20 @@ test("global failed-auth threshold cannot be bypassed across tracked key IDs bel
   assert.equal(rows.length,64);assert.ok(rows.every(r=>r.category==="claimed_key"&&r.failures===2));assert.equal(rows.reduce((n,r)=>n+r.limited,0),28);
   time+=10001;assert.equal(guard.failure("Bearer "+keys[0]+"."+"z".repeat(43)).status,401);
  }finally{guard.close();}
+});
+
+
+test("peer credentials have a protected owner-only Windows ACL even below a broadly readable directory",()=>{
+ const f=fixture(),dir=next("凭据 [literal] & directory");mkdirSync(dir);allowInheritedRead(dir);
+ assert.ok(inspectAcl(dir).rules.some(r=>r.sid==="S-1-1-0"));
+ const a=issue(f,{credentialFile:join(dir,"peer credential.json")}),acl=inspectAcl(a.args.credentialFile);
+ assert.equal(acl.protected,true);assert.equal(acl.owner,acl.current);
+ assert.deepEqual(acl.rules,[{sid:acl.current,inherited:false,rights:2032127,type:"Allow"}]);
+ assert.equal(authenticate(f.db,"Bearer "+a.token).peer_node_id,a.args.peerNodeId);
+});
+
+test("failed Windows credential protection rolls back the grant without creating a usable token",()=>{
+ const f=fixture(),file=next("unavailable-protection")+".json",previous=process.env.SystemRoot;
+ try{process.env.SystemRoot=next("missing-windows");assert.throws(()=>issue(f,{credentialFile:file}),{code:"PRIVATE_FILE_FAILED"});}finally{process.env.SystemRoot=previous;}
+ assert.equal(existsSync(file),false);assert.equal(listPeers(f.db).length,0);assert.equal(f.db.prepare("SELECT count(*) n FROM federation_auth_events").get().n,0);
 });

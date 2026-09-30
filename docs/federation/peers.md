@@ -14,7 +14,11 @@
 
 凭据包含随机 key_id 和 32 字节随机秘密，数据库只存完整 token 的 SHA-256 摘要。请求使用 Authorization: Bearer <token>，不接受 URL 查询参数或 X-Board-Token。摘要比较使用 Node timingSafeEqual；完整认证流程不宣称无时序差异。[Node 24 crypto 文档](https://nodejs.org/docs/latest-v24.x/api/crypto.html)。
 
-原文 token 只写入指定的新文件，使用排他创建和 POSIX 0600 文件模式；CLI 输出不含 token。凭据文件需要通过可信渠道交给对应终端，不能提交到 Git、粘贴到任务或放入模型上下文。Windows 文件隔离仍取决于目录 ACL，0600 不是已经完成 Windows 多用户隔离的证明。
+原文 token 只写入指定的新文件；Windows 原生 CreateNew 在创建时同时设置受保护 DACL，仅允许当前签发账户 FullControl，禁用父目录权限继承。随后在未共享的文件句柄上核验 ACL，再写入并刷新 token。使用系统自带 Windows PowerShell/.NET 的固定程序与静态脚本，路径和内容经 stdin 传递，不进入命令行或错误输出；不通过 PATH 查找程序，不使用 ExecutionPolicy Bypass。CLI 输出不含 token，碰撞不覆盖旧文件，创建/权限核验失败则回滚授权。
+
+凭据输出要求本地盘符路径及支持 Windows ACL 的文件系统；拒绝 UNC、备用数据流及设备名。父目录须预先存在且由操作者控制。脚本被系统策略禁用、超时或中断时不能降级为普通文件写入；异常中断可能留下权限受限但未授权的文件，需本机核查，不自动覆盖。复制给对端时须重新核对接收端账户与 ACL，不能提交 Git、粘贴任务或放入模型上下文。已有凭据文件不被这次更新自动改写。
+
+此 DACL 不隔离同一 Windows 账户内的 agent，也不限制管理员接管或已授权账户再复制凭据；数据库、目录和执行器隔离仍需 S04/S07 验收。原生接口依据见 [FileStream 安全描述符构造](https://learn.microsoft.com/en-us/dotnet/api/system.io.filestream.-ctor?view=netframework-4.8.1)。
 
 本机维护者有数据库和凭据管理权。完整身份库与秘密被复制后，应用不能仅凭同一秘密区分两台物理机器；本批拒绝把本机 UUID 登记为对端，并阻止备份/恢复隔离副本启动，但不宣称已完成所有克隆检测或真实 Tailscale 设备绑定。
 

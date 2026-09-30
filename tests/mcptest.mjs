@@ -1,3 +1,4 @@
+import {inspectAcl} from "./helpers/windows-acl.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -476,4 +477,14 @@ test("direct broker transport supports IPv6 and aborts an incomplete response at
  await new Promise(r=>stalled.listen(0,"127.0.0.1",r));const waiting=createBridge({url:"http://127.0.0.1:"+stalled.address().port,credentialFile:f.coord.file});
  const started=performance.now(),reply=await waiting(initialize);assert.equal(reply.error.code,-32000);assert.ok(performance.now()-started<14000);
  let timer;try{await Promise.race([socketClosed,new Promise((_,reject)=>timer=setTimeout(()=>reject(Error("deadline did not close connection")),1000))]);}finally{clearTimeout(timer);}
+});
+
+
+test("MCP credentials are owner-only and failed protection rolls back principal and audit",()=>{
+ const f=fixture(),acl=inspectAcl(f.coord.file);
+ assert.equal(acl.protected,true);assert.deepEqual(acl.rules,[{sid:acl.current,inherited:false,rights:2032127,type:"Allow"}]);
+ const before=count(f,"broker_auth_events"),file=path("no-protection")+".json",previous=process.env.SystemRoot;
+ try{process.env.SystemRoot=path("missing-windows");assert.throws(()=>issuePrincipal(f.db,{roleId:"coord",projects:["demo"],credentialFile:file}),{code:"PRIVATE_FILE_FAILED"});}finally{process.env.SystemRoot=previous;}
+ assert.equal(existsSync(file),false);assert.equal(count(f,"broker_principals"),1);assert.equal(count(f,"broker_auth_events"),before);
+ assert.equal(listTools(f.db,f.coord.auth).tools.length>0,true);
 });

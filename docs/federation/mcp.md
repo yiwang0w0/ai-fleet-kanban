@@ -10,7 +10,7 @@ MCP 客户端启动 cli/mcp.mjs，使用 stdio 通信。该进程只接收回环
 
 stdio 到 broker 的请求使用独立的 Node HTTP Agent，并显式关闭代理配置，不使用全局 fetch、全局 HTTP Agent 或环境代理。仅接受数字回环根地址，不跟随重定向；保留 10 秒请求期限、1 MiB 响应上限、严格 UTF-8 和节点/epoch 核对。参见 [Node 24 的代理配置说明](https://nodejs.org/docs/latest-v24.x/api/http.html#built-in-proxy-support)。这些是传输控制，不提供 OS 网络隔离。
 
-凭据绑定 node_id、node_epoch、principal_id、角色版本、项目集合；执行身份还绑定 agent_instance_id 和 run_id。代理不信任 clientInfo、工具参数或任务文本声明的身份。数据库只保存令牌 SHA-256；授权命令只输出非秘密身份信息，令牌写入新文件且不覆盖已有文件。角色策略修改、凭据撤销、节点退役/恢复换代、任务重新领取都会使不再匹配的身份失效。
+凭据绑定 node_id、node_epoch、principal_id、角色版本、项目集合；执行身份还绑定 agent_instance_id 和 run_id。代理不信任 clientInfo、工具参数或任务文本声明的身份。数据库只保存令牌 SHA-256；授权命令只输出非秘密身份信息，令牌写入新文件且不覆盖已有文件。 Windows 凭据与 peer 使用同一原生 CreateNew/受保护 DACL 写入器，先在句柄上核验当前账户独占授权，再写入秘密；保护不可用则回滚 principal 和审计。仅新发文件受此流程保护，不自动修改已有凭据。角色策略修改、凭据撤销、节点退役/恢复换代、任务重新领取都会使不再匹配的身份失效。
 
 这是看板工具授权边界。同一个 OS 用户若仍可直接访问数据库、其他凭据或任意工作目录，可以绕过这层控制。tools=read-only 目前是工作区意图声明，不能据此声称文件系统已只读。Windows ACL、隔离用户/容器和执行器能力限制需要在 S04/S07 单独验收。
 

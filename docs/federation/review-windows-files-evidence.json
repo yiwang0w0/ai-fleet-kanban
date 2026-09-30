@@ -1,0 +1,135 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-38-review-windows-files",
+  "date": "2026-09-30",
+  "platform": "Windows",
+  "node_version": "24.16.0",
+  "base_commit": "26a52d8139e01d158b93df34d13636bff4957ff0",
+  "normalization": "UTF-8 LF",
+  "code_and_document_files": [
+    {
+      "path": "core/private-json.mjs",
+      "sha256": "358f8892719c7ce5cefecd8980273adbf37422b2aee88f4b664834997dbc058f",
+      "git_blob": "a67fc3a9da0e5571e46a5d5ecd72787257865523"
+    },
+    {
+      "path": "core/private-json.ps1",
+      "sha256": "2950a5cbda3317575f963ff1f13e39322b65d2a3a506934097f37f4fb24dd568",
+      "git_blob": "b48cdea6b83ebc07343edfb6aacb58073878001c"
+    },
+    {
+      "path": "core/artifacts/workspace-commit.mjs",
+      "sha256": "acb16c44a98528482bc201b5294da4a27097fc506ab46d3dc094c69d2c428afe",
+      "git_blob": "b91271db72223e111f38ce138015a054d5da49fb"
+    },
+    {
+      "path": "core/federation/peers.mjs",
+      "sha256": "d86fc09b234b8a2d112121a018bbe11903b1e903bd35626c4e1cffdbdf4f508f",
+      "git_blob": "913818a68c8ef19b1caddb7c1fa2799afc404687"
+    },
+    {
+      "path": "core/mcp/policy.mjs",
+      "sha256": "0cc465dbd339f5b96b5904d6037d332350f71981baddb10691e3e844367ef49e",
+      "git_blob": "5151a0bc1e8e35d0c59273ba686256679aea066c"
+    },
+    {
+      "path": "tests/helpers/windows-acl.mjs",
+      "sha256": "44bed8e9171ad63328d3c330079b639ecc279362012e01223187020dcc3990fa",
+      "git_blob": "cd7c467a72a3dc10c855834476c53384bb599281"
+    },
+    {
+      "path": "tests/peertest.mjs",
+      "sha256": "b134463b01d02878a6dac359509ab55223aea901118259fd5cd8a34f0646dd44",
+      "git_blob": "43ec13c23828eba5b11bf62585d0802831456e52"
+    },
+    {
+      "path": "tests/mcptest.mjs",
+      "sha256": "cde5b82d4dc5fe542704096dd0ace5e215b627e0e4ee6e4d97b47cc35ba61774",
+      "git_blob": "a106f5560ab60ec18b9bc3c5b097c2c27df0a6bb"
+    },
+    {
+      "path": "tests/workspacefiletest.mjs",
+      "sha256": "7dddcdaca24522052ccd2c16dcd06751dd3e5f38576dfeb255ae162fef5654f7",
+      "git_blob": "d3809c0109a357fb366553d326b9f6089ec1c109"
+    },
+    {
+      "path": "docs/federation/peers.md",
+      "sha256": "2c29c61637ae95b6e592a7517cd3958cafea5566b0f384799c4690b023432846",
+      "git_blob": "8f0d775cd4ac3d33b8b36a01293bed556c81724d"
+    },
+    {
+      "path": "docs/federation/mcp.md",
+      "sha256": "863e04113b49c87fc47eeb20c2b131ff4b12c41244a3ea1ebd44e35110836720",
+      "git_blob": "464b6ac5e47ea406033d368397e91ae4ca798bfd"
+    },
+    {
+      "path": "docs/federation/workspace-files.md",
+      "sha256": "81824d07ade723dd55a72c1974ce7e4bfa2e8116285f7993d8b1f89cab2d0fe3",
+      "git_blob": "19934890b7580f33ba8242c242fd4be37a64caac"
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "3350af717335282667228e329cef6c333f5c0fe117e14980cd6fa439946e53ca",
+      "git_blob": "da6949a83b9ce6e82c09053bd410b3d26d39b55b"
+    }
+  ],
+  "local_validation": {
+    "pass": 134,
+    "new_cases": 5,
+    "failed": 0,
+    "skipped": 0,
+    "log": ".data/review38-final.log",
+    "files": [
+      "peertest",
+      "mcptest",
+      "workspacefiletest",
+      "dispatchtest",
+      "gitpackagetest"
+    ],
+    "duration_ms": 152582.9451,
+    "observations": [
+      "Actual FileStream security-descriptor constructor confirmed available in system Windows PowerShell/.NET Framework. A new synthetic JSON file was created and removed; local observation 315 ms, not a device performance guarantee.",
+      "Actual ACL inspection proves protected DACL, one explicit current-user FullControl ACE, matching owner, despite an Everyone-inheritable-readable parent directory. Paths include Chinese, spaces, brackets and ampersand.",
+      "MCP files use the same writer; missing Windows protection rolls back principal/peer records and audit without granting a usable token. Existing exclusive-file and transaction-failure cleanup tests remain.",
+      "Successful commit, audit rollback, Git ref conflict and retry remove only their fresh index directories. Existing older commit directories and dirty checkout bytes are preserved.",
+      "Unexpected extra temporary content remains intact, returns WORKSPACE_COMMIT_CLEANUP_FAILED, and prevents delivery-manifest persistence; already generated Git objects and references remain."
+    ],
+    "initial_failure": {
+      "log": ".data/review38-primary.log",
+      "pass": 77,
+      "failed": 9,
+      "skipped": 0,
+      "reason": "Seven paths caught a commit variable moved out of scope by the cleanup try block; two ACL inspections caught an incompatible inherited PowerShell module search path. Both corrected before final full rerun."
+    }
+  },
+  "new_commit_ci": "pending",
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false,
+  "limitations": [
+    "ACL metadata was read from real Windows files, but no second real user account login was performed.",
+    "Same-user processes, administrative takeover, copied credentials, existing credentials and complete OS containment are outside this proof.",
+    "Credential output requires a trusted pre-existing local drive directory, ACL-capable filesystem and the system Windows PowerShell/.NET interface; no policy bypass or ordinary-write fallback.",
+    "Forced termination can leave a private unissued credential or temporary index directory; no automatic wildcard cleanup.",
+    "N2 authorized retention/runtime floor, M5 native configuration and N4 review documentation remain open."
+  ],
+  "references": [
+    "https://learn.microsoft.com/en-us/dotnet/api/system.io.filestream.-ctor?view=netframework-4.8.1"
+  ],
+  "static_validation": {
+    "relative_links_checked": 23,
+    "staged_file_hashes_verified": 13
+  },
+  "secret_scan": {
+    "tool": "Windows gitleaks 8.24.3",
+    "scope": "staged diff",
+    "exit_code": 0,
+    "findings": 0
+  }
+}

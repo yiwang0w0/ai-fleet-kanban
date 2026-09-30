@@ -42,7 +42,7 @@ HTTP 网关请求 JSON 另有 128 KiB 边界，MCP 响应另有 512 KiB 边界�
 
 本机受信代码用独立 Git index 从原始基线构建新树，对会话净变化执行固定的 hash-object/update-index/write-tree/commit-tree；新增和删除文件、原始字节及执行位进入真实 Git 对象。固定父提交、运行标识、会话摘要、revision 和完成时间使故障后重建获得同一提交 ID。不执行 checkout、过滤器、hook、签名或网络获取，不改物理 checkout、HEAD、其真实 index 或未跟踪文件。
 
-随后重新读取 commit/tree/blob 实际内容，复核完整目录与“原基线加声明净变化”一致，保存本地 `refs/fleet/workspaces/<UUID>` 和不可变交付清单。清单绑定 node/epoch、task、run、dispatch、agent、仓库、基线、新 commit/tree、文件内容 SHA-256、启动/进程结果摘要和停止证明。Git 对象与 SQLite 无法跨系统原子提交；数据库故障时保留对象、临时 index 和引用，重放只补记同一结果，遇到引用冲突拒绝覆盖。
+随后重新读取 commit/tree/blob 实际内容，复核完整目录与“原基线加声明净变化”一致，保存本地 `refs/fleet/workspaces/<UUID>` 和不可变交付清单。清单绑定 node/epoch、task、run、dispatch、agent、仓库、基线、新 commit/tree、文件内容 SHA-256、启动/进程结果摘要和停止证明。Git 对象与 SQLite 无法跨系统原子提交；数据库故障时保留对象和引用，重放只补记同一结果，遇到引用冲突拒绝覆盖。本次 commit-* 临时目录在 Git 生成的成功与失败路径均清理，且在交付清单落库前完成清理；只删除该次新建目录中已知的 index / index.lock，再移除空目录，不递归扫描或清除旧目录。路径/目录身份改变、未知内容或删除失败时返回 WORKSPACE_COMMIT_CLEANUP_FAILED，保留现场与已生成对象/引用，不写交付清单；原有操作异常保留为 cause。断电或进程强制终止仍可能遗留临时目录，需本机核查，不能据此自动删除任意 commit-*。
 
 `manifest` 会从仓库重读完整交付目录和交付文件字节并核对摘要，然后只输出元数据。内部 `captureWorkspaceCommit` 返回实际字节供后续传输接入。`accepted=false`、`transferred=false`；当前候选报告协议尚未携带该文件交付。未完成远端安全落盘、断点续传、独立测试、来源 CAS 合并、正向验收或关系退役。
 

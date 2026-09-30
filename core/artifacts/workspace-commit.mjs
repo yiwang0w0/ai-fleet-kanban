@@ -1,6 +1,6 @@
 import {encodeGitPackage} from "./git-package.mjs";
 import {execFileSync} from "node:child_process";
-import {mkdtempSync} from "node:fs";
+import {mkdtempSync,lstatSync,realpathSync,readdirSync,unlinkSync,rmdirSync} from "node:fs";
 import {join,dirname} from "node:path";
 import {createHash} from "node:crypto";
 import {localIdentity,transaction} from "../federation/peers.mjs";
@@ -28,7 +28,9 @@ export function commitWorkspaceSession(db,{workspaceId}){
  if(prior)return {manifest:JSON.parse(prior.descriptor_json),manifest_digest:prior.descriptor_digest,accepted:false};
  const root=taskWorkspaceDirectory(db,{workspaceId}),mapping=JSON.parse(db.prepare("SELECT descriptor_json FROM repository_mappings WHERE mapping_id=?").get(c.binding.mapping_id).descriptor_json),pin=gitPin(mapping.git),reader=repositoryReader({root,git:pin}),base=reader.commit(c.binding.base_commit);
  if(base.tree!==c.binding.base_tree)fail("OBJECT_CORRUPT","交付基础树不一致");
- const privateDir=mkdtempSync(join(dirname(root),"commit-")),env={...gitEnvironment(pin.path),GIT_INDEX_FILE:join(privateDir,"index"),GIT_AUTHOR_NAME:"AI Fleet Workspace",GIT_AUTHOR_EMAIL:"workspace@example.invalid",GIT_COMMITTER_NAME:"AI Fleet Workspace",GIT_COMMITTER_EMAIL:"workspace@example.invalid",GIT_AUTHOR_DATE:c.d.finished_at,GIT_COMMITTER_DATE:c.d.finished_at},deadline=performance.now()+30000;
+ const privateParent=realpathSync(dirname(root)),privateDir=mkdtempSync(join(privateParent,"commit-")),privateIdentity=lstatSync(privateDir,{bigint:true}),env={...gitEnvironment(pin.path),GIT_INDEX_FILE:join(privateDir,"index"),GIT_AUTHOR_NAME:"AI Fleet Workspace",GIT_AUTHOR_EMAIL:"workspace@example.invalid",GIT_COMMITTER_NAME:"AI Fleet Workspace",GIT_COMMITTER_EMAIL:"workspace@example.invalid",GIT_AUTHOR_DATE:c.d.finished_at,GIT_COMMITTER_DATE:c.d.finished_at},deadline=performance.now()+30000;
+ let manifest,operationError;
+ try{
  function run(args,input=null,missing=false){
   gitPin(pin);const remaining=Math.floor(deadline-performance.now());if(remaining<=0)fail("WORKSPACE_COMMIT_TIMEOUT","交付对象生成超过期限");
   try{return execFileSync(pin.path,["--no-pager","--no-lazy-fetch","--no-replace-objects","--no-optional-locks","-c","protocol.allow=never","-c","core.fsmonitor=false","-c","core.untrackedCache=false","-c","commit.gpgSign=false",...args],{cwd:root,env,input,windowsHide:true,timeout:Math.min(10000,remaining),maxBuffer:4*1024*1024,stdio:["pipe","pipe","pipe"]}).toString("utf8").trim();}
@@ -48,7 +50,22 @@ export function commitWorkspaceSession(db,{workspaceId}){
  for(const f of changes)if(f.operation==="delete")expected.delete(f.path);else expected.set(f.path,{path:f.path,mode:f.mode,blob_oid:f.blob_oid,size:f.size,sha256:f.sha256});
  if(canonical(full.files)!==canonical([...expected.values()].sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0)))fail("OBJECT_CORRUPT","交付完整目录包含未声明变化");
  const ref="refs/fleet/workspaces/"+workspaceId,old=run(["rev-parse","--verify","--quiet",ref],null,true);if(old!==null&&old!==commit)fail("WORKSPACE_REF_CHANGED","交付引用已绑定其他提交");if(old===null)run(["update-ref",ref,commit,"0".repeat(base.commit.length)]);
- const manifest={schema_version:1,kind:"workspace_delivery_commit",node_id:c.r.node_id,node_epoch:c.r.node_epoch,workspace_id:workspaceId,project_id:c.binding.project_id,repo_id:c.binding.repo_id,task_uid:c.binding.task_uid,run_id:c.r.run_id,dispatch_id:c.r.dispatch_id,agent_instance_id:c.binding.agent_instance_id,base_commit:base.commit,commit,tree,content_snapshot_digest:digest(full),session_descriptor_digest:c.s.descriptor_digest,session_revision:c.s.revision,launch_digest:c.l.launch_digest,process_result_digest:c.d.result_digest,stop_proofs:c.stopped.proofs,fixture_runs:c.stopped.fixtureRuns,files:changes,real_model_call_confirmed:false};
+ manifest={schema_version:1,kind:"workspace_delivery_commit",node_id:c.r.node_id,node_epoch:c.r.node_epoch,workspace_id:workspaceId,project_id:c.binding.project_id,repo_id:c.binding.repo_id,task_uid:c.binding.task_uid,run_id:c.r.run_id,dispatch_id:c.r.dispatch_id,agent_instance_id:c.binding.agent_instance_id,base_commit:base.commit,commit,tree,content_snapshot_digest:digest(full),session_descriptor_digest:c.s.descriptor_digest,session_revision:c.s.revision,launch_digest:c.l.launch_digest,process_result_digest:c.d.result_digest,stop_proofs:c.stopped.proofs,fixture_runs:c.stopped.fixtureRuns,files:changes,real_model_call_confirmed:false};
+ }catch(e){operationError=e;throw e;}finally{
+  try{
+   // Only the exact fresh directory and two known index files may be removed.
+   // No recursive deletion or scan for older commit-* directories is allowed.
+   const current=lstatSync(privateDir,{bigint:true});
+   if(!current.isDirectory()||current.isSymbolicLink()||current.ino===0n||current.ino!==privateIdentity.ino||current.dev!==privateIdentity.dev||realpathSync(privateDir)!==privateDir||realpathSync(dirname(privateDir))!==privateParent)throw Error("temporary directory changed");
+   const files=readdirSync(privateDir);
+   if(files.some(name=>!["index","index.lock"].includes(name)||!lstatSync(join(privateDir,name)).isFile()||lstatSync(join(privateDir,name)).isSymbolicLink()))throw Error("unexpected temporary content");
+   for(const name of files)unlinkSync(join(privateDir,name));rmdirSync(privateDir);
+  }catch{
+   const error=new PeerError("WORKSPACE_COMMIT_CLEANUP_FAILED","本次临时索引清理失败；保留已生成对象和引用，需检查本地目录",409);
+   if(operationError)error.cause=operationError;throw error;
+  }
+ }
+ const {commit}=manifest;
  return transaction(db,()=>{
   localIdentity(db);const now=context(db,workspaceId);if(now.s.revision!==c.s.revision||now.d.result_digest!==c.d.result_digest)fail("WORKSPACE_SESSION_CHANGED","生成期间文件会话已变化");
   const old=db.prepare("SELECT * FROM workspace_commits WHERE workspace_id=?").get(workspaceId);if(old){if(old.descriptor_digest!==digest(manifest))fail("WORKSPACE_COMMIT_CONFLICT","交付提交不一致");return {manifest:JSON.parse(old.descriptor_json),manifest_digest:old.descriptor_digest,accepted:false};}

@@ -1,6 +1,7 @@
+import {writePrivateJSON} from "../private-json.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, lstatSync, openSync, writeFileSync, fsyncSync, closeSync, unlinkSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, unlinkSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { PeerError, SCOPES, uuid, names, version } from "./protocol.mjs";
 
@@ -100,9 +101,7 @@ export function issueCredential(db, {peerNodeId, peerEpoch, scopes, projects, ex
       const credential = {format:1,server_node_id:local.node_id,server_epoch:local.sync_epoch,
         peer_node_id:peerNodeId,peer_epoch:peerEpoch,key_id:keyId,credential_version:credentialVersion,
         scopes,projects,token};
-      const fd = openSync(credentialFile, "wx", 0o600); created = true;
-      try { writeFileSync(fd, JSON.stringify(credential, null, 2) + "\n", "utf8"); fsyncSync(fd); }
-      finally { closeSync(fd); }
+      writePrivateJSON(credentialFile,credential); created = true;
       db.prepare("INSERT INTO federation_peers VALUES(?,?,?,?,?,'active',?,?,?,?) " +
         "ON CONFLICT(peer_node_id) DO UPDATE SET peer_epoch=excluded.peer_epoch,key_id=excluded.key_id," +
         "credential_version=excluded.credential_version,secret_hash=excluded.secret_hash,status='active'," +

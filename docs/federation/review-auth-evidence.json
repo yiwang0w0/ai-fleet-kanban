@@ -96,7 +96,18 @@
       "core/federation/protocol.mjs"
     ]
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": {
+    "commit": "bfef383b7398c2f9ff72dfe350bd563a689a9745",
+    "run_id": 36702034036,
+    "windows_job_id": 109843489614,
+    "gitleaks_job_id": 109843489222,
+    "status": "completed",
+    "conclusion": "success",
+    "main_pass": 1498,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0
+  },
   "complete_phase_gates": 0,
   "total_phase_gates": 12,
   "real_provider_calls": {

@@ -27,7 +27,7 @@
 | M9 | Git 普通路径误拒、逐对象读取与快照范围 | 已处理 | 普通 git/ 目录已修；文件 batch-check/batch 读取保留对象验证与限额；完整工作区不采用静默跳过范围外对象，理由见批次 34 |
 | M10 | 并发突变测试疤痕注释和判据解释缺失 | 已修复 | 恢复历史 2w/1err 原因；本次 Windows 实测 1w/11err/0late/12attempts，部分写入检测有效 |
 | M11 | CI 只标注 FAIL，遗漏 TAP/Node 失败名称 | 已修复 | 标注 FAIL、not ok 和 Node 默认 ✖ 行 |
-| N1 | 临时提交目录、可嵌套事务、凭据 ACL 等补充项 | 部分修复 | migrate、withTaskVersion 和 reopen 使用 SAVEPOINT 保留调用者事务，新增成功/失败/外层回滚用例；目录回收及 Windows ACL 仍待复核 |
+| N1 | 临时提交目录、可嵌套事务、凭据 ACL 等补充项 | 已修复 | SAVEPOINT 保留外层事务；精确清理本次 index 目录并保留异常内容；新 peer/MCP 凭据原生 CreateNew 与 owner-only DACL 同时创建，写前核验，失败回滚；完整 OS 隔离另行验收 |
 | N2 | 已授权节点的长期保留、文档计数与 Node 最低版 | 部分补齐 | 文档按实际 40 Node 主套件 + 4 Python/1 Node 附加入口更新；网关 23 路径 / 12 能力 / 15 scope 及载荷限额已按源码补齐；已授权数据保留及 Node 最低版继续复核 |
 | N3 | 工具参数 schema、任务存在性、代理环境与回环连接 | 已修复 | boolean 入口严格校验；运行身份的范围外任务与未知任务同为 404；回环专用无代理连接；启动前拒绝带凭据或含混代理 URL |
 | N4 | gitleaks 来源链接、旧测试包装命名、历史 CI 标识 | 待复核 | 保留历史事实，不将历史 Linux 证据伪装为 Windows 验收 |
@@ -91,3 +91,14 @@ boolean 参数在 schema 入口拒绝字符串、数字、null、对象和数组
 stdio 默认使用独立的无代理 HTTP Agent，保留 10 秒期限、1 MiB 响应界限、重定向拒绝与身份核验。独立子进程测试同时启用 NODE_USE_ENV_PROXY 和替换全局 fetch，仍完成本机建卡且测试代理收到 0 次请求。执行器保留无凭据代理，含认证/查询/片段/额外路径的 URL 则在配置写入前明确拒绝；失败诊断不回显代理值。
 
 相关回归及源码摘要见 review-mcp-boundaries-evidence.json。原生 CLI 配置与 Windows OS 隔离、临时提交目录/凭据 ACL、长期保留及其他未完事项继续处理；完整阶段及真实调用口径不变。
+
+
+## 批次 38：N1 临时 index 与 Windows 凭据文件
+
+成功、Git 失败及数据库审计失败路径均清理本次临时 index 目录；固定新建目录身份及其父路径，只移除已知 index/index.lock 文件，不递归、不扫描旧 commit-*。未知文件或身份变化时保留现场并拒绝交付清单落库。Git 对象与引用仍保留，正常数据库回滚可重试生成同一提交。
+
+peer 与 MCP 发凭据共用原生 Windows 文件写入器。CreateNew 同时施加禁止继承、仅当前账户 FullControl 的 DACL；以不共享句柄读取实际 ACL，通过后才写 token 并 Flush(true)。固定系统 Windows PowerShell 使用静态编码脚本，路径/秘密经 stdin，不作为脚本或 argv；无 profile、无策略绕过、无普通文件写入降级。保护不可用时回滚授权，旧文件不覆盖，不自动收紧旧凭据。测试在临时目录授予 Everyone 可继承读取权限，再核对新凭据实际 DACL 仍受保护且仅当前 SID；没有冒充第二个真实 Windows 账户登录测试。
+
+初次回归 77/86 通过：7 个提交路径发现 try 块外引用 commit 的作用域错误，2 个 ACL 用例发现测试继承的 PowerShell 模块路径不兼容；修正代码与测试进程环境后重跑。初始失败日志保留，不计为通过。准确最终结果和文件摘要见 review-windows-files-evidence.json。
+
+硬终止仍可能遗留临时 index 或未授权的受限文件；同用户 agent、管理员接管、凭据复制后的 ACL、现有文件和整体执行隔离不在本次证明范围。完整阶段仍 0/12，真实模型各 0/1，未改部署或全局 MCP。
