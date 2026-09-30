@@ -2392,13 +2392,27 @@
       "evidence_required": [
         "action-idempotency 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Opt-in coordinator-backed operator API and browser controls; durable atomic outbox, same-contract create deduplication, bound peer delivery, cancellation receipts and candidate rework. Actual localhost HTTP/browser and isolated Windows tests; no new real model tasks.",
+        "pending": [
+          "Full binding, graph registration, bilateral readiness and final verification/integration/completion UI",
+          "History pagination and operator queue retention procedure",
+          "Actual Tailscale two-PC and desktop G08 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/fleet-actions.md",
+        "docs/federation/fleet-actions-evidence.json",
+        "core/fleet-actions.mjs",
+        "tests/fleetactionstest.mjs"
+      ]
     },
     {
       "id": "T08.04",

@@ -1,0 +1,124 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-50-fleet-actions",
+  "date": "2026-10-01",
+  "base_commit": "e9065b694d9dfa56f6c7c6facf8116e45fa83f00",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "scope": "Opt-in operator controls backed by a coordinate principal and persistent federation-message outbox; partial T08.03 implementation.",
+  "tests": [
+    {
+      "command": "node --test tests/fleetactionstest.mjs tests/fleetviewtest.mjs tests/fleetevidencetest.mjs tests/delegationtest.mjs tests/bindingtest.mjs tests/cancellationtest.mjs tests/resulttest.mjs",
+      "passed": 151,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 54593.9892,
+      "log": ".data/review50-regression.log",
+      "scope": "Broad protocol regression before final exact-limit catalog adjustment",
+      "log_sha256": "397091eb7de3d705b948db37bcfe05f72b9b4237b9293bc30d776035c1caf534"
+    },
+    {
+      "command": "node --test tests/fleetactionstest.mjs tests/servertest.mjs tests/tltest.mjs",
+      "node_runner_units": 19,
+      "action_tests": 17,
+      "server_harness_assertions": 195,
+      "panel_harness_assertions": 23,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 92435.6908,
+      "log": ".data/review50-final-ui-server.log",
+      "scope": "Final source; runner treats the two legacy assertion harnesses as two file units",
+      "log_sha256": "67fa2a20d4c3a714027c5b822e2f7af2ac87cb1cfaa84ecbee3600a848e9702b"
+    },
+    {
+      "command": "node --test tests/desktop-packagetest.mjs",
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 2718.5925,
+      "log": ".data/review50-package-repro.log",
+      "scope": "Unmodified packaging code; prior CI timeout was not reproduced locally",
+      "log_sha256": "9b86d54216f18082984eb78749e56b1a71f8e715cbc9d192ba9065abd453fae7"
+    }
+  ],
+  "counts_note": "Overlapping test rounds are not added together.",
+  "browser": {
+    "environment": "Two isolated localhost board services and authenticated peer gateways on one Windows PC",
+    "source_tasks": 2,
+    "target_tasks_created": 1,
+    "target_task_released": false,
+    "source_runs": 0,
+    "target_runs": 0,
+    "checked": [
+      "Keyboard open, create delegation, accept incoming offer, source status polling",
+      "Contract markup rendered as literal text",
+      "Auto-refresh preserves action group expansion and avoids interrupting keyboard focus",
+      "390px viewport; controls visible without horizontal overflow"
+    ],
+    "screenshot_in_repository": false,
+    "physical_two_pc_test": false,
+    "tailscale_test": false,
+    "observation_sha256": "7b5ff880fa144067a96db9bb7ff7949c240a597c71eb1a2b134771ebc334c7c3",
+    "screenshot_sha256": "cec147e73388d6ccad059a00bf436596f9fdbb569d53fbba067cf51ecaaa7820"
+  },
+  "prior_ci": {
+    "sha": "e9065b694d9dfa56f6c7c6facf8116e45fa83f00",
+    "run_id": 36736332384,
+    "windows_job_id": 109958902027,
+    "windows": "failure",
+    "gitleaks": "success",
+    "failed_step": "desktop-packagetest",
+    "error": "MCPB archive creation failed; output remains incomplete: ETIMEDOUT",
+    "timeout_ms": 30000,
+    "affected_tests": 8,
+    "root_cause": "Unconfirmed; archive subprocess timed out in shared before hook; no local reproduction; no timeout relaxation or retry claimed as a fix"
+  },
+  "formal_progress": {
+    "accepted_tasks": 0,
+    "total_tasks": 72,
+    "accepted_phases": 0,
+    "total_phases": 12
+  },
+  "real_provider_tasks_added": 0,
+  "remaining": [
+    "Binding, registrar approval, bilateral readiness and final verification/integration/completion UI",
+    "Dependency graph and accepted-only stage progress",
+    "History pagination and bounded operator queue retention procedure",
+    "Two physical Windows PCs and actual desktop clients",
+    "Codex diagnosis/re-authorized successful task, Zcode China auth home, OS isolation, operations and 72-hour acceptance"
+  ],
+  "files": [
+    {
+      "path": "core/fleet-actions.mjs",
+      "sha256": "350d0534ab5e6556309015280989f9eef4854e1621b5e9e683d571b9958e0e57"
+    },
+    {
+      "path": "core/server.mjs",
+      "sha256": "4d5e5b19cc384e0c95b663f8b4fac992a54fcff16ae1e5936313cc9e321192e0"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "f549d3463c7291a310a30caa6d7d958662e6cfbc39fd577ae9f4aec165ca9844"
+    },
+    {
+      "path": "tests/fleetactionstest.mjs",
+      "sha256": "827817baf1fc0ae7dc9d0474a6d3c37080c5d4c937bc9208f56ea6d67ee353a9"
+    },
+    {
+      "path": "docs/federation/fleet-actions.md",
+      "sha256": "7f12aa18c8abac6839801210e01fdc5b65aca1111c0fbbb72f499e0ad81a98ab"
+    },
+    {
+      "path": "docs/federation/fleet-view.md",
+      "sha256": "86a1cebbe88db010799e9d6376e33534ee77945659410cec01c50261977ba969"
+    },
+    {
+      "path": "package.json",
+      "sha256": "54513b920dcc56578c1bb5f0c2baf3e07695036713e7e600be8522b5cad41ce3"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "42b31060ff64e00f6003050d238b6484b9f0faf875ef20d0431f0edbb665f008"
+    }
+  ]
+}

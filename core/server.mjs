@@ -20,6 +20,7 @@ import { dirname, join, resolve, relative } from "node:path";
 import { createRequire } from "node:module";
 import { nodeTooOld } from "./env.mjs";
 import {readFleetView,readFleetTask} from "./fleet-view.mjs";
+import {openFleetActions,loadFleetActionsConfig} from "./fleet-actions.mjs";
 import {PeerError} from "./federation/protocol.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -391,6 +392,15 @@ const fpContext = () => {
 };
 
 const db = store.open();
+// Opt-in trusted local configuration; ordinary view-only startup performs no new migration.
+const fleetActions = process.env.BOARD_FLEET_ACTIONS_CONFIG
+  ? openFleetActions(db,{config:loadFleetActionsConfig(process.env.BOARD_FLEET_ACTIONS_CONFIG)}) : null;
+const pumpFleetActions=()=>fleetActions?.tick().catch(()=>{}); // each delivery retains a fixed error code
+const fleetActionsTimer=fleetActions?setInterval(pumpFleetActions,5000):null;
+fleetActionsTimer?.unref();
+if(fleetActions)setImmediate(pumpFleetActions);
+async function stopFleetActions(){if(fleetActionsTimer)clearInterval(fleetActionsTimer);await fleetActions?.close();}
+
 
 // ── Worker supervision: one loop child process per line; the panel's switches
 //    drive these.
@@ -2318,6 +2328,22 @@ const server = http.createServer(async (req, res) => {
         return json(res,200,value);
       } catch(e) {return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"FLEET_VIEW_UNAVAILABLE",error:e instanceof PeerError?e.message:"全局视图暂不可读；请检查数据库与升级状态"});}
     }
+    if ((m==="GET"||m==="POST")&&p==="/api/fleet/actions") {
+      if(m==="GET"&&!guardWrite(req,res,p))return;
+      if(!fleetActions)return json(res,m==="GET"?200:409,{enabled:false,code:"ACTIONS_NOT_CONFIGURED",error:"尚未配置本机协调身份和对端连接，跨端操作未启用"});
+      try {
+        if(m==="GET")return json(res,200,fleetActions.catalog(url.searchParams.get("project")));
+        if(shuttingDown)return json(res,503,{code:"ACTIONS_CLOSED",error:"看板正在停止，请稍后使用同一请求重试"});
+        let body;try{body=await readBody(req);}catch{throw new PeerError("BAD_INPUT","请求必须是有效 JSON",400);}
+        const result=fleetActions.enqueue(body);
+        json(res,["pending","retry_pending"].includes(result.state)?202:200,result);
+        setImmediate(pumpFleetActions);return;
+      } catch(e) {
+        const code=typeof e?.code==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(e.code)?e.code:"ACTION_FAILED";
+        const reasons={BAD_INPUT:"操作参数无效",FORBIDDEN:"协调身份没有所需项目或操作权限",UNAUTHENTICATED:"协调身份已失效，请核对本机配置",POLICY_CHANGED:"角色策略已更新，需要重新授权协调身份",AUTHORIZATION_CHANGED:"权限已变化，旧请求已停止",PEER_NOT_CONFIGURED:"该项目尚未配置此对端",CONFLICT:"任务或回执版本已变化，请刷新后核对",REQUEST_CONFLICT:"请求编号已绑定其他操作",NOT_FOUND:"当前项目没有可操作的对象",CONFIRMATION_REQUIRED:"双方关系和就绪证明尚未满足操作条件",QUEUE_LIMIT:"操作记录已达到上限，需维护后继续"};
+        return json(res,e instanceof PeerError?e.status:409,{code,error:reasons[code]||"操作未获准，请核对当前任务状态与权限"});
+      }
+    }
     if (m === "GET" && p === "/health") return json(res, 200, { status: "ok", port: PORT });
 
     // ── SSE
@@ -3220,6 +3246,7 @@ let shuttingDown = false;
 async function stopWithBoard(trigger) {
   if (shuttingDown) return;
   shuttingDown = true;
+  await stopFleetActions();
   const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
   if (live.length) {
     console.log(`退出(${trigger}): 正在停止 worker ${live.join(" ")}(意图保留)…`);
@@ -3236,6 +3263,7 @@ async function stopWithBoard(trigger) {
 async function restartBoard(trigger) {
   if (shuttingDown) return;
   shuttingDown = true;
+  await stopFleetActions();
   const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
   if (live.length) {
     console.log(`重启(${trigger}): 先停 worker ${live.join(" ")}(意图保留,新进程起来后照原样恢复)…`);
