@@ -99,6 +99,7 @@ export function repositoryReader({root,git}){
    return entries;
  }
  return {info,verify(){gitPin(pin);if(directory(root)!==path||!sameRoot(path))fail("REPOSITORY_CHANGED","仓库路径已改变");},commit,
+  commitBytes(oid){commit(oid);return object("commit",oid,1024*1024);},
   /** Full baseline export requires a separately approved local workspace pool. */
   snapshot({commit:oid,consume}){
    if(typeof consume!=="function")fail("BAD_INPUT","需要本机基线内容接收器");

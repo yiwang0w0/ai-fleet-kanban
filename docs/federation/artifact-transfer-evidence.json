@@ -1,0 +1,118 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-25-artifact-transfer",
+  "date": "2026-09-30",
+  "base_commit": "601890a0ca25eb1be79de3e48237e41c6341831f",
+  "supported_platform": "Windows",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    ".github\\workflows\\ci.yml": "d329131e0cfe788ec18315a10bd17a6ad331d208e5f6efae26089d35a7811e51",
+    "cli\\artifact.mjs": "ce1fcd3b4d2835bcaedd45ffccea6b671ece66f75d6e9a12ea6ea54d2653604b",
+    "core\\artifacts\\git-package.mjs": "533bf0d5e8e0c0ba9f8fae3c79b1794c999c2556a341723457ab59a1dc898edf",
+    "core\\artifacts\\git-reader.mjs": "f680a174b0155fc16c21c43d2e3b3585579abd6486b2f00e60f3e8bf2fa17ffb",
+    "core\\artifacts\\transfer-client.mjs": "d7eb4972ebc8aff6258d6b1df057680665fbc6cc838ed995e4c3ac5a0b69cddd",
+    "core\\artifacts\\transfers.mjs": "e92814f026c4d38efb0b6c80d99e9243e3382f877680e65da7fa15869e2a73cb",
+    "core\\artifacts\\workspace-commit.mjs": "d56fdc9f5f4227dd350b1a6a5abfeb55904838655af4bcbfec81c16feff43d68",
+    "core\\federation\\gateway.mjs": "a5e9dd65a35d1099b8719c1e69cb1b379a784b635ad0c90b9b03cc5c4623d5f1",
+    "core\\federation\\protocol.mjs": "246beb271aa835521f18d0787e642e0ef0299d80b0e3818924187fae743baa42",
+    "package.json": "641994fa1aa8a8469e769e6fc0c3d6daf66104dca3286a3d6bc6827be465594e",
+    "tests\\artifacttransfertest.mjs": "20090b1cf0844c5f38e09e83a0fec6e8f90d42370180c8bc208857286c9ae659",
+    "tests\\gitpackagetest.mjs": "8a10267980bc812fc4f43fa39b1fe0f2beb6cf31399ec024b8e2203f3641a8ed",
+    "core/recovery.mjs": "694aaed6fff980217f46bfa1aa8394c791751820cf4992272f7ec2e5c6fe0475",
+    "tests/recoverytest.mjs": "ae5854d9dcdb588e55412b86783aee4fe43d4ca5ec76add88dedc12d43061270"
+  },
+  "code_git_blobs": {
+    ".github\\workflows\\ci.yml": "d71170c3fbada469bd66a95bb01d3919eb2113b6",
+    "cli\\artifact.mjs": "6f1728817f1ce7e38205d99bbbce5cff29843b51",
+    "core\\artifacts\\git-package.mjs": "5eac880f77f9fcae8dd80e882f8c7c54f7f759bc",
+    "core\\artifacts\\git-reader.mjs": "70bcf2b8309df4e451c8b6cecd187874395fbbb3",
+    "core\\artifacts\\transfer-client.mjs": "a089eafae8dd48feb8fa9cd6318f8bd3e6997d27",
+    "core\\artifacts\\transfers.mjs": "ffcc3810e49099bea37e43a2d8d284c261581c6e",
+    "core\\artifacts\\workspace-commit.mjs": "8d84d40765cd64b0241ca0ca989e7d212c7367f1",
+    "core\\federation\\gateway.mjs": "16becdeda456a211b5d22fdf8ff85e448f8353b9",
+    "core\\federation\\protocol.mjs": "415ec716f4fb4be13f52d3b33a7d4d8bd349c594",
+    "package.json": "cb891025cef736947ff1fb6a44a367d4ef21fd2f",
+    "tests\\artifacttransfertest.mjs": "3eef56f80ac581193f891e3159876a629d73467b",
+    "tests\\gitpackagetest.mjs": "f7db31785037181953247c8a09002a6c684258f0",
+    "core/recovery.mjs": "60e6174b3e664e3f524dd349a142fa1fc2da2836",
+    "tests/recoverytest.mjs": "9fcc2489752e6dfb56dd8d4637ceea1c6d92d564"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "classic_pass": 841,
+      "native_pass": 544,
+      "passed": 1385,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "before binary recovery fingerprint repair",
+      "source_snapshot": ".data/artifact-transfer-tested-source.json"
+    },
+    "incremental": {
+      "command": "node --test --test-concurrency=1 tests/backuptest.mjs tests/recoverytest.mjs tests/workspacefiletest.mjs tests/artifacttransfertest.mjs",
+      "exit": 0,
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "after binary recovery fingerprint repair"
+    },
+    "final_source_digests_verified": 14,
+    "artifact_package_tests": 4,
+    "artifact_transfer_tests": 8,
+    "binary_recovery": {
+      "before": {
+        "blob_bytes": 8388608,
+        "v8_heap_limit_mib": 192,
+        "exit": 134,
+        "diagnostic": "Reached heap limit"
+      },
+      "after": {
+        "blob_bytes": 50331648,
+        "v8_heap_limit_mib": 192,
+        "exit": 0,
+        "same_bytes_stable": true,
+        "last_byte_change_detected": true
+      },
+      "memory_note": "V8 heap bound; native SQLite and Buffer allocations are additional"
+    }
+  },
+  "coverage": [
+    "actual run-bound SHA1/SHA256 Git commit/tree/blob and changed byte capture",
+    "local per-result repository/base and full-baseline-read grant",
+    "authenticated HTTP with post-upload credential revalidation",
+    "lost chunk acknowledgement plus receiver and sender database reopen",
+    "bounded sequential chunks, exact replay, storage reservation and retained old epochs",
+    "source content rejection for file corruption, base/path/run mismatches",
+    "atomic chunk and acknowledgement audit failure rollback",
+    "cancellation, rejection and revoked peer prevent further admission or verification",
+    "source module executed in an independent temporary directory from received bytes",
+    "source repository HEAD/worktree and source task remain unchanged",
+    "backup quarantine and new epoch retain bytes without reusing old grants",
+    "48 MiB binary recovery fingerprint under bounded V8 heap"
+  ],
+  "ci": {
+    "status": "pending_exact_commit_windows_run"
+  },
+  "acceptance": {
+    "accepted": false,
+    "accepted_phases": 0,
+    "total_phases": 12,
+    "physical_two_node_acceptance": false,
+    "real_provider_calls": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 0
+    },
+    "per_provider_authorized_limit": 1,
+    "observations": "transport fixture process observations are synthetic and labelled fixture"
+  },
+  "remaining": [
+    "independent approved verification runner",
+    "source CAS merge and crash reconciliation",
+    "positive owner acceptance, relation retirement and parent advancement",
+    "automatic scheduler, global interface and operations",
+    "Zcode Chinese Coding Plan adapter and actual provider tests",
+    "two physical kanata Windows computers over Tailscale"
+  ]
+}

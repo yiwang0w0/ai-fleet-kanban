@@ -47,7 +47,13 @@ export function recoveryFingerprint(db){
   const info=db.prepare("PRAGMA table_info("+quoted(table.name)+")").all(),pk=info.filter(c=>c.pk).sort((a,b)=>a.pk-b.pk);
   const order=pk.length?pk.map(c=>quoted(c.name)).join(","):"rowid";
   h.update(table.name+"\n");
-  for(const row of db.prepare("SELECT * FROM "+quoted(table.name)+" ORDER BY "+order).iterate())h.update(canonical(row)+"\n");
+  for(const row of db.prepare("SELECT * FROM "+quoted(table.name)+" ORDER BY "+order).iterate()){
+   // Hash actual BLOB bytes directly; canonicalizing typed-array indices can exhaust
+   // the JS heap even for an 8 MiB file. SQLite scalar values keep their encoding.
+   const compact=Object.fromEntries(Object.entries(row).map(([key,value])=>[key,value instanceof Uint8Array?
+    {format:"ai-fleet-sqlite-blob/v1",byte_length:value.byteLength,sha256:createHash("sha256").update(value).digest("hex")}:value]));
+   h.update(canonical(compact)+"\n");
+  }
  }
  return h.digest("hex");
 }

@@ -2095,19 +2095,23 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_prerequisite_passed",
-        "scope": "bounded actual committed-byte capture and portable content snapshot with per-file SHA-256",
+        "result": "local_component_passed",
+        "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
         "pending": [
-          "persistent result/task/run-bound artifact manifest",
-          "authenticated file transport and receiving storage",
-          "independent artifact admission and G07 acceptance"
+          "exact-commit Windows CI",
+          "independent verification runner and source acceptance",
+          "two physical kanata artifact delivery and G07 acceptance"
         ]
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/repositories.md",
         "docs/federation/repository-evidence.json",
-        "tests/repositorytest.mjs"
+        "tests/repositorytest.mjs",
+        "docs/federation/artifact-transfer.md",
+        "docs/federation/artifact-transfer-evidence.json",
+        "tests/gitpackagetest.mjs",
+        "tests/artifacttransfertest.mjs"
       ]
     },
     {
@@ -2132,13 +2136,27 @@
       "evidence_required": [
         "interrupted-transfer/hash 测试"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
+        "pending": [
+          "exact-commit Windows CI",
+          "independent verification runner and source acceptance",
+          "two physical kanata artifact delivery and G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/artifact-transfer.md",
+        "docs/federation/artifact-transfer-evidence.json",
+        "tests/gitpackagetest.mjs",
+        "tests/artifacttransfertest.mjs"
+      ]
     },
     {
       "id": "T07.05",

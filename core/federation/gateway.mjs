@@ -1,3 +1,4 @@
+import {migrateArtifacts,receiveArtifactOffer,receiveArtifactChunk,sealArtifact,peerArtifactStatus,MAX_ARTIFACT_HEADER} from "../artifacts/transfers.mjs";
 import {migrateResults,receiveResult,peerResultStatus,MAX_RESULT_BYTES} from "./results.mjs";
 import {receiveCancellation,peerCancellationState} from "./cancellation.mjs";
 import {progressCancellation} from "./cancellation-service.mjs";
@@ -45,7 +46,7 @@ async function bodyJSON(req,limit=8192) {
 }
 /** Separate authenticated node surface: explicit projections and delegation proposals; no operator UI, secrets or model execution. */
 function createPeerServer(db) {
-  localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateResults(db);
+  localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateResults(db);migrateArtifacts(db);
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
@@ -95,6 +96,13 @@ function createPeerServer(db) {
         if(!receiving)keys(body,["result_id","project_id"],"result status");
         const result=transaction(db,()=>{const peer=authenticate(db,req.headers.authorization,"delegation:result");return receiving?receiveResult(db,peer,body):peerResultStatus(db,peer,body);});
         return send(res,200,result);
+      }
+      if(["/peer/v1/artifact/offer","/peer/v1/artifact/chunk","/peer/v1/artifact/seal","/peer/v1/artifact/status"].includes(req.url)&&req.method==="POST"){
+        const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="offer"?MAX_ARTIFACT_HEADER:action==="chunk"?96*1024:8192);
+        const result=transaction(db,()=>{
+          const peer=authenticate(db,req.headers.authorization,"artifact:write");
+          return action==="offer"?receiveArtifactOffer(db,peer,body):action==="chunk"?receiveArtifactChunk(db,peer,body):action==="seal"?sealArtifact(db,peer,body):peerArtifactStatus(db,peer,body);
+        });return send(res,200,result);
       }
       if(["/peer/v1/delegation/cancel","/peer/v1/delegation/cancel-status"].includes(req.url)&&req.method==="POST"){
         const body=await bodyJSON(req,16384),receiving=req.url.endsWith("/cancel");

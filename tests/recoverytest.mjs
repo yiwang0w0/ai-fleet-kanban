@@ -207,3 +207,17 @@ test("a prepared update held by another process is rejected after retirement com
   assert.match(result.rejected,/NODE_RETIRED/);assert.notEqual(store.get(f.db,f.id).description,"late cross-process write");
  }finally{clearTimeout(timer);if(child.exitCode===null)child.kill();await done;}
 });
+
+test("48 MiB BLOB recovery fingerprints stay bounded and include the final byte",()=>{
+ const script=path("blob-fingerprint")+".mjs";
+ writeFileSync(script,`import {DatabaseSync} from "node:sqlite";
+import {recoveryFingerprint} from ${JSON.stringify(new URL("../core/recovery.mjs",import.meta.url).href)};
+const db=new DatabaseSync(":memory:"),bytes=Buffer.alloc(48*1024*1024,120);
+db.exec("CREATE TABLE payloads(id INTEGER PRIMARY KEY,content BLOB)");db.prepare("INSERT INTO payloads VALUES(1,?)").run(bytes);
+const first=recoveryFingerprint(db);if(first!==recoveryFingerprint(db))throw Error("unchanged BLOB fingerprint drifted");
+bytes[bytes.length-1]^=1;db.prepare("UPDATE payloads SET content=?").run(bytes);if(first===recoveryFingerprint(db))throw Error("final byte excluded");
+console.log(JSON.stringify({bytes:bytes.length,stable:true,last_byte_bound:true}));db.close();
+`);
+ const r=spawnSync(process.execPath,["--max-old-space-size=192",script],{encoding:"utf8",windowsHide:true,timeout:20000,maxBuffer:1024*1024});
+ assert.equal(r.status,0,r.error?.message??r.stderr);assert.deepEqual(JSON.parse(r.stdout),{bytes:48*1024*1024,stable:true,last_byte_bound:true});
+});

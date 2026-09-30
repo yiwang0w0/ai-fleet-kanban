@@ -1,3 +1,4 @@
+import {encodeGitPackage} from "./git-package.mjs";
 import {execFileSync} from "node:child_process";
 import {mkdtempSync} from "node:fs";
 import {join,dirname} from "node:path";
@@ -60,4 +61,10 @@ export function captureWorkspaceCommit(db,{workspaceId}){
  if(head.tree!==manifest.tree||canonical(head.parents)!==canonical([manifest.base_commit]))fail("OBJECT_CORRUPT","交付提交身份不一致");if(digest(g.snapshot({commit:manifest.commit,consume(){}}))!==manifest.content_snapshot_digest)fail("OBJECT_CORRUPT","完整交付目录或字节改变");const capture=paths.length?g.capture({baseCommit:manifest.base_commit,commit:manifest.commit,paths,allowed:c.binding.write_paths}):{files:[]};g.verify();
  for(const f of capture.files){const expected=manifest.files.find(x=>x.path===f.path);if(f.sha256!==expected.sha256||f.size!==expected.size||f.blob_oid!==expected.blob_oid||f.mode!==expected.mode)fail("OBJECT_CORRUPT","交付实际字节不匹配");}
  return {manifest,manifest_digest:row.descriptor_digest,files:capture.files.map(f=>({path:f.path,bytes:f.bytes})),accepted:false,transferred:false};
+}
+
+/** Snapshot immutable bytes for resumable transfer; no remote path or caller manifest is accepted. */
+export function captureWorkspacePackage(db,{workspaceId}){
+ const captured=captureWorkspaceCommit(db,{workspaceId}),c=context(db,workspaceId),root=taskWorkspaceDirectory(db,{workspaceId}),mapping=JSON.parse(db.prepare("SELECT descriptor_json FROM repository_mappings WHERE mapping_id=?").get(c.binding.mapping_id).descriptor_json),g=repositoryReader({root,git:mapping.git});
+ const commitBytes=g.commitBytes(captured.manifest.commit);g.verify();return {manifest:captured.manifest,manifest_digest:captured.manifest_digest,bytes:encodeGitPackage({...captured,commitBytes})};
 }

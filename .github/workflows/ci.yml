@@ -89,6 +89,10 @@ jobs:
         run: bash hrun.sh node tests/workspacetest.mjs
       - name: workspacefiletest (transactional MCP edits, bound launches and actual Git commits)
         run: bash hrun.sh node tests/workspacefiletest.mjs
+      - name: gitpackagetest (actual Git objects, byte identity and complete delivery trees)
+        run: bash hrun.sh node tests/gitpackagetest.mjs
+      - name: artifacttransfertest (durable chunks, lost ACK, restart and local verification)
+        run: bash hrun.sh node tests/artifacttransfertest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)
