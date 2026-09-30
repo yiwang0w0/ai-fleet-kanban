@@ -98,8 +98,12 @@ The gateway receives loopback connections from its proxy, so localhost is not
 proof of a trusted remote peer. Do not expose this through a public tunnel or
 proxy the original board API. Actual two-device routes, ACLs, certificates and
 revocation propagation still require deployment acceptance; current local
-loopback tests do not establish those facts. Anonymous-failure audit/rate limits
-and long-term retention remain review items in [review-fixes](docs/federation/review-fixes.md).
+loopback tests do not establish those facts. Anonymous failures now have bounded aggregation and 429/Retry-After responses
+([peer contract](docs/federation/peers.md)); valid credentials are authenticated
+before failure counters, so a forged public key ID cannot lock out its holder.
+Counters are per process, persistence is periodic, and authentication checks
+still run: this is not network-level flood protection. Long-term authorized
+data retention remains a review item in [review-fixes](docs/federation/review-fixes.md).
 
 Peer and broker secrets are written to explicitly chosen new credential files;
 the database stores token hashes. Keep these files outside agent-readable work

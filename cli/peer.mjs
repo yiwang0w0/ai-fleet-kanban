@@ -1,3 +1,4 @@
+import {listAuthFailures} from "../core/federation/auth-failures.mjs";
 // Explicit local administration; no default deployment database and no model execution.
 import { openPeerDatabase, issueCredential, revokePeer, listPeers } from "../core/federation/peers.mjs";
 import { listenPeerServer } from "../core/federation/gateway.mjs";
@@ -7,6 +8,7 @@ const usage = [
   "        --projects <项目ID,...> --credential-file <新文件绝对路径> [--version <旧凭据版本>]",
   "  revoke --peer <UUID> --version <当前凭据版本>",
   "  list",
+  "  auth-failures [--limit 1–512]",
   "  serve --port <端口> [--host 127.0.0.1|::1]",
   "grant 替换既有登记必须带 --version；替换会使旧凭据立即失效，也可显式重新授权已撤销节点。",
   "凭据只写新文件，不打印 token；不得把凭据文件提交到 Git。"
@@ -17,7 +19,7 @@ try {
   if (!command || ["help","--help"].includes(command)) { console.log(usage); }
   else {
     const fields = {grant:["db","peer","epoch","scopes","projects","credential-file","version"],
-      revoke:["db","peer","version"],list:["db"],serve:["db","port","host"]}[command];
+      revoke:["db","peer","version"],list:["db"],"auth-failures":["db","limit"],serve:["db","port","host"]}[command];
     if (!fields) throw Error(usage);
     const opts = {};
     for (let i=0;i<args.length;i+=2) {
@@ -34,6 +36,7 @@ try {
       scopes:opts.scopes?.split(","),projects:opts.projects?.split(","),expectedVersion,credentialFile:opts["credential-file"]});
     if (command === "revoke") result = revokePeer(db,{peerNodeId:opts.peer,expectedVersion});
     if (command === "list") result = {peers:listPeers(db)};
+    if (command === "auth-failures") result=listAuthFailures(db,{limit:opts.limit===undefined?100:/^[1-9][0-9]*$/.test(opts.limit)?Number(opts.limit):NaN});
     if (command === "serve") {
       if (opts.port === undefined || !/^[0-9]+$/.test(opts.port)) throw Error("serve 需要 --port <端口>");
       const server = await listenPeerServer(db,{host:opts.host || "127.0.0.1",port:Number(opts.port)});

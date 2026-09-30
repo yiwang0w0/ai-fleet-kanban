@@ -88,7 +88,7 @@
     "reason": "Current workspace pools explicitly authorize full history and complete approved commit trees. Sparse materialization would change baseline and complete-delivery contracts.",
     "test": "Selected capture succeeds while a full snapshot of the same commit refuses an out-of-scope symlink before copying files."
   },
-  "new_commit_ci": "pending",
+  "new_commit_ci": "completed",
   "complete_phase_gates": 0,
   "total_phase_gates": 12,
   "real_provider_calls": {
@@ -109,5 +109,173 @@
     "scope": "staged diff",
     "exit_code": 0,
     "findings": 0
+  },
+  "exact_commit_ci": {
+    "commit": "1818a48963dee260421ad964dc2ffc9c6a41379e",
+    "run_id": 36698380888,
+    "run_url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36698380888",
+    "windows_job_id": 109831714350,
+    "gitleaks_job_id": 109831713873,
+    "status": "completed",
+    "conclusion": "success",
+    "main_pass": 1493,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0,
+    "counts": {
+      "native": [
+        15,
+        14,
+        18,
+        26,
+        20,
+        29,
+        21,
+        19,
+        18,
+        21,
+        26,
+        28,
+        35,
+        40,
+        24,
+        18,
+        28,
+        21,
+        19,
+        4,
+        8,
+        8,
+        10,
+        8,
+        14,
+        32,
+        44,
+        38,
+        22,
+        24
+      ],
+      "classic": [
+        [
+          402,
+          0
+        ],
+        [
+          25,
+          0
+        ],
+        [
+          29,
+          0
+        ],
+        [
+          27,
+          0
+        ],
+        [
+          41,
+          0
+        ],
+        [
+          20,
+          0
+        ],
+        [
+          57,
+          0
+        ],
+        [
+          13,
+          0
+        ],
+        [
+          72,
+          0
+        ],
+        [
+          195,
+          0
+        ],
+        [
+          22,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          23,
+          0
+        ]
+      ],
+      "native_total": 652,
+      "classic_total": 931,
+      "native_fail": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "native_skip": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "additional_checks": "codex-selftest 20, prompt-selftest 57, verify_page 13; gates_lib and health alarm steps succeeded"
   }
 }

@@ -369,3 +369,8 @@ Each linked contract names its own errors and bounds. Peer/broker errors such as
 `REQUEST_CONFLICT` extend those surfaces; they do not make UUIDs into secrets or
 turn failure into automatic retries. Full phase and real-provider evidence
 remains in [PROGRESS](federation/PROGRESS.md).
+
+
+### Peer failure accounting
+
+`federation_auth_failure_schema` version 1 and `federation_auth_failures` are separate from credential grant/revoke events. Each bounded aggregate contains `key_id` (untrusted claimed UUID or null), `category` (`claimed_key / missing_or_malformed / overflow`), `failures`, `limited`, `first_at` and `last_at` (Unix milliseconds). HTTP `AUTH_RATE_LIMITED` is 429 with `Retry-After`; `AUTH_AUDIT_UNAVAILABLE` is 503 after a failed audit flush. Neither identifies an authenticated peer. Rate windows are local to a gateway process; retention and crash limits are defined in [peers.md](federation/peers.md).

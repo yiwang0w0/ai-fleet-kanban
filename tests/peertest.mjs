@@ -1,3 +1,4 @@
+import {createAuthFailureGuard,listAuthFailures,AUTH_FAILURE_LIMITS} from "../core/federation/auth-failures.mjs";
 import test, {after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -127,17 +128,19 @@ test("identity/epoch spoofing and incompatible/required extensions fail closed",
 test("all HTTP surfaces authenticate, and peer credentials never expose UI, tasks or files",async()=>{
  const f=fixture(),a=issue(f);
  await running(f,async base=>{
+  let missingFailures=0;
   for(const path of ["/","/health","/api/meta","/api/tasks","/peer/v1/health","/peer/v1/hello","/board_token"]){
-   assert.equal((await api(base,path,null)).status,401);
+   assert.equal((await api(base,path,null)).status,++missingFailures<=AUTH_FAILURE_LIMITS.perKey?401:429);
    if(path!=="/peer/v1/health")assert.equal((await api(base,path,a.token)).status,404);
   }
-  for(const token of ["operator-fixture","worker-fixture","review-fixture",a.token.slice(0,-1)+"!"])
-   assert.equal((await api(base,"/peer/v1/health",token)).status,401);
+  for(const token of ["operator-fixture","worker-fixture","review-fixture"])
+   assert.equal((await api(base,"/peer/v1/health",token)).status,429);
+  assert.equal((await api(base,"/peer/v1/health",a.token.slice(0,-1)+"!")).status,401);
   const health=await api(base,"/peer/v1/health",a.token);assert.equal(health.status,200);assert.equal(health.body.node_id,f.node.node_id);
   assert.equal((await api(base,"/peer/v1/health",a.token,{headers:{Origin:"https://example.test"}})).status,403);
   assert.equal((await api(base,"/peer/v1/hello",a.token,{method:"POST",body:hello(a.credential)})).status,200);
-  assert.equal((await api(base,"/peer/v1/health?token="+a.token,null)).status,401);
-  assert.equal((await api(base,"/peer/v1/health",null,{headers:{"X-Board-Token":a.token,"Tailscale-User-Login":"owner@example.test"}})).status,401);
+  assert.equal((await api(base,"/peer/v1/health?token="+a.token,null)).status,429);
+  assert.equal((await api(base,"/peer/v1/health",null,{headers:{"X-Board-Token":a.token,"Tailscale-User-Login":"owner@example.test"}})).status,429);
  });
  assert.equal(store.list(f.db).tasks.length,0);
 });
@@ -281,4 +284,75 @@ test("unauthenticated requests cannot distinguish retired or restored node state
    assert.equal((await api(base,"/peer/v1/health",p.token)).status,409);
   });
  }
+});
+
+
+test("failed gateway credentials back off without locking out the real holder of a forged key ID",async()=>{
+ const f=fixture(),c=issue(f),bad=c.credential.key_id+"."+"x".repeat(43),secret="untrusted body must never enter auth audit";
+ await running(f,async(base)=>{
+  for(let i=0;i<7;i++){
+   const r=await fetch(base+"/peer/v1/hello?not-a-log-field="+secret,{method:"POST",headers:{Authorization:"Bearer "+bad,"Content-Type":"application/json","X-Forwarded-For":"100.64.1.2"},body:JSON.stringify({secret})});
+   assert.equal(r.status,i<5?401:429);const reply=await r.json();assert.equal(reply.code,i<5?"UNAUTHENTICATED":"AUTH_RATE_LIMITED");
+   if(i>=5)assert.ok(Number(r.headers.get("retry-after"))>=1);
+  }
+  assert.equal((await api(base,"/peer/v1/health",c.token)).status,200);
+  const missing=await api(base,"/peer/v1/health",null,{headers:{"X-Forwarded-For":"100.64.1.3"}});assert.equal(missing.status,401);
+ });
+ const entries=listAuthFailures(f.db).failures,entry=entries.find(e=>e.key_id===c.credential.key_id);
+ assert.equal(entry.failures,7);assert.equal(entry.limited,2);assert.equal(entry.category,"claimed_key");
+ const saved=JSON.stringify(entries);assert.ok(!saved.includes(bad));assert.ok(!saved.includes(c.token));assert.ok(!saved.includes(secret));assert.ok(!saved.includes("100.64"));
+ const cli=spawnSync(process.execPath,["cli/peer.mjs","auth-failures","--db",f.dbPath,"--limit","2"],{cwd:ROOT,encoding:"utf8",windowsHide:true});
+ assert.equal(cli.status,0,cli.stderr);assert.equal(JSON.parse(cli.stdout).failures.length,2);
+ assert.throws(()=>listAuthFailures(f.db,{limit:513}),e=>e.code==="BAD_INPUT");
+});
+
+test("failure accounting bounds hostile key cardinality, global rate, persisted rows and age",()=>{
+ const f=fixture();let time=1000000;const guard=createAuthFailureGuard(f.db,{now:()=>time});
+ try{
+  let limited=0;
+  for(let i=0;i<300;i++){const r=guard.failure("Bearer "+randomUUID()+"."+"y".repeat(43));if(r.status===429)limited++;}
+  assert.ok(limited>=200);guard.flush();
+  const initial=listAuthFailures(f.db,{limit:512,now:time}).failures;
+  assert.equal(initial.length,AUTH_FAILURE_LIMITS.keys+1);assert.equal(initial.reduce((n,x)=>n+x.failures,0),300);assert.ok(initial.some(x=>x.category==="overflow"&&x.key_id===null));
+  for(let i=0;i<550;i++){time+=AUTH_FAILURE_LIMITS.windowMs+1;assert.equal(guard.failure("invalid").status,401);guard.flush();}
+  assert.equal(f.db.prepare("SELECT count(*) n FROM federation_auth_failures").get().n,AUTH_FAILURE_LIMITS.rows);
+  time+=AUTH_FAILURE_LIMITS.retentionMs+1;assert.equal(listAuthFailures(f.db,{now:time}).failures.length,0);
+  guard.failure("invalid");guard.flush();assert.equal(f.db.prepare("SELECT count(*) n FROM federation_auth_failures").get().n,1);
+ }finally{guard.close();}
+ const reopened=createAuthFailureGuard(f.db,{now:()=>time});try{assert.equal(listAuthFailures(f.db,{now:time}).failures.length,1);}finally{reopened.close();}
+});
+
+test("auth audit rollback retains bounded pending counts and returns 503 until persistence recovers",()=>{
+ const f=fixture();let time=500000;const guard=createAuthFailureGuard(f.db,{now:()=>time});
+ try{
+  guard.failure("invalid");f.db.exec("CREATE TRIGGER fail_auth_audit BEFORE INSERT ON federation_auth_failures BEGIN SELECT RAISE(ABORT,'audit fixture failure'); END");
+  assert.throws(()=>guard.flush(),/audit fixture failure/);assert.equal(f.db.isTransaction,false);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM federation_auth_failures").get().n,0);
+  assert.equal(guard.failure("invalid").status,503);
+  f.db.exec("DROP TRIGGER fail_auth_audit");guard.flush();
+  assert.equal(listAuthFailures(f.db,{now:time}).failures[0].failures,2);
+  assert.equal(guard.failure("invalid").status,401);
+ }finally{guard.close();}
+ assert.equal(listAuthFailures(f.db,{now:time}).failures.reduce((n,r)=>n+r.failures,0),3);
+});
+
+test("auth audit rejects unknown schema without partially creating its event table",()=>{
+ const f=fixture();f.db.exec("CREATE TABLE federation_auth_failure_schema(singleton INTEGER PRIMARY KEY,version INTEGER NOT NULL); INSERT INTO federation_auth_failure_schema VALUES(1,2)");
+ assert.throws(()=>createAuthFailureGuard(f.db),e=>e.code==="SCHEMA_INCOMPATIBLE");assert.equal(f.db.isTransaction,false);
+ assert.equal(f.db.prepare("SELECT count(*) n FROM sqlite_master WHERE name='federation_auth_failures'").get().n,0);
+});
+
+
+test("global failed-auth threshold cannot be bypassed across tracked key IDs below each key limit",()=>{
+ const f=fixture();let time=2000000;const guard=createAuthFailureGuard(f.db,{now:()=>time}),keys=Array.from({length:64},()=>randomUUID());
+ try{
+  for(let i=0;i<128;i++){
+   const result=guard.failure("Bearer "+keys[i%keys.length]+"."+"z".repeat(43));
+   assert.equal(result.status,i<AUTH_FAILURE_LIMITS.global?401:429);
+   if(i>=AUTH_FAILURE_LIMITS.global)assert.equal(result.retry_after,10);
+  }
+  guard.flush();const rows=listAuthFailures(f.db,{now:time}).failures;
+  assert.equal(rows.length,64);assert.ok(rows.every(r=>r.category==="claimed_key"&&r.failures===2));assert.equal(rows.reduce((n,r)=>n+r.limited,0),28);
+  time+=10001;assert.equal(guard.failure("Bearer "+keys[0]+"."+"z".repeat(43)).status,401);
+ }finally{guard.close();}
 });

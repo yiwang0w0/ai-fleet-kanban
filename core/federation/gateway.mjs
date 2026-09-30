@@ -1,3 +1,4 @@
+import {createAuthFailureGuard} from "./auth-failures.mjs";
 import {migrateCompletion,receiveCompletion} from "./completion.mjs";
 import {migrateArtifacts,receiveArtifactOffer,receiveArtifactChunk,sealArtifact,peerArtifactStatus,MAX_ARTIFACT_HEADER} from "../artifacts/transfers.mjs";
 import {migrateResults,receiveResult,peerResultStatus,MAX_RESULT_BYTES} from "./results.mjs";
@@ -48,6 +49,7 @@ async function bodyJSON(req,limit=8192) {
 /** Separate authenticated node surface: explicit projections and delegation proposals; no operator UI, secrets or model execution. */
 function createPeerServer(db) {
   localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateResults(db);migrateArtifacts(db);migrateCompletion(db);
+  const failures=createAuthFailureGuard(db);
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
@@ -138,10 +140,18 @@ function createPeerServer(db) {
       }
       throw new PeerError("NOT_FOUND","节点接口不存在",404);
     } catch (e) {
+      if(e instanceof PeerError&&e.status===401){
+        const denial=failures.failure(req.headers.authorization);
+        if(denial.retry_after)res.setHeader("Retry-After",String(denial.retry_after));
+        return send(res,denial.status,{code:denial.code,error:denial.status===401?"需要有效的独立对端凭据":denial.status===429?"无效凭据请求过多，请稍后重试":"鉴权失败审计暂不可用"},true);
+      }
       const known = e instanceof PeerError;
       send(res,known ? e.status : 500,{error:known ? e.message : "节点接口内部错误",code:known ? e.code : "INTERNAL"},true);
     }
   });
+  const closeAudit=()=>{try{failures.close();}catch{console.error("节点鉴权失败审计关闭时写入失败；部分计数未持久化");}};
+  server.once("close",closeAudit);
+  server.once("error",()=>{if(!server.listening)closeAudit();});
   server.requestTimeout = 10000;
   server.headersTimeout = 10000;
   server.keepAliveTimeout = 5000;
