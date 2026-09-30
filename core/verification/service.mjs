@@ -122,3 +122,11 @@ export function captureVerificationReceipt(db,{verificationId,sourceGate}){
  if(state.phase!=="settled"||state.receipt.checks_passed!==true||!successObservation(state.receipt.observation,p.descriptor.definition))fail("VERIFICATION_NOT_PASSED","缺少完整独立检查通过记录");
  assertVerificationInput(i,{allowGenerated:true});current(db,r,sourceGate);return {verification_id:verificationId,binding:state.binding,receipt:state.receipt,receipt_digest:state.receipt_digest,currently_valid:true,accepted:false};
 }
+
+/** Fast mutable-authority guard for callers already holding the local write transaction.
+ * Full input/file validation still uses captureVerificationReceipt outside that transaction. */
+export function assertVerificationReceiptCurrent(db,{verificationId,receiptDigest,sourceGate}){
+ const r=row(db,verificationId),p=current(db,r,sourceGate),state=verificationState(db,verificationId);
+ if(state.phase!=="settled"||state.receipt_digest!==receiptDigest||state.receipt.checks_passed!==true||!successObservation(state.receipt.observation,p.descriptor.definition))fail("VERIFICATION_NOT_PASSED","固定验证回执不再可用");
+ return {verification_id:verificationId,binding:state.binding,receipt_digest:receiptDigest};
+}

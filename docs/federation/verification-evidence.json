@@ -80,7 +80,18 @@
     "file-to-directory and directory-to-file reconstruction"
   ],
   "ci": {
-    "status": "pending_exact_commit_windows_run"
+    "status": "passed",
+    "commit": "e73f0a6a08551cb0438a6f966aa471fa06df1b83",
+    "run_id": 36672639826,
+    "run_number": 87,
+    "windows_job_id": 109750751268,
+    "windows_main_pass": 1404,
+    "windows_main_fail": 0,
+    "windows_status": "success",
+    "gitleaks_job_id": 109750751178,
+    "gitleaks": "success",
+    "windows_runtime_minutes": 19.1167,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36672639826"
   },
   "acceptance": {
     "accepted": false,

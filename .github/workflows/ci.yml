@@ -13,7 +13,8 @@ jobs:
       matrix:
         os: [windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    # Previous Windows run took 19.1 min before adding real Git integration cases.
+    timeout-minutes: 35
     env:
       # windows-latest pipes default to cp1252; the harnesses print CJK. Without
       # this, codex-selftest dies of UnicodeEncodeError before its first assertion.
@@ -97,6 +98,8 @@ jobs:
         run: bash hrun.sh node tests/commandsupervisortest.mjs
       - name: verificationworkspacetest (independent source checks, one-use launch and recovery)
         run: bash hrun.sh node tests/verificationworkspacetest.mjs
+      - name: integrationtest (source ref CAS, bound commits and crash reconciliation)
+        run: bash hrun.sh node tests/integrationtest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)

@@ -2185,11 +2185,11 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Windows independent source command profiles, actual Git reconstruction, one-use launch and immutable verification receipts",
+        "scope": "Windows independent source verification plus actual bound Git integration, single-ref CAS and crash reconciliation",
         "pending": [
           "exact-commit Windows CI",
           "Windows OS permission isolation",
-          "source CAS merge and acceptance",
+          "source positive acceptance, relation retirement and parent advancement",
           "two physical kanata validation and G07 acceptance"
         ]
       },
@@ -2198,7 +2198,10 @@
         "docs/federation/verification.md",
         "tests/commandsupervisortest.mjs",
         "tests/verificationworkspacetest.mjs",
-        "docs/federation/verification-evidence.json"
+        "docs/federation/verification-evidence.json",
+        "docs/federation/integration.md",
+        "docs/federation/integration-evidence.json",
+        "tests/integrationtest.mjs"
       ]
     },
     {
