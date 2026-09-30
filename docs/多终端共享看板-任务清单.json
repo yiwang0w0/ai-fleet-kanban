@@ -2333,7 +2333,7 @@
         "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; 17 desktop + 14 fleet + 37 MCP local tests and isolated browser task-link checks",
         "pending": [
           "Full role/run/artifact trace and saved handoff summaries",
-          "Retention/long-running deployment and actual desktop client setup",
+          "Long-running deployment, actual desktop setup and operational recovery",
           "Physical two-PC offline/reconnect G08 acceptance"
         ]
       },
@@ -2347,7 +2347,8 @@
         "tests/fleetviewtest.mjs",
         "docs/federation/desktop-context.md",
         "docs/federation/desktop-context-evidence.json",
-        "tests/desktopcontexttest.mjs"
+        "tests/desktopcontexttest.mjs",
+        "docs/federation/context-retention-evidence.json"
       ]
     },
     {
@@ -2410,7 +2411,7 @@
         "scope": "Scoped desktop MCP queries and immutable Markdown export/watch; 17 desktop + 14 fleet + 37 MCP local tests and isolated browser task-link checks",
         "pending": [
           "Full role/run/artifact trace and saved handoff summaries",
-          "Retention/long-running deployment and actual desktop client setup",
+          "Long-running deployment, actual desktop setup and operational recovery",
           "Physical two-PC offline/reconnect G08 acceptance"
         ]
       },
@@ -2421,7 +2422,8 @@
       "implementation_evidence": [
         "docs/federation/desktop-context.md",
         "docs/federation/desktop-context-evidence.json",
-        "tests/desktopcontexttest.mjs"
+        "tests/desktopcontexttest.mjs",
+        "docs/federation/context-retention-evidence.json"
       ]
     },
     {

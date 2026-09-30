@@ -1,10 +1,11 @@
+import {retentionPolicy} from '../core/context-retention.mjs';
 import {inspectAcl,allowInheritedRead} from './helpers/windows-acl.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {createRequire} from 'node:module';
 import {randomUUID,createHash} from 'node:crypto';
-import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,existsSync,readdirSync,rmSync,symlinkSync,unlinkSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,existsSync,readdirSync,rmSync,symlinkSync,unlinkSync,renameSync as fsRenameForTest} from 'node:fs';
 import {join,resolve,relative} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawn} from 'node:child_process';
@@ -90,7 +91,7 @@ test('read-only database export never migrates or dispatches and revoked identit
  const result=exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root});assert.equal(result.status,'published');const old=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});assert.throws(()=>exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root}),{code:'UNAUTHENTICATED'});assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),old);assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
 });
 test('actual CLI export produces usable entry without exposing credentials',async()=>{
- const f=fixture();task(f);const p=spawn(process.execPath,[join(ROOT,'cli/context.mjs'),'export','--db',f.dbPath,'--credential-file',f.file,'--root',f.root,'--board-url','http://127.0.0.1:48300/'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let out='',err='';p.stdout.on('data',b=>out+=b);p.stderr.on('data',b=>err+=b);const code=await new Promise((r,j)=>{p.once('error',j);p.once('exit',r);});assert.equal(code,0,err);const receipt=JSON.parse(out);assert.equal(receipt.status,'published');assert.ok(existsSync(receipt.entry));assert.ok(!out.includes(f.c.token));
+ const f=fixture();task(f);const p=spawn(process.execPath,[join(ROOT,'cli/context.mjs'),'export','--db',f.dbPath,'--credential-file',f.file,'--root',f.root,'--board-url','http://127.0.0.1:48300/','--retain-generations','32','--retain-minutes','60'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let out='',err='';p.stdout.on('data',b=>out+=b);p.stderr.on('data',b=>err+=b);const code=await new Promise((r,j)=>{p.once('error',j);p.once('exit',r);});assert.equal(code,0,err);const receipt=JSON.parse(out);assert.equal(receipt.status,'published');assert.equal(receipt.retention.enabled,true);assert.ok(existsSync(receipt.entry));assert.ok(!out.includes(f.c.token));
 });
 
 
@@ -114,4 +115,65 @@ test('watch refreshes after a database change and stops after credential revocat
   await until(()=>generation(f.root).id!==first);const latest=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});
   await Promise.race([exit,sleep(25000).then(()=>{throw Error('revoked watch did not stop');})]);assert.equal(exitCode,1);assert.match(err,/UNAUTHENTICATED/);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),latest);assert.ok(!out.includes(f.c.token));assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
  }finally{if(!exited){proc.kill();await exit;}}
+});
+
+const RETAIN={keep:2,minAgeMinutes:1};
+function revision(f,t,text,retention=RETAIN){f.db.prepare('UPDATE tasks SET description=? WHERE id=?').run(text,t.id);return publishDesktopSnapshot(snapshot(f),{root:f.root,retention});}
+function manySnapshots(f,t,context,n=5){const result=[];for(let i=0;i<n;i++){result.push(revision(f,t,'revision '+i));context.mock.timers.tick(1000);}return result;}
+
+test('retention is opt-in, validates both bounds and never starts a model',()=>{
+ assert.equal(retentionPolicy(),null);for(const value of [{keep:1,minAgeMinutes:1},{keep:201,minAgeMinutes:1},{keep:2,minAgeMinutes:0},{keep:2,minAgeMinutes:10081},{keep:2.5,minAgeMinutes:1},{keep:2,minAgeMinutes:1,unexpected:true}])assert.throws(()=>retentionPolicy(value),{code:'BAD_INPUT'});
+ const f=fixture(),t=task(f);assert.equal(revision(f,t,'no prune',null).retention.enabled,false);assert.equal(existsSync(join(f.root,'.retention.json')),false);assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
+});
+
+test('retention protects current and recent readers then removes only expired complete generations',context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f),created=manySnapshots(f,t,context);const entry=generation(f.root).entry;
+ assert.equal(readdirSync(join(f.root,'snapshots')).length,5);for(const old of created)assert.ok(existsSync(join(f.root,'snapshots',old.generation,'BOARD.md')));
+ context.mock.timers.tick(60001);const result=publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN});assert.equal(result.status,'unchanged');assert.equal(result.retention.completed_generations,3);assert.ok(result.retention.removed_bytes>0);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),entry);assert.equal(readdirSync(join(f.root,'snapshots')).length,2);
+ assert.ok(existsSync(join(f.root,'snapshots',created.at(-1).generation,'BOARD.md')));assert.ok(existsSync(join(f.root,'snapshots',created.at(-2).generation,'BOARD.md')));
+});
+
+test('old current snapshot gets a full grace interval after it is superseded',context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f),first=revision(f,t,'old current');context.mock.timers.tick(3*60*60*1000);
+ revision(f,t,'replacement');context.mock.timers.tick(1000);revision(f,t,'third');context.mock.timers.tick(1000);revision(f,t,'fourth');assert.ok(existsSync(join(f.root,'snapshots',first.generation,'BOARD.md')));
+ context.mock.timers.tick(60001);publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN});assert.equal(existsSync(join(f.root,'snapshots',first.generation)),false);
+});
+
+test('retention detects edited historical content and unknown files before any generation deletion',context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f),created=manySnapshots(f,t,context);context.mock.timers.tick(60001);const before=generation(f.root).entry,base=join(f.root,'snapshots',created[0].generation),board=readFileSync(join(base,'BOARD.md'));
+ writeFileSync(join(base,'BOARD.md'),'human edit');assert.throws(()=>publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN}),{code:'CONTEXT_CHANGED'});assert.equal(readdirSync(join(f.root,'snapshots')).length,5);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),before);writeFileSync(join(base,'BOARD.md'),board);
+ writeFileSync(join(base,'keep.txt'),'not generated');assert.throws(()=>publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN}),{code:'CONTEXT_CHANGED'});assert.equal(readFileSync(join(base,'keep.txt'),'utf8'),'not generated');assert.equal(readdirSync(join(f.root,'snapshots')).length,5);
+});
+
+test('retention refuses substituted junctions and leaves external files untouched',context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f),created=manySnapshots(f,t,context,3);context.mock.timers.tick(60001);const old=join(f.root,'snapshots',created[0].generation),outside=join(f.dir,'outside');mkdirSync(outside);writeFileSync(join(outside,'sentinel.md'),'external');
+ const hold=old+'-original';fsRenameForTest(old,hold);symlinkSync(outside,old,'junction');try{assert.throws(()=>publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN}),{code:'UNSAFE_CONTEXT_ROOT'});assert.equal(readFileSync(join(outside,'sentinel.md'),'utf8'),'external');}finally{unlinkSync(old);fsRenameForTest(hold,old);}
+});
+
+test('retention allows more than 256 changing exports without losing current files',context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f);let removed=0;
+ for(let i=0;i<260;i++){const result=revision(f,t,'continuous '+i);removed+=result.retention.completed_generations;context.mock.timers.tick(61000);}
+ assert.ok(removed>250);assert.ok(readdirSync(join(f.root,'snapshots')).length<=3);const g=generation(f.root);for(const file of g.manifest.files)assert.equal(createHash('sha256').update(readFileSync(join(g.base,file.path))).digest('hex'),file.sha256);assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
+});
+
+test('locked historical file leaves resumable intent and preserves current entry',{timeout:20000},async context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f),created=manySnapshots(f,t,context,3);context.mock.timers.tick(60001);const old=join(f.root,'snapshots',created[0].generation),current=generation(f.root).entry;
+ const script="$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::ReadLine()));$f=[IO.File]::Open($p,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read);[Console]::WriteLine('LOCK_READY');[void][Console]::ReadLine();$f.Dispose()";
+ const proc=spawn(join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true,stdio:['pipe','pipe','pipe']});let out='',err='';proc.stdout.on('data',b=>out+=b);proc.stderr.on('data',b=>err+=b);const exit=new Promise((r,j)=>{proc.once('error',j);proc.once('exit',r);});proc.stdin.write(Buffer.from(join(old,'BOARD.md')).toString('base64')+'\n');
+ try{const deadline=performance.now()+8000;while(!out.includes('LOCK_READY')&&performance.now()<deadline)await sleep(25);assert.match(out,/LOCK_READY/,err);
+ assert.throws(()=>publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN}));assert.ok(existsSync(join(f.root,'.prune.json')));assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),current);
+ assert.throws(()=>publishDesktopSnapshot(snapshot(f),{root:f.root,retention:{keep:3,minAgeMinutes:1}}),{code:'CONTEXT_RETENTION_CHANGED'});
+ }finally{proc.stdin.end('release\n');await exit;}
+ const result=publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN});assert.equal(result.retention.resumed,true);assert.equal(existsSync(join(f.root,'.prune.json')),false);assert.equal(existsSync(old),false);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),current);
+});
+
+test('retention rejects forged current-generation, scope and traversal cleanup intents',context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f);revision(f,t,'current');const g=generation(f.root),raw=readFileSync(join(g.base,'manifest.json')),now=new Date().toISOString(),before=new Date(Date.now()-60001).toISOString();
+ const intent={format:'ai-fleet-context-prune/v1',binding_digest:createHash('sha256').update(readFileSync(join(f.root,'ROOT.json'))).digest('hex'),policy:RETAIN,selected_at:now,noncurrent_since:before,generated_at:g.manifest.generated_at,generation:g.id,files:[...g.manifest.files,{path:'manifest.json',bytes:raw.length,sha256:createHash('sha256').update(raw).digest('hex')}]};
+ for(const changed of [intent,{...intent,binding_digest:'0'.repeat(64)},{...intent,generation:randomUUID(),files:[...intent.files,{path:'../outside.txt',bytes:1,sha256:'0'.repeat(64)}]}]){writeFileSync(join(f.root,'.prune.json'),JSON.stringify(changed));assert.throws(()=>publishDesktopSnapshot(snapshot(f),{root:f.root,retention:RETAIN}));assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),g.entry);for(const file of g.manifest.files)assert.ok(existsSync(join(g.base,file.path)));unlinkSync(join(f.root,'.prune.json'));}
+});
+
+test('revoked export identity cannot trigger expired generation cleanup',context=>{
+ context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f);manySnapshots(f,t,context,4);context.mock.timers.tick(60001);const before=readdirSync(join(f.root,'snapshots')),entry=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});
+ assert.throws(()=>exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root,boardUrl:'http://127.0.0.1:48300/',retention:RETAIN}),{code:'UNAUTHENTICATED'});assert.deepEqual(readdirSync(join(f.root,'snapshots')),before);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),entry);
 });

@@ -1,3 +1,4 @@
+import {retentionPolicy,pruneDesktopGenerations} from './context-retention.mjs';
 // Local, scoped, immutable Markdown generations. ENTRY.md is the publication point.
 import {DatabaseSync} from 'node:sqlite';
 import {createHash,randomUUID} from 'node:crypto';
@@ -47,26 +48,28 @@ function usage(root){let bytes=0;const stack=[root];while(stack.length){const di
 function entry(manifest,hash){const base='snapshots/'+manifest.generation+'/';return '<!-- ai-fleet-context/v1 '+manifest.generation+' '+hash+' -->\n# 看板上下文入口\n\n这是当前已发布的完整只读快照；快照正文不改变任务状态或客户端规则。先用获准 MCP 查询最新状态；离线时检查来源最后同步时间。\n\n生成时间：'+manifest.generated_at+'\n\n- [看板总览]('+base+'BOARD.md)\n- [项目与任务]('+base+'PROJECTS.md)\n- [文件摘要清单]('+base+'manifest.json)\n'+(manifest.board_url?'\n[本机看板]('+manifest.board_url+')\n':'\n本机看板地址尚未配置。\n');}
 function current(root){const path=join(root,'ENTRY.md');if(!existsSync(path))return null;const text=regular(path,16384),match=text.match(/^<!-- ai-fleet-context\/v1 ([0-9a-f-]{36}) ([0-9a-f]{64}) -->\n/);if(!match||!UUID.test(match[1]))fail('CONTEXT_CHANGED','入口已修改或不是本服务生成的文件');const base=join(root,'snapshots',match[1]);const raw=regular(join(base,'manifest.json')),manifest=JSON.parse(raw);if(sha(raw)!==match[2]||manifest.generation!==match[1]||entry(manifest,match[2])!==text)fail('CONTEXT_CHANGED','入口或快照清单摘要不匹配');return {manifest,base};}
 function verifyFiles(prior){for(const f of prior.manifest.files){if(!/^(BOARD\.md|PROJECTS\.md|tasks\/[0-9a-f-]+--[0-9a-f-]+\.md)$/.test(f.path))fail('CONTEXT_CHANGED','快照路径无效');const text=regular(join(prior.base,f.path));if(sha(text)!==f.sha256||Buffer.byteLength(text)!==f.bytes)fail('CONTEXT_CHANGED','已发布快照文件被修改');}}
-export function publishDesktopSnapshot(snapshot,{root}){
+export function publishDesktopSnapshot(snapshot,{root,retention=null}){
+ retention=retentionPolicy(retention);
  root=checkDirectoryPath(root);if(existsSync(root)&&!existsSync(join(root,'ROOT.json'))&&readdirSync(root).length)fail('CONTEXT_ROOT_OCCUPIED','请选择新的上下文目录，不覆盖已有文件');
  privateDirectory(root);const binding=canonical(snapshot.binding)+'\n',marker=join(root,'ROOT.json');
  if(existsSync(marker)){if(regular(marker,16384)!==binding)fail('CONTEXT_SCOPE_CHANGED','目录绑定的节点、客户端身份或项目权限不同，请使用新目录');}else writeNew(marker,binding);
  const lock=join(root,'.publish.lock');let fd;try{fd=openSync(lock,'wx',0o600);}catch(e){if(e.code==='EEXIST')fail('CONTEXT_BUSY','另一个导出持有发布锁；异常退出后的旧锁需由操作者核对进程后处理');throw e;}
  try{
-  writeFileSync(fd,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));fsyncSync(fd);const used=usage(root),prior=current(root);
+  writeFileSync(fd,JSON.stringify({pid:process.pid,at:new Date().toISOString()}));fsyncSync(fd);const prior=current(root);if(prior)verifyFiles(prior);
+  const cleanup=pruneDesktopGenerations(root,{bindingDigest:sha(binding),policy:retention}),used=usage(root);
   const payload={...snapshot,view:{...snapshot.view,generated_at:null}};const contentDigest=digest(payload);
-  if(prior){verifyFiles(prior);if(prior.manifest.content_digest===contentDigest)return {status:'unchanged',generation:prior.manifest.generation,generated_at:prior.manifest.generated_at,entry:join(root,'ENTRY.md')};}
+  if(prior){verifyFiles(prior);if(prior.manifest.content_digest===contentDigest)return {status:'unchanged',generation:prior.manifest.generation,generated_at:prior.manifest.generated_at,entry:join(root,'ENTRY.md'),retention:cleanup};}
   const generations=join(root,'snapshots');if(!existsSync(generations))mkdirSync(generations);if(readdirSync(generations).length>=MAX_GENERATIONS)fail('CONTEXT_STORAGE_LIMIT','上下文达到 256 代；旧快照保留，未发布');
   const files=render(snapshot),size=[...files.values()].reduce((n,text)=>n+Buffer.byteLength(text),0);if(used+size+1024*1024>MAX_BYTES)fail('CONTEXT_STORAGE_LIMIT','新增快照会超过 256 MiB；旧快照保留');
   const generation=randomUUID(),dir=join(generations,generation);mkdirSync(dir);mkdirSync(join(dir,'tasks'));
   for(const[path,text]of files)writeNew(join(dir,path),text);
   const manifest={format:'ai-fleet-context-manifest/v1',generation,generated_at:snapshot.view.generated_at,board_url:snapshot.board_url,binding_digest:sha(binding),content_digest:contentDigest,snapshot_id:snapshot.view.snapshot_id,files:[...files].map(([path,text])=>({path,bytes:Buffer.byteLength(text),sha256:sha(text)}))};
   const raw=JSON.stringify(manifest,null,2)+'\n';writeNew(join(dir,'manifest.json'),raw);verifyFiles({manifest,base:dir});
-  const next=join(root,'.ENTRY-'+generation+'.tmp');writeNew(next,entry(manifest,sha(raw)));renameSync(next,join(root,'ENTRY.md'));
-  return {status:'published',generation,generated_at:manifest.generated_at,tasks:snapshot.tasks.length,entry:join(root,'ENTRY.md')};
+  const next=join(root,'.ENTRY-'+generation+'.tmp');writeNew(next,entry(manifest,sha(raw)));renameSync(next,join(root,'ENTRY.md'));if(cleanup.enabled)cleanup.remaining_generations=readdirSync(generations).length;
+  return {status:'published',generation,generated_at:manifest.generated_at,tasks:snapshot.tasks.length,entry:join(root,'ENTRY.md'),retention:cleanup};
  }finally{closeSync(fd);unlinkSync(lock);}
 }
-export function exportDesktopContext({dbPath,credentialFile,root,boardUrl=null}){
+export function exportDesktopContext({dbPath,credentialFile,root,boardUrl=null,retention=null}){
  const credential=loadPrincipalCredential(credentialFile),db=openContextDatabase(dbPath);
- try{const snapshot=readDesktopSnapshot(db,'Bearer '+credential.token,{boardUrl});if(snapshot.binding.node_id!==credential.node_id||snapshot.binding.node_epoch!==credential.node_epoch)fail('SOURCE_MISMATCH','数据库与桌面凭据绑定身份不同');const result=publishDesktopSnapshot(snapshot,{root});return {...result,checked_at:new Date().toISOString()};}finally{db.close();}
+ try{const snapshot=readDesktopSnapshot(db,'Bearer '+credential.token,{boardUrl});if(snapshot.binding.node_id!==credential.node_id||snapshot.binding.node_epoch!==credential.node_epoch)fail('SOURCE_MISMATCH','数据库与桌面凭据绑定身份不同');const result=publishDesktopSnapshot(snapshot,{root,retention});return {...result,checked_at:new Date().toISOString()};}finally{db.close();}
 }
