@@ -1,5 +1,6 @@
 // Trusted local queue service. Never changes release, role, quota or acceptance policy.
 import {randomUUID} from 'node:crypto';
+import {registerSchedulerInstance,observeSchedulerControl,finishSchedulerInstance} from './lifecycle.mjs';
 import {existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,writeFileSync,openSync,closeSync,fsyncSync,unlinkSync,realpathSync} from 'node:fs';
 import {join,dirname,basename,relative,isAbsolute,sep} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -68,8 +69,8 @@ export function openScheduler(db,{dbPath,sourceGate,config,environment=process.e
  sourceGate.check();const c=policy(db,config,sourceGate),node=localIdentity(db),id=randomUUID();
  const lock=join(dirname(database),'.'+basename(database)+'.fleet-scheduler.lock');let fd;
  try{fd=openSync(lock,'wx',0o600);}catch(e){if(e.code==='EEXIST')fail('SCHEDULER_BUSY','已有调度锁；异常退出的旧锁需核实原进程停止后由操作者处理');throw e;}
- let closed=false,busy=false,cursor=['',''];const notices=new Map();
- const emit=event=>{try{onEvent({format:'ai-fleet-scheduler-event/v1',at:new Date().toISOString(),node_id:node.node_id,node_epoch:node.sync_epoch,...event});}catch{/* Logging never decides whether a provider is retried. */}};
+ let closed=false,busy=false,cursor=['',''],lastError=null;const notices=new Map(),controlStop=new AbortController(),controlCancel=new AbortController();
+ const emit=event=>{try{onEvent({format:'ai-fleet-scheduler-event/v1',at:new Date().toISOString(),node_id:node.node_id,node_epoch:node.sync_epoch,instance_id:id,...event});}catch{/* Logging never decides whether a provider is retried. */}};
  let identity,binding;
  try{
   writeFileSync(fd,JSON.stringify({id,pid:process.pid,node_id:node.node_id,node_epoch:node.sync_epoch,at:new Date().toISOString()})+'\n');fsyncSync(fd);
@@ -78,7 +79,14 @@ export function openScheduler(db,{dbPath,sourceGate,config,environment=process.e
   const marker=join(c.root,'ROOT.json');
   if(!existsSync(marker)&&readdirSync(c.root).length)fail('SCHEDULER_ROOT_NOT_EMPTY','新调度根目录须为空');
   sameRecord(marker,binding);
+  registerSchedulerInstance(db,{instanceId:id,pid:process.pid,configDigest:binding.config_digest});
  }catch(e){closeSync(fd);unlinkSync(lock);throw e;}
+ function control(){
+  const observed=observeSchedulerControl(db,id);
+  if(observed.mode!=='run')controlStop.abort();if(observed.mode==='cancel')controlCancel.abort();
+  if(observed.changed)emit({kind:'control_observed',mode:observed.mode,revision:observed.revision,executor_stop_confirmed:false});
+ }
+ const controlTimer=setInterval(()=>{try{control();}catch(e){lastError=code(e);clearInterval(controlTimer);controlStop.abort();emit({kind:'attention',code:lastError});}},1000);controlTimer.unref();
  function check(){
   if(closed)fail('SCHEDULER_CLOSED','调度器已经关闭');
   const n=localIdentity(db);if(n.node_id!==node.node_id||n.sync_epoch!==node.sync_epoch)fail('EPOCH_CHANGED','节点代次已变化，停止新分派');
@@ -125,8 +133,11 @@ export function openScheduler(db,{dbPath,sourceGate,config,environment=process.e
   }
  }
  return {
+  instance_id:id,
   async tick({stopSignal=null,cancelSignal=null}={}){
-   if(busy)fail('SCHEDULER_BUSY','调度轮次仍在执行');check();busy=true;const jobs=[];
+   if(busy)fail('SCHEDULER_BUSY','调度轮次仍在执行');
+   try{check();control();if(lastError)fail(lastError,'调度管理状态需要核对');}catch(e){lastError=code(e);throw e;}
+   stopSignal=AbortSignal.any([controlStop.signal,...(stopSignal?[stopSignal]:[])]);cancelSignal=AbortSignal.any([controlCancel.signal,...(cancelSignal?[cancelSignal]:[])]);busy=true;const jobs=[];
    try{
     const rows=db.prepare("SELECT * FROM broker_assignments WHERE state='waiting_executor' AND (created_at>? OR (created_at=? AND assignment_id>?)) ORDER BY created_at,assignment_id LIMIT 32").all(cursor[0],cursor[0],cursor[1]);
     for(const a of rows){
@@ -143,11 +154,13 @@ export function openScheduler(db,{dbPath,sourceGate,config,environment=process.e
   },
   async watch({stopSignal,cancelSignal=null}={}){
    if(!(stopSignal instanceof AbortSignal))fail('BAD_INPUT','持续运行需要停止信号',400);
+   stopSignal=AbortSignal.any([stopSignal,controlStop.signal]);
    emit({kind:'started',max_active:c.max_active,poll_ms:c.poll_ms});
    while(!stopSignal.aborted){
     await this.tick({stopSignal,cancelSignal});
     if(!stopSignal.aborted)try{await delay(c.poll_ms,undefined,{signal:stopSignal});}catch(e){if(e.name!=='AbortError')throw e;}
    }
+   if(lastError)fail(lastError,'调度管理状态需要核对');
    emit({kind:'stopped',inflight:inflight(db,node)});
   },
   reconcile(assignmentId){
@@ -160,10 +173,15 @@ export function openScheduler(db,{dbPath,sourceGate,config,environment=process.e
    const result=reconcileExecutionJournal(db,join(secret,'execution-observation.json'));
    return {assignment_id:assignmentId,dispatch_id:d.dispatch_id,phase:result.phase,launched:false};
   },
-  close(){
+  close({errorCode=null}={}){
+   errorCode??=lastError;
    if(closed)return;if(busy)fail('SCHEDULER_BUSY','须等待在途轮次结束后关闭');
-   closed=true;closeSync(fd);
-   const current=JSON.parse(readFileSync(lock,'utf8'));if(current.id!==id)fail('SCHEDULER_LOCK_CHANGED','调度锁身份已改变，未移除');unlinkSync(lock);
+   closed=true;clearInterval(controlTimer);
+   try{
+    const current=JSON.parse(readFileSync(lock,'utf8'));if(current.id!==id)fail('SCHEDULER_LOCK_CHANGED','调度锁身份已改变，未移除');
+    const terminal=finishSchedulerInstance(db,id,{unconfirmedRuns:inflight(db,node),errorCode});
+    closeSync(fd);fd=null;unlinkSync(lock);emit({kind:'closed',state:terminal.state,unconfirmed_runs:terminal.unconfirmed_runs,error_code:terminal.error_code,executor_stop_confirmed:terminal.state==='stopped'&&terminal.unconfirmed_runs===0});
+   }finally{if(fd!==null){closeSync(fd);fd=null;}}
   }
  };
 }

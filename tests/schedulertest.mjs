@@ -7,7 +7,8 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,cpSyn
 import {join,relative,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
+import {openSchedulerControlDatabase,schedulerStatus,requestSchedulerStop} from '../core/execution/lifecycle.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {migrateSync} from '../core/federation/sync-store.mjs';
 import {localIdentity} from '../core/federation/peers.mjs';
@@ -15,6 +16,8 @@ import {migrateDispatch,putQuota,quotaStatus} from '../core/execution/dispatch.m
 import {putRole,issuePrincipal,revokePrincipal} from '../core/mcp/policy.mjs';
 import {callTool} from '../core/mcp/tools.mjs';
 import {openScheduler} from '../core/execution/scheduler.mjs';
+import {createBackup,restoreBackup} from '../core/backup.mjs';
+import {prepareRecovery,activateRecovery,retireNode} from '../core/recovery.mjs';
 import {createSourceGate} from '../core/execution/source-gate.mjs';
 import {pinFile} from '../core/execution/supervisor.mjs';
 import {registerRepository} from '../core/artifacts/repositories.mjs';
@@ -141,4 +144,77 @@ test('existing private files after a gate refusal are retained and cannot be reu
  const f=fixture(),{a}=card(f),s=open(f);revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});await s.tick();
  const file=join(f.config.root,a.assignment_id,'private','sentinel.txt');writeFileSync(file,'keep');await s.tick();
  assert.equal(readFileSync(file,'utf8'),'keep');assert.equal(used(f),0);assert.equal(f.events.at(-1).code,'ORPHANED_PREPARATION');s.close();
+});
+
+const status=(f,id=null)=>schedulerStatus(f.db,{instanceId:id});
+const command=(f,name,args=[])=>JSON.parse(execFileSync(process.execPath,[join(source,'cli','scheduler.mjs'),name,'--db',f.dbPath,...args],{encoding:'utf8',windowsHide:true,timeout:10000,stdio:['ignore','pipe','pipe']}));
+const request=(f,s,mode='drain',revision=1,id=randomUUID())=>requestSchedulerStop(f.db,{instanceId:s.instance_id,expectedRevision:revision,requestId:id,mode});
+async function waitFor(check,label,timeout=10000){const end=Date.now()+timeout;for(;;){const value=check();if(value)return value;if(Date.now()>end)throw Error(label+' timed out');await delay(30);}}
+function cliWatch(f){
+ const config=join(f.base,'scheduler.json');writeFileSync(config,JSON.stringify(f.config));
+ const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>['systemroot','windir','temp','tmp','path','pathext','pythonutf8'].includes(k.toLowerCase())));
+ const child=spawn(process.execPath,[join(source,'cli','scheduler.mjs'),'watch','--db',f.dbPath,'--config-file',config,'--accepted-rev',approval],{env,windowsHide:true,stdio:['ignore','pipe','pipe']});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);const done=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
+ return {child,done,output:()=>({out,err}),async close(){if(child.exitCode===null&&child.signalCode===null)child.kill();await done;}};
+}
+
+test('status CLI opens an existing database read-only without initializing lifecycle or launching work',()=>{
+ const f=fixture(),before=f.db.prepare('SELECT count(*) n FROM sqlite_master').get().n;
+ const output=command(f,'status');assert.equal(output.configured,false);assert.deepEqual(output.instances,[]);assert.equal(output.process_liveness,'not_checked');assert.equal(f.db.prepare('SELECT count(*) n FROM sqlite_master').get().n,before);assert.equal(used(f),0);
+ const readonly=openSchedulerControlDatabase(f.dbPath,{readOnly:true});assert.throws(()=>readonly.exec('CREATE TABLE forbidden(n)'));readonly.close();
+});
+
+test('durable drain is versioned and idempotent, prevents a new claim and cannot affect the next instance',async()=>{
+ const f=fixture();card(f);const s=open(f),id=randomUUID(),receipt=request(f,s,'drain',1,id);
+ assert.equal(receipt.state,'requested');assert.equal(receipt.executor_stop_confirmed,false);assert.equal(status(f,s.instance_id).instances[0].control_pending,true);assert.deepEqual(request(f,s,'drain',1,id),receipt);
+ assert.throws(()=>request(f,s,'cancel',1,id),{code:'REQUEST_CONFLICT'});assert.throws(()=>request(f,s,'cancel',1),{code:'CONFLICT'});
+ const r=await s.tick();assert.equal(r.results.length,0);assert.equal(used(f),0);let instance=status(f,s.instance_id).instances[0];assert.equal(instance.state,'draining');assert.equal(instance.observed_revision,2);assert.equal(instance.executor_stop_confirmed,false);
+ s.close();instance=status(f,s.instance_id).instances[0];assert.equal(instance.state,'stopped');assert.equal(instance.executor_stop_confirmed,true);assert.equal(instance.unconfirmed_runs,0);assert.deepEqual(request(f,s,'drain',1,id),receipt);assert.throws(()=>request(f,s,'cancel',2),{code:'SCHEDULER_ENDED'});
+ const next=open(f);assert.notEqual(next.instance_id,s.instance_id);assert.equal(status(f,next.instance_id).instances[0].requested_mode,'run');assert.equal(status(f,next.instance_id).instances[0].revision,1);next.close();assert.equal(used(f),0);
+});
+
+test('separate CLI drain wakes a long-poll scheduler and lets only the in-flight synthetic task finish',async()=>{
+ const f=fixture({wait:3000,limit:2});card(f);card(f);f.config.poll_ms=60000;const host=cliWatch(f);
+ try{
+  await started(f);const instance=command(f,'status').instances[0],r=command(f,'drain',['--instance',instance.instance_id,'--version',String(instance.revision),'--request-id',randomUUID()]);assert.equal(r.state,'requested');assert.equal(r.executor_stop_confirmed,false);
+  await waitFor(()=>host.child.exitCode!==null,'draining scheduler',15000);assert.equal(await host.done,0,host.output().err);const terminal=command(f,'status',['--instance',instance.instance_id]).instances[0];assert.equal(terminal.state,'stopped');assert.equal(terminal.observed_revision,2);assert.equal(terminal.executor_stop_confirmed,true);
+  assert.equal(used(f),1);assert.equal(launches(f),1);assert.equal(f.db.prepare("SELECT count(*) n FROM broker_assignments WHERE state='waiting_executor'").get().n,1);assert.equal(JSON.parse(f.db.prepare('SELECT observation_json FROM broker_execution_records').get().observation_json).status,'success');assert.ok(host.output().out.includes('control_observed'));assert.ok(!host.output().out.includes('PRIVATE-TASK-BODY'));
+ }finally{await host.close();}
+});
+
+test('separate cancel command escalates drain and confirms actual Job cleanup without refunding quota',async()=>{
+ const f=fixture({wait:9000,limit:2});card(f);card(f);f.config.poll_ms=60000;const host=cliWatch(f);
+ try{
+  await started(f);const instance=command(f,'status').instances[0];command(f,'drain',['--instance',instance.instance_id,'--version','1','--request-id',randomUUID()]);const cancelId=randomUUID(),args=['--instance',instance.instance_id,'--version','2','--request-id',cancelId];const receipt=command(f,'cancel',args);assert.deepEqual(command(f,'cancel',args),receipt);
+  assert.throws(()=>requestSchedulerStop(f.db,{instanceId:instance.instance_id,expectedRevision:3,requestId:randomUUID(),mode:'drain'}),{code:'CONTROL_DOWNGRADE'});
+  await waitFor(()=>host.child.exitCode!==null,'cancelled scheduler',15000);assert.equal(await host.done,0,host.output().err);const terminal=command(f,'status',['--instance',instance.instance_id]).instances[0];assert.equal(terminal.state,'stopped');assert.equal(terminal.observed_revision,3);assert.equal(terminal.executor_stop_confirmed,true);
+  const o=JSON.parse(f.db.prepare('SELECT observation_json FROM broker_execution_records').get().observation_json);assert.equal(o.status,'cancelled');assert.equal(o.process.cleanup,'job_empty');assert.equal(o.real_model_call_confirmed,false);assert.equal(used(f),1);assert.equal(launches(f),1);
+ }finally{await host.close();}
+});
+
+test('hard-stopped scheduler remains unconfirmed and its stale control cannot stop a replacement instance',async()=>{
+ const f=fixture();f.config.poll_ms=60000;const host=cliWatch(f);let instance;
+ try{instance=await waitFor(()=>status(f).instances[0],'registered instance');host.child.kill();await host.done;}finally{await host.close();}
+ const stale=status(f,instance.instance_id).instances[0];assert.equal(stale.ended_at,null);assert.equal(stale.executor_stop_confirmed,false);assert.equal(stale.state,'running');assert.equal(schedulerStatus(f.db,{instanceId:instance.instance_id,now:Date.parse(stale.heartbeat_at)+11000}).instances[0].heartbeat_state,'stale');
+ requestSchedulerStop(f.db,{instanceId:instance.instance_id,expectedRevision:1,requestId:randomUUID(),mode:'cancel'});assert.equal(status(f,instance.instance_id).instances[0].control_pending,true);assert.throws(()=>open(f),{code:'SCHEDULER_BUSY'});assert.equal(used(f),0);
+ // Fixture-only manual recovery: the exact child handle is terminal and no worker was started.
+ const lock=join(f.base,'.board.db.fleet-scheduler.lock'),rel=relative(resolve(f.base),resolve(lock));assert.ok(rel&&!rel.startsWith('..'));assert.equal(JSON.parse(readFileSync(lock,'utf8')).id,instance.instance_id);unlinkSync(lock);
+ const replacement=open(f);await replacement.tick();assert.notEqual(replacement.instance_id,instance.instance_id);assert.equal(status(f,replacement.instance_id).instances[0].state,'running');assert.equal(status(f,instance.instance_id).instances[0].control_pending,true);replacement.close();
+});
+
+test('missing execution settlement produces attention on close instead of a false stopped receipt',async()=>{
+ const f=fixture();card(f);const s=open(f);f.db.exec("CREATE TRIGGER lifecycle_reject_settle BEFORE INSERT ON broker_dispatch_events WHEN NEW.kind='settled' BEGIN SELECT RAISE(ABORT,'fixture settlement failure'); END");
+ const r=await s.tick();assert.equal(r.inflight,1);s.close();const terminal=status(f,s.instance_id).instances[0];assert.equal(terminal.state,'attention');assert.equal(terminal.unconfirmed_runs,1);assert.equal(terminal.executor_stop_confirmed,false);assert.equal(used(f),1);
+});
+
+test('control observation failure stops new claims and is retained in the terminal record',async()=>{
+ const f=fixture();card(f);const s=open(f);f.db.exec("CREATE TRIGGER lifecycle_reject_observe BEFORE UPDATE OF observed_revision ON scheduler_instances BEGIN SELECT RAISE(ABORT,'fixture observation failure'); END");
+ await assert.rejects(s.tick());f.db.exec('DROP TRIGGER lifecycle_reject_observe');s.close();const terminal=status(f,s.instance_id).instances[0];assert.equal(terminal.state,'attention');assert.equal(terminal.error_code,'ERR_SQLITE_ERROR');assert.equal(used(f),0);assert.equal(launches(f),0);
+});
+
+test('actual backup recovery preserves control history but fences its prior node epoch',()=>{
+ const f=fixture(),s=open(f),requestId=randomUUID(),args={instanceId:s.instance_id,expectedRevision:1,requestId,mode:'drain'};requestSchedulerStop(f.db,args);s.close();
+ const evidence=join(f.base,'evidence');mkdirSync(evidence);writeFileSync(join(evidence,'sentinel.txt'),'fixture only');const backup=createBackup({dbPath:f.dbPath,evidenceDir:evidence,destination:join(TMP,'lifecycle-backup-'+randomUUID())}),restored=join(TMP,'lifecycle-restored-'+randomUUID());restoreBackup({backupDirectory:backup.destination,destination:restored});const dbPath=join(restored,'board.db'),db=new DatabaseSync(dbPath);dbs.push(db);
+ assert.throws(()=>schedulerStatus(db),{code:'RESTORE_HOLD'});retireNode({dbPath:f.dbPath,expectedEpoch:f.config.node_epoch});const plan=prepareRecovery({dbPath});
+ const attestation={format:'ai-fleet-retirement-attestation/v1',node_id:plan.node_id,retired_epoch:plan.retired_epoch,plan_digest:plan.plan_digest,original_board_stopped:true,original_agents_stopped:true,original_identity_disabled:true,other_restored_writers_stopped:true,evidence_ref:'isolated scheduler lifecycle fixture; no physical devices',attested_at:new Date().toISOString()};activateRecovery({dbPath,plan,expectedPlanDigest:plan.plan_digest,attestation});
+ const prior=schedulerStatus(db,{instanceId:s.instance_id}).instances[0];assert.equal(prior.identity_current,false);assert.equal(prior.node_epoch,f.config.node_epoch);assert.throws(()=>requestSchedulerStop(db,args),{code:'EPOCH_CHANGED'});assert.equal(db.prepare('SELECT count(*) n FROM scheduler_control_requests').get().n,1);assert.equal(db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
 });

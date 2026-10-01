@@ -1305,7 +1305,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers.",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover.",
         "pending": [
           "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
           "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
@@ -1326,7 +1326,8 @@
         "tests/supervisortest.mjs",
         "docs/federation/scheduler.md",
         "docs/federation/scheduler-evidence.json",
-        "tests/schedulertest.mjs"
+        "tests/schedulertest.mjs",
+        "docs/federation/scheduler-lifecycle-evidence.json"
       ]
     },
     {
@@ -1502,7 +1503,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers.",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover.",
         "pending": [
           "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
           "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
@@ -1525,7 +1526,8 @@
         "docs/federation/zcode-evidence.json",
         "docs/federation/scheduler.md",
         "docs/federation/scheduler-evidence.json",
-        "tests/schedulertest.mjs"
+        "tests/schedulertest.mjs",
+        "docs/federation/scheduler-lifecycle-evidence.json"
       ]
     },
     {

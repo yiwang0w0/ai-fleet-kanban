@@ -60,6 +60,30 @@ once 执行一轮有界扫描并等待该批在途任务；watch 继续轮询并
 
 调度器只使用本机 MCP 地址，任务续租由既有 runner 负责，不以 Tailscale 在线与否决定是否结束已领取任务。真实断线和重连验收仍待两台电脑实测，不能从这个实现推定通过。
 
+## 后台实例的本机管理
+
+每次启动都会生成新的 instance_id，并把控制版本、观察版本、节点代次和心跳保存在本机数据库。普通日志也携带 instance_id。以下管理命令不需要订阅配置或 accepted_rev，不启动执行器；它们只适用于有权直接访问本机数据库的操作者，不向 MCP 或 peer 开放。
+
+~~~powershell
+node cli/scheduler.mjs status --db C:/board-data/board.db
+node cli/scheduler.mjs status --db C:/board-data/board.db --instance <观察到的实例UUID>
+node cli/scheduler.mjs drain --db C:/board-data/board.db --instance <实例UUID> --version <所见revision> --request-id <本次唯一UUID>
+node cli/scheduler.mjs cancel --db C:/board-data/board.db --instance <实例UUID> --version <最新revision> --request-id <另一唯一UUID>
+~~~
+
+status 使用只读数据库连接，不初始化表；尚未启动过新调度器时返回 configured:false 和空实例列表。默认返回最近20个实例，指定 instance 可读取更早的历史。PID 仅供核对，命令不会按 PID 或进程名结束程序。process_liveness 固定为 not_checked；recent 心跳不是操作系统存活证明，超过10秒标记 stale 也不会自动宣告进程死亡或抢占锁。
+
+- drain 持久请求停止新领取，并等待已领取任务完成；执行器原有超时仍适用。
+- cancel 额外请求现有监管器取消在途执行，可从 drain 升级；不能降回 drain，也没有隐式恢复领取操作。
+- 返回 state:requested 只证明命令已落盘，executor_stop_confirmed:false。继续查询同一 instance 的状态；observed_revision 跟上 revision 才说明该实例观察了请求。
+- 状态 running、draining、cancelling 分别表示最近一次记录的运行或已观察的管理意图。正常关闭且既有停止证据核对无未决运行时记录 stopped、unconfirmed_runs:0 和 executor_stop_confirmed:true。attention 表示错误或未确认的运行，不能作为完整停止证明。所有终态字段对应 ended_at 时的记录，不证明查询时的 OS 进程状态，也不等于任务验收。
+
+--version 必须为当前控制版本，避免覆盖别人刚发出的取消；--request-id 重试时保留，返回同一不可变请求回执。改内容复用请求号被拒。旧请求只绑定原实例及其节点代次；新启动生成新实例，恢复换代后旧命令不能重放到新节点。已有消费记录、额度和任务状态不因为重新打开调度器而清零。
+
+控制观察独立于任务队列轮询，通常每秒一次，所以 poll_ms:60000 的空闲等待也能被唤醒；同步 Git/文件操作可能延迟事件循环，不能据此承诺真实负载下的一秒停止。检查控制记录失败时停止新领取并保留 attention，已领取任务依原监管继续结束。关闭终态不能落盘时保留锁待核对；不会自动删除旧锁或自动重试已消费许可。
+
+强制终止、断电或宿主崩溃可能留下未结束记录、未观察请求及锁。即使 PID 已复用或心跳过期，也不能将记录改成已停后自动启动另一个实例。需按下一节核对原主进程、受监管进程和回执；仅在有明确停止证据后处理确切的残留锁。服务安装、Windows开机启动、全节点组件统一启动、告警接线及72小时验证仍待实施/验收，本批没有改动用户的服务或计划任务。
+
 ## 中断与回执恢复
 
 数据库真实路径旁有 .<数据库文件名>.fleet-scheduler.lock，包含进程 ID 和锁身份；同一数据库从不同调度根启动仍被拒绝。强制退出留下的锁不会仅因时间到期被抢占。必须先核对记录中的原进程与执行器状态；处理旧锁属于本机操作恢复步骤，不应删除活动锁来开启第二个调度器。
@@ -81,3 +105,5 @@ node cli/scheduler.mjs reconcile --db C:/board-data/board.db --config-file C:/bo
 本机测试使用空账号和无网络的合成 Zcode 程序，在真实 Windows Job 中执行，不使用用户订阅。覆盖持续接收后续请求、并发与额度、授权撤销、源码变化、实际 CLI、优雅停止、实际进程取消、结算失败后只补交一次回执，以及自动准备登记 Git 工作区与文件会话。测试成功不代表三家原生模型已联调。
 
 当前以有界批次运行，一批全部结束后再补下一批；源码/工作区准备含同步文件与 Git 操作，大规模任务的吞吐和心跳延迟尚未验收。没有安装 Windows 服务或设置开机启动，也未实施运行证据自动清理、完整 OS 权限隔离、每日预算窗口与模型用量限额。后续仍需完整界面操作、跨节点同步服务接线、实际三执行器和双机断线闭环、72 小时及运维验收。正式阶段完成数保持 0/12。
+
+本机管理回归与故障记录见 [调度实例控制证据](scheduler-lifecycle-evidence.json)。控制记录新增 scheduler_lifecycle_schema v1、scheduler_instances 和 scheduler_control_requests；只由新调度器注册时创建，不改既有分派/schema或启动许可。

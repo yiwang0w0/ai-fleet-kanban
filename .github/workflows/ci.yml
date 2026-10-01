@@ -114,7 +114,7 @@ jobs:
         run: bash hrun.sh node tests/supervisortest.mjs
       - name: adaptertest (explicit provider profiles, scoped tools and sealed configuration)
         run: bash hrun.sh node tests/adaptertest.mjs
-      - name: schedulertest (continuous local queue, native receipts and no relaunch)
+      - name: schedulertest (continuous queue, durable lifecycle controls and native stop receipts)
         run: bash hrun.sh node tests/schedulertest.mjs
         env:
           PYTHON: python
