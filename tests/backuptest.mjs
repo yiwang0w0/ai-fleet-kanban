@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createBackup, verifyBackup, restoreBackup } from "../core/backup.mjs";
+import {migrateSync,shareTask} from "../core/federation/sync-store.mjs";
 const require = createRequire(import.meta.url), store = require("../core/store.js");
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const TMP = mkdtempSync(join(tmpdir(), "fleet-backup-")), handles = [];
@@ -54,6 +55,29 @@ test("live WAL snapshot retains committed tasks, events, identity and verified e
   store.add(f.db,{subject:"after snapshot"});
   assert.equal(verifyBackup(b.destination).manifest.database.tasks,1);
 });
+test("evidence relocation preserves maximum task and projection versions without generating sync work",()=>{
+ const f=fixture();migrateSync(f.db);f.db.prepare("UPDATE tasks SET aggregate_version=? WHERE id=?").run(Number.MAX_SAFE_INTEGER,f.id);shareTask(f.db,{id:f.id,projectId:"demo",expectedVersion:Number.MAX_SAFE_INTEGER});f.db.exec("DELETE FROM federation_dirty");
+ const before=f.db.prepare("SELECT * FROM tasks WHERE id=?").get(f.id),share=f.db.prepare("SELECT * FROM federation_shares").get(),triggers=f.db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name").all(),b=backup(f),dest=target("version-preserving-restore");
+ restoreBackup({backupDirectory:b.destination,destination:dest});const db=new DatabaseSync(join(dest,"board.db"));handles.push(db);
+ assert.deepEqual({...db.prepare("SELECT * FROM tasks WHERE id=?").get(f.id)},{...before,evidence_path:join(dest,"evidence/result.md")});assert.deepEqual(db.prepare("SELECT * FROM federation_shares").get(),share);assert.equal(db.prepare("SELECT count(*) n FROM federation_dirty").get().n,0);assert.deepEqual(db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name").all(),triggers);
+ assert.equal(db.prepare("SELECT count(*) n FROM sqlite_master WHERE name LIKE 'board_restore_evidence_%'").get().n,0);assert.equal(readFileSync(join(dest,"evidence/result.md"),"utf8"),"verified output\n");
+});
+
+test("restore refuses a backup carrying an outstanding recovery or completion write permit",()=>{
+ for(const table of ["result_recovery_permits","completion_write_permits"]){
+  const f=fixture();f.db.exec("CREATE TABLE "+table+"(task_id INTEGER PRIMARY KEY)");f.db.prepare("INSERT INTO "+table+" VALUES(?)").run(f.id);const b=backup(f),dest=target("unexpected-permit");
+  assert.throws(()=>restoreBackup({backupDirectory:b.destination,destination:dest}),/RESTORE_EVIDENCE_SCOPE/);assert.equal(existsSync(join(dest,".incomplete")),true);assert.equal(existsSync(join(dest,"restore-receipt.json")),false);assert.equal(f.db.prepare("SELECT count(*) n FROM "+table).get().n,1);
+ }
+});
+
+test("restore refuses a path-triggered business mutation and rolls back every relocated row",()=>{
+ const f=fixture(),other=store.add(f.db,{subject:"untouched second task",evidencePath:join(f.evidence,"second.md")});writeFileSync(join(f.evidence,"second.md"),"second evidence");
+ f.db.exec("CREATE TRIGGER inject_restore_mutation AFTER UPDATE OF evidence_path ON tasks WHEN NEW.id="+other+" BEGIN UPDATE tasks SET subject='unexpected' WHERE id=NEW.id; END");
+ const before=f.db.prepare("SELECT * FROM tasks ORDER BY id").all(),triggers=f.db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name").all(),b=backup(f),dest=target("atomic-restore");
+ assert.throws(()=>restoreBackup({backupDirectory:b.destination,destination:dest}),/RESTORE_EVIDENCE_SCOPE/);
+ assert.equal(existsSync(join(dest,".incomplete")),true);assert.equal(existsSync(join(dest,"restore-receipt.json")),false);const db=new DatabaseSync(join(dest,"board.db"),{readOnly:true});handles.push(db);assert.deepEqual(db.prepare("SELECT * FROM tasks ORDER BY id").all(),before);assert.deepEqual(db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' ORDER BY name").all(),triggers);assert.equal(db.prepare("SELECT count(*) n FROM sqlite_master WHERE name LIKE 'board_restore_evidence_%'").get().n,0);assert.deepEqual(f.db.prepare("SELECT * FROM tasks ORDER BY id").all(),before);assert.equal(readFileSync(join(f.evidence,"second.md"),"utf8"),"second evidence");
+});
+
 test("restore is isolated, rebinds evidence paths, and cannot start a board or mint tokens", () => {
   const f=fixture(), b=backup(f), dest=target("restore");
   const restored=restoreBackup({backupDirectory:b.destination,destination:dest});

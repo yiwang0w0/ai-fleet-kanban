@@ -269,6 +269,55 @@ export function verifyBackup(directory) {
   validateBundle(root, manifest);
   return { verified: true, manifest };
 }
+// Only the verified, quarantined copy is writable here. Keep the result and
+// completion freeze triggers installed; grant their existing recovery exception
+// for one row, while a stricter guard allows just its exact path substitution.
+function relocateEvidence(db, references, destination) {
+  if (!references.length) return;
+  if (!db.isTransaction || db.prepare("SELECT count(*) n FROM board_restore_hold").get().n !== 1)
+    fail("RESTORE_EVIDENCE_SCOPE: relocation requires a held restore transaction");
+  const permit = "board_restore_evidence_permits", guard = "board_restore_evidence_only";
+  if (db.prepare("SELECT 1 FROM sqlite_master WHERE name IN (?,?)").get(permit, guard))
+    fail("RESTORE_EVIDENCE_SCOPE: unexpected relocation state");
+  const exists = name => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+  for (const name of ["result_recovery_permits", "completion_write_permits"])
+    if (exists(name) && db.prepare("SELECT 1 FROM "+name+" LIMIT 1").get())
+      fail("RESTORE_EVIDENCE_SCOPE: existing write permits must be empty");
+  const columns = db.prepare("PRAGMA table_info(tasks)").all().map(c=>c.name);
+  const quoted = name => '"'+name.replaceAll('"','""')+'"';
+  const unchanged = columns.filter(c=>c!=="evidence_path").map(c=>"OLD."+quoted(c)+" IS NEW."+quoted(c)).join(" AND ");
+  const scope = "("+unchanged+") AND EXISTS(SELECT 1 FROM "+permit+" p WHERE p.task_id=OLD.id AND p.source_path IS OLD.evidence_path AND p.target_path IS NEW.evidence_path)";
+  const versionSQL = db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='task_content_version'").get()?.sql;
+  // This is the current and historical store-generated counter, not a business
+  // permission. Refuse an unknown definition rather than suppress its behavior.
+  const versionParts = versionSQL?.match(/^(CREATE TRIGGER task_content_version AFTER UPDATE ON tasks WHEN )([\s\S]+)( BEGIN UPDATE tasks SET aggregate_version=aggregate_version\+1 WHERE id=NEW.id; END)$/);
+  if (versionSQL && !versionParts) fail("RESTORE_EVIDENCE_SCOPE: unrecognized task version counter");
+  db.exec("CREATE TABLE "+permit+"(task_id INTEGER PRIMARY KEY,source_path TEXT NOT NULL,target_path TEXT NOT NULL)");
+  db.exec("CREATE TRIGGER "+guard+" BEFORE UPDATE ON tasks WHEN NOT ("+scope+") BEGIN SELECT RAISE(ABORT,'RESTORE_EVIDENCE_SCOPE: only the verified evidence path may change'); END");
+  if (versionSQL) {
+    db.exec("DROP TRIGGER task_content_version");
+    db.exec(versionParts[1]+"("+versionParts[2]+") AND NOT ("+scope+")"+versionParts[3]);
+  }
+  const sealed = exists("result_recovery_permits");
+  for (const ref of references) {
+    const before = db.prepare("SELECT * FROM tasks WHERE id=?").get(ref.task_id);
+    if (!before || digest(String(before.evidence_path)) !== ref.source_path_sha256)
+      fail("RESTORE_EVIDENCE_SCOPE: evidence reference changed");
+    const path = join(destination, ref.path);
+    db.prepare("INSERT INTO "+permit+" VALUES(?,?,?)").run(ref.task_id,before.evidence_path,path);
+    if (sealed) db.prepare("INSERT INTO result_recovery_permits VALUES(?)").run(ref.task_id);
+    db.prepare("UPDATE tasks SET evidence_path=? WHERE id=?").run(path,ref.task_id);
+    const after = db.prepare("SELECT * FROM tasks WHERE id=?").get(ref.task_id);
+    if (!after || columns.some(c=>after[c] !== (c==="evidence_path"?path:before[c])))
+      fail("RESTORE_EVIDENCE_SCOPE: unexpected task mutation");
+    if (sealed) db.prepare("DELETE FROM result_recovery_permits WHERE task_id=?").run(ref.task_id);
+    db.prepare("DELETE FROM "+permit+" WHERE task_id=?").run(ref.task_id);
+  }
+  // Restore the exact counter definition before publishing the receipt. Errors
+  // anywhere above roll this schema and all row changes back together.
+  if (versionSQL) { db.exec("DROP TRIGGER task_content_version"); db.exec(versionSQL); }
+  db.exec("DROP TRIGGER "+guard+"; DROP TABLE "+permit);
+}
 export function restoreBackup({ backupDirectory, destination, upgradeSchema = false }) {
   if(typeof upgradeSchema!=="boolean")fail("upgradeSchema 必须是布尔值");
   const root = canonicalDirectory(backupDirectory), manifest = readManifest(root);
@@ -284,8 +333,7 @@ export function restoreBackup({ backupDirectory, destination, upgradeSchema = fa
     db.prepare("INSERT INTO board_restore_hold VALUES (?,?)").run(manifest.backup_id, new Date().toISOString());
     const wasRetired=db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_lifecycle'").get() && db.prepare("SELECT state FROM board_lifecycle").get()?.state==="retired";
     if(wasRetired)db.exec("UPDATE board_lifecycle SET state='active' WHERE singleton=1");
-    for (const ref of manifest.evidence_references)
-      db.prepare("UPDATE tasks SET evidence_path=? WHERE id=?").run(join(dest, ref.path), ref.task_id);
+    relocateEvidence(db, manifest.evidence_references, dest);
     // Only the new held copy is upgraded, before its final receipt is sealed.
     // migrate joins this transaction; failure also rolls back evidence relocation.
     if(upgradeSchema)createRequire(import.meta.url)("./store.js").migrate(db);
