@@ -3127,7 +3127,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   for(const vfy of v.verifications){
    const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-   const state=vfy.phase==="settled"?(vfy.checks_passed?"检查通过 · 待合并与验收":"检查未通过"):({ready:"输入已准备",preparing:"输入准备未完成",launch_committed:"已启动 · 需核对回执"}[vfy.phase]||vfy.phase);
+   const state=vfy.phase==="settled"?(vfy.checks_passed?"检查通过 · 详见合并与验收回执":"检查未通过"):({ready:"输入已准备",preparing:"输入准备未完成",launch_committed:"已启动 · 需核对回执"}[vfy.phase]||vfy.phase);
    card.append(el("p",state,"fleet-task-title"),el("p",vfy.project_id+" · "+vfy.verification_id,"fleet-id"));
    const review="项目："+vfy.project_id+"\n检查："+vfy.verification_id+"\n传输："+vfy.transfer_id+"\n固定配置："+vfy.profile_id;
    if(vfy.phase==="ready")bar.append(actionButton("执行本机独立检查",vfy.project_id,"run_verification",{id:vfy.verification_id},review+"\n将运行本机管理者批准的固定测试程序，并记录实际退出和停止状态；本步骤不批准任务。"));
@@ -3154,7 +3154,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   section.append(el("h4","来源合并与双端结案"));
   for(const i of v.integrations){
    const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-   const state=({ready:"合并内容已准备",preparing:"准备未完成，保留原意图",launch_committed:"合并已启动，待核对",settled:"来源已合并，等待验收",abandoned:"合并已放弃"}[i.phase]||i.phase);
+   const state=({ready:"合并内容已准备",preparing:"准备未完成，保留原意图",launch_committed:"合并已启动，待核对",settled:"来源已合并",abandoned:"合并已放弃"}[i.phase]||i.phase);
    card.append(el("p",state,"fleet-task-title"),el("p",i.project_id+" · "+i.ref,"fleet-note"),el("p",i.integration_id,"fleet-id"));
    const review="项目："+i.project_id+"\n候选："+i.result_id+"\n合并："+i.integration_id+"\n来源引用："+i.ref+"\n原基线："+i.base_commit+"\n交付提交："+i.artifact_commit;
    if(i.phase==="ready")bar.append(actionButton("确认合并到来源引用",i.project_id,"apply_integration",{id:i.integration_id},review+"\n仅当引用仍是原基线才更新；本步骤尚不验收任务。"));
