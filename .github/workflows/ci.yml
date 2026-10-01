@@ -152,6 +152,8 @@ jobs:
           PYTHON: python
       - name: "fleetviewtest (operator reads, ownership and offline freshness)"
         run: bash hrun.sh node tests/fleetviewtest.mjs
+      - name: "fleetprogresstest (scoped contracts, external confirmations and invalidation)"
+        run: bash hrun.sh node tests/fleetprogresstest.mjs
       - name: "fleetactionstest (operator outbox, receipts and idempotent remote commands)"
         run: bash hrun.sh node tests/fleetactionstest.mjs
       - name: "fleetevidencetest (scoped relationships and task history)"

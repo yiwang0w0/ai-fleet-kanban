@@ -404,6 +404,7 @@
   .fleet-edge-path{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)}.fleet-endpoint{white-space:normal;overflow-wrap:anywhere;text-align:left;max-width:100%}.fleet-endpoint small{display:block;color:var(--dim)}.fleet-arrow{font-size:24px;color:var(--accent)}.fleet-trace summary{cursor:pointer}.fleet-trace dl+dl{border-top:1px solid var(--line);padding-top:var(--sp-3)}
   #fleet-action-body textarea{display:block;box-sizing:border-box;width:100%;font:var(--fs-md) var(--font);background:var(--panel2);color:var(--fg);border:1px solid var(--line);padding:var(--sp-2)}
   #fleet-actions button{white-space:normal}
+  #fleet-progress progress{accent-color:var(--ok)}
   .fleet-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--fs-md)/1.6 var(--font);background:var(--panel);padding:var(--sp-3);border:1px solid var(--line);border-radius:var(--r-sm)}
   @media(max-width:520px){.fleet-filters label{width:100%;justify-content:space-between}.fleet-filters input,.fleet-filters select{max-width:68%}.fleet-dialog{padding:var(--sp-3)}.fleet-detail dl{grid-template-columns:1fr}.fleet-top h2{font-size:var(--fs-lg)}}
 </style>
@@ -427,6 +428,7 @@
   <div id="fleet-summary" class="fleet-summary"></div>
   <div id="fleet-nodes" class="fleet-nodes"></div>
   <section id="fleet-relations" aria-label="跨终端委派"></section>
+  <section id="fleet-progress" aria-label="阶段进度与确认记录"></section>
   <section id="fleet-actions" aria-label="跨端操作与回执"></section>
   <button type="button" id="fleet-more" hidden>显示更多</button>
   <p class="fleet-note">远端显示上次收到的授权数据。同步失败时保留缓存；尚未同步的终端任务数量未知。跨端请求由本机协调身份发出，任务处理仍由所有者终端负责。</p>
@@ -3180,6 +3182,27 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
  }
 
+ function renderProgress(v){
+  const box=$("fleet-progress");box.replaceChildren();
+  const section=el("details",undefined,"fleet-trace");section.open=actionFolds.get("阶段进度与确认记录")??false;section.addEventListener("toggle",()=>actionFolds.set("阶段进度与确认记录",section.open));section.append(el("summary","阶段进度与确认记录"));box.append(section);
+  if(!v.enabled){section.append(el("p","尚未登记阶段计划与外部确认记录。","fleet-note"));return;}
+  section.append(el("p","本机管理者登记的计划与确认记录 · 读取于 "+time(v.generated_at)+"。任务已完成或测试通过不会自动计入阶段验收。","fleet-note"));
+  for(const plan of v.plans)projectNames.add(plan.project_id);choices();
+  const labels={accepted:"已验收",pending_acceptance:"待验收",pending:"待确认",rejected:"未通过",stale:"旧确认已失效",invalid:"确认记录无效",not_submitted:"未提交确认",planned:"计划中",ready:"可开始",in_progress:"进行中",verifying:"待验收",blocked:"阻塞"};
+  for(const p of v.plans){
+   const card=el("article",undefined,"fleet-edge"),c=p.counts;card.append(el("h4",p.plan_id+" · "+p.project_id),el("p","任务验收 "+c.accepted_tasks+" / "+c.total_tasks+"（"+c.task_percent+"%） · 阶段验收 "+c.accepted_phases+" / "+c.total_phases+"（"+c.phase_percent+"%）","fleet-task-title"));
+   const meter=el("progress");meter.max=100;meter.value=c.task_percent;meter.setAttribute("aria-label",p.plan_id+" 任务验收百分比");card.append(meter,el("p","阻塞 "+c.blocked_tasks+" · 待验收 "+c.pending_acceptance_tasks+" · 有实现证据 "+c.with_implementation_evidence+" · 有验证记录 "+c.with_verification_records,"fleet-note"));
+   for(const phase of p.phases){const row=el("details",undefined,"fleet-trace"),key="progress:"+p.plan_id+":"+phase.phase_id;row.open=actionFolds.get(key)??false;row.addEventListener("toggle",()=>actionFolds.set(key,row.open));row.append(el("summary",phase.phase_id+" "+phase.title+" · "+phase.gate_id+" · "+(labels[phase.state]||phase.state)));
+    row.append(el("p","需确认角色："+phase.required_roles.join("、"),"fleet-note"));if(phase.blocked_by.length)row.append(el("p","前置阶段尚未验收："+phase.blocked_by.join("、"),"fleet-note fleet-warning"));
+    for(const t of phase.tasks){const item=el("div",undefined,"fleet-edge");item.append(el("p",t.id+" "+t.subject+" · "+(labels[t.state]||t.state),"fleet-task-title"),el("p","实现证据 "+t.implementation_evidence_count+" · 验证记录："+({local_component_passed:"本机组件通过",passed:"通过",failed:"未通过"}[t.verification_result]||t.verification_result||"尚无记录"),"fleet-note"));if(t.blocker)item.append(el("p","阻塞："+t.blocker.reason+"；解除条件："+(t.blocker.release_condition||"待填写")+"；责任角色："+(t.blocker.responsible_role||"待填写")+"；复核："+time(t.blocker.next_review_at),"fleet-note fleet-warning"));row.append(item);}
+    for(const h of phase.history){const note=el("div",undefined,"fleet-edge");note.append(el("p","确认记录 · "+(labels[h.state]||h.state)+" · 登记者 "+h.registered_by+" · "+time(h.registered_at),"fleet-task-title"));if(h.reason)note.append(el("p",h.reason,"fleet-note fleet-warning"));if(h.note)note.append(el("p",h.note,"fleet-note"));for(const x of h.confirmations)note.append(el("p",x.role+" · "+x.instance_id+" · "+time(x.at)+" · "+x.reference,"fleet-note"));note.append(el("p","回执摘要："+h.sha256,"fleet-id"));row.append(note);}
+    if(!phase.history.length)row.append(el("p","尚无确认记录。","fleet-note"));card.append(row);
+   }section.append(card);
+  }
+  if(!v.plans.length)section.append(el("p","当前项目没有登记的阶段计划。","fleet-note"));
+ }
+ async function loadProgress(id,signal){try{const v=await request("/api/fleet/progress"+(project.value?"?project="+encodeURIComponent(project.value):""),signal);if(id===generation)renderProgress(v);}catch(e){if(e.name!=="AbortError"&&id===generation)$("fleet-progress").replaceChildren(el("p","阶段进度不可用："+e.message,"fleet-note fleet-warning"));}}
+
  function renderActions(v){
   const box=$("fleet-actions");box.replaceChildren(el("h3","跨端操作与回执"));
   if(!v.enabled){box.append(el("p",v.error||"尚未配置本机协调身份和对端连接。","fleet-note"));return;}
@@ -3282,7 +3305,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   relationships(value.relations,$("fleet-relations"));
   notice.className="fleet-note";notice.textContent="视图更新于 "+time(value.generated_at)+(value.sync_state==="not_configured"?" · 本机尚未配置联邦同步":value.sync_state==="upgrade_required"?" · 同步存储需要升级，未读取远端数据":"")+(value.truncated?" · 仅显示前 "+value.returned+" 项，请缩小筛选或显示更多":"");$("fleet-more").hidden=!value.truncated||limit>=10000;
  }
- async function load(){if(!dialog.open)return;const id=++generation;controller?.abort();controller=new AbortController();const params=new URLSearchParams({limit:String(limit)});if(owner.value)params.set("owner",owner.value);if(project.value)params.set("project",project.value);if(query.value.trim())params.set("q",query.value.trim());notice.textContent="正在更新…";loadActions(id,controller.signal);
+ async function load(){if(!dialog.open)return;const id=++generation;controller?.abort();controller=new AbortController();const params=new URLSearchParams({limit:String(limit)});if(owner.value)params.set("owner",owner.value);if(project.value)params.set("project",project.value);if(query.value.trim())params.set("q",query.value.trim());notice.textContent="正在更新…";loadActions(id,controller.signal);loadProgress(id,controller.signal);
   try{const value=await request("/api/fleet?"+params,controller.signal);if(id===generation)render(value);}catch(e){if(e.name==="AbortError")return;if(id===generation){notice.className="fleet-note fleet-warning";notice.textContent=(last?"更新失败，保留上次视图。":"视图读取失败。")+e.message;}}
  }
  async function showTask(uid){const id=++detailGeneration;$("fleet-detail-title").textContent="任务详情";detail.showModal();const body=$("fleet-detail-body");body.replaceChildren(el("p","正在读取任务…","fleet-note"));try{const t=await request("/api/fleet/task?uid="+encodeURIComponent(uid));if(id!==detailGeneration||!detail.open)return;$("fleet-detail-title").textContent=t.subject;body.replaceChildren();const dl=el("dl");for(const[label,value]of [["所属终端",t.owner_name],["终端身份",t.owner_node_id],["任务 UID",t.task_uid],["父任务",t.parent_uid||"根任务"],["项目",t.project_id||"未绑定"],["状态",states[t.status]||t.status],["数据来源",t.read_only?"远端缓存 · "+time(t.last_sync_at):"本机"],["运行",t.run_id||"尚无运行"],["更新",time(t.updated_at)]])dl.append(el("dt",label),el("dd",value));body.append(dl);for(const[label,value]of [["任务说明",t.description],["验收条件",t.acceptance],["执行结果",t.result],["裁定",t.verdict_note]])if(value){body.append(el("h3",label),el("pre",value));}evidence(t.evidence,body);taskActions(t,body,id);if(t.local_id!==null){const locate=el("button","在本机面板定位");locate.type="button";locate.addEventListener("click",()=>{detail.close();dialog.close();$("task-find-id").value=String(t.local_id);$("task-find").requestSubmit();});body.append(locate);}}catch(e){if(id===detailGeneration)body.replaceChildren(el("p",e.message,"fleet-note fleet-warning"));}}

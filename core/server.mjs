@@ -20,6 +20,7 @@ import { dirname, join, resolve, relative } from "node:path";
 import { createRequire } from "node:module";
 import { nodeTooOld } from "./env.mjs";
 import {readFleetView,readFleetTask} from "./fleet-view.mjs";
+import {readFleetProgress} from "./fleet-progress.mjs";
 import {openFleetActions,loadFleetActionsConfig} from "./fleet-actions.mjs";
 import {PeerError} from "./federation/protocol.mjs";
 
@@ -2327,6 +2328,11 @@ const server = http.createServer(async (req, res) => {
         const value=p.endsWith("/task")?readFleetTask(db,url.searchParams.get("uid")):readFleetView(db,{projectId:url.searchParams.get("project"),ownerNodeId:url.searchParams.get("owner"),query:url.searchParams.get("q")??"",limit:url.searchParams.has("limit")?Number(url.searchParams.get("limit")):1000});
         return json(res,200,value);
       } catch(e) {return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"FLEET_VIEW_UNAVAILABLE",error:e instanceof PeerError?e.message:"全局视图暂不可读；请检查数据库与升级状态"});}
+    }
+    if (m==="GET"&&p==="/api/fleet/progress") {
+      if(!guardWrite(req,res,p))return;
+      try{return json(res,200,readFleetProgress(process.env.BOARD_PROGRESS_CONFIG,{projectId:url.searchParams.get("project")}));}
+      catch(e){return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"PROGRESS_UNAVAILABLE",error:e instanceof PeerError?e.message:"阶段进度暂不可读，请检查管理者配置"});}
     }
     if ((m==="GET"||m==="POST")&&p==="/api/fleet/actions") {
       if(m==="GET"&&!guardWrite(req,res,p))return;
