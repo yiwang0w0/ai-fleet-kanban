@@ -192,7 +192,7 @@ test("HTTP requires versions, rejects stale controls and returns current version
   const newer=await api("POST",path+"/update",{expected_version:1,description:"new"});assert.equal(newer.status,200);
   for(const action of ["claim","resolve","autoreview","update","pin","release","reopen","archive"]){
    const r=await api("POST",path+"/"+action,{expected_version:1,worker:"v",verdict:"approve",subject:"obsolete"});
-   assert.equal(r.status,409,action+" "+JSON.stringify(r));assert.equal(r.body.current_version,2);
+   assert.equal(r.status,409,action+" "+JSON.stringify(r));assert.equal(r.body.current_version,2);assert.equal(r.body.conflict?.kind,'task_version');assert.equal(r.body.conflict?.automatic_retry,false);
   }
   assert.equal((await api("GET",path)).body.task.description,"new");
   const payload=join(TMP,"cli-edit.json");writeFileSync(payload,JSON.stringify({acceptance:"CLI verified"}));

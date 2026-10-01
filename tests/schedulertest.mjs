@@ -1,3 +1,4 @@
+import {readFleetHealth} from '../core/fleet-health.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -199,6 +200,7 @@ test('separate cancel command escalates drain and confirms actual Job cleanup wi
 test('hard-stopped scheduler remains unconfirmed and its stale control cannot stop a replacement instance',async()=>{
  const f=fixture();f.config.poll_ms=60000;const host=cliWatch(f);let instance;
  try{instance=await waitFor(()=>status(f).instances[0],'registered instance');host.child.kill();await host.done;}finally{await host.close();}
+ const health=readFleetHealth(f.db);assert.ok(health.issues.some(i=>i.code==='SCHEDULER_LOCK_ORPHAN'));assert.equal(health.executor_stop_confirmed,false);
  const stale=status(f,instance.instance_id).instances[0];assert.equal(stale.ended_at,null);assert.equal(stale.executor_stop_confirmed,false);assert.equal(stale.state,'running');assert.equal(schedulerStatus(f.db,{instanceId:instance.instance_id,now:Date.parse(stale.heartbeat_at)+11000}).instances[0].heartbeat_state,'stale');
  requestSchedulerStop(f.db,{instanceId:instance.instance_id,expectedRevision:1,requestId:randomUUID(),mode:'cancel'});assert.equal(status(f,instance.instance_id).instances[0].control_pending,true);assert.throws(()=>open(f),{code:'SCHEDULER_BUSY'});assert.equal(used(f),0);
  // Fixture-only manual recovery: the exact child handle is terminal and no worker was started.

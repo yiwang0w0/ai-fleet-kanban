@@ -2783,11 +2783,17 @@ async function post(url, body){
                                body: JSON.stringify(body) });
   if (!r.ok){
     const b = await r.json().catch(()=>({}));
-    const e = new Error(b.error || r.status); e.status = r.status; e.body = b; throw e;
+    throw operationError(b,r.status);
   }
   const result=await r.json();
   if(mutation?.[2]==="resolve") draftVersions.delete(Number(mutation[1]));
   return result;
+}
+function operationError(body,status){
+  const conflict=body?.conflict?.format==="ai-fleet-conflict/v1"&&body.conflict.automatic_retry===false?body.conflict:null;
+  const reason=conflict?.kind==="state"&&body?.error?body.error+"。"+conflict.message:conflict?.message||body?.error||String(status);
+  const e=new Error(reason);
+  e.status=status;e.body=body;e.conflict=conflict;e.retrySameRequest=!conflict&&status>=500;return e;
 }
 // ⭐ v0.19 (self-audit P1-2): a restart refused because cards are in flight (409 needs_force) is a
 //   question for the human, not a dead end. Ask it here — once, same words on every button — and
@@ -3140,10 +3146,10 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   actionBusy=true;actionSubmit.disabled=true;if(draft.input)draft.input.disabled=true;actionStatus.textContent="正在保存请求…";
   try{
    const response=await fetch("/api/fleet/actions",{method:"POST",headers:{...WH,"Content-Type":"application/json"},body:JSON.stringify(draft.frozen),signal:AbortSignal.timeout(15000)});
-   const value=await response.json();if(!response.ok)throw Error((value.error||"操作未被接受")+" ["+(value.code||response.status)+"]");
+   const value=await response.json();if(!response.ok)throw operationError(value,response.status);
    actionStatus.textContent=(actionStates[value.state]||value.state)+" · 请求 "+value.action_id+"。请在操作回执中查看后续状态。";
    actionSubmit.textContent="已保存";load();
-  }catch(error){actionStatus.textContent=error.message+"。可重试同一请求；若版本或权限已变化，请关闭后刷新核对。";actionSubmit.disabled=false;actionSubmit.textContent="重试同一请求";}
+  }catch(error){const retry=error.retrySameRequest!==false;actionStatus.textContent=error.message+(retry?"。通信结果未确认，可使用原编号和原内容重试；不会自动提交。":"。请关闭此窗口，刷新并核对后再操作。");actionSubmit.disabled=!retry;actionSubmit.textContent=retry?"重试同一请求":"需关闭并核对";}
   finally{actionBusy=false;}
  });
 
@@ -3315,7 +3321,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   renderDelivery(v.delivery,box);
   const receipts=el("details",undefined,"fleet-trace");receipts.open=true;receipts.append(el("summary","操作回执 · "+v.actions.length));
-  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({integration_ready:"合并内容已准备",integration_launched:"合并已启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),el("p",a.action_id,"fleet-id"));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
+  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({integration_ready:"合并内容已准备",integration_launched:"合并已启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.conflict?.message?" · "+a.conflict.message:a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),el("p",a.action_id,"fleet-id"));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
   if(!v.actions.length)receipts.append(el("p","从本机任务详情发起委派，或处理收到的委派。","fleet-note"));box.append(receipts);
   if(v.truncated)box.append(el("p","每类最多显示 100 条；请缩小项目范围。","fleet-note fleet-warning"));
  }

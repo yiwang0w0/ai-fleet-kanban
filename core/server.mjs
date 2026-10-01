@@ -1,3 +1,6 @@
+import conflictGuide from './conflicts.js';
+import {readFleetHealth} from './fleet-health.mjs';
+import {inspectionError} from './inspection.mjs';
 // Board HTTP layer — REST + SSE + static hosting. Zero dependencies
 // (node:http / node:sqlite only).
 //
@@ -2342,6 +2345,11 @@ const server = http.createServer(async (req, res) => {
         return json(res,200,value);
       } catch(e) {return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"FLEET_VIEW_UNAVAILABLE",error:e instanceof PeerError?e.message:"全局视图暂不可读；请检查数据库与升级状态"});}
     }
+    if (m==="GET"&&p==="/api/fleet/health") {
+      if(!guardWrite(req,res,p))return;
+      try{return json(res,200,readFleetHealth(db));}
+      catch(e){return json(res,503,inspectionError(e));}
+    }
     if (m==="GET"&&p==="/api/fleet/progress") {
       if(!guardWrite(req,res,p))return;
       try{return json(res,200,readFleetProgress(process.env.BOARD_PROGRESS_CONFIG,{projectId:url.searchParams.get("project")}));}
@@ -2360,7 +2368,8 @@ const server = http.createServer(async (req, res) => {
       } catch(e) {
         const code=typeof e?.code==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(e.code)?e.code:"ACTION_FAILED";
         const reasons={BAD_INPUT:"操作参数无效",FORBIDDEN:"协调身份没有所需项目或操作权限",UNAUTHENTICATED:"协调身份已失效，请核对本机配置",POLICY_CHANGED:"角色策略已更新，需要重新授权协调身份",AUTHORIZATION_CHANGED:"权限已变化，旧请求已停止",PEER_NOT_CONFIGURED:"该项目尚未配置此对端",CONFLICT:"任务或回执版本已变化，请刷新后核对",REQUEST_CONFLICT:"请求编号已绑定其他操作",NOT_FOUND:"当前项目没有可操作的对象",CONFIRMATION_REQUIRED:"双方关系和就绪证明尚未满足操作条件",QUEUE_LIMIT:"操作记录已达到上限，需维护后继续"};
-        return json(res,e instanceof PeerError?e.status:409,{code,error:reasons[code]||"操作未获准，请核对当前任务状态与权限"});
+        const conflict=conflictGuide.describeConflict(e,{scope:"federation"});
+        return json(res,e instanceof PeerError?e.status:409,{code,error:conflict?.message||reasons[code]||"操作未获准，请核对当前任务状态与权限",...(conflict?{conflict}:{})});
       }
     }
     // ── SSE
@@ -3096,7 +3105,8 @@ const server = http.createServer(async (req, res) => {
     // green). The mapping table is store.httpStatusFor, ONE place; the mapping AND
     // the declaration are unified in statusFor() above — calling the raw mapping
     // here would recreate "this road silently 400s".
-    return json(res, statusFor(e, "兜底"), { error: msg, ...(Number.isSafeInteger(e?.current_version) ? {expected_version:e.expected_version,current_version:e.current_version} : {}) });
+    const conflict=conflictGuide.describeConflict(e);
+    return json(res, statusFor(e, "兜底"), { error: msg, ...(conflict?{code:e.code,conflict}:{}), ...(Number.isSafeInteger(e?.current_version) ? {expected_version:e.expected_version,current_version:e.current_version} : {}) });
   }
 });
 

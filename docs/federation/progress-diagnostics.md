@@ -32,4 +32,4 @@
 
 见 [本批证据](progress-diagnostics-evidence.json)。本机临时数据库、实际回环 HTTP、拓扑和双端绑定夹具验证了只读行为、去重、审计失败回滚、显式解除人工闸和原闸门保持。面板渲染函数验证了展示文案与转义，不据此声称实体桌面已验收。
 
-本批完成 M1 的可见性出口，并接通 H3a 的核心本机诊断。H3 尚未整体完成：版本/运行 CAS/远端冲突的统一解释，以及健康哨对 broker/投递/孤儿实例的报警仍待接通。跨模块 federation stuck 与 dispatch stale 已在后续批次提供，见 [只读巡检](inspection.md)。此入口没有以任务年龄猜测故障，也没有自动重派未知运行。
+本批完成 M1 的可见性出口，并接通 H3a 的核心本机诊断。后续已接通版本/运行 CAS/远端冲突的 [统一说明](conflicts.md)，以及 broker/持久投递/调度锁的 [健康哨观测](health-watch.md)；实体与持续运行验收仍待完成。跨模块 federation stuck 与 dispatch stale 已在后续批次提供，见 [只读巡检](inspection.md)。此入口没有以任务年龄猜测故障，也没有自动重派未知运行。

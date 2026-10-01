@@ -1,3 +1,4 @@
+import {readFleetHealth} from '../core/fleet-health.mjs';
 import {authenticate} from "../core/federation/peers.mjs";
 import {createIntent,receiveOffer,decideIncoming,recordReceipt} from "../core/federation/delegation.mjs";
 import {migrateRelations,createRelationGraph,publishTopology,approveRelation,relationStatus} from "../core/federation/relations.mjs";
@@ -56,8 +57,9 @@ test("actual HTTP proposal, acceptance and status stay distinct and duplicate cl
 test("lost acknowledgement resumes same durable intent after reopen without another target task",async()=>{
  let lost=true;const f=await pair({fetchImpl:async(...args)=>{const r=await fetch(...args);if(lost&&String(args[0]).endsWith("/offer")){lost=false;await r.arrayBuffer();throw Error("lost ACK PRIVATE");}return r;}});
  const input=proposal(f);f.source.enqueue(input);await f.source.tick();assert.equal(f.source.catalog("demo").actions[0].state,"retry_pending");assert.equal(f.target.catalog("demo").incoming.length,1);
+ assert.ok(readFleetHealth(f.a.db,{now:f.now()+1800001}).issues.some(i=>i.code==='DELIVERY_RETRY_PENDING'));
  await f.source.close();f.advance(31000);const reopened=f.open(f.a);await reopened.tick();assert.equal(reopened.catalog("demo").actions[0].state,"acknowledged");assert.equal(f.target.catalog("demo").incoming.length,1);
- assert.equal(store.list(f.b.db).tasks.length,0);assert.equal(JSON.stringify(reopened.catalog("demo")).includes("PRIVATE"),false);
+ assert.equal(store.list(f.b.db).tasks.length,0);assert.equal(JSON.stringify(reopened.catalog("demo")).includes("PRIVATE"),false);assert.ok(!readFleetHealth(f.a.db,{now:f.now()+1800001}).issues.some(i=>i.code==='DELIVERY_RETRY_PENDING'));
 });
 test("offline retry is bounded and queue crash reservation replays one intent",async()=>{
  let requests=0;const f=await pair({fetchImpl:async()=>{requests++;throw Error("offline");}}),input=proposal(f);f.source.enqueue(input);
@@ -67,7 +69,7 @@ test("offline retry is bounded and queue crash reservation replays one intent",a
 });
 test("coordinator revocation between handshake and offer prevents the mutating request",async()=>{
  let f,network=0;f=await pair({fetchImpl:async(...args)=>{network++;const r=await fetch(...args);if(String(args[0]).endsWith("/hello"))revokePrincipal(f.a.db,{principalId:f.a.principal.principal_id,expectedVersion:1});return r;}});
- f.source.enqueue(proposal(f));await f.source.tick();assert.equal(network,1);assert.equal(f.target.catalog("demo").incoming.length,0);assert.throws(()=>f.source.catalog("demo"));assert.equal(f.a.db.prepare("SELECT state FROM fleet_operator_actions").get().state,"blocked");
+ f.source.enqueue(proposal(f));await f.source.tick();assert.equal(network,1);assert.equal(f.target.catalog("demo").incoming.length,0);assert.throws(()=>f.source.catalog("demo"));assert.equal(f.a.db.prepare("SELECT state FROM fleet_operator_actions").get().state,"blocked");assert.ok(readFleetHealth(f.a.db).issues.some(i=>i.code==='DELIVERY_BLOCKED'));
 });
 test("wrong project, stale task, altered request and unknown URL fields roll back all writes",async()=>{
  const f=await pair(),t=card(f.a),input=proposal(f,t);
@@ -114,6 +116,8 @@ test("real board HTTP action endpoints enforce operator, origin and coordinator 
   for(let i=0;i<40&&!f.target.catalog("demo").incoming.length;i++)await sleep(100);
   assert.equal(f.target.catalog("demo").incoming.length,1);
   const repeated=await request("/api/fleet/actions",{method:"POST",headers,body:JSON.stringify({...input,action_id:randomUUID()})});assert.equal((await repeated.json()).action_id,input.action_id);assert.equal(rows(f.a.db),1);
+  const changed=await request("/api/fleet/actions",{method:"POST",headers,body:JSON.stringify({...input,arguments:{...input.arguments,target_node_id:randomUUID()}})});
+  assert.equal(changed.status,409);const conflict=(await changed.json()).conflict;assert.equal(conflict.kind,'request_identity');assert.equal(conflict.automatic_retry,false);assert.equal(rows(f.a.db),1);
   const list=await request("/api/fleet/actions?project=demo",{headers});assert.equal(list.status,200);assert.match(list.headers.get("cache-control"),/no-store/);assert.equal((await list.json()).actions[0].state,"acknowledged");
   assert.equal((await request("/api/fleet/actions?project=other",{headers})).status,403);
   const invalid=await request("/api/fleet/actions",{method:"POST",headers,body:'{"PRIVATE-PARSE-MARKER"'});assert.equal(invalid.status,400);assert.equal((await invalid.text()).includes("PRIVATE-PARSE-MARKER"),false);

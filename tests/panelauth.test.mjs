@@ -1,10 +1,12 @@
+import {DatabaseSync} from 'node:sqlite';
+import {randomUUID} from 'node:crypto';
 import test,{before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {join,resolve,relative} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {createServer} from 'node:net';
 import {setTimeout as delay} from 'node:timers/promises';
 const ROOT=resolve(process.env.BOARD_AUTH_TEST_ROOT||fileURLToPath(new URL('../',import.meta.url)));
@@ -59,4 +61,28 @@ test('H3 authenticated task reads expose current blockers without changing task 
   assert.ok(read.progress_blockers.some(r=>r.code==='HUMAN_GATE'&&r.action==='claim'));
  }
  assert.equal((await fetch(base+'/api/tasks')).status,401);
+});
+
+test('H3 fleet health is operator-only, sanitized and reads an unconfigured board without enabling services',async()=>{
+ const path='/api/fleet/health';
+ assert.equal((await fetch(base+path)).status,401);
+ const r=await fetch(base+path,{headers:headers(operator)});assert.equal(r.status,200);
+ const value=await r.json();assert.equal(value.format,'ai-fleet-health/v1');assert.equal(value.state_changes,false);assert.deepEqual(value.issues,[]);
+ for(const token of [worker,review])assert.equal((await fetch(base+path,{headers:headers(token)})).status,403);
+ assert.equal((await fetch(base+path,{headers:{...headers(operator),Origin:'https://foreign.example'}})).status,403);
+ for(const secret of [DIR,operator,worker,review])assert.ok(!JSON.stringify(value).includes(secret));
+ assert.match(r.headers.get('cache-control'),/no-store/);
+});
+
+test('H3 watcher reads actual authenticated health and cannot treat unavailable health as recovered',()=>{
+ const db=new DatabaseSync(join(DIR,'board.db'));db.exec('PRAGMA busy_timeout=5000');
+ try{
+  db.exec('CREATE TABLE fleet_operator_actions(action_id TEXT PRIMARY KEY,node_id TEXT,node_epoch TEXT,state TEXT,created_at TEXT)');
+  const n=db.prepare('SELECT node_id,sync_epoch FROM board_node').get();
+  db.prepare('INSERT INTO fleet_operator_actions VALUES(?,?,?,?,?)').run(randomUUID(),n.node_id,n.sync_epoch,'blocked',new Date().toISOString());
+  const run=()=>spawnSync(process.env.PYTHON||'python',[join(ROOT,'watchers/board_health_watch.py'),'--once'],{cwd:ROOT,encoding:'utf8',windowsHide:true,timeout:20000,env:{...process.env,BOARD_URL:base,BOARD_DATA_DIR:DIR,BOARD_GATED_SUBTREE:'',PYTHONUTF8:'1',PYTHONDONTWRITEBYTECODE:'1'}});
+  const observed=run();assert.equal(observed.status,1,observed.stderr);assert.match(observed.stdout,/投递受阻/);for(const token of [operator,worker,review])assert.ok(!observed.stdout.includes(token));
+  db.exec('DROP TABLE fleet_operator_actions; CREATE TABLE fleet_operator_actions(private TEXT)');
+  const unavailable=run();assert.equal(unavailable.status,1,unavailable.stderr);assert.match(unavailable.stdout,/联邦体检不可读/);assert.doesNotMatch(unavailable.stdout,/体检恢复正常/);
+ }finally{db.close();}
 });

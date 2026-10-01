@@ -13,8 +13,9 @@ jobs:
       matrix:
         os: [windows-latest]
     runs-on: ${{ matrix.os }}
-    # Previous Windows run took 19.1 min before adding real Git integration cases.
-    timeout-minutes: 35
+    # CI #138 reached the former 35-minute budget before the remaining suites.
+    # Keep every check and each harness timeout; allow the complete Windows job to finish.
+    timeout-minutes: 60
     env:
       # windows-latest pipes default to cp1252; the harnesses print CJK. Without
       # this, codex-selftest dies of UnicodeEncodeError before its first assertion.
@@ -112,6 +113,8 @@ jobs:
         run: bash hrun.sh node tests/dispatchtest.mjs
       - name: inspectiontest (read-only pending inventories, scoped cursors and sanitized errors)
         run: bash hrun.sh node tests/inspectiontest.mjs
+      - name: fleet health and conflict diagnostics (read-only observations and retry guidance)
+        run: bash hrun.sh node --test tests/fleethealthtest.mjs tests/conflicttest.mjs
       - name: outputtest (provider terminals, UTF-8, identity and bounds)
         run: bash hrun.sh node tests/outputtest.mjs
       - name: supervisortest (pinned processes, timeout, cancellation and descendants)
@@ -142,6 +145,8 @@ jobs:
         run: bash hrun.sh python loops/worker_loop.py --prompt-selftest
       - name: board_health_watch selftest (alarm criteria + throttle)
         run: bash hrun.sh python watchers/board_health_watch.py --selftest
+      - name: healthwatchtest (fleet alarm backoff, recovery and unavailable observations)
+        run: bash hrun.sh python tests/healthwatchtest.py
       - name: verify_page selftest (assertion builder + host allowlist, no browser needed)
         run: bash hrun.sh node examples/verify_page.mjs --selftest
 

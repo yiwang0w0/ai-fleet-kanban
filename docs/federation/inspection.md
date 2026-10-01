@@ -44,4 +44,4 @@ CLI 错误为固定 code 和简短说明，不透出本机文件路径或输入�
 
 [验证证据](inspection-evidence.json)记录 Windows 下的先红后绿、真实协议状态转换、CLI 只读摘要、分页和损坏拒绝。历史容量与旧代次边界使用合成存储夹具；不据此声称实体双机验收。去重 18 项有通过记录，非一次 29 项测试。
 
-本批接通 H3b/H3c；H3a 的版本/运行 CAS/远端冲突统一解释，以及 H3d 健康哨报警仍待完成。本机任务卡的原因展示见 [阻塞诊断](progress-diagnostics.md)。
+本批接通 H3b/H3c；后续 H3a 的统一解释见 [冲突说明](conflicts.md)，H3d 见 [健康哨](health-watch.md)。本机任务卡的原因展示见 [阻塞诊断](progress-diagnostics.md)。

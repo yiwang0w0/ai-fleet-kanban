@@ -1,3 +1,4 @@
+import {readFleetHealth} from '../core/fleet-health.mjs';
 import {dispatchStale} from '../core/inspection.mjs';
 import {createBackup,restoreBackup} from '../core/backup.mjs';
 import {prepareRecovery,activateRecovery,retireNode} from '../core/recovery.mjs';
@@ -641,8 +642,9 @@ test('H3 stale dispatch inventory follows actual preparation, interruption and e
  assert.equal(dispatchStale(f.db).items[0].record_id,w.receipt.dispatch_id);assert.equal(dispatchStale(f.db).items[0].state,'prepared');
  recorded(f,w);assert.equal(dispatchStale(f.db).total,0); // a launched run alone is not evidence of a stall
  f.db.prepare('UPDATE tasks SET lease_until=1 WHERE id=?').run(w.receipt.task_id);store.reapExpired(f.db);
+ assert.ok(readFleetHealth(f.db).issues.some(i=>i.code==='BROKER_INTERRUPTED'));
  const before=resolutionState(f),out=dispatchStale(f.db);assert.equal(out.items[0].state,'interrupted');assert.equal(out.items[0].next_action,'reconcile_or_attest_stopped');assert.equal(resolutionState(f),before);
  const r=spawnSync(process.execPath,[join(ROOT,'cli/dispatch.mjs'),'stale','--db',f.dbPath],{encoding:'utf8',windowsHide:true,timeout:15000});assert.equal(r.status,2,r.stderr);assert.equal(JSON.parse(r.stdout).total,1);
- recordUncertainResolution(f.db,uncertain(f,w));assert.equal(dispatchStale(f.db).total,0);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ recordUncertainResolution(f.db,uncertain(f,w));assert.equal(dispatchStale(f.db).total,0);assert.ok(!readFleetHealth(f.db).issues.some(i=>i.code==='BROKER_INTERRUPTED'));assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
  const prepared=prepare(f,assign(f,card(f)));assert.equal(dispatchStale(f.db).total,1);abandonPrepared(f.db,{dispatchId:prepared.receipt.dispatch_id,reason:'fixture reviewed abandonment'});assert.equal(dispatchStale(f.db).total,0);
 });

@@ -1,3 +1,4 @@
+import conflictGuide from './conflicts.js';
 import {readFileSync,statSync,realpathSync} from "node:fs";
 import {isAbsolute} from "node:path";
 import {PeerError,uuid,names} from "./federation/protocol.mjs";
@@ -67,7 +68,7 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now,sourceG
   const p=c.peers.find(p=>p.node_id===nodeId&&p.node_epoch===epoch&&p.projects.includes(project));
   if(!p)fail("PEER_NOT_CONFIGURED","未配置该项目的固定对端连接");return p;
  }
- function publicRow(r){return {action_id:r.action_id,project_id:r.project_id,command:r.command,state:r.state,attempts:r.attempts,next_attempt_at:r.next_attempt_at,last_error_code:r.last_error_code,created_at:r.created_at,updated_at:r.updated_at,result:JSON.parse(r.summary_json)};}
+ function publicRow(r){return {action_id:r.action_id,project_id:r.project_id,command:r.command,state:r.state,attempts:r.attempts,next_attempt_at:r.next_attempt_at,last_error_code:r.last_error_code,conflict:conflictGuide.describeConflict(r.last_error_code,{scope:"federation"}),created_at:r.created_at,updated_at:r.updated_at,result:JSON.parse(r.summary_json)};}
  function transport(kind,id,project,context){
   if(["registration","topology","binding","binding_message"].includes(kind)){
    const result=fleetBindingTransport(db,{kind,id,project,auth:context.auth});const b=result.binding;

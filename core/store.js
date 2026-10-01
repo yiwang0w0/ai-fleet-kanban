@@ -529,7 +529,7 @@ function startRun(db, taskId, worker, { runtime = null, agentInstanceId = null, 
 function requireRun(t, runId) {
   if (typeof runId !== "string" || !UUID_RE.test(runId))
     throw err(ERR.BAD_INPUT, "必须携带领取回执中的 run_id，禁止自动查找并替换为当前执行 ID");
-  if (t.run_id !== runId) throw err(ERR.CONFLICT, "执行实例已失效，本次心跳、重试或结果不属于当前 run");
+  if (t.run_id !== runId) throw Object.assign(err(ERR.CONFLICT, "执行实例已失效，本次心跳、重试或结果不属于当前 run"), {conflict_kind:"run_identity"});
   return runId;
 }
 
