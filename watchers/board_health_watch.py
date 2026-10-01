@@ -150,6 +150,10 @@ FLEET_MESSAGES = {
     "SCHEDULER_LOCK_ORPHAN": ("problem", "锁记录的进程当前未观察到；先核对停止事实，不自动删锁"),
     "SCHEDULER_LOCK_MISMATCH": ("problem", "调度锁与实例记录不一致；核对原实例和恢复过程"),
     "SCHEDULER_OWNER_UNKNOWN": ("notice", "调度进程可见性不明；检查本机权限，不能认定停止"),
+    "CALL_BUDGET_EXHAUSTED": ("notice", "调用许可已消耗或保留完毕；需核对明确预算，不自动加额度"),
+    "CALL_BUDGET_OVERRUN": ("problem", "已消耗与保留调用超过登记上限；核对预算账本"),
+    "STORAGE_LOW": ("problem", "数据库或工作区所在卷可用空间不足；核对容量，不自动删除证据"),
+    "STORAGE_UNAVAILABLE": ("problem", "数据库或工作区容量无法核对；检查目录、权限和文件系统"),
     "NODE_ATTENTION": ("problem", "节点常驻留下 attention；核对组件及停止证据"),
     "NODE_HEARTBEAT_STALE": ("problem", "节点常驻心跳陈旧；核对原实例，不能认定执行器停止"),
     "NODE_LOCK_MISSING": ("problem", "未结节点实例缺少锁；核对常驻进程"),
@@ -167,13 +171,13 @@ FLEET_MESSAGES = {
 
 def fleet_health_signals(value):
     """Validate one complete observation; a broken/unknown response can never clear alarms."""
-    if (not isinstance(value, dict) or value.get("format") != "ai-fleet-health/v2"
+    if (not isinstance(value, dict) or value.get("format") != "ai-fleet-health/v3"
             or value.get("state_changes") is not False
             or value.get("remote_state") != "not_queried"
             or value.get("executor_stop_confirmed") is not False):
         raise ValueError("invalid fleet health observation")
     modules = value.get("modules")
-    if (not isinstance(modules, dict) or set(modules) != {"broker", "delivery", "scheduler", "node_runtime"}
+    if (not isinstance(modules, dict) or set(modules) != {"broker", "delivery", "scheduler", "node_runtime", "call_budget", "storage"}
             or any(v not in {"available", "not_configured"} for v in modules.values())):
         raise ValueError("incomplete fleet health coverage")
     issues = value.get("issues")

@@ -30,9 +30,9 @@ watchers/board_health_watch.py 通过已认证的 GET /api/fleet/health 增加�
 [验证证据](health-conflicts-evidence.json)包含真实临时 HTTP 看板到 Python 哨的链路、丢 ACK/授权撤销、已确认退出的调度子进程与保留锁，以及只读字节校验。未据本机夹具声称实体双机或 72 小时观察验收。
 
 
-## 节点常驻覆盖（健康响应 v2）
+## 节点常驻覆盖（当前健康响应 v3）
 
-健康响应升级为 ai-fleet-health/v2，modules 固定包含 broker、delivery、scheduler、node_runtime。服务和 Python 健康哨应一同升级；旧格式或缺失 node_runtime 覆盖被当作“体检不可读”，不能清除节点告警。不改变数据库 schema，也不启动组件。
+第九十批初版为 v2；当前健康响应为 ai-fleet-health/v3，modules 固定包含 broker、delivery、scheduler、node_runtime、call_budget、storage。服务和 Python 健康哨应一同升级；旧格式或缺失任一必需模块覆盖被当作“体检不可读”，不能清除节点告警。不改变数据库 schema，也不启动组件。
 
 节点常驻使用自己的实例表、控制表和 `.fleet-node-runtime.lock`。attention、超过 60 秒的心跳、缺失/不可读/不匹配/进程不可见的锁，按节点实例单独报告。新的锁不匹配同样留 60 秒启动窗口。正常结束的实例不因旧组件状态反复报警；有 attention 的结束实例仍需核对。PID 存在不证明身份，PID 不可见不证明所有执行器停止。
 
@@ -40,4 +40,17 @@ watchers/board_health_watch.py 通过已认证的 GET /api/fleet/health 增加�
 
 新增信号使用既有去重和解除机制。同一代码按实例计数，多个同步项目会合并到该实例；输出不含项目名、原始 error_code、凭据或 summary 正文。查看具体来源时使用 node-runtime status 的本机管理入口。锁文件和数据库不在同一事务，观察存在时间差。
 
-[节点巡检证据](node-health-evidence.json) 覆盖新增反例、真实临时常驻进程、认证 HTTP 到 Python 健康哨，以及时钟偏移、只读和解除去重。磁盘/预算/供应商认证有效期的完整监控与实机部署演练仍须补齐；本次不宣称 T11.02 或任何正式阶段通过。
+[节点巡检证据](node-health-evidence.json) 覆盖新增反例、真实临时常驻进程、认证 HTTP 到 Python 健康哨，以及时钟偏移、只读和解除去重。磁盘与调用许可检查见下节；供应商认证有效期及实际部署演练仍须补齐，不能据此签收 T11.02 或任何正式阶段。
+
+
+## 调用许可与存储容量
+
+call_budget 读取本机当前代次已启用的调用许可。已消耗 used 加尚处于 prepared 的保留量达到 limit_total，产生 CALL_BUDGET_EXHAUSTED 提示；超过上限产生 CALL_BUDGET_OVERRUN 问题。禁用许可不会产生“额度耗尽”提示。用例中的超限账本为合成故障，不是实际模型消费；观察不改变 used、reserved、策略或任务，也不会退款、加额度或重试。计数是本机调用许可，不代表供应商余额、金额或真实调用成功数。
+
+storage 检查数据库及全部已登记工作区池，包括旧代次保留池。产物 chunk 存于数据库，因此数据库卷的物理可用空间纳入检查；应用内 256 MiB 产物上限仍使用原容量入口，不能混淆。文件系统按当前用户可用块数乘块大小计算可用字节，使用 BigInt 防止截断。[Node.js 文件系统说明](https://nodejs.org/docs/latest-v24.x/api/fs.html#statfsbavail)。
+
+默认低空间告警阈值为 512 MiB，属于巡检提示阈值，不是 G00 已冻结的存储或性能验收指标。低于阈值报 STORAGE_LOW；路径不可读、登记目录身份变化、无法查询或结果异常报 STORAGE_UNAVAILABLE，不返回空的健康结果。相同卷复用一次观察；输出目录目标数、成功卷观察数、不可读目标数和最低可用字节，不输出私有路径、项目或供应商信息。多个目录可在同一卷，目标数不是物理磁盘数。
+
+本机盘符路径参与查询，UNC 等不支持路径明确报不可核对，不自动探测网络共享。不扫描目录内容，不删除文件，不触发归档，也不检查尚未登记的外部交付/备份目录。内存数据库且没有工作区池时 storage 为 not_configured。可用空间是一次观察，不能保证之后写入成功；数据库与文件系统也不是原子快照。
+
+[容量巡检证据](capacity-health-evidence.json) 保留先红后绿、真实 Windows 卷、只读哈希、低空间/不可读夹具、额度保留与释放、认证 HTTP 到 Python 的验证。没有故意写满真实磁盘、消耗真实模型额度或部署实机健康哨。供应商认证有效期、登记节点实际可达性与完整值守演练仍按计划取证。

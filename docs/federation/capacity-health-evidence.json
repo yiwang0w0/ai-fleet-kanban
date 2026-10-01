@@ -1,0 +1,70 @@
+{
+  "format": "ai-fleet-capacity-health-evidence/v1",
+  "batch": 91,
+  "base_commit": "57f8707bd432dda71bd5bffed7d8c8948a1f5785",
+  "checked_at": "2026-10-01T16:15:57.162557+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "red": {
+    "path": ".data/review91-capacity-red.log",
+    "sha256": "32e324b501c307ce562f30de2eaec9d00cdd679e5f2fd594814943b7b7aa826e",
+    "failed": 3
+  },
+  "runs": [
+    {
+      "path": ".data/review91-capacity-green.log",
+      "sha256": "01defaf5f75a85fc43cb56b6c6b893d1688693753c1a3815aa3385522599c9ba",
+      "passed": 3,
+      "failed": 0
+    },
+    {
+      "path": ".data/review91-capacity-http.log",
+      "sha256": "acd1571f9bb8eb89068c5e7c7939d937ff16caccb45d7bd4a20470dcf336f8dd",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "path": ".data/review91-capacity-watcher.log",
+      "sha256": "c953cd4ee4307e92dfae6a00d6beb7be02b817a2381560df6a499dd7ee7d64dc",
+      "passed": 3,
+      "failed": 0
+    }
+  ],
+  "total_distinct_passed": 10,
+  "skipped": 0,
+  "sources": [
+    {
+      "path": "core/fleet-health.mjs",
+      "sha256": "a7822625d3932cf4c24cfa875aa1f80fd22546c6af36fbc4b2644f668564b90a"
+    },
+    {
+      "path": "watchers/board_health_watch.py",
+      "sha256": "da524aa38c0f4b95dd810285c8cf010f36c14e6bdcb8d6de1d1c51a25347d29c"
+    },
+    {
+      "path": "tests/fleethealthtest.mjs",
+      "sha256": "8462bcccb2afd5a8555e9bcd919a018ed81b203859dd1708d060629e1d6fd59a"
+    },
+    {
+      "path": "tests/healthwatchtest.py",
+      "sha256": "9331ef7d9817faf2aa6f2c0c06c0929901733a26f7c5e019d2c994fca7c8ef6e"
+    },
+    {
+      "path": "tests/panelauth.test.mjs",
+      "sha256": "91ac45349df43e55ce25074107387f52f016181ff1b2478e8d83a7f963b77b8e"
+    }
+  ],
+  "scope": {
+    "real_windows_volume_query": true,
+    "real_disk_exhaustion": false,
+    "low_space_and_probe_failure": "synthetic_statfs_injection",
+    "quota_overrun": "synthetic_local_ledger",
+    "provider_balance_checked": false,
+    "database_mutated_by_health": false,
+    "filesystem_mutated_by_health": false,
+    "models_called": false,
+    "production_deployed": false,
+    "formal_accepted_tasks": 0,
+    "formal_accepted_stages": 0
+  }
+}
