@@ -67,7 +67,7 @@ test('H3 fleet health is operator-only, sanitized and reads an unconfigured boar
  const path='/api/fleet/health';
  assert.equal((await fetch(base+path)).status,401);
  const r=await fetch(base+path,{headers:headers(operator)});assert.equal(r.status,200);
- const value=await r.json();assert.equal(value.format,'ai-fleet-health/v1');assert.equal(value.state_changes,false);assert.deepEqual(value.issues,[]);
+ const value=await r.json();assert.equal(value.format,'ai-fleet-health/v2');assert.equal(value.state_changes,false);assert.deepEqual(value.issues,[]);
  for(const token of [worker,review])assert.equal((await fetch(base+path,{headers:headers(token)})).status,403);
  assert.equal((await fetch(base+path,{headers:{...headers(operator),Origin:'https://foreign.example'}})).status,403);
  for(const secret of [DIR,operator,worker,review])assert.ok(!JSON.stringify(value).includes(secret));

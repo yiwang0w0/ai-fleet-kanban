@@ -8,7 +8,7 @@ spec.loader.exec_module(watch)
 
 def snapshot(code=None, seed="a", count=1):
     issues = [] if code is None else [dict(code=code, level=watch.FLEET_MESSAGES[code][0], fingerprint=seed * 64, count=count, sample_ids=["12345678-1234-4123-8123-123456789abc"], next_action="ignored")]
-    return dict(format="ai-fleet-health/v1", modules=dict(broker="available", delivery="available", scheduler="available"), state_changes=False, executor_stop_confirmed=False, remote_state="not_queried", issues=issues)
+    return dict(format="ai-fleet-health/v2", modules=dict(broker="available", delivery="available", scheduler="available", node_runtime="available"), state_changes=False, executor_stop_confirmed=False, remote_state="not_queried", issues=issues)
 
 class FleetHealthWatchTests(unittest.TestCase):
     def test_every_code_uses_fixed_local_text_and_severity(self):
@@ -56,6 +56,22 @@ class FleetHealthWatchTests(unittest.TestCase):
             result = watch.probe_fleet_health(lambda _: value)
             self.assertTrue(result[0])
             self.assertEqual(result[2], ["FLEET_HEALTH_UNAVAILABLE"])
+
+    def test_old_or_missing_node_coverage_cannot_clear_runtime_alarm(self):
+        for missing in (True, False):
+            value = snapshot()
+            if missing:
+                value["modules"].pop("node_runtime")
+            else:
+                value["format"] = "ai-fleet-health/v1"
+            self.assertEqual(watch.probe_fleet_health(lambda _: value)[2], ["FLEET_HEALTH_UNAVAILABLE"])
+
+    def test_node_retry_recovers_once_without_repeating_unchanged_observations(self):
+        throttle = watch.AlarmThrottle()
+        issue = str(watch.fleet_health_signals(snapshot("NODE_SYNC_RETRY"))[3])
+        self.assertEqual([throttle.tick(issue)[0] for _ in range(3)], ["report", "report", "quiet"])
+        self.assertEqual(throttle.tick(None)[0], "clear")
+        self.assertEqual(throttle.tick(None)[0], "quiet")
 
     def test_fetch_failures_are_sanitized_and_keep_alarm(self):
         def fetch(_):

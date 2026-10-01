@@ -1,3 +1,4 @@
+import {readFleetHealth} from '../core/fleet-health.mjs';
 import {issueCredential,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,7 +32,7 @@ function task(f,subject){const id=store.add(f.db,{subject});shareTask(f.db,{id,p
 const command=(f,name,args=[])=>JSON.parse(execFileSync(process.execPath,[join(source,'cli','node-runtime.mjs'),name,'--db',f.dbPath,...args],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe'],timeout:10000}));
 
 test('node host owns authenticated loopback components and a separate lifecycle namespace',async()=>{
- const f=await fixture(),before=schedulerStatus(f.db);assert.equal(before.configured,false);const h=start(f),ready=await h.ready(),s=status(f).instances[0];assert.equal(s.instance_id,ready.instance_id);assert.equal(s.components.filter(c=>c.state==='listening').length,2);assert.equal(schedulerStatus(f.db).configured,false);
+ const f=await fixture(),before=schedulerStatus(f.db);assert.equal(before.configured,false);const h=start(f),ready=await h.ready(),s=status(f).instances[0];assert.equal(s.instance_id,ready.instance_id);assert.equal(s.components.filter(c=>c.state==='listening').length,2);assert.equal(schedulerStatus(f.db).configured,false);const health=readFleetHealth(f.db);assert.equal(health.modules.node_runtime,'available');assert.deepEqual(health.issues,[]);assert.equal(health.node_lock_observation.state,'recorded');
  assert.equal((await fetch('http://127.0.0.1:'+f.config.mcp.port+'/local/v1/tools/list',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
  assert.equal((await fetch('http://127.0.0.1:'+f.config.peer.port+'/peer/v1/hello',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
  assert.throws(()=>createLifecycleRegistry('constructor'),{code:'BAD_INPUT'});h.stop.abort();await h.done;const final=status(f).instances[0];assert.equal(final.state,'stopped');assert.ok(final.components.every(c=>c.state==='stopped'));assert.equal(existsSync(join(f.dir,'.board.db.fleet-node-runtime.lock')),false);assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);

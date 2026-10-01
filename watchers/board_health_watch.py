@@ -150,18 +150,30 @@ FLEET_MESSAGES = {
     "SCHEDULER_LOCK_ORPHAN": ("problem", "锁记录的进程当前未观察到；先核对停止事实，不自动删锁"),
     "SCHEDULER_LOCK_MISMATCH": ("problem", "调度锁与实例记录不一致；核对原实例和恢复过程"),
     "SCHEDULER_OWNER_UNKNOWN": ("notice", "调度进程可见性不明；检查本机权限，不能认定停止"),
+    "NODE_ATTENTION": ("problem", "节点常驻留下 attention；核对组件及停止证据"),
+    "NODE_HEARTBEAT_STALE": ("problem", "节点常驻心跳陈旧；核对原实例，不能认定执行器停止"),
+    "NODE_LOCK_MISSING": ("problem", "未结节点实例缺少锁；核对常驻进程"),
+    "NODE_LOCK_UNREADABLE": ("problem", "节点常驻锁不可读；保留文件并检查"),
+    "NODE_LOCK_ORPHAN": ("problem", "节点锁所记进程当前未观察到；先核对停止事实"),
+    "NODE_LOCK_MISMATCH": ("problem", "节点锁与实例不一致；核对原实例及恢复记录"),
+    "NODE_OWNER_UNKNOWN": ("notice", "节点进程可见性不明；检查本机权限"),
+    "NODE_SYNC_RETRY": ("notice", "节点同步正在错误/退避状态；核对同步记录、凭据和对端"),
+    "NODE_SYNC_PENDING": ("notice", "节点同步仍有待处理批次；核对积压及推进情况"),
+    "NODE_SYNC_OBSERVATION_STALE": ("problem", "常驻心跳仍更新，但同步观察已陈旧；核对该实例"),
+    "NODE_COMPONENT_STOPPED": ("problem", "运行中节点的同步组件已停止；核对组件状态"),
+    "NODE_COMPONENTS_MISSING": ("problem", "未结节点长期缺少组件记录；核对启动情况"),
 }
 
 
 def fleet_health_signals(value):
     """Validate one complete observation; a broken/unknown response can never clear alarms."""
-    if (not isinstance(value, dict) or value.get("format") != "ai-fleet-health/v1"
+    if (not isinstance(value, dict) or value.get("format") != "ai-fleet-health/v2"
             or value.get("state_changes") is not False
             or value.get("remote_state") != "not_queried"
             or value.get("executor_stop_confirmed") is not False):
         raise ValueError("invalid fleet health observation")
     modules = value.get("modules")
-    if (not isinstance(modules, dict) or set(modules) != {"broker", "delivery", "scheduler"}
+    if (not isinstance(modules, dict) or set(modules) != {"broker", "delivery", "scheduler", "node_runtime"}
             or any(v not in {"available", "not_configured"} for v in modules.values())):
         raise ValueError("incomplete fleet health coverage")
     issues = value.get("issues")
