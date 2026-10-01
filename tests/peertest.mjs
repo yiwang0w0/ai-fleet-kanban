@@ -368,6 +368,21 @@ test("peer credentials have a protected owner-only Windows ACL even below a broa
  assert.equal(authenticate(f.db,"Bearer "+a.token).peer_node_id,a.args.peerNodeId);
 });
 
+test("private credential helper failures expose only a safe reason and retain a bounded startup budget",()=>{
+ // Each mocked helper runs in its own Node process so no other test's process
+ // creation or real ACL checks can be affected by the injected failures.
+ for(const [kind,reason] of [["timeout","helper_timeout"],["spawn","helper_unavailable"],["exit","helper_failed"],["output","unverified_response"]]){
+  const code=`import cp from 'node:child_process'; import {syncBuiltinESMExports} from 'node:module';
+   const kind=${JSON.stringify(kind)};let options;
+   cp.spawnSync=(_file,_args,o)=>{options=o;return {status:kind==='output'?0:kind==='exit'?1:null,stdout:'private-fixture-marker',stderr:'private-fixture-marker',error:kind==='timeout'?{code:'ETIMEDOUT'}:kind==='spawn'?{code:'ENOENT'}:undefined};};syncBuiltinESMExports();
+   const {writePrivateJSON}=await import(${JSON.stringify(new URL('../core/private-json.mjs',import.meta.url).href)});
+   try{writePrivateJSON('C:/private-fixture-marker/credential.json',{token:'private-fixture-marker'});process.exitCode=2;}
+   catch(e){console.log(JSON.stringify({code:e.code,reason:e.reason,message:e.message,budget:options?.timeout}));}`;
+  const r=spawnSync(process.execPath,['--input-type=module','-e',code],{encoding:'utf8',windowsHide:true});assert.equal(r.status,0,r.stderr);const out=JSON.parse(r.stdout);
+  assert.equal(out.code,'PRIVATE_FILE_FAILED');assert.equal(out.reason,reason);assert.ok(out.budget>=15000&&out.budget<=30000,'cold Windows helper startup must have a bounded 15-30 second allowance');assert.ok(!r.stdout.includes('private-fixture-marker'));
+ }
+});
+
 test("failed Windows credential protection rolls back the grant without creating a usable token",()=>{
  const f=fixture(),file=next("unavailable-protection")+".json",previous=process.env.SystemRoot;
  try{process.env.SystemRoot=next("missing-windows");assert.throws(()=>issue(f,{credentialFile:file}),{code:"PRIVATE_FILE_FAILED"});}finally{process.env.SystemRoot=previous;}

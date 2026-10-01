@@ -9,6 +9,7 @@ const usage=[
  "node cli/cancellation.mjs progress --db <接收DB> --relation <UUID>",
  "node cli/cancellation.mjs get --db <DB> --relation <UUID>",
  "node cli/cancellation.mjs list --db <DB> --project <项目>",
+ "poll 只获取并保存已有回执；接收端必须显式 progress 才推进停止证明。旧节点未声明只读查询能力时 poll 拒绝发送状态请求。",
  "取消送达不是停止确认；未知进程或未确认下游保持待处理。以上命令不启动模型。"
 ].join("\n");
 const [command,...args]=process.argv.slice(2);let db;

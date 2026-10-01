@@ -54,7 +54,9 @@ request 原因为 operator_cancelled 或 deadline_exceeded；后者是显式业�
 
 MCP 的 get_cancellation、list_cancellations 对 coordinate / observe 开放，request_cancellation、progress_cancellation 仅 coordinate；逐次校验项目权限和写请求幂等。MCP 不提供任意 URL、凭据路径或模型启动。列表包含 identity_current；恢复换代前的历史可读但不能作为当前停止证明继续使用。
 
-peer 协商能力 delegation-cancellation-v1，并使用 POST /peer/v1/delegation/cancel 与 cancel-status，正文上限 16 KiB。状态查询在鉴权后推进接收端本地事务并返回接收或停止回执；下游网络发送仍是独立步骤。
+peer 协商能力 delegation-cancellation-v1，并使用 POST /peer/v1/delegation/cancel 与 cancel-status，正文上限 16 KiB。状态查询在鉴权后只返回已有接收或停止回执，不修改分派、任务、身份或取消证明。接收端须显式使用本地 progress / MCP progress_cancellation 推进，轮询不会代为推进；下游网络发送仍是独立步骤。
+
+新客户端 poll 要求对端声明 delegation-cancellation-status-readonly-v1；旧节点缺少该能力时返回 REQUIRED_FEATURE_UNSUPPORTED，且不发送 cancel-status 请求，避免旧实现把查询当作写操作。升级接收端后可安全轮询。send 的接收确认和本地 progress 仍沿用原合同；poll 会在来源端保存已取得的回执，不声称来源数据库也只读。
 
 ## 尚需完成
 

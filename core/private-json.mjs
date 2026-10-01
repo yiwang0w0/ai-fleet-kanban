@@ -13,10 +13,13 @@ export function writePrivateJSON(file,value){
  const systemRoot=process.env.SystemRoot;
  if(!systemRoot||!isAbsolute(systemRoot))throw new PeerError("PRIVATE_FILE_FAILED","Windows 凭据保护接口不可用",409);
  const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase())));
+ // Allow a bounded margin for Windows cold startup on hosted runners. Stay closed
+ // and fail closed without retrying an operation that may have created a file.
  const result=spawnSync(join(systemRoot,"System32","WindowsPowerShell","v1.0","powershell.exe"),["-NoLogo","-NoProfile","-NonInteractive","-EncodedCommand",encoded],{
-  input:Buffer.from(file,"utf8").toString("base64")+"|"+bytes.toString("base64"),env,windowsHide:true,timeout:10000,maxBuffer:16384,encoding:"utf8",stdio:["pipe","pipe","pipe"]});
+  input:Buffer.from(file,"utf8").toString("base64")+"|"+bytes.toString("base64"),env,windowsHide:true,timeout:30000,maxBuffer:16384,encoding:"utf8",stdio:["pipe","pipe","pipe"]});
  if(result.status===0&&result.stdout.trim()==="PRIVATE_FILE_OK")return;
  if(result.status===2&&result.stdout.trim()==="PRIVATE_FILE_EXISTS")throw Object.assign(Error("EEXIST: credential file already exists"),{code:"EEXIST"});
  // Never forward PowerShell exception output, credential bytes or destination paths.
- throw new PeerError("PRIVATE_FILE_FAILED","无法创建并核验受保护的 Windows 凭据文件；未授权本次凭据",409);
+ const reason=result.error?.code==="ETIMEDOUT"?"helper_timeout":result.error?"helper_unavailable":result.status!==0?"helper_failed":"unverified_response";
+ throw Object.assign(new PeerError("PRIVATE_FILE_FAILED","无法创建并核验受保护的 Windows 凭据文件；未授权本次凭据",409),{reason});
 }

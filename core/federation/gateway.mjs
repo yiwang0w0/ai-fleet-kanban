@@ -3,7 +3,6 @@ import {migrateCompletion,receiveCompletion} from "./completion.mjs";
 import {migrateArtifacts,receiveArtifactOffer,receiveArtifactChunk,sealArtifact,peerArtifactStatus,MAX_ARTIFACT_HEADER} from "../artifacts/transfers.mjs";
 import {migrateResults,receiveResult,peerResultStatus,MAX_RESULT_BYTES} from "./results.mjs";
 import {receiveCancellation,peerCancellationState} from "./cancellation.mjs";
-import {progressCancellation} from "./cancellation-service.mjs";
 import {migrateBindings,receiveBindingMessage} from "./bindings.mjs";
 import http from "node:http";
 import {migrateRelations,publishTopology,approveRelation,withdrawRelation,completeRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
@@ -115,7 +114,7 @@ function createPeerServer(db) {
         if(!receiving)keys(body,["relation_id","project_id","cancel_id"],"cancellation status");
         const result=transaction(db,()=>{const peer=authenticate(db,req.headers.authorization,"delegation:control");
           if(receiving)return receiveCancellation(db,peer,body);
-          peerCancellationState(db,peer,body);progressCancellation(db,body.relation_id);return peerCancellationState(db,peer,body);
+          return peerCancellationState(db,peer,body);
         });return send(res,200,result);
       }
       if(req.url==="/peer/v1/delegation/binding"&&req.method==="POST"){

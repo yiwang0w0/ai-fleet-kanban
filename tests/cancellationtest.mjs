@@ -123,10 +123,48 @@ test("real HTTP loss of receive and stop responses replays the same cancel witho
  const first=await deliverCancellation(f.a.db,{relationId:f.d.relation_id,url,credentialFile:f.ab.file,fetchImpl:async(u,o)=>{const r=await fetch(u,o);if(u.endsWith("/cancel")&&lost){lost=false;await r.arrayBuffer();throw Error("lost receive ACK");}return r;}});
  assert.equal(first.delivery_state,"retry_pending");assert.equal(first.state,"pending");assert.equal(cancellationState(f.b.db,f.d.relation_id).state,"received");
  assert.equal((await deliverCancellation(f.a.db,{relationId:f.d.relation_id,url,credentialFile:f.ab.file})).state,"received");
+ assert.equal(progressCancellation(f.b.db,f.d.relation_id).receipt.stopped,true);
  lost=true;const unknown=await deliverCancellation(f.a.db,{relationId:f.d.relation_id,mode:"poll",url,credentialFile:f.ab.file,fetchImpl:async(u,o)=>{const r=await fetch(u,o);if(u.endsWith("cancel-status")&&lost){lost=false;await r.arrayBuffer();throw Error("lost stop ACK");}return r;}});
  assert.equal(unknown.state,"received");assert.equal(unknown.delivery_state,"retry_pending");assert.equal(cancellationState(f.b.db,f.d.relation_id).stopped,true);
  const done=await deliverCancellation(f.a.db,{relationId:f.d.relation_id,mode:"poll",url,credentialFile:f.ab.file});assert.equal(done.stopped,true);assert.equal(done.cancel_id,c.cancel_id);assert.equal(f.b.db.prepare("SELECT count(*) n FROM cancellation_proofs").get().n,1);
 });
+// The wire status operation must never advance a cancellation, even if all
+// process evidence is already sufficient. Only explicit progress may write it.
+test("cancel-status HTTP reads leave prepared dispatches and all durable state unchanged",async()=>{
+ const f=fullyBound(),{w,q}=worker(f),c=received(f),url=await network(f.b);
+ const tables=f.b.db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().map(r=>r.name);
+ const snapshot=()=>digest(tables.map(n=>[n,f.b.db.prepare('SELECT * FROM "'+n.replaceAll('"','""')+'"').all()]));
+ const query=async(body={},auth=f.ab.auth)=>fetch(url+"/peer/v1/delegation/cancel-status",{method:"POST",headers:{Authorization:auth,"Content-Type":"application/json"},body:JSON.stringify({relation_id:f.d.relation_id,project_id:"demo",cancel_id:c.cancel_id,...body})});
+ const before=snapshot();
+ for(const [body,auth,status] of [[{},"Bearer invalid",401],[{project_id:"private"},f.ab.auth,404],[{cancel_id:randomUUID()},f.ab.auth,404]]){const r=await query(body,auth);assert.equal(r.status,status);await r.arrayBuffer();assert.equal(snapshot(),before);}
+ for(let i=0;i<2;i++){const r=await query();assert.equal(r.status,200);assert.equal((await r.json()).kind,"cancel_received");assert.equal(snapshot(),before);}
+ assert.equal(dispatchStatus(f.b.db,w.dispatch_id).phase,"prepared");assert.equal(quotaStatus(f.b.db,q.quota_id).used,0);
+ assert.throws(()=>authorizeLaunch(f.b.db,{dispatchId:w.dispatch_id,sourceGate}),{code:"CANCELLATION_PENDING"});
+ const progress=cli("progress","--db",f.b.path,"--relation",f.d.relation_id);assert.equal(progress.status,0,progress.stderr);assert.equal(JSON.parse(progress.stdout).receipt.stopped,true);
+ assert.equal(dispatchStatus(f.b.db,w.dispatch_id).phase,"abandoned");const stopped=snapshot();
+ for(let i=0;i<2;i++){const r=await query();assert.equal(r.status,200);assert.equal((await r.json()).kind,"cancel_stopped");assert.equal(snapshot(),stopped);}
+ const saved=await deliverCancellation(f.a.db,{relationId:f.d.relation_id,mode:"poll",url,credentialFile:f.ab.file});assert.equal(saved.stopped,true);assert.equal(snapshot(),stopped);assert.equal(quotaStatus(f.b.db,q.quota_id).used,0);
+});
+
+test("poll refuses a peer without the read-only status capability before issuing a status request",async()=>{
+ const f=fullyBound(),{w}=worker(f);received(f);const url=await network(f.b),before=counts(f.b.db),sourceBefore=counts(f.a.db);
+ for(const missing of [true,false]){
+  const paths=[],required=[];
+  const result=await deliverCancellation(f.a.db,{relationId:f.d.relation_id,mode:"poll",url,credentialFile:f.ab.file,fetchImpl:async(u,o)=>{
+   paths.push(new URL(u).pathname);
+   if(u.endsWith("/hello")){
+    const body=JSON.parse(o.body);required.push(...body.required_capabilities);
+    if(!missing)return new Response(JSON.stringify({code:"REQUIRED_FEATURE_UNSUPPORTED"}),{status:426,headers:{"Content-Type":"application/json"}});
+    const r=await fetch(u,{...o,body:JSON.stringify({...body,required_capabilities:["delegation-cancellation-v1"]})}),hello=await r.json();hello.capabilities=hello.capabilities.filter(x=>x!=="delegation-cancellation-status-readonly-v1");
+    return new Response(JSON.stringify(hello),{status:r.status,headers:{"Content-Type":"application/json"}});
+   }
+   return fetch(u,o);
+  }});
+  assert.equal(result.delivery_state,"blocked");assert.equal(result.error_code,"REQUIRED_FEATURE_UNSUPPORTED");assert.deepEqual(paths,["/peer/v1/hello"]);assert.ok(required.includes("delegation-cancellation-status-readonly-v1"));
+  assert.equal(counts(f.a.db),sourceBefore);assert.equal(counts(f.b.db),before);assert.equal(dispatchStatus(f.b.db,w.dispatch_id).phase,"prepared");
+ }
+});
+
 test("forged or changed stop receipts cannot settle a source cancellation",()=>{
  const f=fullyBound();received(f);const r=progressCancellation(f.b.db,f.d.relation_id).receipt,before=counts(f.a.db);
  for(const patch of [{request_digest:"0".repeat(64)},{target_epoch:randomUUID()},{stopped:false},{member_count:0},{fixture_runs:1}])assert.throws(()=>recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:{...r,...patch}}),{code:"RECEIPT_MISMATCH"});
@@ -240,6 +278,8 @@ test("explicit-database CLI performs request, HTTP send/poll, inspection and unr
  const sent=await cliAsync("send",...transport);assert.equal(sent.status,0,sent.stderr);assert.equal(JSON.parse(sent.stdout).stopped,false);
  const pending=cli("progress","--db",f.b.path,"--relation",f.d.relation_id);assert.equal(pending.status,2,pending.stderr);assert.equal(JSON.parse(pending.stdout).receipt.stopped,false);
  finishDispatch(f.b.db,{dispatchId:w.dispatch_id,result:{status:"cancelled",evidence:"terminal synthetic fixture",usage:null}});
+ const unadvanced=await cliAsync("poll",...transport);assert.equal(unadvanced.status,0,unadvanced.stderr);assert.equal(JSON.parse(unadvanced.stdout).stopped,false);
+ const progressed=cli("progress","--db",f.b.path,"--relation",f.d.relation_id);assert.equal(progressed.status,0,progressed.stderr);assert.equal(JSON.parse(progressed.stdout).receipt.stopped,true);
  const done=await cliAsync("poll",...transport);assert.equal(done.status,0,done.stderr);assert.equal(JSON.parse(done.stdout).stopped,true);
 });
 test("independent processes serialize cancellation receipt against consuming a single launch permit",async()=>{
@@ -271,7 +311,7 @@ test("restored target retains fences and exposes old cancellation history withou
  assert.equal(listCancellations(db,{projectId:"demo"}).cancellations[0].identity_current,0);
 });
 test("lost source persistence after a real stopped HTTP receipt is retryable without rewriting target proof",async()=>{
- const f=fullyBound();received(f);const url=await network(f.b),before=counts(f.a.db);
+ const f=fullyBound();received(f);progressCancellation(f.b.db,f.d.relation_id);const url=await network(f.b),before=counts(f.a.db);
  f.a.db.exec("CREATE TRIGGER injected BEFORE INSERT ON cancellation_events BEGIN SELECT RAISE(ABORT,'stop receipt persistence fault'); END");
  const failed=await deliverCancellation(f.a.db,{relationId:f.d.relation_id,mode:"poll",url,credentialFile:f.ab.file});
  assert.equal(failed.delivery_state,"retry_pending");assert.equal(failed.stopped,false);assert.equal(counts(f.a.db),before);assert.equal(cancellationState(f.b.db,f.d.relation_id).stopped,true);
