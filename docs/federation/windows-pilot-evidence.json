@@ -1,0 +1,121 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-59-windows-pilot-preparation",
+  "date": "2026-10-01",
+  "development_base": "1f4be62479950ce864b60a9a08333efe1953804f",
+  "pilot_code": "fea7378bfbef422cfdbfee10688fa21e6b04e026",
+  "scope": "Freeze A pilot source to the same baseline already supplied to B, record current Windows/Tailscale observations and prepare an unapproved network activation delta.",
+  "source_pin": {
+    "dedicated_detached_checkout": true,
+    "tracked_source_clean": true,
+    "node_identity_unchanged": true,
+    "database_bytes_unchanged": true,
+    "prior_config_and_receipt_retained": true,
+    "current_config_and_receipt_updated": true,
+    "managed_worktree_tool": "Transport closed; local Git worktree fallback after listing existing worktrees"
+  },
+  "network_observation": {
+    "tailscale_version": "1.102.2",
+    "designated_windows_peers_online_at_observation": true,
+    "stable_tailscale_ids_distinct": true,
+    "magic_dns_enabled": true,
+    "A_existing_serve_forward_preserved": {
+      "port": 47824,
+      "target": "127.0.0.1:47824"
+    },
+    "A_proposed_ports_without_observed_TCP_listeners": [
+      47924,
+      47925,
+      47926
+    ],
+    "B_port_and_serve_state_verified": false,
+    "effective_tailnet_policy_verified": false,
+    "https_enabled_verified": false
+  },
+  "draft": {
+    "decision": "pending",
+    "state": "awaiting_B_identity_and_network_review",
+    "project_id": "kanata-pilot",
+    "local_ui_port": 47924,
+    "local_peer_port": 47925,
+    "private_https_port": 47925,
+    "initial_scopes": [
+      "peer:handshake",
+      "peer:health",
+      "sync:pull",
+      "sync:ack"
+    ],
+    "B_board_identity_missing": true,
+    "credential_handoff_not_finalized": true,
+    "rollback_scoped_to_pilot_entry": true
+  },
+  "executed": {
+    "peer_gateway": false,
+    "credential_grant": false,
+    "tailscale_serve": false,
+    "tailnet_policy_change": false,
+    "desktop_mcp": false,
+    "model_call": false
+  },
+  "validation": {
+    "source_git_checks": "Exact HEAD and clean tracked source verified",
+    "identity": "Pinned CLI node show against isolated A database",
+    "database": "Raw database SHA-256 compared before and after read-only identity check",
+    "configuration": "Original configuration matched prior receipt before repin; new config digest recorded in current receipt",
+    "network": "Installed tailscale version/help/status/serve status and narrowly filtered local TCP listening observation",
+    "code_tests": "No application code changed; no redundant protocol or model tests were run"
+  },
+  "private_evidence": [
+    {
+      "key": "A_receipt_sha256",
+      "sha256": "8e4527cfae314eca6e99db84321acba9ac14af9a71dd425c7334747ad2f2fb80"
+    },
+    {
+      "key": "A_repin_sha256",
+      "sha256": "3dad2f4ebae8b9d27ad8fb30571155ab0d813b6d11fdf6fcdfd2f1af29e19b0f"
+    },
+    {
+      "key": "network_snapshot_sha256",
+      "sha256": "d8390fc5331224210a6a9e523fdb8e7cb41f7d2a53d7586f630cc141b51a5c74"
+    },
+    {
+      "key": "serve_snapshot_sha256",
+      "sha256": "d8dd022f9d066685da840222e0c1e2cfea4968309103b61727d2e1e46c9ff711"
+    },
+    {
+      "key": "network_draft",
+      "sha256": "d420ee6738ba6cc9f3ee7d31e29b2f979b339db3bb1739428813977ba5822285"
+    }
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "prior_ci": {
+    "commit": "1f4be62479950ce864b60a9a08333efe1953804f",
+    "run_id": 36816322295,
+    "status": "in_progress",
+    "windows_job": 110222049170,
+    "gitleaks_job": 110222049416,
+    "gitleaks_conclusion": "success"
+  },
+  "limitations": [
+    "B initialization receipt still pending; online status does not prove its board identity or source checkout",
+    "No peer server, credential grant, Tailscale configuration, model invocation or desktop MCP deployment performed",
+    "Private plan is incomplete and not approved; live first activation and rollback have not been exercised"
+  ],
+  "sources": [
+    {
+      "title": "Tailscale Serve CLI reference",
+      "url": "https://tailscale.com/docs/reference/tailscale-cli/serve",
+      "checked_date": "2026-10-01"
+    },
+    {
+      "title": "Tailscale Serve",
+      "url": "https://tailscale.com/docs/features/tailscale-serve",
+      "checked_date": "2026-10-01"
+    }
+  ]
+}

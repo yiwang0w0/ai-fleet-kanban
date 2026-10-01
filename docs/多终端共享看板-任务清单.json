@@ -685,7 +685,11 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": null,
-      "acceptance_receipt": null
+      "acceptance_receipt": null,
+      "preparation_evidence": [
+        "docs/federation/windows-pilot.md",
+        "docs/federation/windows-pilot-evidence.json"
+      ]
     },
     {
       "id": "T01.03",
@@ -1041,7 +1045,11 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": null,
-      "acceptance_receipt": null
+      "acceptance_receipt": null,
+      "preparation_evidence": [
+        "docs/federation/windows-pilot.md",
+        "docs/federation/windows-pilot-evidence.json"
+      ]
     },
     {
       "id": "T03.02",
@@ -1213,7 +1221,11 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": null,
-      "acceptance_receipt": null
+      "acceptance_receipt": null,
+      "preparation_evidence": [
+        "docs/federation/windows-pilot.md",
+        "docs/federation/windows-pilot-evidence.json"
+      ]
     },
     {
       "id": "T04.01",
