@@ -1475,7 +1475,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
                    || a.id - b.id);
 
     const pick = cands.find((t) => {
-      if(!taskTree.claimable(db,t.id)||!topologyGuard.claimable(db,t.id)||!delegationGuard.claimable(db,t.id))return false;
+      if(progressHolds(db,t,"claim").length)return false;
       if (t.lock_key && heldLocks.has(t.lock_key)) return false;  // lock held -> skip to next candidate
       if (unfinishedKids.has(Number(t.id))) return false;         // parent gate: children unfinished
       if (unreleasedAncestor(db, t.parent_id) != null) return false;  // ⭐ ancestor-release invariant
@@ -1618,8 +1618,8 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
     //   endpoints 400).
     const no = (why, code = ERR.CONFLICT) => { db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_claim_by_id"); return { ok: false, why, code }; };
     if (!t) return no(`卡 #${id} 不存在`, ERR.NOT_FOUND);
-    if(!topologyGuard.claimable(db,t.id)||!delegationGuard.claimable(db,t.id))return no("本地任务结构或委派端点尚未满足执行条件",ERR.CONFLICT);
-    if(!taskTree.claimable(db,t.id))return no("任务祖先链损坏、已关闭或超过深度上限",ERR.BAD_INPUT);
+    const structuralHold=progressHolds(db,t,"claim").find(x=>x.code!=="HUMAN_GATE");
+    if(structuralHold)return no(structuralHold.message,structuralHold.code==="TASK_TREE_HELD"?ERR.BAD_INPUT:ERR.CONFLICT);
     if (t.kind === "goal") return no(`#${id} 是目标,目标不能被认领`);
     if (t.archived_at) return no(`#${id} 已归档`);
     if (t.status !== "not_started") return no(`#${id} 现在是 ${t.status}(持有者 ${t.worker || "-"}),不是未开始`);
@@ -2219,7 +2219,7 @@ function markAutoReviewedInner(db, { id, note = "", decisionPackage = null, expe
 function deferToRearm(db) {
   const NLJ = String.fromCharCode(10);
   const rows = db.prepare(
-    `SELECT p.id FROM tasks p
+    `SELECT p.id,p.human_gate FROM tasks p
       WHERE p.status='waiting' AND p.waiting_for='confirm' AND p.archived_at IS NULL
         AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id
                       AND c.archived_at IS NULL AND c.status<>'done')`).all();
@@ -2238,7 +2238,7 @@ function deferToRearm(db) {
           AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=tasks.id
                         AND c.archived_at IS NULL AND c.status<>'done')`
     ).run(NLJ + NLJ + "—— 子任务卡 #" + kids.join(" #") +
-          " 未完 → 自动转入等待重审(子卡齐了会自动送回重审,人不用在确认队列里等它)——",
+          (r.human_gate ? " 未完 → 等待子卡完成；人工闸仍生效，完成后需人工处理——" : " 未完 → 自动转入等待重审(子卡齐了会自动送回重审,人不用在确认队列里等它)——"),
           now(), Number(r.id));
     if (ch.changes) moved.push(Number(r.id));
   }
@@ -2324,7 +2324,7 @@ function completeGoals(db) {
   };
   for (const g of db.prepare(
       "SELECT id FROM tasks WHERE kind='goal' AND status<>'done' AND archived_at IS NULL").all()) {
-    if((topologyGuard.finishHeld(db,g.id)||delegationGuard.sourceHeld(db,g.id)))continue;
+    if(progressHolds(db,g,"complete_goal").length)continue;
     const ids = subtree(g.id);
     // Zero children = NO GROUNDS for completion (not "all complete"). `every` is
     // vacuously true on an empty array; without this line a childless goal silently
@@ -2355,7 +2355,7 @@ function completeGoals(db) {
       "SELECT id, result FROM tasks WHERE kind='goal' AND status='done' AND resolved_by='auto' AND archived_at IS NULL").all()) {
     // ⭐ This subtree also includes archived cards ⇒ "archive the unfinished child to
     //   keep the goal closed" stops working.
-    if((topologyGuard.finishHeld(db,g.id)||delegationGuard.sourceHeld(db,g.id)))continue;
+    if(progressHolds(db,g,"complete_goal").length)continue;
     const open = subtree(g.id).map((i) => rowOf.get(i)).filter((r) => r.status !== "done");
     if (!open.length) continue;
     // Goal reopen is also a "back into the flow" road ⇒ drop verdict (same invariant
@@ -2368,6 +2368,65 @@ function completeGoals(db) {
     changed.push(-Number(g.id));
   }
   return changed;
+}
+
+// Shared local gates for queue selection and diagnostics. No writes or remote probes.
+function progressHolds(db,t,action) {
+  const out=[],push=(code,message,next_action)=>out.push({code,action,message,next_action});
+  if(action==="claim"){
+    if(!taskTree.claimable(db,t.id))push("TASK_TREE_HELD","任务祖先链损坏、关闭或超过深度上限","核对本机任务树及祖先状态");
+    if(!topologyGuard.claimable(db,t.id))push("TOPOLOGY_NOT_READY","本地任务结构尚未完成登记或身份已换代","核对项目拓扑登记及恢复回执");
+    if(!delegationGuard.claimable(db,t.id))push("DELEGATION_NOT_READY","委派端点尚未授权执行或被协议持有","核对双端绑定、取消和结果回执");
+  } else {
+    if(topologyGuard.finishHeld(db,t.id))push("TOPOLOGY_FINISH_HELD","拓扑操作正在持有此任务的完成入口","推进或明确撤回已有拓扑操作");
+    if(delegationGuard.sourceHeld(db,t.id))push("DELEGATION_FINISH_HELD","委派、取消或候选结果正在持有此任务","按对应协议完成结算或人工恢复");
+  }
+  // Goal completion is the existing mechanical descendant summary, not model review.
+  if(action!=="complete_goal"&&Number(t.human_gate))push("HUMAN_GATE","待人工裁定，不会自动领取或送回重审","由操作者裁定或显式解除人工闸");
+  return out;
+}
+
+/** Current local reasons only; absence is not a grant to run a provider or a remote action. */
+function stuckWhy(db,task) {
+  const id=typeof task==="object"&&task!==null?task.id:task;
+  if(!Number.isSafeInteger(id)||id<1)throw err(ERR.BAD_INPUT,"task id invalid");
+  const t=db.prepare("SELECT * FROM tasks WHERE id=?").get(id);
+  if(!t)throw err(ERR.NOT_FOUND,"任务不存在");
+  if(t.archived_at||t.status==="done"||t.status==="in_progress")return [];
+  const action=t.kind==="goal"?"complete_goal":t.status==="not_started"?"claim":t.waiting_for==="rearm"?"rearm":"review";
+  const out=progressHolds(db,t,action);
+  const push=(code,message,next_action,extra={})=>out.push({code,action,message,next_action,...extra});
+  if(action==="claim"){
+    if(!t.released)push("NOT_RELEASED","任务尚未放行","核对任务后显式放行");
+    const ds=depsSatisfied(db,t);
+    if(!ds.ok)push(ds.broken?"BROKEN_DEPENDENCIES":"DEPENDENCIES_UNFINISHED",ds.broken?"依赖字段损坏，拒绝按零依赖处理":"依赖任务尚未完成","核对依赖任务与定义",{related_task_ids:ds.pending??[]});
+    const ua=unreleasedAncestor(db,t.parent_id);
+    if(ua!==null)push("ANCESTOR_NOT_RELEASED","祖先任务尚未放行","先核对并放行祖先",{related_task_ids:[ua]});
+    if(t.attempts>=lifetimeCap(t))push("ATTEMPT_LIMIT","累计派发次数已达到上限","人工核对失败原因并补充输入或调整任务");
+    if(t.lock_key){
+      const held=db.prepare("SELECT id FROM tasks WHERE status='in_progress' AND lock_key=? AND id<>? ORDER BY id").all(t.lock_key,id);
+      if(held.length)push("LOCK_HELD","执行锁被其他在途任务持有","等待在途执行结清",{related_task_ids:held.map(x=>Number(x.id))});
+    }
+    const rt=rootOf(db,id),wip=db.prepare("SELECT id FROM tasks WHERE status='in_progress'").all().filter(x=>rootOf(db,x.id)===rt);
+    if(wip.length>=WIP_PER_ROOT)push("ROOT_WIP_LIMIT","同一根树的在途任务已达上限","等待已有执行结清",{related_task_ids:wip.map(x=>Number(x.id))});
+  }
+  if(action==="rearm"||action==="claim"){
+    const children=db.prepare("SELECT id,status FROM tasks WHERE parent_id=? AND archived_at IS NULL ORDER BY id").all(id),open=children.filter(x=>x.status!=="done");
+    if(open.length)push("CHILDREN_UNFINISHED","子任务尚未全部完成","先推进未完成子任务",{related_task_ids:open.map(x=>Number(x.id))});
+    else if(action==="rearm"&&!children.length)push("NO_REARM_CHILDREN","没有可用于重新送审的未归档子任务","核对派生关系与归档状态");
+    else if(action==="rearm"){
+      const newest=db.prepare("SELECT MAX(updated_at) at FROM tasks WHERE parent_id=? AND archived_at IS NULL").get(id).at;
+      if(!t.auto_review_at||t.auto_review_at>=newest)push("NO_NEW_CHILD_RESULT","未观察到上次审阅之后的新子任务结果","核对审阅记录及子任务结果");
+    }
+  }
+  if(action==="review"&&t.review_fp&&t.review_fp===reviewFingerprint(t))push("DELIVERY_ALREADY_REVIEWED","此交付已审阅，当前没有新的交付内容","按既有审阅意见处理或补充新证据");
+  if(action==="complete_goal"){
+    const descendants=db.prepare("WITH RECURSIVE children(id) AS (SELECT id FROM tasks WHERE parent_id=? UNION SELECT t.id FROM tasks t JOIN children c ON t.parent_id=c.id) SELECT t.id,t.status FROM tasks t JOIN children c ON t.id=c.id WHERE t.id<>? ORDER BY t.id").all(id,id);
+    const open=descendants.filter(x=>x.status!=="done");
+    if(!descendants.length)push("GOAL_WITHOUT_CHILDREN","目标没有子任务，不能据空集合宣布完成","补齐目标任务分解");
+    else if(open.length)push("DESCENDANTS_UNFINISHED","目标下仍有未完成任务，包含已归档任务","核对并完成或明确调整任务归属",{related_task_ids:open.map(x=>Number(x.id))});
+  }
+  return out;
 }
 
 /**
@@ -2395,30 +2454,36 @@ function completeGoals(db) {
  */
 function rearmDone(db, {parentId=null}={}) {
   if(parentId!==null&&(!Number.isSafeInteger(parentId)||parentId<1))throw err(ERR.BAD_INPUT,"parentId invalid");
-  const rows = db.prepare(
-    `SELECT p.id FROM tasks p
-      WHERE p.status='waiting' AND p.archived_at IS NULL
-        AND (? IS NULL OR p.id=?) AND p.human_gate=0
-        AND p.auto_review_at IS NOT NULL
-        AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id
-                          AND c.archived_at IS NULL AND c.status<>'done')
-        AND p.auto_review_at < (SELECT MAX(c.updated_at) FROM tasks c
-                                  WHERE c.parent_id=p.id AND c.archived_at IS NULL)`).all(parentId,parentId).filter(r=>!topologyGuard.finishHeld(db,r.id)&&!delegationGuard.sourceHeld(db,r.id));
-  for (const r of rows) {
-    const kids = db.prepare(
-      "SELECT id FROM tasks WHERE parent_id=? AND archived_at IS NULL").all(r.id).map((x) => Number(x.id));
-    db.prepare(
-      // review_fp cleared alongside auto_review_at: the children finishing IS the new
-      // information, even though the parent's own deliverable text did not change.
-      // Every path that deliberately sends a card back for review has to clear both,
-      // or the dedup filter quietly undoes the send-back.
-      `UPDATE tasks SET waiting_for='review', auto_review_at=NULL, review_fp=NULL,
-                        verdict_note=COALESCE(verdict_note,'') || ?, updated_at=? WHERE id=?`
-    ).run(`${"\n\n"}—— 子任务卡 #${kids.join(" #")} 已全部完成 → 自动送回重审(不再等待人工)——`,
-          now(), Number(r.id));
-  }
-  return rows.map((r) => Number(r.id));
+  const ownsTransaction=!db.isTransaction;
+  db.exec(ownsTransaction?"BEGIN IMMEDIATE":"SAVEPOINT store_rearm");
+  try {
+    const rows=db.prepare(
+      "SELECT p.* FROM tasks p WHERE p.status='waiting' AND p.archived_at IS NULL "+
+      "AND (? IS NULL OR p.id=?) AND p.auto_review_at IS NOT NULL "+
+      "AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL) "+
+      "AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL AND c.status<>'done') "+
+      "AND p.auto_review_at < (SELECT MAX(c.updated_at) FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL)"
+    ).all(parentId,parentId),moved=[];
+    for(const r of rows){
+      const kids=db.prepare("SELECT id,aggregate_version FROM tasks WHERE parent_id=? AND archived_at IS NULL ORDER BY id").all(r.id);
+      const reasons=progressHolds(db,r,"rearm");
+      if(reasons.length){
+        // Dedup by the reviewed child result and blockers, not by the polling clock.
+        const fingerprint=JSON.stringify({review_at:r.auto_review_at,review_fp:r.review_fp,children:kids.map(c=>[c.id,c.aggregate_version]),reasons:reasons.map(x=>x.code)});
+        const last=db.prepare("SELECT kind,detail FROM task_events WHERE task_id=? AND kind IN('review.rearm_blocked','review.rearmed') ORDER BY id DESC LIMIT 1").get(r.id);
+        if(last?.kind!=="review.rearm_blocked"||JSON.parse(last.detail).fingerprint!==fingerprint)
+          appendEvent(db,{taskId:r.id,kind:"review.rearm_blocked",detail:eventState(r,{fingerprint,reasons,child_ids:kids.map(c=>Number(c.id))})});
+        continue;
+      }
+      db.prepare(
+        "UPDATE tasks SET waiting_for='review',auto_review_at=NULL,review_fp=NULL,"+
+        "verdict_note=COALESCE(verdict_note,'') || ?,updated_at=? WHERE id=?"
+      ).run("\n\n—— 子任务卡 #"+kids.map(c=>c.id).join(" #")+" 已全部完成 → 自动送回重审(不再等待人工)——",now(),r.id);
+      appendEvent(db,{taskId:r.id,kind:"review.rearmed",detail:eventState(r,{waiting_for:"review",child_ids:kids.map(c=>Number(c.id))})});
+      moved.push(Number(r.id));
+    }
+    db.exec(ownsTransaction?"COMMIT":"RELEASE store_rearm");return moved;
+  } catch(e){db.exec(ownsTransaction?"ROLLBACK":"ROLLBACK TO store_rearm; RELEASE store_rearm");throw e;}
 }
 
 /** Waiting cards auto-review has not seen yet (or that moved after it looked). */
@@ -2460,7 +2525,7 @@ function pendingReview(db) {
    //   criterion cost: one edited line marched the whole pile back into re-review.
    //   ⚠ A card never reviewed (review_fp NULL) always passes — this filter narrows
    //   an existing queue, it must never be the reason a card is never looked at.
-   .filter((t) => !topologyGuard.finishHeld(db,t.id)&&!delegationGuard.sourceHeld(db,t.id))
+   .filter((t) => !progressHolds(db,t,"review").length)
    .filter((t) => !t.review_fp || t.review_fp !== reviewFingerprint(t))
    .map((t) => ({ ...t, pin: pinnedAncestor(db, t.parent_id) }))
    .sort((a, b) => (a.pin == null) - (b.pin == null)
@@ -3018,7 +3083,7 @@ module.exports = {
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,
   noProgressHold, stateFingerprint, fpDiff, heldByNoProgress, openChildrenOnLines,
-  reopen, rearmDone, deferToRearm, completeGoals,
+  reopen, rearmDone, deferToRearm, completeGoals, stuckWhy,
   list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, STATUS_LABEL, WF_LABEL, DEFAULT_LEASE_MIN, MAX_LEASE_MIN, defuseRulingHeads,
   DEFAULT_ROUTE,
   verifyRegistry, assertVerify,

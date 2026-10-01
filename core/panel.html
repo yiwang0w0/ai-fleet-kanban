@@ -830,6 +830,13 @@ function hbClass(t){
 
 // Returns CONTENT only, no nodes. Node creation/reuse is upsert()'s job — merged,
 // "same card = same node" cannot hold and the thing to animate vanishes each time.
+function progressTags(t) {
+  return (t.progress_blockers || []).map(reason =>
+    '<span class="tag hold" title="'+esc(reason.next_action)+'">'+esc(reason.message)+'</span>').join("");
+}
+function progressWaitLabel(t) {
+  return t.waiting_for === "rearm" && t.progress_blockers?.length ? "重审受阻" : wfLabel(t.waiting_for);
+}
 function cardParts(t){
   const lc = lineColor(t.line);
   const who = t.status === "in_progress" ? (t.worker || t.line) : t.line;
@@ -883,7 +890,7 @@ function cardParts(t){
   }
   // ⭐ Human-gated: out of the queue, attempts unburned — the board must show WHO it
   //   is waiting for.
-  if (t.human_gate) top += `<span class="tag hold">待人工</span>`;
+  if (t.human_gate) top += `<span class="tag hold" title="人工闸保持生效，子任务完成也不会自动解除">待人工 · 不会自动送回</span>`;
   if (t.lock_key) top += `<span class="tag lock">🔒${esc(t.lock_key)}</span>`;
   // ── Linked closure: the declaration is the FORECAST, cascade is the RESULT.
   //   Both show — forecast alone leaves "why did it close" unreadable, result alone
@@ -892,9 +899,10 @@ function cardParts(t){
   if (t.proves_parent) top += `<span class="tag oneof" title="本卡的验证通过即回答了父卡的问题 —— 父卡会跟着通过">验证父卡</span>`;
   if (t.resolved_by === "cascade") top += `<span class="tag casc" title="非人工裁定:同链另一张卡通过机器验证,本卡因此不再需要。理由见卡面裁定记录">联动关闭</span>`;
   if (t.status === "waiting" && t.waiting_for)
-    top += `<span class="tag wf ${t.waiting_for}">${wfLabel(t.waiting_for)}</span>`;
+    top += `<span class="tag wf ${t.waiting_for}">${esc(progressWaitLabel(t))}</span>`;
 
   let meta2 = [];
+  if (t.progress_blockers?.length) meta2.push(progressTags(t));
   if (t.status === "in_progress"){
     meta2.push(`<span class="hb" data-live="hb"></span>`);
     if (t.lease_until) meta2.push(`<span data-live="lease"></span>`);

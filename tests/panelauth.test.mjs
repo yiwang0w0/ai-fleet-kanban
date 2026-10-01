@@ -48,3 +48,15 @@ test('H2 authenticated SSE receives task changes without putting credentials in 
   const observed=await Promise.race([reader.read(),delay(3000).then(()=>{throw Error('Missing SSE event');})]);assert.match(new TextDecoder().decode(observed.value),/task.created/);
  }finally{ctl.abort();await reader?.cancel().catch(()=>{});}
 });
+
+test('H3 authenticated task reads expose current blockers without changing task state',async()=>{
+ const created=await fetch(base+'/api/tasks',{method:'POST',headers:headers(operator),body:JSON.stringify({subject:'Synthetic human-held work',line:'alpha',humanGate:true})});
+ assert.equal(created.status,201);const t=(await created.json()).task;
+ assert.ok(t.progress_blockers.some(r=>r.code==='HUMAN_GATE'));
+ for(const token of [operator,worker,review]){
+  const result=await (await fetch(base+'/api/tasks',{headers:headers(token)})).json(),read=result.tasks.find(x=>x.id===t.id);
+  assert.equal(read.human_gate,true);assert.equal(read.aggregate_version,t.aggregate_version);assert.equal(read.attempts,0);
+  assert.ok(read.progress_blockers.some(r=>r.code==='HUMAN_GATE'&&r.action==='claim'));
+ }
+ assert.equal((await fetch(base+'/api/tasks')).status,401);
+});

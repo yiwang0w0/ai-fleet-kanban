@@ -496,3 +496,11 @@ test("H4c a restored co-located registrar permits local exit only for its actual
  assert.equal(store.get(restored.db,f.source.id).human_gate,true);assert.equal(store.get(restored.db,f.source.id).released,false);
  assert.equal(restored.db.prepare("SELECT registrar_epoch FROM relation_graphs").get().registrar_epoch,f.a.node.sync_epoch);
 });
+
+test("H3 diagnostics use actual source and target binding guards without changing protocol state",()=>{
+ const f=fixture(),before=state(f.b.db);
+ assert.ok(store.stuckWhy(f.b.db,f.target.id).some(r=>r.code==="DELEGATION_NOT_READY"));assert.equal(state(f.b.db),before);
+ begin(f);const held=state(f.a.db);assert.ok(store.stuckWhy(f.a.db,f.source.id).some(r=>r.code==="DELEGATION_NOT_READY"));assert.equal(state(f.a.db),held);
+ finish(f);assert.equal(store.stuckWhy(f.b.db,f.target.id).some(r=>r.code==="DELEGATION_NOT_READY"),false);
+ assert.ok(store.stuckWhy(f.a.db,f.source.id).some(r=>r.code==="DELEGATION_NOT_READY"));
+});

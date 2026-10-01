@@ -286,6 +286,7 @@ const unnamedOf = (t) => {
 // file names, hashes and controlled download endpoints — never source paths.
 const taskOut = (t) => t ? {
   ...t,
+  progress_blockers: store.stuckWhy(db,t),
   decision_package: decision.publicDecisionPackage(t, DECISION_CTX),
   // ⭐ The panel's button captions come FROM the server-side criterion. If the panel
   //   computed its own, that would be a second copy of the formula — able to say

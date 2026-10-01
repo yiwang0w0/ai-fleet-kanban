@@ -334,3 +334,13 @@ test("preparation refuses a transition whose native cancellation could not resto
  const f=setup(),dependency=card(f.a),task=card(f.a,{blockedBy:[dependency.id]});init(f);store.archive(f.a.db,{id:dependency.id});
  const before=state(f.a.db);assert.throws(()=>stage(f,[edit(f,task)]),/归档/);assert.equal(state(f.a.db),before);
 });
+
+test("H3 diagnostics share current topology claim and finish holds and remain read-only",()=>{
+ const f=setup(),t=card(f.a),dep=card(f.a);bind(f);const before=state(f.a.db);
+ assert.ok(store.stuckWhy(f.a.db,t.id).some(r=>r.code==="TOPOLOGY_NOT_READY"));assert.equal(state(f.a.db),before);
+ commit(f,stage(f));assert.equal(store.stuckWhy(f.a.db,t.id).some(r=>r.code==="TOPOLOGY_NOT_READY"),false);
+ const task=store.claimById(f.a.db,{id:t.id,worker:"engine"}).task;store.report(f.a.db,{id:t.id,worker:"engine",runId:task.run_id,outcome:"done",evidence:"fixture"});
+ const op=stage(f,[edit(f,t,null,[dep])]),held=state(f.a.db);
+ assert.ok(store.stuckWhy(f.a.db,t.id).some(r=>r.code==="TOPOLOGY_FINISH_HELD"));assert.equal(store.pendingReview(f.a.db).some(x=>x.id===t.id),false);assert.equal(state(f.a.db),held);
+ cancelPreparedTopology(f.a.db,{operationId:op.operation_id});assert.equal(store.stuckWhy(f.a.db,t.id).some(r=>r.code==="TOPOLOGY_FINISH_HELD"),false);
+});

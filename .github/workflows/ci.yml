@@ -52,6 +52,8 @@ jobs:
       # Pure layers first: store, rulings, gates, prompt library.
       - name: selftest (store)
         run: bash hrun.sh node tests/selftest.mjs
+      - name: progressdiagnostictest (local blockers and audited parent rearm)
+        run: bash hrun.sh node tests/progressdiagnostictest.mjs
       - name: identitytest (node ownership and atomic migration)
         run: bash hrun.sh node tests/identitytest.mjs
       - name: backuptest (WAL snapshots and quarantined restore)
