@@ -5,7 +5,7 @@
   "plan_id": "AFK-FED-001",
   "plan_version": "1.3",
   "decision": "pending",
-  "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
+  "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
   "schema_version": {
     "federation_sync": 4,
     "broker_dispatch": 3
@@ -25,67 +25,24 @@
   "accepted_task_ids": [],
   "test_results": [
     {
-      "case": "B1",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/versiontest.mjs",
-      "test_name_pattern": "HTTP requires versions, rejects stale controls and returns current version"
+      "case": "f10f268 targeted six-suite baseline",
+      "passed": 134,
+      "failed": 1,
+      "skipped": 0,
+      "embedded_server_assertions": "195 passed within one wrapper; not additive",
+      "isolated_retry": "1 passed, initial failure retained"
     },
     {
-      "case": "B2-version",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/review-contracttest.mjs",
-      "test_name_pattern": "B2 package, desktop manifests"
+      "case": "seven-module defect observations",
+      "observations": 8,
+      "result": "reproduced; unresolved",
+      "model_calls": 0
     },
     {
-      "case": "B2-domains",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/review-contracttest.mjs",
-      "test_name_pattern": "B2 glossary distinguishes"
-    },
-    {
-      "case": "B3-doc",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/review-contracttest.mjs",
-      "test_name_pattern": "B3 every operator entry"
-    },
-    {
-      "case": "B3-cli",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/review-contracttest.mjs",
-      "test_name_pattern": "B3 CLI refuses"
-    },
-    {
-      "case": "H1",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/versiontest.mjs",
-      "test_name_pattern": "migration rebuilds semantic version coverage"
-    },
-    {
-      "case": "H4",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/mcptest.mjs",
-      "test_name_pattern": "role registration rejects unknown and incompatible"
-    },
-    {
-      "case": "H6",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/recoverytest.mjs",
-      "test_name_pattern": "explicit restore upgrade reaches reviewed activation"
-    },
-    {
-      "case": "H7",
-      "green": "passed",
-      "negative_control": "expected_failure",
-      "test_file": "tests/synctest.mjs",
-      "test_name_pattern": "three nodes isolate event UUIDs"
+      "case": "six Python selftest commands",
+      "passed_commands": 5,
+      "failed_commands": 1,
+      "failed_assertion": "Readonly-rule assertion rejects .data in checkout parent path; original 56 PASS / 1 FAIL retained"
     }
   ],
   "task_assessments": [
@@ -100,9 +57,10 @@
       "evidence": [
         "tests/identitytest.mjs",
         "docs/federation/foundation-evidence.json",
-        "docs/federation/recovery.md"
+        "docs/federation/recovery.md",
+        "docs/federation/seven-module-review-evidence.json"
       ],
-      "remaining": "Stable identity and recovery are implemented; physical device enrollment/duplicate identity checks and independent acceptance remain pending."
+      "remaining": "Prior assessment (historical scope): Stable identity and recovery are implemented; physical device enrollment/duplicate identity checks and independent acceptance remain pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
     },
     {
       "task_id": "T02.02",
@@ -114,9 +72,10 @@
       "status": "pending_acceptance",
       "evidence": [
         "tests/identitytest.mjs",
-        "docs/federation/foundation-evidence.json"
+        "docs/federation/foundation-evidence.json",
+        "docs/federation/seven-module-review-evidence.json"
       ],
-      "remaining": "Historical three-node UID/migration coverage; not rerun in this batch, current full CI pending."
+      "remaining": "Prior assessment (historical scope): Historical three-node UID/migration coverage; not rerun in this batch, current full CI pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
     },
     {
       "task_id": "T02.03",
@@ -128,9 +87,10 @@
       "evidence": [
         "tests/runfencetest.mjs",
         "docs/federation/runs-evidence.json",
-        "tests/review-contracttest.mjs"
+        "tests/review-contracttest.mjs",
+        "docs/federation/seven-module-review-evidence.json"
       ],
-      "remaining": "Qualified role/identity vocabulary asserted now; run contract evidence is historical until current CI and independent review."
+      "remaining": "Prior assessment (historical scope): Qualified role/identity vocabulary asserted now; run contract evidence is historical until current CI and independent review. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
     },
     {
       "task_id": "T02.04",
@@ -143,9 +103,10 @@
       "evidence": [
         "tests/versiontest.mjs",
         "tests/synctest.mjs",
-        "docs/federation/pr2-0.24-evidence.json"
+        "docs/federation/pr2-0.24-evidence.json",
+        "docs/federation/seven-module-review-evidence.json"
       ],
-      "remaining": "Current B1/H1/H7 targeted checks pass; complete authority/replica matrix still requires current CI and independent review."
+      "remaining": "Prior assessment (historical scope): Current B1/H1/H7 targeted checks pass; complete authority/replica matrix still requires current CI and independent review. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
     },
     {
       "task_id": "T02.05",
@@ -158,9 +119,10 @@
       "evidence": [
         "tests/peertest.mjs",
         "docs/federation/peers-evidence.json",
-        "docs/federation/migration-0.24.md"
+        "docs/federation/migration-0.24.md",
+        "docs/federation/seven-module-review-evidence.json"
       ],
-      "remaining": "Protocol negotiation matrix exists; historical evidence plus current migration instruction checks, full current CI pending."
+      "remaining": "Prior assessment (historical scope): Protocol negotiation matrix exists; historical evidence plus current migration instruction checks, full current CI pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
     },
     {
       "task_id": "T02.06",
@@ -171,13 +133,14 @@
       "status": "pending_acceptance",
       "evidence": [
         "tests/recoverytest.mjs",
-        "docs/federation/gates/G02.draft.json"
+        "docs/federation/gates/G02.draft.json",
+        "docs/federation/seven-module-review-evidence.json"
       ],
-      "remaining": "Two legacy schema recovery cases pass now; G01 and independent ARCH/TEST/REVIEW acceptance pending."
+      "remaining": "Prior assessment (historical scope): Two legacy schema recovery cases pass now; G01 and independent ARCH/TEST/REVIEW acceptance pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
     }
   ],
-  "evidence_manifest": "docs/federation/pr2-0.24-evidence.json",
-  "evidence_sha256": "1a633f4037c41f35e8e62d12535f6ab2b88b576e935fd869cacfecdb03687cca",
+  "evidence_manifest": "docs/federation/seven-module-review-evidence.json",
+  "evidence_sha256": "ff244251f63ec032968df1c7005cf67f85e0aafd44ba809d129d6133f808c515",
   "evidence_hash_format": "UTF-8 LF",
   "required_roles": [
     "ARCH",
@@ -188,12 +151,86 @@
     "G01 not accepted",
     "Current complete Windows CI pending",
     "Physical identity binding not accepted",
-    "Independent architecture/reviewer receipt missing"
+    "Independent architecture/reviewer receipt missing",
+    "Seven-module H2/H3/H4/H5/H7/H12 runtime observations remain unresolved; see current manifest",
+    "Initial snapshot-suite failure and path-sensitive Python assertion are retained; no all-green full baseline claim"
   ],
   "reviewer_instance_id": null,
   "operator_decision_ref": null,
   "verified_at": null,
   "drafted_at": "2026-10-01",
   "rollback_ref": "backup/pr2-before-main-20261001",
-  "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database."
+  "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database.",
+  "historical_test_evidence": {
+    "namespace": "PR2 inline review B1-B3/H1-H7; not seven-module H1-H12",
+    "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
+    "evidence_manifest": "docs/federation/pr2-0.24-evidence.json",
+    "evidence_sha256": "1a633f4037c41f35e8e62d12535f6ab2b88b576e935fd869cacfecdb03687cca",
+    "test_results": [
+      {
+        "case": "B1",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/versiontest.mjs",
+        "test_name_pattern": "HTTP requires versions, rejects stale controls and returns current version"
+      },
+      {
+        "case": "B2-version",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B2 package, desktop manifests"
+      },
+      {
+        "case": "B2-domains",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B2 glossary distinguishes"
+      },
+      {
+        "case": "B3-doc",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B3 every operator entry"
+      },
+      {
+        "case": "B3-cli",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B3 CLI refuses"
+      },
+      {
+        "case": "H1",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/versiontest.mjs",
+        "test_name_pattern": "migration rebuilds semantic version coverage"
+      },
+      {
+        "case": "H4",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/mcptest.mjs",
+        "test_name_pattern": "role registration rejects unknown and incompatible"
+      },
+      {
+        "case": "H6",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/recoverytest.mjs",
+        "test_name_pattern": "explicit restore upgrade reaches reviewed activation"
+      },
+      {
+        "case": "H7",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/synctest.mjs",
+        "test_name_pattern": "three nodes isolate event UUIDs"
+      }
+    ]
+  },
+  "reanchored_at": "2026-10-01T07:28:24.034Z"
 }

@@ -1,0 +1,303 @@
+{
+  "format": "ai-fleet-seven-module-review-evidence/v1",
+  "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "package_version": "0.24.0",
+  "recorded_at": "2026-10-01T07:28:24.034Z",
+  "delivery_parent_sha": "d55046a4d1895a20bee12a662dcec60b965d7843",
+  "scope": "Reproduce the requested historical code baseline; no product fix or independent acceptance is claimed.",
+  "finding_namespace": "seven-module/H1-H12; distinct from the earlier PR2 inline B1-B3/H1-H7",
+  "existing_at_anchor": [
+    "docs/federation/migration-0.24.md",
+    "docs/GLOSSARY.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "docs/federation/gates/G01.draft.json",
+    "docs/federation/gates/G02.draft.json",
+    "docs/federation/gates/G05.draft.json"
+  ],
+  "production_containment": {
+    "authorized_by": "2026-10-01 user instruction to remove A-machine TCP 47824 Serve",
+    "production_network_changed": true,
+    "board_before": {
+      "loopback_root": "ECONNREFUSED",
+      "loopback_api_meta": "ECONNREFUSED",
+      "matching_board_node_process_found": false,
+      "taskkill_causation": "not_proven"
+    },
+    "serve_removal": {
+      "format": "ai-fleet-targeted-serve-removal/v1",
+      "checked_at": "2026-10-01T07:10:36.581Z",
+      "port": 47824,
+      "type": "TCPForward",
+      "removed": true,
+      "other_serve_entries_preserved": true,
+      "serve_reset_used": false,
+      "board_restarted": false,
+      "remaining_port_listeners": 0
+    },
+    "peer_activation_performed": false,
+    "production_database_changed": false,
+    "production_source_changed": false
+  },
+  "runtime_observations": [
+    {
+      "id": "seven-module/H2",
+      "runtime_reproduced": true,
+      "unauthenticated_root_status": 200,
+      "operator_token_in_html": true,
+      "anonymous_meta_contains_node_id": true,
+      "anonymous_tasks_contains_private_fixture": true,
+      "fixture_secret_values_recorded": false
+    },
+    {
+      "id": "seven-module/H3+M1",
+      "runtime_reproduced": true,
+      "all_children_done": true,
+      "parent_human_gate": true,
+      "parent_waiting_for": "rearm",
+      "sweep_returned_parent": false,
+      "new_events": 0,
+      "setup_note": "Isolated fixture sets explicit human gate and earlier review timestamp; actual store rearm sweep is unchanged."
+    },
+    {
+      "id": "seven-module/H7a",
+      "runtime_reproduced": true,
+      "exit_code": 1,
+      "absolute_missing_path_in_stderr": true,
+      "raw_stderr_recorded": false
+    },
+    {
+      "id": "seven-module/H7b",
+      "runtime_reproduced": true,
+      "run_state": "ended",
+      "principal_status": "active",
+      "bound_task_read_after_report": true
+    },
+    {
+      "id": "seven-module/H12",
+      "runtime_reproduced": true,
+      "credential_has_server_endpoint": false,
+      "wrong_loopback_endpoint_received_authorization": true,
+      "sync_result": "error",
+      "error_code": "REMOTE_401",
+      "credential_values_recorded": false
+    },
+    {
+      "id": "seven-module/H4b",
+      "runtime_reproduced": true,
+      "endpoint": "cancel-status",
+      "dispatch_before": "prepared",
+      "dispatch_after": "abandoned",
+      "stopped_receipt_returned": true,
+      "model_started": false
+    },
+    {
+      "id": "seven-module/H4a",
+      "runtime_reproduced": true,
+      "both_cancellations_stopped": true,
+      "source_binding_state": "confirmed",
+      "target_binding_state": "confirmed",
+      "source_closed": 0,
+      "target_closed": 0,
+      "source_claim_refused": true
+    },
+    {
+      "id": "seven-module/H5a",
+      "runtime_reproduced": true,
+      "backup_completed": true,
+      "restore_error": "RESULT_PENDING",
+      "incomplete_marker_retained": true,
+      "restore_receipt_created": false,
+      "original_evidence_retained": true,
+      "setup_note": "Legacy evidence_path set before candidate sealing; protocol fixture uses synthetic process result and real backup/restore."
+    }
+  ],
+  "baseline_suite": {
+    "files": [
+      "tests/peertest.mjs",
+      "tests/synctest.mjs",
+      "tests/snapshottest.mjs",
+      "tests/epochrecoverytest.mjs",
+      "tests/mcptest.mjs",
+      "tests/servertest.mjs"
+    ],
+    "node_test_count": 135,
+    "passed": 134,
+    "failed": 1,
+    "skipped": 0,
+    "duration_ms": 140358.8476,
+    "embedded_server_assertions": {
+      "passed": 195,
+      "failed": 0,
+      "counting_note": "Already represented by one Node test wrapper; do not add 195 to the outer count."
+    },
+    "failed_case": "expired snapshots are refused and old peers without the capability continue using increments",
+    "failure": "expected synced, observed error",
+    "isolated_retry": {
+      "passed": 1,
+      "failed": 0,
+      "duration_ms": 666.0251
+    },
+    "interpretation": "Failure did not recur in one isolated retry. Cause not established; first failure retained, no all-green combined suite claim."
+  },
+  "python_selftests": [
+    {
+      "file": "gates/gates_lib.py",
+      "exit_code": 0,
+      "id": "gates",
+      "argument": ""
+    },
+    {
+      "file": "loops/worker_loop.py",
+      "exit_code": 0,
+      "id": "codex",
+      "argument": "--codex-selftest"
+    },
+    {
+      "file": "loops/worker_loop.py",
+      "exit_code": 1,
+      "id": "prompt",
+      "argument": "--prompt-selftest"
+    },
+    {
+      "file": "loops/reviewer_loop.py",
+      "exit_code": 0,
+      "id": "digest",
+      "argument": "--digest-selftest"
+    },
+    {
+      "file": "watchers/board_health_watch.py",
+      "exit_code": 0,
+      "id": "health",
+      "argument": "--selftest"
+    },
+    {
+      "file": "probe/run_probe.py",
+      "exit_code": 0,
+      "id": "probe",
+      "argument": "--policy-selftest"
+    }
+  ],
+  "prompt_diagnostic": {
+    "format": "ai-fleet-readonly-rule-diagnostic/v1",
+    "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+    "rules": 58,
+    "checkout_prefix_contains_dot_data": true,
+    "original_assertion_passes": false,
+    "relative_rule_contains_dot_data": false,
+    "relative_rule_covers_all_core": false,
+    "production_changed": false,
+    "interpretation": "The unchanged selftest rejects .data anywhere in an absolute deny-rule path. This checkout has .data in its parent. Actual relative rules neither include .data nor cover all core. Original result remains 56 PASS / 1 FAIL; not relabelled green."
+  },
+  "probe_setup_failure": {
+    "first_attempt": "Server fixture omitted BOARD_DEFAULT_ROUTE=main; its config was correctly refused. Fixed fixture route and wrote synthetic board_token to the actual token-file interface. Product code unchanged.",
+    "final_probe_count": 8,
+    "interpretation": "Probe success means the observed defect is reproducible, not that the defect is repaired."
+  },
+  "pending_runtime_experiments": [
+    "H4c registrar epoch / pending binding attempt escape",
+    "H4d process death after launch permit without valid journal",
+    "H5b source epoch A-to-B-to-C while receiver misses B",
+    "H6 input expansion, diagnostic preservation and idle classification",
+    "H7c credential-file lifecycle after revocation",
+    "H8 authenticated request saturation and write-lock duration",
+    "H9 frozen verification registry / actual CLI versions",
+    "H10 old-epoch workspace quota and artifact retention",
+    "H11 pinned Git and lock latency"
+  ],
+  "no_real_provider_calls": true,
+  "physical_two_pc_acceptance": false,
+  "acceptance": {
+    "accepted_tasks": 0,
+    "total_tasks": 72,
+    "accepted_gates": 0,
+    "total_gates": 12,
+    "T01_05": "pending independent sign-off; H5a limits restore coverage",
+    "T08_05": "implemented per existing delivery record; pending independent sign-off"
+  },
+  "anchor_source_hash_format": "Git blob bytes",
+  "anchor_source_hashes": [
+    {
+      "path": "core/server.mjs",
+      "sha256": "3ec14a81163024f04be2bc18c35d7e89bdb21a3c0e14ebd693700b11074bd7cf"
+    },
+    {
+      "path": "core/store.js",
+      "sha256": "ac79d062584b08d18ae780427370bb02a6b84ad484c797554dd0371441cd4003"
+    },
+    {
+      "path": "core/mcp/policy.mjs",
+      "sha256": "933fa046f9f06a4f0f5be6693f3918500993d3e7a46a5fdc71159fc86f753a99"
+    },
+    {
+      "path": "core/mcp/credential.mjs",
+      "sha256": "232319c4fd26e78dc3962cf288895c602aae0660b7588986f73f34aa1dc199d6"
+    },
+    {
+      "path": "core/federation/sync-client.mjs",
+      "sha256": "e52e11e8c7c0b1dda16958613f03feab50d92d6b78bf6749975b30d0fd3c9bc1"
+    },
+    {
+      "path": "core/federation/cancellation-service.mjs",
+      "sha256": "5d49bbea66571e8432c772198ae762b86220aab15d15cfef28dc9262c1ccc472"
+    },
+    {
+      "path": "core/federation/bindings.mjs",
+      "sha256": "aca83bb3bafb2933d284a3abd8e8beb85aaa4d6a2a2d4cd5d00ac7038134d0a7"
+    },
+    {
+      "path": "core/federation/gateway.mjs",
+      "sha256": "85bab28da1cafa26b4a26bfea749d930f16afd716aaaddfe4d60d221769597a0"
+    },
+    {
+      "path": "core/federation/epoch-recovery.mjs",
+      "sha256": "dcb66b6789df690e12a6ad22ff6f2898570434a5d04bb4450267fde79d96b311"
+    },
+    {
+      "path": "core/backup.mjs",
+      "sha256": "1855c8d1de764d7a3c61204d43d4dd1500864945bc4d41786aa9213b0c034c7f"
+    },
+    {
+      "path": "core/execution/runner.mjs",
+      "sha256": "42d62d48909f719b8305fdaa3c7c24e6f1472d4aa5d2932af57fb25f667b8ecb"
+    },
+    {
+      "path": "core/execution/source-gate.mjs",
+      "sha256": "929e9d348ee1342d6ac0de249437e0fba64c48dbfcc4f6300438f0970cc8ccd2"
+    },
+    {
+      "path": "core/artifacts/workspaces.mjs",
+      "sha256": "ff42ca63625bea6d556a7da829ce50f5e0e0c00ac71d869689d830f5e74aa1ee"
+    },
+    {
+      "path": "core/artifacts/transfers.mjs",
+      "sha256": "5ebd4163dfad7b0ac3aaed946a975edb14c7dafbdf829d767c53b732de583692"
+    },
+    {
+      "path": "loops/worker_loop.py",
+      "sha256": "979def27810a6ceb7c443da511629ca3394414f13a1c1d7a48c7b13015c1ab6f"
+    }
+  ],
+  "probe_source_hash_format": "UTF-8 LF",
+  "probe_source_hashes": {
+    "tests/seven-module-baseline-probes.mjs": "2fd8bbb2ad0e5c877ae0959ff1f75b608459f5a98646c7517507e8dd467afa4c",
+    "tests/seven-module-result-probes.mjs": "43815e58c490385a76bd906e104f1c3c021bbc3ce1c3d64b66af01b010a13e61"
+  },
+  "private_log_hashes": {
+    "baseline-suites.log": "e4996350e201d6fd9808324db201a46dd7bf35db4a334effd34fc790254e8c5d",
+    "snapshot-retry.log": "ef507859fc3b9c6650454f4b1dfa03e2980a507cbb1834a00eb95a5d0b8a3556",
+    "runtime-probes.log": "24658229a3e66b12fea253d44c4bb94f4a49865758724bbf781c8845966a08fe",
+    "runtime-probes-2.log": "9a6d1efdee24fb79c7d1508ebf6143378391a2b681a9c5dfbc539dde09753917",
+    "runtime-probes.json": "40d63247c42d6b5d1c4e788a08b81383fb8b01d1eb747a4eaa390c1bdc18818c",
+    "result-probes.log": "895912bf953a18e08519a91dd764dcdf1007d0127149f2be156fe59b64bd8175",
+    "result-probes.json": "2649d8b0f7ff3017a2415dd43dec0d828f090a9f4cbbcaa37d3e8dac9e120455",
+    "python-gates.log": "cdef435d21869f731159f48bd8e3f8ec3e2158d613768ce6c8c7072d5ce9f873",
+    "python-codex.log": "df4fa77b97a443d266ed3d505f3a2e14f1ba6b0a9de24d2ce665caddb831d449",
+    "python-prompt.log": "16782de71b17e7de91b165bb2745d0b6d09437ee2002263d31d5f3665f8c7939",
+    "python-digest.log": "765cbe1dd5015edb96ca34632dca8f53b48da4bfec61b9e3bb5b735b9551d756",
+    "python-health.log": "deaad2d647ab38e5ca5e01cece66548b0699fbe0f07af59dcd3e0f2443b4fa12",
+    "python-probe.log": "506d53bdc0aade40d72fd1f33c71b1d58dc6f4d72aa8d3335309d5810f137d88",
+    "prompt-diagnostic.json": "84baaf7a399ac2a46098dd08623a86ba0850e970dcd96cf0cfbfc4abf96e03d2"
+  },
+  "private_log_note": "Raw logs stay in ignored local storage. Public evidence excludes tokens, real task contents, Tailscale node identifiers and machine-specific paths."
+}

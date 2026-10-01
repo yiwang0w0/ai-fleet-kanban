@@ -55,3 +55,9 @@ node cli/recovery.mjs prepare --db <全新恢复目录/board.db> --plan-file <�
 最终 restore-receipt.json 的 database 记录迁移后的身份与计数，source_database 保留备份原摘要，schema_upgrade 记录原数据库文件摘要及身份是 initialized 或 preserved。恢复回执在迁移成功后才生成并绑定新数据库字节。原备份仍可独立 verify。
 
 迁移失败会回滚数据库修改并保留 .incomplete；不会生成成功回执。成功迁移也保留 board_restore_hold，不启动服务、不生成操作员令牌、不放行任务。之后仍须核对恢复计划、提供真实停机声明并显式 activate；没有旧联邦身份的备份也必须确认原服务和其他副本已经停止，不能据新建 UUID 推定唯一写者。
+
+## 已知限制：封存候选的证据路径恢复
+
+2026-10-01 在 f10f268（0.24.0）实际复现：任务设置了 evidence_path，且其委派候选结果仍被 result_task_freeze 封存时，备份可以完成，但恢复重定位 evidence_path 的 UPDATE 会触发 RESULT_PENDING。恢复事务回滚、目录保留 .incomplete，不生成成功回执；原备份和原证据仍保留。此前普通任务的恢复演练不能覆盖此场景。见[七模块复核](seven-module-review.md)。
+
+修复及独立验收前，该组合不能作为可用的灾难恢复路径。不要删除触发器、隔离标记或手改库绕过；保留原库、备份和失败目录供恢复实现核对。恢复激活后的目录也不可随意搬动，现有证据引用及回执绑定需要保持。
