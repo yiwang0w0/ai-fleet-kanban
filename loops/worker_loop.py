@@ -883,8 +883,15 @@ def prompt_selftest():
            all(r.split("(", 1)[1].startswith("//") for r in rules), str(rules[:2]))
     else:
         ok("Windows 上绝对路径保持盘符形(v0.17.0 实测有效)", all(re.match(r"^\w+\([A-Za-z]:/", r) for r in rules), str(rules[:2]))
-    ok("deny_path 把 POSIX 绝对路径拼成 //(盘符形不动)",
-       deny_path("/x/y") == "//x/y" and deny_path("C:\\x\\y") == "C:/x/y")
+    # ⚠ 平台相关:Windows 的 abspath 会把 "/x/y" 补成当前盘的盘符形(D:/x/y)—— 那正是 CLI 在 Windows 上
+    #   认的绝对形,所以两边各断言自己的形(Windows 车道抓到的:第一版只写了 POSIX 的期望)。
+    if os.name != "nt":
+        ok("deny_path 把 POSIX 绝对路径拼成 //(盘符形不动)",
+           deny_path("/x/y") == "//x/y" and deny_path("C:\\x\\y") == "C:/x/y")
+    else:
+        ok("deny_path:盘符形不动;POSIX 形在 Windows 上落成盘符形(abspath 语义),绝不出现 //",
+           deny_path("C:\\x\\y") == "C:/x/y" and re.match(r"^[A-Za-z]:/", deny_path("/x/y")) is not None
+           and not deny_path("/x/y").startswith("//"))
     # ⭐ 证据目录必须留给模型:任何一条 Edit 规则都不能盖住证据文件的路径(Read deny 同样会拒掉
     #   Write —— 2026-09-28 实测 Write 工具先按 Read 规则查路径,所以两种规则都不许盖住它)。
     ev_sample = deny_path(os.path.join(EVID, "task-1-attempt-1.md"))
