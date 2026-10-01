@@ -11,7 +11,9 @@ import {execFileSync,spawn} from 'node:child_process';
 import {openSchedulerControlDatabase,schedulerStatus,requestSchedulerStop} from '../core/execution/lifecycle.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {migrateSync} from '../core/federation/sync-store.mjs';
-import {localIdentity} from '../core/federation/peers.mjs';
+import {localIdentity,migratePeers,issueCredential} from '../core/federation/peers.mjs';
+import net from 'node:net';
+import {runNodeRuntime,nodeRuntimeStatus,nodeLifecycle} from '../core/node-runtime.mjs';
 import {migrateDispatch,putQuota,quotaStatus} from '../core/execution/dispatch.mjs';
 import {putRole,issuePrincipal,revokePrincipal} from '../core/mcp/policy.mjs';
 import {callTool} from '../core/mcp/tools.mjs';
@@ -217,4 +219,28 @@ test('actual backup recovery preserves control history but fences its prior node
  assert.throws(()=>schedulerStatus(db),{code:'RESTORE_HOLD'});retireNode({dbPath:f.dbPath,expectedEpoch:f.config.node_epoch});const plan=prepareRecovery({dbPath});
  const attestation={format:'ai-fleet-retirement-attestation/v1',node_id:plan.node_id,retired_epoch:plan.retired_epoch,plan_digest:plan.plan_digest,original_board_stopped:true,original_agents_stopped:true,original_identity_disabled:true,other_restored_writers_stopped:true,evidence_ref:'isolated scheduler lifecycle fixture; no physical devices',attested_at:new Date().toISOString()};activateRecovery({dbPath,plan,expectedPlanDigest:plan.plan_digest,attestation});
  const prior=schedulerStatus(db,{instanceId:s.instance_id}).instances[0];assert.equal(prior.identity_current,false);assert.equal(prior.node_epoch,f.config.node_epoch);assert.throws(()=>requestSchedulerStop(db,args),{code:'EPOCH_CHANGED'});assert.equal(db.prepare('SELECT count(*) n FROM scheduler_control_requests').get().n,1);assert.equal(db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
+});
+
+async function runtimeConfig(f){const probe=net.createServer();await new Promise(r=>probe.listen(0,'127.0.0.1',r));const port=probe.address().port;await new Promise(r=>probe.close(r));f.config.profiles[0].mcp_url='http://127.0.0.1:'+port;return {format:'ai-fleet-node-runtime/v1',node_id:f.config.node_id,node_epoch:f.config.node_epoch,peer:null,mcp:{port,board_url:null},sync:[],scheduler:f.config};}
+
+test('node host drain retains MCP during an offline in-flight synthetic task and closes components afterward',async()=>{
+ const f=fixture({wait:3000,limit:2}),other=fixture(),config=await runtimeConfig(f),stop=new AbortController();card(f);card(f);migratePeers(other.db);const file=join(f.base,'offline-peer.json');issueCredential(other.db,{peerNodeId:f.config.node_id,peerEpoch:f.config.node_epoch,scopes:['peer:handshake','sync:pull','sync:ack'],projects:['demo'],credentialFile:file});
+ const unused=net.createServer();await new Promise(r=>unused.listen(0,'127.0.0.1',r));const port=unused.address().port;await new Promise(r=>unused.close(r));config.sync=[{project_id:'demo',url:'http://127.0.0.1:'+port,credential_file:file,server_node_id:other.config.node_id,server_epoch:other.config.node_epoch,poll_ms:1000}];
+ const events=[],running=runNodeRuntime({dbPath:f.dbPath,config,sourceGate:gate,environment,stopSignal:stop.signal,onEvent:e=>events.push(e)});running.catch(()=>{});
+ try{await started(f);await waitFor(()=>nodeRuntimeStatus(f.db).instances[0]?.components.some(c=>c.name.startsWith('sync:')&&['error','backoff'].includes(c.state)),'offline component');stop.abort();
+  const r=await fetch('http://127.0.0.1:'+config.mcp.port+'/local/v1/tools/list',{method:'POST',headers:{Authorization:f.auth,'Content-Type':'application/json'},body:'{}'});assert.equal(r.status,200);assert.ok((await r.json()).result.tools.length>0);
+  await running;assert.equal(used(f),1);assert.equal(launches(f),1);const o=JSON.parse(f.db.prepare('SELECT observation_json FROM broker_execution_records').get().observation_json);assert.equal(o.status,'success');assert.equal(o.process.cleanup,'job_empty');const final=nodeRuntimeStatus(f.db).instances[0];assert.equal(final.state,'stopped');assert.ok(final.components.every(c=>c.state==='stopped'));assert.equal(f.db.prepare("SELECT count(*) n FROM broker_assignments WHERE state='waiting_executor'").get().n,1);assert.ok(!JSON.stringify(events).includes('PRIVATE-TASK-BODY'));
+ }finally{stop.abort();await running.catch(()=>{});}
+});
+
+test('node host durable cancellation reaches its owned scheduler and records both terminal instances',async()=>{
+ const f=fixture({wait:9000,limit:2}),config=await runtimeConfig(f),stop=new AbortController();card(f);card(f);const running=runNodeRuntime({dbPath:f.dbPath,config,sourceGate:gate,environment,stopSignal:stop.signal});running.catch(()=>{});
+ try{await started(f);const instance=nodeRuntimeStatus(f.db).instances[0];assert.equal(schedulerStatus(f.db).instances.length,1);const r=nodeLifecycle.requestStop(f.db,{instanceId:instance.instance_id,expectedRevision:1,requestId:randomUUID(),mode:'cancel'});assert.equal(r.state,'requested');await running;const node=nodeRuntimeStatus(f.db).instances[0],scheduler=schedulerStatus(f.db).instances[0];assert.equal(node.state,'stopped');assert.equal(node.observed_revision,2);assert.equal(scheduler.state,'stopped');assert.notEqual(node.instance_id,scheduler.instance_id);assert.equal(node.executor_stop_confirmed,true);const o=JSON.parse(f.db.prepare('SELECT observation_json FROM broker_execution_records').get().observation_json);assert.equal(o.status,'cancelled');assert.equal(o.process.cleanup,'job_empty');assert.equal(used(f),1);assert.equal(launches(f),1);
+ }finally{stop.abort();await running.catch(()=>{});}
+});
+
+test('node host observes a durable startup drain before launching the first queued task',async()=>{
+ const f=fixture({limit:1}),config=await runtimeConfig(f);card(f);let requested=false;
+ await runNodeRuntime({dbPath:f.dbPath,config,sourceGate:gate,environment,onEvent:e=>{if(e.kind==='component'&&e.name==='mcp'&&e.state==='listening'){nodeLifecycle.requestStop(f.db,{instanceId:e.instance_id,expectedRevision:1,requestId:randomUUID(),mode:'drain'});requested=true;}}});
+ assert.equal(requested,true);assert.equal(used(f),0);assert.equal(launches(f),0);assert.equal(nodeRuntimeStatus(f.db).instances[0].observed_revision,2);
 });

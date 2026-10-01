@@ -1305,7 +1305,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover.",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover. A composed Windows node host keeps its authenticated MCP and synchronization running while the owned scheduler drains or cancels; isolated real-loopback and synthetic Windows Job tests passed, including startup-stop and replaced-lock regressions.",
         "pending": [
           "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
           "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
@@ -1327,7 +1327,10 @@
         "docs/federation/scheduler.md",
         "docs/federation/scheduler-evidence.json",
         "tests/schedulertest.mjs",
-        "docs/federation/scheduler-lifecycle-evidence.json"
+        "docs/federation/scheduler-lifecycle-evidence.json",
+        "docs/federation/node-runtime.md",
+        "docs/federation/node-runtime-evidence.json",
+        "tests/noderuntimetest.mjs"
       ]
     },
     {
@@ -1503,7 +1506,7 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover.",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover. A composed Windows node host keeps its authenticated MCP and synchronization running while the owned scheduler drains or cancels; isolated real-loopback and synthetic Windows Job tests passed, including startup-stop and replaced-lock regressions.",
         "pending": [
           "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
           "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
@@ -1527,7 +1530,10 @@
         "docs/federation/scheduler.md",
         "docs/federation/scheduler-evidence.json",
         "tests/schedulertest.mjs",
-        "docs/federation/scheduler-lifecycle-evidence.json"
+        "docs/federation/scheduler-lifecycle-evidence.json",
+        "docs/federation/node-runtime.md",
+        "docs/federation/node-runtime-evidence.json",
+        "tests/noderuntimetest.mjs"
       ]
     },
     {
@@ -1771,7 +1777,12 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": null,
-      "acceptance_receipt": null
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/node-runtime.md",
+        "docs/federation/node-runtime-evidence.json",
+        "tests/noderuntimetest.mjs"
+      ]
     },
     {
       "id": "T06.01",
