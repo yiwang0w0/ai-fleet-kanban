@@ -1,3 +1,4 @@
+import {openSchedulerControlDatabase} from "../core/execution/lifecycle.mjs";
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -16,10 +17,18 @@ const ROOT=fileURLToPath(new URL('../',import.meta.url)),TMP=mkdtempSync(join(tm
 mkdirSync(source);for(const dir of ['core','cli','packaging/windows'])cpSync(join(ROOT,dir),join(source,dir),{recursive:true});
 const git=args=>execFileSync('git',['-C',source,...args],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}).trim();git(['init','--quiet','--template=']);git(['config','core.autocrlf','false']);git(['add','.']);git(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','fixture']);const approval=join(TMP,'accepted-fixture');writeFileSync(approval,git(['rev-parse','HEAD:']));
 const sha=b=>createHash('sha256').update(b).digest('hex');
-after(async()=>{for(const c of children)if(c.exitCode===null&&c.signalCode===null)c.kill();for(const db of dbs)db.close();const rel=relative(resolve(tmpdir()),resolve(TMP));assert.ok(rel&&!rel.startsWith('..'));rmSync(TMP,{recursive:true,force:true});});
+after(async()=>{const cleanup=await Promise.allSettled(children.map(closeLaunch));for(const db of dbs)db.close();const errors=cleanup.filter(r=>r.status==='rejected').map(r=>r.reason);if(errors.length)throw new AggregateError(errors,'startup fixture cleanup did not finish; retained temporary directory');const rel=relative(resolve(tmpdir()),resolve(TMP));assert.ok(rel&&!rel.startsWith('..'));rmSync(TMP,{recursive:true,force:true,maxRetries:5,retryDelay:100});});
 function node(args){return spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:30000});}
 function cli(args){return node([join(source,'cli/node-startup.mjs'),...args]);}
-function fixture(){const dir=mkdtempSync(join(TMP,'node-')),dbPath=join(dir,'board.db'),db=new DatabaseSync(dbPath);dbs.push(db);store.migrate(db);migratePeers(db);const n=localIdentity(db),config=join(dir,'config.json'),bundle=join(dir,'启动 & ($literal) bundle');writeFileSync(config,JSON.stringify({format:'ai-fleet-node-runtime/v1',node_id:n.node_id,node_epoch:n.sync_epoch,peer:null,mcp:{port:0,board_url:null},sync:[],scheduler:null}));return {dir,dbPath,db,n,config,bundle};}
+function fixture(){
+ const dir=mkdtempSync(join(TMP,'node-')),dbPath=join(dir,'board.db'),setup=new DatabaseSync(dbPath);
+ try{store.migrate(setup);migratePeers(setup);}finally{setup.close();}
+ // Observe/control a concurrent host through the same bounded connection policy as the CLI.
+ const db=openSchedulerControlDatabase(dbPath);dbs.push(db);
+ const n=localIdentity(db),config=join(dir,'config.json'),bundle=join(dir,'启动 & ($literal) bundle');
+ writeFileSync(config,JSON.stringify({format:'ai-fleet-node-runtime/v1',node_id:n.node_id,node_epoch:n.sync_epoch,peer:null,mcp:{port:0,board_url:null},sync:[],scheduler:null}));
+ return {dir,dbPath,db,n,config,bundle};
+}
 function prepare(f){const r=cli(['prepare','--db',f.dbPath,'--config-file',f.config,'--accepted-rev',approval,'--output',f.bundle]);assert.equal(r.status,0,r.stderr);const plan=JSON.parse(r.stdout);f.digest=plan.manifest_sha256;return plan;}
 const args=(f,action)=>['-NoLogo','-NoProfile','-NonInteractive','-File',join(source,'packaging/windows/node-startup.ps1'),'-Action',action,'-Bundle',f.bundle,'-Digest',f.digest];
 const ps=(f,action)=>spawnSync(PS,args(f,action),{encoding:'utf8',windowsHide:true,timeout:30000});
@@ -50,14 +59,39 @@ test('short-path source preparation preserves wrapper identity and refuses ident
  const copy=join(f.dir,'copied-wrapper.ps1');writeFileSync(copy,readFileSync(wrapper));argv[4]=copy;const rejected=spawnSync(PS,argv,{encoding:'utf8',windowsHide:true,timeout:30000});assert.equal(rejected.status,1,rejected.stdout+rejected.stderr);assert.match(rejected.stdout,/STARTUP_BINDING_CHANGED/);assert.equal(nodeRuntimeStatus(f.db).configured,false);
 });
 
+function startLaunch(f){
+ const child=spawn(PS,args(f,'Run'),{windowsHide:true,stdio:['ignore','pipe','pipe']}),h={f,child,out:'',err:''};
+ child.stdout.on('data',b=>h.out+=b);child.stderr.on('data',b=>h.err+=b);
+ h.done=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});h.done.catch(()=>{});
+ children.push(h);return h;
+}
+async function closeLaunch(h){
+ const {f,child,done}=h;
+ if(child.exitCode===null&&child.signalCode===null){
+  // A failed observer must not prevent the owned fixture instance from draining.
+  const control=openSchedulerControlDatabase(f.dbPath);
+  try{
+   const status=nodeRuntimeStatus(control);assert.equal(status.node_id,f.n.node_id);assert.equal(status.node_epoch,f.n.sync_epoch);
+   const active=status.instances.filter(s=>!s.ended_at);assert.ok(active.length<=1,'fixture has an unexpected second active instance');
+   const s=active[0];if(s)nodeLifecycle.requestStop(control,{instanceId:s.instance_id,expectedRevision:s.revision,requestId:randomUUID(),mode:'cancel'});
+  }finally{control.close();}
+  await waitFor(()=>child.exitCode!==null||child.signalCode!==null,15000);
+ }
+ await done;
+}
+function observeLaunch(h){
+ if(h.child.exitCode!==null)throw Error(h.out+h.err);
+ const db=openSchedulerControlDatabase(h.f.dbPath,{readOnly:true});try{return nodeRuntimeStatus(db);}finally{db.close();}
+}
+
 test('hidden PowerShell launcher handles literal metacharacter paths, serves real MCP and drains its exact instance',async()=>{
- const f=fixture();prepare(f);const child=spawn(PS,args(f,'Run'),{windowsHide:true,stdio:['ignore','pipe','pipe']});children.push(child);let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);const done=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
+ const f=fixture();prepare(f);const h=startLaunch(f),{child,done}=h;
  try{
-  await waitFor(()=>{if(child.exitCode!==null)throw Error(out+err);return nodeRuntimeStatus(f.db).instances[0]?.components.some(c=>c.name==='mcp'&&c.state==='listening');});const s=nodeRuntimeStatus(f.db).instances[0],port=s.components.find(c=>c.name==='mcp').summary.port;
+  await waitFor(()=>{if(child.exitCode!==null)throw Error(h.out+h.err);return nodeRuntimeStatus(f.db).instances[0]?.components.some(c=>c.name==='mcp'&&c.state==='listening');});const s=nodeRuntimeStatus(f.db).instances[0],port=s.components.find(c=>c.name==='mcp').summary.port;
   assert.equal((await fetch('http://127.0.0.1:'+port+'/local/v1/tools/list',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
   const second=ps(f,'Run');assert.equal(second.status,1,second.stdout+second.stderr);assert.ok(events(f).some(e=>e.kind==='attention'&&e.code==='NODE_RUNTIME_BUSY'));assert.equal(nodeRuntimeStatus(f.db).instances.length,1);
-  nodeLifecycle.requestStop(f.db,{instanceId:s.instance_id,expectedRevision:s.revision,requestId:randomUUID(),mode:'drain'});await waitFor(()=>child.exitCode!==null);assert.equal(await done,0,out+err);assert.equal(nodeRuntimeStatus(f.db).instances[0].state,'stopped');assert.ok(events(f).some(e=>e.kind==='closed'));assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
- }finally{const s=nodeRuntimeStatus(f.db).instances.find(s=>!s.ended_at);if(s)try{nodeLifecycle.requestStop(f.db,{instanceId:s.instance_id,expectedRevision:s.revision,requestId:randomUUID(),mode:'cancel'});}catch{}if(child.exitCode===null&&child.signalCode===null){await Promise.race([done,delay(5000)]);if(child.exitCode===null&&child.signalCode===null)child.kill();}await done;}
+  nodeLifecycle.requestStop(f.db,{instanceId:s.instance_id,expectedRevision:s.revision,requestId:randomUUID(),mode:'drain'});await waitFor(()=>child.exitCode!==null);assert.equal(await done,0,h.out+h.err);assert.equal(nodeRuntimeStatus(f.db).instances[0].state,'stopped');assert.ok(events(f).some(e=>e.kind==='closed'));assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
+ }finally{await closeLaunch(h);}
 });
 
 test('review digest and independently modified XML are refused before any host instance',()=>{
@@ -146,4 +180,39 @@ test('management adapter creates only disabled tasks then explicitly enables, st
 
 test('management adapter refuses altered registered definitions, duplicate registration and active removal',()=>{
  const f=fixture();prepare(f);for(const [scenario,code] of [['foreign','STARTUP_TASK_CHANGED'],['duplicate','STARTUP_TASK_EXISTS'],['active','STARTUP_TASK_ACTIVE']]){const r=management(f,scenario);assert.equal(r.status,1,r.stdout+r.stderr);assert.match(r.stdout,new RegExp(code));}assert.equal(nodeRuntimeStatus(f.db).configured,false);
+});
+
+
+async function duringStartupWrite(f,read){
+ const script="const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1]);db.exec('PRAGMA busy_timeout=5000;BEGIN EXCLUSIVE');process.send({locked:true});setTimeout(()=>{db.exec('ROLLBACK');db.close();process.disconnect();},1000);";
+ const writer=spawn(process.execPath,['-e',script,f.dbPath],{windowsHide:true,stdio:['ignore','ignore','pipe','ipc'],timeout:10000});
+ let error='';writer.stderr.on('data',b=>error+=b);
+ const closed=new Promise((resolve,reject)=>{writer.once('error',reject);writer.once('close',code=>code===0?resolve():reject(Error('isolated lock writer failed: '+error)));});
+ try{await new Promise((resolve,reject)=>{writer.once('message',m=>m.locked?resolve():reject(Error('lock not held')));writer.once('error',reject);writer.once('exit',code=>code!==null&&code!==0&&reject(Error('writer exited before readiness')));});return await read();}
+ finally{await closed;}
+}
+test('startup status waits for an actual independent writer without changing database contents',async()=>{
+ const f=fixture(),before=sha(readFileSync(f.dbPath));
+ await duringStartupWrite(f,()=>{const s=nodeRuntimeStatus(f.db);assert.equal(s.node_id,f.n.node_id);assert.equal(s.configured,false);});
+ assert.equal(sha(readFileSync(f.dbPath)),before);
+});
+
+test('production read-only control waits for a transient startup writer and remains read-only',async()=>{
+ const f=fixture(),before=sha(readFileSync(f.dbPath));
+ await duringStartupWrite(f,()=>{
+  const db=openSchedulerControlDatabase(f.dbPath,{readOnly:true});
+  try{assert.equal(nodeRuntimeStatus(db).node_id,f.n.node_id);assert.equal(db.prepare('PRAGMA busy_timeout').get().timeout,5000);assert.equal(db.prepare('PRAGMA query_only').get().query_only,1);assert.throws(()=>db.prepare("UPDATE board_node SET display_name='changed'").run(),/readonly/);}finally{db.close();}
+ });
+ assert.equal(sha(readFileSync(f.dbPath)),before);
+});
+
+test('startup cleanup uses its own control connection when the observer rejects a write lock',async()=>{
+ const f=fixture();prepare(f);const h=startLaunch(f);
+ try{
+  await waitFor(()=>observeLaunch(h).instances[0]?.components.some(c=>c.name==='mcp'&&c.state==='listening'));
+  f.db.exec('PRAGMA busy_timeout=0');
+  await duringStartupWrite(f,()=>closeLaunch(h));
+  assert.equal(await h.done,0,h.out+h.err);assert.equal(nodeRuntimeStatus(f.db).instances[0].state,'stopped');
+  assert.ok(events(f).some(e=>e.kind==='closed'&&e.state==='stopped'));
+ }finally{f.db.exec('PRAGMA busy_timeout=5000');await closeLaunch(h);}
 });
