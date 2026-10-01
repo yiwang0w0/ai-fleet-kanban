@@ -1,0 +1,210 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-53-fleet-delivery-actions",
+  "date": "2026-10-01",
+  "base_commit": "2f955f8656d71e160328052c159f2eb65904869e",
+  "browser_code_commit": "d6b475adbb40321a475a45d3f71ffa120174271f",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "scope": "Optional trusted delivery configuration, durable operator actions for actual file delivery and one-use independent checks; successful checks do not accept tasks.",
+  "tests": [
+    {
+      "command": "node --test tests/artifacttransfertest.mjs tests/completiontest.mjs tests/fleetactionstest.mjs tests/verificationworkspacetest.mjs tests/tltest.mjs",
+      "node_runner_units": 63,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 452555.2257,
+      "log": ".data/review53-regression.log",
+      "scope": "Related regression before final transaction authorization hooks and opt-in configuration guard; timeline unit includes 23 legacy assertions.",
+      "log_sha256": "bfca0a9eb74bab9ce6df2869fab5c16284d32f7c2657d9d921de11bb9eb3a5f2"
+    },
+    {
+      "command": "node --test --test-name-pattern='panel delivery' tests/completiontest.mjs tests/fleetactionstest.mjs",
+      "node_runner_units": 5,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 63781.1904,
+      "log": ".data/review53-final-delivery.log",
+      "scope": "Final delivery, recovery, revoked running command, and configuration guards.",
+      "log_sha256": "e246f3cfb3a3246a249ca1cfabce63c3424333d2e32523f0c6ef14735ba3b240"
+    },
+    {
+      "command": "node --test tests/artifacttransfertest.mjs",
+      "node_runner_units": 8,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 91665.3054,
+      "log": ".data/review53-final-artifacts.log",
+      "scope": "Final artifact transaction authorization hooks and existing transfer behavior.",
+      "log_sha256": "88576cefb7b1bbe0ec032cb96cd439b582a677df262ab9ff3e4139c5bfdfb2db"
+    }
+  ],
+  "counts_note": "Overlapping rounds are not summed. Only confirmation display and documentation changed after final tests; full inline script parsed and final UI exercised after the display fix.",
+  "checks": [
+    "Actual Git files after lost chunk ACK and reopened action controller",
+    "Queue transaction rollback prevents file effects",
+    "Configuration or candidate version changes reject frozen actions",
+    "Artifact authorization rechecked inside persistence transaction",
+    "Database receipt failure recovers original retained journal without launching again",
+    "Principal revocation stops actual Windows Job and keeps failed observation",
+    "Missing delivery config disables delivery; null/false/malformed config rejects"
+  ],
+  "browser": {
+    "environment": "Two temporary localhost boards on one Windows PC; synthetic task output prepared with existing fixture APIs before UI actions",
+    "bytes": 182815,
+    "actions": [
+      [
+        {
+          "command": "register_artifact_target",
+          "state": "applied",
+          "checks_passed": null
+        },
+        {
+          "command": "verify_artifact",
+          "state": "applied",
+          "checks_passed": null
+        },
+        {
+          "command": "prepare_verification",
+          "state": "applied",
+          "checks_passed": null
+        },
+        {
+          "command": "run_verification",
+          "state": "applied",
+          "checks_passed": true
+        }
+      ],
+      [
+        {
+          "command": "prepare_artifact",
+          "state": "applied",
+          "checks_passed": null
+        },
+        {
+          "command": "send_artifact",
+          "state": "acknowledged",
+          "checks_passed": null
+        }
+      ]
+    ],
+    "source_task_status": "not_started",
+    "target_task_status": "waiting",
+    "source_dispatch_records": 0,
+    "target_fixture_dispatch_records": 1,
+    "new_real_provider_calls": 0,
+    "independent_check_passed": true,
+    "tasks_accepted": 0,
+    "observations_log": ".data/review53-ui-observed.json",
+    "observations_sha256": "2e5d7a2695736e772a5a858c0228369d47b3124052c0517eaa41133983135386",
+    "screenshot_in_repository": false,
+    "physical_two_pc_test": false,
+    "tailscale_test": false,
+    "cleanup": "Both browser tabs closed; child board/peer services terminated; helper exit 0.",
+    "limitations": [
+      "No integration or completion UI exercised",
+      "Initial UI confirmation displayed relationship ID; fixed and verified candidate ID in final browser flow",
+      "Initial observer cleanup queried an absent source dispatch table; fixture-only observer corrected before final run",
+      "Viewport override did not change reported 1280px width; 390px validation not claimed for this batch"
+    ]
+  },
+  "prior_ci": {
+    "commit": "2f955f8656d71e160328052c159f2eb65904869e",
+    "run_id": 36748331413,
+    "jobs": [
+      {
+        "id": 110000163044,
+        "name": "harness (windows-latest)",
+        "conclusion": "success"
+      },
+      {
+        "id": 110000162046,
+        "name": "gitleaks",
+        "conclusion": "success"
+      }
+    ],
+    "older_run": {
+      "commit": "ec105ff",
+      "run_id": 36745725816,
+      "conclusion": "failure",
+      "reason": "Old PowerShell archive process ETIMEDOUT"
+    }
+  },
+  "current_batch_ci": "Pending push; prior CI does not validate this batch",
+  "real_provider_calls": {
+    "claude": {
+      "used": 1,
+      "limit": 1,
+      "result": "success"
+    },
+    "codex": {
+      "used": 1,
+      "limit": 1,
+      "result": "failure_root_cause_unconfirmed"
+    },
+    "zcode": {
+      "used": 0,
+      "limit": 1,
+      "result": "china_login_location_pending"
+    }
+  },
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "remaining": [
+    "Git integration and bilateral completion panel actions",
+    "Full dependency graph, accepted-only phase progress and structural editing",
+    "History pagination and queue retention",
+    "Actual Windows two-PC Tailscale and desktop executor acceptance",
+    "OS isolation, deployment, recovery and 72-hour observation"
+  ],
+  "source_files": [
+    {
+      "path": "core/fleet-delivery-actions.mjs",
+      "sha256": "6c0565d2a6323221769535c605e787201945a7aa3e785df24578e35ddd74c60b"
+    },
+    {
+      "path": "core/fleet-actions.mjs",
+      "sha256": "b07292afbccf23aad782418bc0cba827a8a94af0077ff20ec705257b8433b07b"
+    },
+    {
+      "path": "core/artifacts/transfers.mjs",
+      "sha256": "5ebd4163dfad7b0ac3aaed946a975edb14c7dafbdf829d767c53b732de583692"
+    },
+    {
+      "path": "core/artifacts/transfer-client.mjs",
+      "sha256": "8bfc354229b24b5123d7d4de46688642e98366b5eb9692de86bb194a2e9a26a0"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "33ef5552ad99d7fcf505eb1ba71a815c13f6c9b95e54e3145ab78e80c0b95c57"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "9776f9862e69da227f4f0cc2caa7b7b07b9776cd2e8927c216828f0d0a394e7a"
+    },
+    {
+      "path": "tests/fleetactionstest.mjs",
+      "sha256": "e4fc2e4d1eaab3164abf20ed8f7fd6ddbd2104a563e0b3637d1dcc24b191b63b"
+    },
+    {
+      "path": "docs/federation/fleet-actions.md",
+      "sha256": "d24a9dd99c6c0a478bf89fb0f31db85f024fe905626224805340211e6e8f49e1"
+    },
+    {
+      "path": "docs/federation/verification.md",
+      "sha256": "592a3b23a755f6c700663b74802e8e21b5c6625a790172786312a4167f2efa3d"
+    },
+    {
+      "path": "docs/federation/PROGRESS.md",
+      "sha256": "5ead45ce6f30c4eb70a4c2a1867ebd30087e436fc7971d8655d10c26466b1b05"
+    },
+    {
+      "path": "docs/多终端共享看板-任务清单.json",
+      "sha256": "1e2af3dc30fa0e85418821b0a3cfb04c9fa559da9f942dcb9dcebfabe34138dc"
+    }
+  ]
+}

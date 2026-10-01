@@ -112,7 +112,7 @@ GET /api/fleet/actions[?project=demo] 返回当前协调身份获准的本地协
 
 这些命令继续使用同一操作 ID、事务、授权快照及持久队列。登记观察只保留有限的身份、代次、版本和结构摘要字段；对端附加字段不写入缓存。登记节点拒绝过期结构时保留失败回执和未确认绑定，不自动更新用户核对的关系。
 
-本轮验证见 [fleet-binding-actions-evidence.json](fleet-binding-actions-evidence.json)。尚未完成最终验证/合并/结案的页面入口、完整结构编辑器、历史翻页和队列保留运维，以及真实 Tailscale 两机验收。
+绑定专项验证见 [fleet-binding-actions-evidence.json](fleet-binding-actions-evidence.json)。文件交付与独立检查见下文；Git 合并/双端结案页面、完整结构编辑器、历史翻页和队列保留运维，以及真实 Tailscale 两机验收仍待完成。
 
 ## 文件交付与来源独立检查
 
@@ -158,3 +158,5 @@ GET /api/fleet/actions[?project=demo] 返回当前协调身份获准的本地协
 本地文件/检查操作成功后的队列 state 为 applied；这仅说明本机该步骤已有记录。检查通过由 checks_passed 单列，不计入任务或阶段验收。目录显示受限元数据、固定程序/检查文件名及摘要，不输出本机绝对路径、凭据、原始测试正文。每类目标、传输和检查至多 100 项，截断会提示。
 
 独立副本与 Windows Job 仍不是操作系统文件/网络沙箱；本机管理者应只登记可信的固定检查。真实双机、客户端安装、模型调用、OS 隔离和长期运行仍按原计划分别验收。
+
+文件交付与检查的最终本机测试、浏览器证据及限制见 [fleet-delivery-actions-evidence.json](fleet-delivery-actions-evidence.json)。

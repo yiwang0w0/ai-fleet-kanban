@@ -2399,9 +2399,9 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Coordinator-backed panel workflow now includes topology publication, authenticated registrar observations, derived source binding preview, independently reviewed target proposal, approval/poll/withdrawal and source-ready delivery. Isolated Windows HTTP and browser tests only; no new model tasks.",
+        "scope": "Panel delivery now covers approved receiving baseline, actual file packaging and resumable transfer, content verification, independent input preparation, one-use fixed checks and receipt reconciliation. Related Windows tests and actual localhost two-board browser flow passed; no physical two-PC or new real-provider calls.",
         "pending": [
-          "Final verification/integration/completion UI and full structural editor",
+          "Final Git integration/completion UI and full structural editor",
           "History pagination and operator queue retention procedure",
           "Actual Tailscale two-PC and desktop G08 acceptance"
         ]
@@ -2413,7 +2413,10 @@
         "core/fleet-actions.mjs",
         "tests/fleetactionstest.mjs",
         "core/fleet-binding-actions.mjs",
-        "docs/federation/fleet-binding-actions-evidence.json"
+        "docs/federation/fleet-binding-actions-evidence.json",
+        "core/fleet-delivery-actions.mjs",
+        "tests/completiontest.mjs",
+        "docs/federation/fleet-delivery-actions-evidence.json"
       ]
     },
     {
