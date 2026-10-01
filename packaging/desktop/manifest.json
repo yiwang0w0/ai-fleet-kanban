@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "ai-fleet-board",
   "display_name": "AI Fleet 看板",
-  "version": "0.24.0-dev.1",
+  "version": "0.24.0",
   "description": "连接本机获准看板工具，查询终端任务和同步状态。",
   "long_description": "连接已经配置的本机看板代理。权限由独立凭据决定，桌面查询建议使用 observe 身份。此扩展不安装看板服务、不保存模型订阅、不自动启动执行器。",
   "author": {

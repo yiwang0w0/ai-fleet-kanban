@@ -164,6 +164,14 @@ jobs:
         run: bash hrun.sh node tests/desktop-packagetest.mjs
         env:
           PYTHON: python
+      - name: "desktop-archivetest (ZIP writer: Python cross-decode, determinism, bounds, no subprocess)"
+        run: bash hrun.sh node tests/desktop-archivetest.mjs
+        env:
+          PYTHON: python
+      - name: "review-contracttest (version, qualified terms and safe upgrade instructions)"
+        run: bash hrun.sh node tests/review-contracttest.mjs
+        env:
+          PYTHON: python
       - name: "tltest (timeline drawing primitives + source shape)"
         run: bash hrun.sh node tests/tltest.mjs
 

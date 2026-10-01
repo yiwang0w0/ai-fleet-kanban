@@ -263,7 +263,7 @@ CLI — process supervision, routing, rulings — which the CLI has no opinion a
 
 ## Federation contracts (0.24 development)
 
-These are implemented machine terms in `0.24.0-dev.1`, not physical fleet or
+These are implemented machine terms in `0.24.0`, not physical fleet or
 provider acceptance claims. The [migration guide](federation/migration-0.24.md)
 covers intentional incompatibilities. Component schema numbers, package version,
 worker protocol, peer protocol and MCP protocol versions are independent.

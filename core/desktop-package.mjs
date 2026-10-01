@@ -14,7 +14,10 @@ const hash=b=>createHash('sha256').update(b).digest('hex');
 // ZIP 2.0, PKWARE APPNOTE 4.3.7/4.3.12/4.3.16. Only our bounded public snapshot.
 // Compression and CRC use Node's built-in zlib; no shell, stdin or extra runtime.
 // https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT
-function archiveSnapshot(entries){
+// ⚠ 2026-09-30: the PowerShell child this replaced hit spawnSync's 30 s budget on three consecutive
+//   Windows CI runs after passing once. The precise stall was not reproduced locally.
+//   The build spawns nothing now; tests/desktop-archivetest.mjs pins that.
+export function archiveSnapshot(entries){
  if(entries.length>32)throw Error('Desktop archive file limit exceeded');
  const locals=[],directory=[],seen=new Set();let offset=0,total=0;
  for(const {path,bytes} of [...entries].sort((a,b)=>a.path<b.path?-1:a.path>b.path?1:0)){

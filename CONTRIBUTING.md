@@ -9,7 +9,7 @@ they clear is the same one the codebase already holds itself to.
 
 1. **Machine assertions over prose.** A change to behavior comes with a harness
    assertion that goes red without it. "I tested it manually" does not survive
-   the next contributor. `npm test` is the authoritative list of the 40 Node
+   the next contributor. `npm test` is the authoritative list of the Node
    harnesses. Windows CI also runs four Python selftests and one Node page
    verifier selftest:
 
@@ -76,11 +76,11 @@ machine-contract change (see the GLOSSARY rule above — those also need the
 migration story). The tag and the README must never disagree about what
 version you are looking at.
 
-The current `0.24.0-dev.1` identifies an unreleased development branch. Do not
+The package version is `0.24.0` on this unreleased review branch. Do not
 create a release tag merely to satisfy a version check. Before an authorized
 0.24.0 release, align package/README/tag on the release commit, finish the
 [Windows migration checklist](docs/federation/migration-0.24.md), and attach
-that commit's required CI and acceptance evidence. The prerelease identifier
+that commit's required CI and acceptance evidence. The package version
 does not claim that physical fleet/provider validation or deployment is done.
 
 ## Scope guidance
