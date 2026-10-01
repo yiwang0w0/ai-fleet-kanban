@@ -18,7 +18,7 @@ export const nodeLifecycle=createLifecycleRegistry('node-runtime');
 const schedulerLifecycle=createLifecycleRegistry('scheduler');
 const errorCode=e=>typeof e?.code==='string'&&/^[A-Z][A-Z0-9_]{0,79}$/.test(e.code)?e.code:'NODE_RUNTIME_ERROR';
 function port(value){if(!Number.isInteger(value)||value<0||value>65535)fail('BAD_INPUT','必须显式指定回环端口',400);return value;}
-function policy(db,input){
+export function validateNodeRuntimeConfig(db,input){
  exact(input,['format','node_id','node_epoch','peer','mcp','sync','scheduler'],'node_runtime');if(input.format!=='ai-fleet-node-runtime/v1')fail('BAD_INPUT','节点常驻配置格式无效',400);
  uuid(input.node_id,'node_id');uuid(input.node_epoch,'node_epoch');const n=localIdentity(db);if(input.node_id!==n.node_id||input.node_epoch!==n.sync_epoch)fail('EPOCH_CHANGED','常驻配置不属于本机当前代次');
  if(input.peer!==null){exact(input.peer,['host','port'],'peer_listener');if(!['127.0.0.1','::1'].includes(input.peer.host))fail('UNSAFE_BIND','节点仅监听数字回环地址',400);port(input.peer.port);}
@@ -54,7 +54,7 @@ export async function runNodeRuntime({dbPath,config,sourceGate,stopSignal=null,c
  }
  const fatal=e=>{failure??=errorCode(e);drain.abort();emit({kind:'attention',code:failure});};
  try{
-  const c=policy(db,config),database=realpathSync(dbPath);id=randomUUID();lock=join(dirname(database),'.'+basename(database)+'.fleet-node-runtime.lock');
+  const c=validateNodeRuntimeConfig(db,config),database=realpathSync(dbPath);id=randomUUID();lock=join(dirname(database),'.'+basename(database)+'.fleet-node-runtime.lock');
   try{fd=openSync(lock,'wx',0o600);}catch(e){if(e.code==='EEXIST')fail('NODE_RUNTIME_BUSY','已有节点常驻锁；须核对原实例停止后处理残留');throw e;}
   writeFileSync(fd,JSON.stringify({instance_id:id,pid:process.pid,node_id:c.node_id,node_epoch:c.node_epoch})+'\n');fsyncSync(fd);
   nodeLifecycle.register(db,{instanceId:id,pid:process.pid,configDigest:digest(c)});registered=true;

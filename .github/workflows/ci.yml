@@ -114,6 +114,8 @@ jobs:
         run: bash hrun.sh node tests/supervisortest.mjs
       - name: adaptertest (explicit provider profiles, scoped tools and sealed configuration)
         run: bash hrun.sh node tests/adaptertest.mjs
+      - name: nodestartuptest (reviewed logon bundle, Task Scheduler validation and hidden launch)
+        run: bash hrun.sh node tests/nodestartuptest.mjs
       - name: noderuntimetest (owned loopback gateways, scoped sync and restart)
         run: bash hrun.sh node tests/noderuntimetest.mjs
       - name: schedulertest (continuous queue, durable lifecycle controls and native stop receipts)
