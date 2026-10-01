@@ -1,3 +1,4 @@
+import {prepareBindingRecovery,recordBindingRecovery,bindingRecovery,migrateBindingRecovery,BINDING_RECOVERY_CODE} from "../core/federation/binding-recovery.mjs";
 import http from "node:http";
 import {spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
@@ -16,9 +17,9 @@ import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from
 import {digest,canonical} from "../core/federation/sync-store.mjs";
 import {enrollTask,callTool} from "../core/mcp/tools.mjs";
 import {createIntent,receiveOffer,decideIncoming,recordReceipt,incomingStatus,outgoingStatus} from "../core/federation/delegation.mjs";
-import {migrateRelations,createRelationGraph,publishTopology,approveRelation,withdrawRelation,relationStatus} from "../core/federation/relations.mjs";
+import {migrateRelations,localRegistrarPeer,createRelationGraph,publishTopology,approveRelation,withdrawRelation,relationStatus} from "../core/federation/relations.mjs";
 import {bindTopology,prepareTopology,startTopologyAttempt,acceptTopologyReceipt,topologyState} from "../core/federation/topology.mjs";
-import {migrateBindings,prepareBinding,bindingState,bindingMessage,receiveBindingMessage,recordBindingMessage,startBindingAttempt,acceptBindingReceipt,cancelUnsentBinding,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal} from "../core/federation/bindings.mjs";
+import {migrateBindings,prepareBinding,bindingState,bindingMessage,receiveBindingMessage,recordBindingMessage,startBindingAttempt,acceptBindingReceipt,cancelUnsentBinding,rejectBindingAttempt,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal} from "../core/federation/bindings.mjs";
 import {submitBinding,sendBindingMessage} from "../core/federation/binding-client.mjs";
 import {listenPeerServer} from "../core/federation/gateway.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
@@ -29,8 +30,8 @@ function node(){const dir=join(TMP,"n"+serial++);mkdirSync(dir);const path=join(
 function grant(a,b,scopes=["peer:handshake","delegation:offer","delegation:status","delegation:binding"],projects=["demo"]){const file=join(TMP,"grant"+serial+++".json");issueCredential(b.db,{peerNodeId:a.node.node_id,peerEpoch:a.node.sync_epoch,scopes,projects,credentialFile:file,expectedVersion:b.db.prepare("SELECT credential_version FROM federation_peers WHERE peer_node_id=?").get(a.node.node_id)?.credential_version});const c=JSON.parse(readFileSync(file,"utf8"));return {file,auth:"Bearer "+c.token,peer:authenticate(b.db,"Bearer "+c.token)};}
 function card(f,extra={}){const id=store.add(f.db,{subject:"work "+serial++,description:"requested work",acceptance:"review evidence",treeMode:"hierarchical",route:"mcp",released:1,...extra}),t=store.get(f.db,id);enrollTask(f.db,{id,projectId:"demo",workKind:"implement",capabilities:["board-tools"],expectedVersion:t.aggregate_version});return store.get(f.db,id);}
 function register(f,owner,g){bindTopology(owner.db,{projectId:"demo",graphId:f.g.graph_id,graphEpoch:f.g.graph_epoch,registrarNodeId:f.r.node.node_id,registrarEpoch:f.r.node.sync_epoch});const op=prepareTopology(owner.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:0}),args=startTopologyAttempt(owner.db,{operationId:op.operation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version}),receipt=publishTopology(f.r.db,g.peer,args);acceptTopologyReceipt(owner.db,{operationId:op.operation_id,requestId:args.request_id,receipt});}
-function fixture({withThird=false}={}){
- const a=node(),b=node(),r=node(),source=card(a),ab=grant(a,b),ar=grant(a,r,["peer:handshake","relations:read","relations:approve","relations:publish"]),br=grant(b,r,["peer:handshake","relations:read","relations:approve","relations:publish"]);
+function fixture({withThird=false,registrarAtSource=false}={}){
+ const a=node(),b=node(),r=registrarAtSource?a:node(),source=card(a),ab=grant(a,b),ar=registrarAtSource?{peer:localRegistrarPeer(a.db,"demo")}:grant(a,r,["peer:handshake","relations:read","relations:approve","relations:publish"]),br=grant(b,r,["peer:handshake","relations:read","relations:approve","relations:publish"]);
  const out=createIntent(a.db,{delegationId:randomUUID(),taskUid:source.task_uid,expectedVersion:source.aggregate_version,targetNodeId:b.node.node_id,targetEpoch:b.node.sync_epoch});receiveOffer(b.db,ab.peer,out.offer);
  const accepted=decideIncoming(b.db,{delegationId:out.delegation_id,decisionId:randomUUID(),expectedVersion:1,decision:"accept",note:"fixture"});
  recordReceipt(a.db,out.delegation_id,accepted);
@@ -368,4 +369,130 @@ test("a decline committed during an HTTP retry upload is checked before any rece
   const split=Math.floor(text.length/2);req.write(text.slice(0,split));receiving.then(()=>{decline(f);req.end(text.slice(split));}).catch(reject);
  });
  const r=await result;assert.equal(r.status,409);assert.equal(r.body.code,"PROPOSAL_DECLINED");assert.equal(f.b.db.prepare("SELECT count(*) n FROM binding_inbox").get().n,1);assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"declined");
+});
+
+
+function rotatedFixtureNode(original){
+ const evidence=join(original.dir,"recovery-evidence");mkdirSync(evidence);writeFileSync(join(evidence,"fixture.txt"),"synthetic binding recovery");
+ const backup=createBackup({dbPath:original.path,evidenceDir:evidence,destination:join(TMP,"binding-backup"+serial++)}),dir=join(TMP,"binding-restore"+serial++);
+ restoreBackup({backupDirectory:backup.destination,destination:dir});const path=join(dir,"board.db");
+ retireNode({dbPath:original.path,expectedEpoch:original.node.sync_epoch});const plan=prepareRecovery({dbPath:path});
+ activateRecovery({dbPath:path,plan,expectedPlanDigest:plan.plan_digest,attestation:{format:"ai-fleet-retirement-attestation/v1",node_id:plan.node_id,retired_epoch:plan.retired_epoch,plan_digest:plan.plan_digest,original_board_stopped:true,original_agents_stopped:true,original_identity_disabled:true,other_restored_writers_stopped:true,evidence_ref:"isolated binding recovery fixture",attested_at:new Date().toISOString()}});
+ const db=new DatabaseSync(path);dbs.push(db);return {dir,path,db,node:localIdentity(db)};
+}
+function bindingRecoveryCLI(n,...args){return spawnSync(process.execPath,[join(ROOT,"cli/binding.mjs"),...args,"--db",n.path],{cwd:ROOT,encoding:"utf8",windowsHide:true,timeout:30000});}
+test("H4c registrar restoration leaves an unknown committed approval pending until explicit local recovery",()=>{
+ const f=fixture();begin(f);
+ const args=startBindingAttempt(f.b.db,{relationId:f.d.relation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version});
+ const late=approveRelation(f.r.db,f.br.peer,args);assert.equal(late.kind,"relation_confirmed");
+ const renewed=rotatedFixtureNode(f.r),grantAfter=grant(f.b,renewed,["peer:handshake","relations:read","relations:approve"]);
+ assert.notEqual(renewed.node.sync_epoch,f.r.node.sync_epoch);
+ assert.throws(()=>approveRelation(renewed.db,grantAfter.peer,args),{code:"GRAPH_RECOVERY_REQUIRED"});
+ assert.throws(()=>rejectBindingAttempt(f.b.db,{relationId:f.d.relation_id,requestId:args.request_id,code:"GRAPH_RECOVERY_REQUIRED"}),{code:"UNKNOWN_REMOTE_OUTCOME"});
+ assert.equal(bindingState(f.b.db,f.d.relation_id).attempts[0].state,"pending");
+ assert.throws(()=>prepareTopology(f.b.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:1}),/BINDING_PENDING/);
+ const planFile=join(f.b.dir,"binding-plan.json"),before=state(f.b.db);
+ const cli=bindingRecoveryCLI(f.b,"prepare-recovery","--relation",f.d.relation_id,"--registrar-epoch",renewed.node.sync_epoch,"--plan-file",planFile);
+ assert.equal(cli.status,0,cli.stderr);assert.equal(state(f.b.db),before);
+ const plan=JSON.parse(readFileSync(planFile,"utf8"));assert.equal(plan.remote_outcome_known,false);
+ const attestation=recoveryAttestation(plan),attestationFile=join(f.b.dir,"attestation.json");writeFileSync(attestationFile,JSON.stringify(attestation));
+ const recorded=bindingRecoveryCLI(f.b,"record-recovery","--plan-file",planFile,"--plan-digest",plan.plan_digest,"--attestation-file",attestationFile);
+ assert.equal(recorded.status,0,recorded.stderr);const receipt=JSON.parse(recorded.stdout);
+ assert.equal(receipt.authority,"operator_attested_not_machine_verified");assert.equal(receipt.remote_outcome_known,false);assert.equal(receipt.graph_recovered,false);
+ assert.equal(bindingState(f.b.db,f.d.relation_id).state,"cancelled");assert.equal(bindingState(f.b.db,f.d.relation_id).recovery.code,BINDING_RECOVERY_CODE);
+ assert.equal(bindingState(f.b.db,f.d.relation_id).attempts[0].error_code,BINDING_RECOVERY_CODE);
+ assert.equal(f.b.db.prepare("SELECT closed FROM delegation_bindings").get().closed,0);assert.equal(f.b.db.prepare("SELECT count(*) n FROM binding_cancellations").get().n,0);
+ assert.equal(store.get(f.b.db,f.target.id).human_gate,true);assert.equal(store.get(f.b.db,f.target.id).released,false);
+ assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"must-stay-held"}).ok,false);
+ assert.throws(()=>store.setReleased(f.b.db,{id:f.target.id,released:true}),/DELEGATION_UNCONFIRMED/);
+ assert.throws(()=>acceptBindingReceipt(f.b.db,{relationId:f.d.relation_id,requestId:args.request_id,receipt:late}),{code:"CONFLICT"});
+ acceptBindingReceipt(f.a.db,{relationId:f.d.relation_id,receipt:late});
+ for(const kind of ["proposal","source_ready"]){const body=bindingMessage(f.a.db,{relationId:f.d.relation_id,kind});assert.throws(()=>receiveBindingMessage(f.b.db,f.ab.peer,body),{code:"BINDING_RECOVERED"});}
+ const frozen=state(f.b.db);
+ const read=bindingRecoveryCLI(f.b,"get-recovery","--relation",f.d.relation_id);assert.equal(read.status,0,read.stderr);assert.deepEqual(JSON.parse(read.stdout),receipt);assert.equal(state(f.b.db),frozen);
+ assert.equal(prepareTopology(f.b.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:1}).state,"prepared");
+ assert.equal(renewed.db.prepare("SELECT count(*) n FROM relation_edges WHERE relation_id=?").get(f.d.relation_id).n,1);
+});
+function recoveryAttestation(plan,extra={}){return {format:"ai-fleet-binding-recovery-attestation/v1",...Object.fromEntries(["node_id","node_epoch","binding_epoch","relation_id","registrar_node_id","retired_registrar_epoch","observed_registrar_epoch","plan_digest"].map(k=>[k,plan[k]])),old_registrar_disabled:true,both_endpoint_workers_stopped:true,remote_outcome_unknown:true,no_automatic_release:true,evidence_ref:"isolated synthetic test fixture",attested_at:new Date().toISOString(),...extra};}
+function recoveryPlan(f,which="a"){return prepareBindingRecovery(f[which].db,{relationId:f.d.relation_id,registrarEpoch:randomUUID()});}
+function recover(f,plan,attestation=recoveryAttestation(plan),which="a"){return recordBindingRecovery(f[which].db,{plan,expectedPlanDigest:plan.plan_digest,attestation});}
+const recoveryState=db=>JSON.stringify({state:state(db),recoveries:db.prepare("SELECT * FROM binding_recoveries ORDER BY relation_id").all(),outbox:db.prepare("SELECT * FROM binding_outbox ORDER BY request_id").all()});
+
+test("H4c local source recovery retains sent messages and acknowledged attempts without releasing work",()=>{
+ const f=fixture();begin(f);const plan=recoveryPlan(f),attestation=recoveryAttestation(plan);
+ assert.throws(()=>cancelUnsentBinding(f.a.db,f.d.relation_id),{code:"UNKNOWN_REMOTE_OUTCOME"});
+ const outbox=f.a.db.prepare("SELECT * FROM binding_outbox").all(),attempts=f.a.db.prepare("SELECT * FROM binding_attempts").all();
+ const receipt=recover(f,plan,attestation);assert.deepEqual(f.a.db.prepare("SELECT * FROM binding_outbox").all(),outbox);assert.deepEqual(f.a.db.prepare("SELECT * FROM binding_attempts").all(),attempts);
+ assert.equal(store.get(f.a.db,f.source.id).human_gate,true);assert.equal(store.get(f.a.db,f.source.id).released,false);assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"no-duplicate"}).ok,false);
+ assert.equal(bindingState(f.b.db,f.d.relation_id).state,"prepared");assert.throws(()=>prepareTopology(f.b.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:1}),/BINDING_PENDING/);
+ assert.equal(prepareTopology(f.a.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:1}).state,"prepared");
+ const once=recoveryState(f.a.db);assert.deepEqual(recover(f,plan,attestation),receipt);assert.equal(recoveryState(f.a.db),once);
+ assert.throws(()=>recover(f,plan,{...attestation,evidence_ref:"different operator decision"}),{code:"REQUEST_CONFLICT"});
+ assert.throws(()=>f.a.db.prepare("UPDATE binding_recoveries SET receipt_json='{}'").run(),/immutable/);
+ assert.throws(()=>f.a.db.prepare("DELETE FROM binding_recoveries").run(),/retained/);
+ assert.throws(()=>f.a.db.prepare("UPDATE delegation_bindings SET state='confirmed'").run(),/immutable/);
+ assert.equal(listBindings(f.a.db,{projectId:"demo"}).bindings[0].recovery.code,BINDING_RECOVERY_CODE);
+});
+
+test("H4c recovery rejects unreviewed digests, incomplete statements and stale task or request state",()=>{
+ const f=fixture();begin(f);const plan=recoveryPlan(f),attestation=recoveryAttestation(plan),before=recoveryState(f.a.db);
+ assert.throws(()=>recordBindingRecovery(f.a.db,{plan,expectedPlanDigest:"0".repeat(64),attestation}),{code:"PLAN_MISMATCH"});
+ for(const k of ["old_registrar_disabled","both_endpoint_workers_stopped","remote_outcome_unknown","no_automatic_release"])assert.throws(()=>recover(f,plan,{...attestation,[k]:false}),{code:"RETIREMENT_ATTESTATION_REQUIRED"});
+ for(const k of ["node_id","node_epoch","binding_epoch","relation_id","registrar_node_id","retired_registrar_epoch","observed_registrar_epoch"])assert.throws(()=>recover(f,plan,{...attestation,[k]:randomUUID()}),{code:"ATTESTATION_MISMATCH"});
+ assert.throws(()=>recover(f,plan,{...attestation,evidence_ref:""}),{code:"RETIREMENT_ATTESTATION_REQUIRED"});assert.throws(()=>recover(f,plan,{...attestation,attested_at:"invalid"}),{code:"RETIREMENT_ATTESTATION_REQUIRED"});
+ assert.throws(()=>recover(f,{...plan,automatic_release:true},attestation),{code:"PLAN_MISMATCH"});assert.equal(recoveryState(f.a.db),before);
+ assert.throws(()=>prepareBindingRecovery(f.a.db,{relationId:f.d.relation_id,registrarEpoch:f.r.node.sync_epoch}),{code:"REGISTRAR_EPOCH_MISMATCH"});
+ store.update(f.a.db,{id:f.source.id,humanGate:true});const changed=recoveryState(f.a.db);assert.throws(()=>recover(f,plan,attestation),{code:"PLAN_STALE"});assert.equal(recoveryState(f.a.db),changed);
+ const fresh=recoveryPlan(f);startBindingAttempt(f.a.db,{relationId:f.d.relation_id,action:"withdraw"});assert.throws(()=>recover(f,fresh),{code:"PLAN_STALE"});
+});
+
+test("H4c recovery atomically rolls back attempts, task holds and receipts when audit storage fails",()=>{
+ const f=fixture();begin(f);startBindingAttempt(f.a.db,{relationId:f.d.relation_id,action:"withdraw"});const plan=recoveryPlan(f),attestation=recoveryAttestation(plan);
+ for(const [table,condition] of [["binding_events","NEW.kind='operator_recovery'"],["task_events","NEW.kind='binding_operator_recovery'"],["binding_recoveries","1"]]){
+  const before=recoveryState(f.a.db);f.a.db.exec("CREATE TRIGGER injected BEFORE INSERT ON "+table+" WHEN "+condition+" BEGIN SELECT RAISE(ABORT,'injected recovery audit'); END");
+  assert.throws(()=>recover(f,plan,attestation),/injected recovery audit/);assert.equal(recoveryState(f.a.db),before);f.a.db.exec("DROP TRIGGER injected");
+ }
+ assert.equal(recover(f,plan,attestation).code,BINDING_RECOVERY_CODE);
+});
+
+test("H4c recovered local epochs require a fresh plan and retain old endpoint history",()=>{
+ const f=fixture();begin(f);const old=recoveryPlan(f),renewed=rotatedFixtureNode(f.a);
+ assert.throws(()=>recordBindingRecovery(renewed.db,{plan:old,expectedPlanDigest:old.plan_digest,attestation:recoveryAttestation(old)}),{code:"IDENTITY_MISMATCH"});
+ assert.throws(()=>prepareBindingRecovery(f.a.db,{relationId:f.d.relation_id,registrarEpoch:randomUUID()}),{code:"NODE_RETIRED"});
+ const plan=prepareBindingRecovery(renewed.db,{relationId:f.d.relation_id,registrarEpoch:randomUUID()});
+ assert.equal(plan.binding_epoch,f.a.node.sync_epoch);assert.equal(plan.node_epoch,renewed.node.sync_epoch);
+ const receipt=recordBindingRecovery(renewed.db,{plan,expectedPlanDigest:plan.plan_digest,attestation:recoveryAttestation(plan)});
+ assert.equal(receipt.code,BINDING_RECOVERY_CODE);assert.equal(listBindings(renewed.db,{projectId:"demo"}).bindings[0].identity_current,0);
+ assert.throws(()=>bindingState(renewed.db,f.d.relation_id),{code:"BINDING_RECOVERY_REQUIRED"});
+ assert.throws(()=>prepareTopology(renewed.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:1}),{code:"TOPOLOGY_RECOVERY_REQUIRED"});
+ assert.equal(store.claimById(renewed.db,{id:f.source.id,worker:"new-epoch"}).ok,false);
+ const cli=bindingRecoveryCLI(renewed,"get-recovery","--relation",f.d.relation_id);assert.equal(cli.status,0,cli.stderr);assert.deepEqual(JSON.parse(cli.stdout),receipt);
+});
+
+test("H4c recovery plans remain read-only before schema upgrade and unknown schemas fail closed",()=>{
+ const f=fixture();begin(f);f.a.db.exec("DROP TRIGGER binding_recovery_immutable; DROP TRIGGER binding_recovery_retained; DROP TABLE binding_recoveries; DROP TABLE binding_recovery_schema");
+ const before=state(f.a.db),planFile=join(f.a.dir,"readonly-plan.json");
+ const cli=bindingRecoveryCLI(f.a,"prepare-recovery","--relation",f.d.relation_id,"--registrar-epoch",randomUUID(),"--plan-file",planFile);assert.equal(cli.status,0,cli.stderr);
+ assert.equal(f.a.db.prepare("SELECT count(*) n FROM sqlite_master WHERE name='binding_recoveries'").get().n,0);assert.equal(state(f.a.db),before);
+ const plan=JSON.parse(readFileSync(planFile,"utf8"));assert.equal(recover(f,plan).code,BINDING_RECOVERY_CODE);
+ f.a.db.exec("UPDATE binding_recovery_schema SET version=99");
+ assert.throws(()=>bindingRecovery(f.a.db,f.d.relation_id),{code:"SCHEMA_INCOMPATIBLE"});assert.throws(()=>migrateBindingRecovery(f.a.db),{code:"SCHEMA_INCOMPATIBLE"});
+});
+
+test("H4c network errors cannot invoke operator recovery and confirmed bindings require cancellation",()=>{
+ const f=fixture();begin(f);const args=startBindingAttempt(f.b.db,{relationId:f.d.relation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version}),before=recoveryState(f.b.db);
+ for(const code of ["GRAPH_RECOVERY_REQUIRED",BINDING_RECOVERY_CODE])assert.throws(()=>rejectBindingAttempt(f.b.db,{relationId:f.d.relation_id,requestId:args.request_id,code}),{code:"UNKNOWN_REMOTE_OUTCOME"});
+ assert.equal(recoveryState(f.b.db),before);finish(f);assert.throws(()=>recoveryPlan(f,"b"),{code:"RECOVERY_NOT_AVAILABLE"});
+});
+
+
+test("H4c a restored co-located registrar permits local exit only for its actual new epoch",()=>{
+ const f=fixture({registrarAtSource:true});begin(f);startBindingAttempt(f.a.db,{relationId:f.d.relation_id,action:"withdraw"});
+ const restored=rotatedFixtureNode(f.a);
+ assert.throws(()=>prepareBindingRecovery(restored.db,{relationId:f.d.relation_id,registrarEpoch:randomUUID()}),{code:"REGISTRAR_EPOCH_MISMATCH"});
+ const plan=prepareBindingRecovery(restored.db,{relationId:f.d.relation_id,registrarEpoch:restored.node.sync_epoch});
+ assert.equal(plan.registrar_node_id,plan.node_id);
+ assert.equal(recordBindingRecovery(restored.db,{plan,expectedPlanDigest:plan.plan_digest,attestation:recoveryAttestation(plan)}).code,BINDING_RECOVERY_CODE);
+ assert.equal(store.get(restored.db,f.source.id).human_gate,true);assert.equal(store.get(restored.db,f.source.id).released,false);
+ assert.equal(restored.db.prepare("SELECT registrar_epoch FROM relation_graphs").get().registrar_epoch,f.a.node.sync_epoch);
 });

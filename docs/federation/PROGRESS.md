@@ -2,7 +2,15 @@
 
 目标：AFK-FED-001。此文件记录实现事实；完整验收条件见上级目录的实施计划。
 
-## 最新进展：第七十三批，2026-10-01
+## 最新进展：第七十四批，2026-10-01
+
+补齐 seven-module/H4c 的登记节点换代绑定出口。实际备份/恢复/激活实验确认：旧登记节点已提交但回执丢失，换代错误不能证明原请求失败。本机 prepare-recovery 只读固定当前/旧 epoch、关系、任务、请求、消息和拓扑状态；record-recovery 要求旧登记节点停用、双方执行器停止等明确人工声明，并原子保留回执及审计。退出后相关任务保持人工闸且不放行，原请求/消息/图保留，迟到确认不能复活；不生成取消/完成证明，不放宽网络拒绝清单。登记节点与来源同机的真实恢复也通过。见 [操作合同](binding-recovery.md) 与 [证据](binding-recovery-evidence.json)。
+
+旧版本缺少恢复命令的断言先失败。最终绑定、拓扑、取消、完成、证据视图五套相关回归一次串行 161/161 通过，0 失败、0 跳过；首批 7 项已包含，不重复累加。最初的夹具回执字段误写已纠正，原失败日志保留。没有重复全仓套件。独立 binding_recovery_schema 为 1，binding schema 仍为 4；任务和审计失败整体回滚，原备份及普通换代保护保持。
+
+上一轮启动修复 175411a 的 CI #132 已失败：具体错误是启动测试读取 nodeRuntimeStatus 时 database is locked，gitleaks 通过；未再出现 STARTUP_BINDING_CHANGED。下一步以该具体并发读问题为优先，不靠重复 CI 掩盖。本批只解除旧 prepared 绑定的本机阻塞，不重建图/拓扑或清除异常实例锁。H5b 及其他原评审项仍待推进。G01/G02/G05 仍锚定 f10f268、pending，正式 0/72、0/12 不变；无生产部署、Tailscale 改动、真实 peer 或模型调用。
+
+## 第七十三批，2026-10-01
 
 补齐 seven-module/H4d 的未知 dispatch 人工出口：本机 prepare-uncertain 只读生成绑定节点/运行/任务/凭据状态的计划，record-uncertain 要求确切停止声明并记录 OPERATOR_ATTESTED_LOST。原任务保持人工闸且不放行，旧运行凭据撤销；已有替代运行不受影响。计划、声明、回执及 task_events/dispatch 事件原子保存，原观察/结果保留，重复决定幂等，旧计划或不同声明拒绝。不会伪造机器观察、退款、重试或验收。见 [操作合同](uncertain-execution.md) 和 [验证证据](uncertain-execution-evidence.json)。
 

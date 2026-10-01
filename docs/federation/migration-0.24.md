@@ -77,3 +77,8 @@ H4a 修复将 binding_schema 从 3 升到 4、relation_schema 从 2 升到 3，�
 ## 人工未知运行恢复记录
 
 新增只增不改的 `broker_execution_resolutions` 与 `broker_execution_resolution_schema=1`；dispatch schema 仍为 3，既有观察/结果保持。人工停止证据进入取消时使用停止回执 v2，登记节点握手能力为 `delegation-operator-stop-v1`。旧 v1 回执继续有效；参与人工恢复的节点需同时升级，不能静默降级证据。操作及限制见 [人工恢复](uncertain-execution.md)。
+
+
+## 未确认绑定的本机人工退出记录
+
+新增独立 binding_recovery_schema=1 和只增不改的 binding_recoveries，现有 binding schema 保持 4。普通迁移只创建记录存储，不裁定旧请求。人工退出保留请求、消息和原图，绑定本地终结但不生成取消/完成证明；相关任务保持人工闸且不放行。只读计划和回执检查不安装迁移，未知记录版本拒绝读取/写入。操作见 [登记节点换代后的绑定人工退出](binding-recovery.md)；旧写入者仍须停用，不能靠降级代码清除退出记录。
