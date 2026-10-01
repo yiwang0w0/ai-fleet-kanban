@@ -131,6 +131,8 @@ jobs:
         run: bash hrun.sh node tests/nodestartuptest.mjs
       - name: noderuntimetest (owned loopback gateways, scoped sync and restart)
         run: bash hrun.sh node tests/noderuntimetest.mjs
+      - name: runtime lock recovery (reviewed plan, stopped host and preserved history)
+        run: bash hrun.sh node --test tests/runtimelocktest.mjs
       - name: schedulertest (continuous queue, durable lifecycle controls and native stop receipts)
         run: bash hrun.sh node tests/schedulertest.mjs
         env:

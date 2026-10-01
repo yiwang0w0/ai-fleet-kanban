@@ -1,0 +1,110 @@
+{
+  "format": "ai-fleet-runtime-lock-evidence/v1",
+  "batch": 88,
+  "base_commit": "1aa869d751a9d39e3bb0efbaa1ec8a1916166e45",
+  "checked_at": "2026-10-01T15:21:30.778046+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "red": {
+    "path": ".data/review88-lock-red.log",
+    "sha256": "ee70fe09a3cfaf0c409cacf97ea5ff49c9cb955b6f2b690d7d882c64456c439b",
+    "failed": 4
+  },
+  "runs": [
+    {
+      "path": ".data/review88-lock-green.log",
+      "sha256": "f92f347299acfdeca22b7fe7085c7bc74756bf8577b6b89fd2632ae7dc7294c2",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "path": ".data/review88-lock-cleanup-green.log",
+      "sha256": "0b586c4c439cc8c766f7a5092f7fb8bae2745f1ee385060594856dc28fd5d97f",
+      "passed": 2,
+      "failed": 0,
+      "overlap": 1
+    },
+    {
+      "path": ".data/review88-ci145-green.log",
+      "sha256": "afff831cc85f9f489f11534199f67cd199a5d1c872ed0c408888b80383f7c079",
+      "passed": 1,
+      "failed": 0
+    }
+  ],
+  "ci_failure": {
+    "run": 36882000214,
+    "head": "1aa869d751a9d39e3bb0efbaa1ec8a1916166e45",
+    "log": {
+      "path": ".data/review88-ci145-job-110435825077.log",
+      "sha256": "f2caa98f16ec1444dbce35b8eca9385b9efd773b21dcfd9324a78925f2b09ed7"
+    },
+    "failed_case": "failed Windows credential protection rolls back the grant without creating a usable token",
+    "fix": "Allocate network fixture before invalidating SystemRoot; retain original credential error and rollback assertions"
+  },
+  "total_distinct_passed": 6,
+  "skipped": 0,
+  "sources": [
+    {
+      "path": "core/execution/runtime-lock-recovery.mjs",
+      "sha256": "851085f608812aa3bfb647a19d75aa69c598e9abe2cf9b28190dfdceb3960b11"
+    },
+    {
+      "path": "cli/runtime-lock.mjs",
+      "sha256": "8ba930b726ff09cae944b853d18c4cfe502e2223a0b8f49738b646dda075c03f"
+    },
+    {
+      "path": "cli/node-runtime.mjs",
+      "sha256": "7954a4c7e8647decbec165c135918e0b73016d839628292c8108f418364c0cb5"
+    },
+    {
+      "path": "cli/scheduler.mjs",
+      "sha256": "8e56e9e7b4f92a13909ac99a7e6e13fd4a6ae03ab420384cbf8eff67a5ad2eb6"
+    },
+    {
+      "path": "tests/runtimelocktest.mjs",
+      "sha256": "7036024ac59bad4e514bf9a6ca120523a5ae023a5014f5bf2e8a085cef8590f3"
+    },
+    {
+      "path": "tests/peertest.mjs",
+      "sha256": "3d800e0219bc0384e8ec104f01d05a50170f25f0f74baacd72a45f4eb3af143d"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "3b5ec84327555708eb7bd23db2e9bafd2b771adbdc425ca29d95777e5145c345"
+    },
+    {
+      "path": "package.json",
+      "sha256": "1f818ee2b5a048ba9a8c49ab7dbe6666c78658e07149898bb505152b85f1e859"
+    },
+    {
+      "path": "core/execution/stop-proof.mjs",
+      "sha256": "88fef1bf799d5e5a62695c312235e5680fbdd294d2427619426b9d2b35c03947"
+    },
+    {
+      "path": "core/execution/lifecycle.mjs",
+      "sha256": "42df43ce94214bd909b1d337ea1bd716a0bd1a7498f2a758697de6ed11ad930f"
+    },
+    {
+      "path": "core/mcp/credential-cleanup.mjs",
+      "sha256": "9552c83ee2a32bba681bd5cc5efa5c7c42ff8dcb67bc608417595de753ae11d3"
+    },
+    {
+      "path": "core/mcp/credential-cleanup.ps1",
+      "sha256": "d6091a85f49a40539b024fa13789fab78c53460df998f71be85aa4d95c3d9654"
+    }
+  ],
+  "limitations": [
+    "Synthetic Windows hosts and scheduler lock; no actual provider process calls",
+    "Signal zero confirms PID absence, not all machine descendants",
+    "Prior operator stop attestations remain explicitly unverified by machine",
+    "Production locks and service restart acceptance untouched"
+  ],
+  "providers_called": false,
+  "production_changed": false,
+  "tailscale_changed": false,
+  "real_multi_pc_acceptance": false,
+  "formal_accepted_tasks": 0,
+  "formal_total_tasks": 72,
+  "formal_accepted_stages": 0,
+  "formal_total_stages": 12
+}

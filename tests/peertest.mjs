@@ -386,6 +386,7 @@ test("private credential helper failures expose only a safe reason and retain a 
 
 test("failed Windows credential protection rolls back the grant without creating a usable token",()=>{
  const f=fixture(),file=next("unavailable-protection")+".json",previous=process.env.SystemRoot;
+ fixtureEndpoint(f.db); // Allocate the network fixture before intentionally breaking Windows helper startup.
  try{process.env.SystemRoot=next("missing-windows");assert.throws(()=>issue(f,{credentialFile:file}),{code:"PRIVATE_FILE_FAILED"});}finally{process.env.SystemRoot=previous;}
  assert.equal(existsSync(file),false);assert.equal(listPeers(f.db).length,0);assert.equal(f.db.prepare("SELECT count(*) n FROM federation_auth_events").get().n,0);
 });

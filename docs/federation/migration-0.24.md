@@ -95,3 +95,7 @@ H5b 增加 source-epoch-lineage-v1 能力及受 sync:pull 保护的只读恢复�
 ## 签发端点与同步结构 5
 
 对端凭据升级为 format 2，grant 必须指定 --endpoint，旧未绑定地址的凭据须重新签发；客户端在任何发送之前匹配固定地址。同步结构 5 增加已成功来源的地址，旧事件/游标保持，换代恢复保留地址，旧写入者拒绝该结构。见 [端点绑定的操作步骤与限制](peer-endpoints.md)。此迁移没有删除产物、历史或工作区。
+
+## 实例锁恢复记录
+
+新增独立 runtime_lock_recovery_schema=1 和不可变 runtime_lock_recoveries；只读 prepare 不迁移，明确 apply 才安装并记录。既有任务、生命周期版本和配额不改；新旧代次不可重放恢复决定。见 [实例锁恢复](runtime-lock-recovery.md)。

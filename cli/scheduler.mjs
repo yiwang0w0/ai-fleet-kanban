@@ -5,7 +5,8 @@ import {createSourceGate} from '../core/execution/source-gate.mjs';
 import {openScheduler} from '../core/execution/scheduler.mjs';
 import {openSchedulerControlDatabase,schedulerStatus,requestSchedulerStop} from '../core/execution/lifecycle.mjs';
 import {readRecoveryJSON} from '../core/recovery.mjs';
-const usage=['node cli/scheduler.mjs once|watch|reconcile --db <本机DB绝对路径> --config-file <本机配置JSON> --accepted-rev <既有治理验收文件> [--assignment <恢复用ID>]',
+const usage=['异常退出残留锁：使用 cli/runtime-lock.mjs prepare/apply；不按心跳超时自动接管。',
+ 'node cli/scheduler.mjs once|watch|reconcile --db <本机DB绝对路径> --config-file <本机配置JSON> --accepted-rev <既有治理验收文件> [--assignment <恢复用ID>]',
  'node cli/scheduler.mjs status --db <本机DB绝对路径> [--instance <实例UUID>]',
  'node cli/scheduler.mjs drain|cancel --db <本机DB绝对路径> --instance <实例UUID> --version <所见控制版本> --request-id <唯一请求UUID>',
  'drain 停止新领取并等待在途完成；cancel 另行请求取消在途执行。请求成功不代表已停止，须再查 status。',

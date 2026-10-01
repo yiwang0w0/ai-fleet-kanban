@@ -3,7 +3,8 @@ import {readRecoveryJSON} from '../core/recovery.mjs';
 import {createSourceGate} from '../core/execution/source-gate.mjs';
 import {openSchedulerControlDatabase} from '../core/execution/lifecycle.mjs';
 import {runNodeRuntime,nodeLifecycle,nodeRuntimeStatus} from '../core/node-runtime.mjs';
-const usage=['node cli/node-runtime.mjs watch --db <绝对路径> --config-file <节点配置JSON> --accepted-rev <治理验收文件>',
+const usage=['异常退出残留锁：使用 cli/runtime-lock.mjs prepare/apply；不按心跳超时自动接管。',
+ 'node cli/node-runtime.mjs watch --db <绝对路径> --config-file <节点配置JSON> --accepted-rev <治理验收文件>',
  'node cli/node-runtime.mjs status --db <绝对路径> [--instance <实例UUID>]',
  'node cli/node-runtime.mjs drain|cancel --db <绝对路径> --instance <实例UUID> --version <所见revision> --request-id <请求UUID>',
  'watch 只启动明确配置的组件；scheduler非null时会按既有许可调用执行器。未安装开机启动。'].join('\n');
