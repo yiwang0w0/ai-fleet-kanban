@@ -117,6 +117,8 @@ jobs:
         run: bash hrun.sh node --test tests/fleethealthtest.mjs tests/conflicttest.mjs
       - name: outputtest (provider terminals, UTF-8, identity and bounds)
         run: bash hrun.sh node tests/outputtest.mjs
+      - name: launchrequesttest (complete pre-permit request bounds and safe diagnostics)
+        run: bash hrun.sh node tests/launchrequesttest.mjs
       - name: supervisortest (pinned processes, timeout, cancellation and descendants)
         run: bash hrun.sh node tests/supervisortest.mjs
       - name: adaptertest (explicit provider profiles, scoped tools and sealed configuration)

@@ -2,7 +2,7 @@
 
 评审代码：`f10f268c30358b8a2dcb58e72ac79c629fa15f5a`，版本 0.24.0，Windows。原报告的 0f6935e/83acc1b 不作为本轮运行基线。本轮开始时开发分支已到 d55046a（增加节点常驻与登录工具），另建干净 detached checkout 运行 f10f268；没有回退开发分支或部署目录。
 
-**以下实验及未修复状态固定于 f10f268。** 后续 H2 修复见 [面板认证证据](panel-auth-evidence.json)，H4b 修复见 [取消只读查询证据](cancellation-status-evidence.json)，H4a 修复见 [取消结算证据](cancellation-closure-evidence.json)，H5a 修复见 [封存恢复证据](sealed-restore-evidence.json)，H4d 人工未知运行出口见 [恢复证据](uncertain-execution-evidence.json)，H4c 换代绑定人工退出见 [绑定恢复证据](binding-recovery-evidence.json)，H5b 跨过中间代次见 [恢复链证据](source-lineage-evidence.json)，H3a/M1 本机阻塞诊断见 [操作说明](progress-diagnostics.md)，H3b/H3c 跨模块只读清单见 [巡检说明](inspection.md)，其余 H3 冲突与健康观测见 [统一说明](conflicts.md) / [健康哨](health-watch.md)；不覆盖本页旧基线观测。 当前证据见 [seven-module-review-evidence.json](seven-module-review-evidence.json)。本页中的 H1–H12 属于 `seven-module`；先前 PR2 行内 B1–B3/H1–H7 的修复证据属于另一套编号。
+**以下实验及未修复状态固定于 f10f268。** 后续 H2 修复见 [面板认证证据](panel-auth-evidence.json)，H4b 修复见 [取消只读查询证据](cancellation-status-evidence.json)，H4a 修复见 [取消结算证据](cancellation-closure-evidence.json)，H5a 修复见 [封存恢复证据](sealed-restore-evidence.json)，H4d 人工未知运行出口见 [恢复证据](uncertain-execution-evidence.json)，H4c 换代绑定人工退出见 [绑定恢复证据](binding-recovery-evidence.json)，H5b 跨过中间代次见 [恢复链证据](source-lineage-evidence.json)，H3a/M1 本机阻塞诊断见 [操作说明](progress-diagnostics.md)，H3b/H3c 跨模块只读清单见 [巡检说明](inspection.md)，其余 H3 冲突与健康观测见 [统一说明](conflicts.md) / [健康哨](health-watch.md)，H6a 完整请求与错误分类见 [执行器预检](executor-preflight.md)；不覆盖本页旧基线观测。 当前证据见 [seven-module-review-evidence.json](seven-module-review-evidence.json)。本页中的 H1–H12 属于 `seven-module`；先前 PR2 行内 B1–B3/H1–H7 的修复证据属于另一套编号。
 
 ## A 机实际状态与处置
 

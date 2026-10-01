@@ -1,3 +1,4 @@
+import {buildLaunchRequest,launchFailureCode} from "./launch-request.mjs";
 import {watchDelegationCancellation} from "./control.mjs";
 import {createRequire} from "node:module";
 import {existsSync} from "node:fs";
@@ -35,14 +36,18 @@ export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared
   runtime:plan.runtime,model:plan.model,effort:plan.effort,run_id:plan.runId,agent_instance_id:plan.agentInstanceId,principal_id:plan.principalId,
   command_sha256:plan.command.sha256,python_sha256:python.sha256,files_digest:digest(plan.pins),prompt_sha256:plan.promptHash,
   environment_sha256:prepared.manifest.environment_sha256,timeout_ms:timeoutMs,heartbeat_ms:heartbeatMs,stderr_limit:stderrLimit});
+ // Validate the complete serialized payload and all deterministic supervisor
+ // settings before spending the single-use budget; prompt length alone is not enough.
+ const launchOptions={python,command:plan.command,args:plan.args,cwd:plan.cwd,env:plan.env,input:plan.input,
+  pins:plan.pins,runtime:plan.runtime,decoder:plan.decoder,timeoutMs,heartbeatMs,stderrLimit};
+ buildLaunchRequest(launchOptions);
  // No await between final validation and the transactional, single-use permit.
  validatePreparedAdapter(prepared);
  const permit=authorizeLaunch(db,{dispatchId,sourceGate,execution});
  const cancellation=watchDelegationCancellation(db,permit.task_id,{signal});
  let observation;
  try{
-  observation=await superviseProcess({python,command:plan.command,args:plan.args,cwd:plan.cwd,env:plan.env,input:plan.input,
-   pins:plan.pins,runtime:plan.runtime,decoder:plan.decoder,timeoutMs,heartbeatMs,stderrLimit,signal:cancellation.signal,
+  observation=await superviseProcess({...launchOptions,signal:cancellation.signal,
    heartbeat:()=>{
     const current=dispatchStatus(db,dispatchId),t=store.get(db,permit.task_id);
     const p=db.prepare("SELECT status,role_version FROM broker_principals WHERE principal_id=?").get(permit.principal_id);
@@ -54,9 +59,9 @@ export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared
     if(current.phase!=="launch_committed")return false;
     store.heartbeat(db,{id:permit.task_id,worker:permit.worker,runId:permit.run_id,leaseMin:5});return true;
    }});
- }catch{
+ }catch(error){
   // Uncertainty never grants a retry/refund. Do not echo provider/host exceptions.
-  observation={status:"failed",evidence:"Executor supervisor did not return a complete observation.",usage:null,diagnostic:"SUPERVISOR_ERROR",
+  observation={status:"failed",evidence:"Executor supervisor did not return a complete observation.",usage:null,diagnostic:launchFailureCode(error),
    observed:null,real_model_call_confirmed:false,process:{started:null,cleanup:"unconfirmed",containment:null}};
  }
  cancellation.close();

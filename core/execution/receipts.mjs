@@ -1,3 +1,4 @@
+import {isLaunchFailureCode} from "./launch-request.mjs";
 import {isProviderErrorMetadata} from "./provider-error.mjs";
 import {exact,fail} from "../mcp/policy.mjs";
 import {canonical} from "../federation/sync-store.mjs";
@@ -25,7 +26,7 @@ export function processObservation(value,{result,launch}){
  if(value.status!==result.status||value.evidence!==result.evidence||canonical(value.usage)!==canonical(result.usage)||value.real_model_call_confirmed!==false||typeof value.diagnostic!=="string"||!/^[A-Z][A-Z0-9_]{0,79}$/.test(value.diagnostic))bad();
  const o=value.observed,p=value.process;
  if(o===null){
-  if(value.status==="success"||value.diagnostic!=="SUPERVISOR_ERROR")bad();
+  if(value.status==="success"||value.diagnostic!=="SUPERVISOR_ERROR"&&!isLaunchFailureCode(value.diagnostic))bad();
  }else{
   const providerError=o!==null&&typeof o==="object"&&Object.hasOwn(o,"provider_error");
   exact(o,["runtime","session_id","turn_id","model","terminal_status","protocol_error","bytes","events","stdout_sha256",...(providerError?["provider_error"]:[])],"execution_observed");

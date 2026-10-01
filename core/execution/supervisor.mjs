@@ -1,3 +1,5 @@
+import {buildLaunchRequest,commandIsolation} from "./launch-request.mjs";
+export {buildLaunchRequest,commandIsolation} from "./launch-request.mjs";
 import {createCommandOutput} from "./command-output.mjs";
 import {spawn} from "node:child_process";
 import {createHash} from "node:crypto";
@@ -34,31 +36,19 @@ export async function superviseCommand(options){
  if(process.platform!=="win32")fail("WINDOWS_REQUIRED");
  return supervise({input:"",pins:[],stderrLimit:65536,...options,commandOutput:true});
 }
-export function commandIsolation(value){
- if(value===null)return null;
- if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).sort().join(",")!=="kind,memory_limit_bytes,network,process_limit"||value.kind!=="windows-appcontainer"||value.network!=="none"||!Number.isSafeInteger(value.memory_limit_bytes)||value.memory_limit_bytes<67108864||value.memory_limit_bytes>2147483648||!Number.isInteger(value.process_limit)||value.process_limit<1||value.process_limit>64)fail("BAD_ISOLATION");
- return {...value};
-}
 export function sandboxObservation(value,isolation,{finished=true}={}){
  return !!value&&value.kind==="windows-appcontainer"&&value.network==="none"&&value.capability_count===0&&value.token_verified===true&&typeof value.profile_name==="string"&&/^ai-fleet-check-[0-9a-f-]{36}$/.test(value.profile_name)&&value.memory_limit_bytes===isolation?.memory_limit_bytes&&value.process_limit===isolation?.process_limit&&(!finished||value.profile_removed===true&&value.staging_removed===true);
 }
 async function supervise({python,command,args,cwd,env,input,pins,runtime,decoder={},commandOutput=false,stdoutLimit=65536,timeoutMs=60000,isolation=null,
  signal=null,heartbeat=null,heartbeatMs=10000,stderrLimit=1024*1024}){
  isolation=commandIsolation(isolation);if(isolation&&!commandOutput)fail("PROVIDER_ISOLATION_UNSUPPORTED");
+ const options={python,command,args,cwd,env,input,pins,runtime,decoder,commandOutput,stdoutLimit,timeoutMs,isolation,signal,heartbeat,heartbeatMs,stderrLimit};
+ buildLaunchRequest(options);
  const py=verifyPin(python),exe=verifyPin(command);
- if(!Array.isArray(args)||args.length>200||args.some(x=>typeof x!=="string"||x.includes("\0")))fail("BAD_ARGS");
- if(!isAbsolute(cwd)||!statSync(cwd).isDirectory())fail("BAD_CWD");
- if(!env||Array.isArray(env)||typeof env!=="object"||Object.entries(env).some(([k,v])=>!k||/[=\0]/.test(k)||typeof v!=="string"||v.includes("\0")))fail("BAD_ENV");
- if(typeof input!=="string"||Buffer.byteLength(input)>131072)fail("BAD_INPUT");
- if(!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>86400000)fail("BAD_TIMEOUT");
- if(!Number.isSafeInteger(heartbeatMs)||heartbeatMs<50||heartbeatMs>60000||heartbeat!==null&&typeof heartbeat!=="function")fail("BAD_HEARTBEAT");
- if(!Number.isSafeInteger(stderrLimit)||stderrLimit<1||stderrLimit>1024*1024)fail("BAD_LIMITS");
- if(!Array.isArray(pins)||pins.length>15)fail("BAD_PINS");
- const checkedPins=[exe,...pins.map(verifyPin)],hostPin=pinFile(HOST);
+ if(!statSync(cwd).isDirectory())fail("BAD_CWD");
+ const checkedPins=pins.map(verifyPin),hostPin=pinFile(HOST);
+ const requestBytes=buildLaunchRequest({...options,python:py,command:exe,cwd:realpathSync(cwd),pins:checkedPins});
  const output=commandOutput?createCommandOutput({stdoutLimit,stderrLimit}):createOutputDecoder(runtime,decoder);
- const request={command:exe.path,args,cwd:realpathSync(cwd),env,input,pins:checkedPins,timeout_ms:timeoutMs,...(isolation?{isolation}:{})};
- const requestBytes=Buffer.from(JSON.stringify(request)+"\n");
- if(requestBytes.length>524288)fail("REQUEST_LIMIT");
  if(signal?.aborted)return {...output.finish({stopReason:"cancelled"}),process:{started:false,cleanup:"not_started",containment:null}};
  // No shell is used for either the host or the provider process.
  const host=spawn(py.path,["-I","-S","-B",HOST],{windowsHide:true,stdio:["pipe","pipe","pipe"],env:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp",...(isolation?["userprofile","localappdata","appdata","homedrive","homepath"]:[])].includes(k.toLowerCase())))});

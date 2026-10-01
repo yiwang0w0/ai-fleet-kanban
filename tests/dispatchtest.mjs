@@ -418,7 +418,7 @@ test("late observations are retained without overwriting a replacement task stat
  const receipt=settleObserved(f,w,observed(x));assert.equal(receipt.result.delivery,"stale_run_retained");
  assert.equal(JSON.stringify(store.get(f.db,w.receipt.task_id)),before);assert.ok(receipt.execution.observation_digest);
 });
-function adapterFixture(){
+function adapterFixture({prompt="fixture only"}={}){
  const s=source(),bridge=join(s.codeRoot,"bridge.mjs");writeFileSync(bridge,"// fixture never contacted\n");
  git(s.codeRoot,["add","."]);git(s.codeRoot,["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","--quiet","-m","fixture bridge"]);
  writeFileSync(s.approvalFile,git(s.codeRoot,["rev-parse","HEAD:"]));s.gate=createSourceGate({codeRoot:s.codeRoot,approvalFile:s.approvalFile});
@@ -430,7 +430,7 @@ function adapterFixture(){
  // provider executable, account credential or network is used by this test.
  const prepared=prepareAdapter({installation:{runtime:"claude",version:ADAPTER_CONTRACTS.claude,program:pinFile(process.execPath),auth_home:dirs.auth},role,
   dispatch:w.receipt,codeRoot:s.codeRoot,workspace:dirs.work,privateDirectory:dirs.private,
-  mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile:w.credentialFile},prompt:"fixture only",
+  mcp:{node:pinFile(process.execPath),bridge:pinFile(bridge),url:"http://127.0.0.1:43111",credentialFile:w.credentialFile},prompt,
   environment:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase())))});
  const pythonPath=execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c","import sys; print(sys.executable)"],{encoding:"utf8",windowsHide:true}).trim();
  return {f,w,prepared,options:{dispatchId:w.receipt.dispatch_id,sourceGate:s.gate,prepared,python:pinFile(pythonPath),privateDirectory:dirs.private,timeoutMs:5000}};
@@ -647,4 +647,42 @@ test('H3 stale dispatch inventory follows actual preparation, interruption and e
  const r=spawnSync(process.execPath,[join(ROOT,'cli/dispatch.mjs'),'stale','--db',f.dbPath],{encoding:'utf8',windowsHide:true,timeout:15000});assert.equal(r.status,2,r.stderr);assert.equal(JSON.parse(r.stdout).total,1);
  recordUncertainResolution(f.db,uncertain(f,w));assert.equal(dispatchStale(f.db).total,0);assert.ok(!readFleetHealth(f.db).issues.some(i=>i.code==='BROKER_INTERRUPTED'));assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
  const prepared=prepare(f,assign(f,card(f)));assert.equal(dispatchStale(f.db).total,1);abandonPrepared(f.db,{dispatchId:prepared.receipt.dispatch_id,reason:'fixture reviewed abandonment'});assert.equal(dispatchStale(f.db).total,0);
+});
+
+test("runner rejects JSON-expanded requests before consuming the one-use permit",async()=>{
+ const {f,w,options}=adapterFixture({prompt:"x"+"\u0001".repeat(100000)});
+ const before=dispatchStatus(f.db,w.receipt.dispatch_id),events=count(f,"broker_dispatch_events");
+ await assert.rejects(executePreparedDispatch(f.db,options),{code:"REQUEST_LIMIT"});
+ const after=dispatchStatus(f.db,w.receipt.dispatch_id);
+ assert.equal(after.phase,"prepared");assert.equal(after.launch_at,null);assert.equal(after.execution,null);
+ assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);assert.equal(quotaStatus(f.db,f.quota.quota_id).reserved,1);
+ assert.equal(count(f,"broker_execution_records"),0);assert.equal(count(f,"broker_dispatch_events"),events);
+ assert.deepEqual(after.run,before.run);assert.equal(existsSync(join(options.privateDirectory,"execution-observation.json")),false);
+ assert.throws(()=>authenticatePrincipal(f.db,w.auth),{code:"LAUNCH_NOT_AVAILABLE"});
+});
+
+test("runner retains typed post-permit failures in signed receipts without refund or retry",async()=>{
+ const {f,w,prepared,options}=adapterFixture(),gate=options.sourceGate,credential=readFileSync(prepared.plan.credentialFile,"utf8");
+ options.sourceGate={...gate,check(){const result=gate.check();writeFileSync(prepared.plan.credentialFile,readFileSync(prepared.plan.credentialFile,"utf8")+"\n");return result;}};
+ const receipt=await executePreparedDispatch(f.db,options),o=receipt.execution.observation;
+ assert.equal(receipt.phase,"settled");assert.equal(o.diagnostic,"PIN_CHANGED");
+ assert.equal(o.observed,null);assert.equal(o.process.started,null);assert.equal(o.process.cleanup,"unconfirmed");
+ assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ assert.equal(reconcileExecutionJournal(f.db,receipt.journal_file).execution.observation.diagnostic,"PIN_CHANGED");
+ writeFileSync(prepared.plan.credentialFile,credential);
+ assert.throws(()=>authenticatePrincipal(f.db,w.auth),{code:"UNAUTHENTICATED"});
+ await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
+ assert.equal(JSON.stringify(o).includes(prepared.plan.credentialFile),false);
+});
+
+test("runner keeps unknown post-permit filesystem exceptions private and uncertain",async()=>{
+ const {f,w,prepared,options}=adapterFixture(),gate=options.sourceGate;
+ options.sourceGate={...gate,check(){const result=gate.check();rmSync(prepared.plan.credentialFile);return result;}};
+ const receipt=await executePreparedDispatch(f.db,options),o=receipt.execution.observation;
+ assert.equal(receipt.phase,"settled");assert.equal(o.diagnostic,"SUPERVISOR_ERROR");
+ assert.equal(o.observed,null);assert.equal(o.process.started,null);assert.equal(o.process.cleanup,"unconfirmed");
+ assert.equal(JSON.stringify(o).includes(prepared.plan.credentialFile),false);assert.equal(JSON.stringify(o).includes("ENOENT"),false);
+ assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ assert.equal(reconcileExecutionJournal(f.db,receipt.journal_file).phase,"settled");
+ assert.throws(()=>authorizeLaunch(f.db,{dispatchId:w.receipt.dispatch_id,sourceGate:gate}),{code:"LAUNCH_NOT_AVAILABLE"});
 });

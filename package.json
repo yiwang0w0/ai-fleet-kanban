@@ -37,6 +37,7 @@
     "test:dispatch": "node tests/dispatchtest.mjs",
     "test:output": "node tests/outputtest.mjs",
     "test:supervisor": "node tests/supervisortest.mjs",
+    "test:launch-request": "node tests/launchrequesttest.mjs",
     "test:adapters": "node tests/adaptertest.mjs",
     "test:trees": "node tests/treetest.mjs",
     "test:delegation": "node tests/delegationtest.mjs",

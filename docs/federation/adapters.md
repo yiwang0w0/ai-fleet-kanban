@@ -93,3 +93,7 @@ features.apply_patch_freeform=false 也不能保证隐藏 GPT-5.4 的 apply_patc
 Claude 2.1.284 的 6 次空账号 / 本机假 Messages 接口探针中，基线只暴露指定 fleet MCP 工具并实际完成一次 get_task 往返；--safe-mode 会连显式 fleet MCP 一起关闭，未采用。指定一个包含已知标记的自动记忆目录后，旧配置确实把标记带入模型请求；同时设置 autoMemoryEnabled=false 与 CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 后，两轮请求均不带标记，工具往返保持正常。最终原生 stdout 交给看板现有解码器，session/model/工具集合/MCP 状态校验通过；real_model_call_confirmed 仍为 false。
 
 内置 agents-md 插件与 agent 名称仍出现在初始化信息中，不能称为插件和子 agent 完全不存在；它们不在本次模型请求工具集合内。两个 managed policy 注册表位置和默认系统 managed-settings.json 在本机探针前未找到，故此结果没有测试组织策略覆盖 hooks 等设置的情况。实际权限仍依赖原生 dontAsk/allowedTools 与 broker 授权；事后解码不能撤销已发生的副作用。证据见 review-claude-native-evidence.json。
+
+## 完整请求预检
+
+启动许可前会检查实际 UTF-8 JSON 请求（含参数、环境和换行）的 512 KiB 上限。失败保留 prepared 与未消费额度；许可后固定错误码用于诊断，不退款或重启。见 [执行器预检](executor-preflight.md)。H6 的无输出检测和 stderr 分类仍待补齐。
