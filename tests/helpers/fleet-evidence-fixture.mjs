@@ -9,12 +9,12 @@ import {canonical,digest,recordSource} from "../../core/federation/sync-store.mj
 import {enrollTask} from "../../core/mcp/tools.mjs";
 const store=createRequire(import.meta.url)("../../core/store.js");
 export function evidenceFixture(path=":memory:",{withBinding=true}={}){
- const db=new DatabaseSync(path);store.migrate(db);migratePeers(db);migrateBindings(db);migrateCancellations(db);migrateResults(db);store.renameNode(db,"kanata");
+ const db=new DatabaseSync(path);store.migrate(db);migratePeers(db);migrateBindings(db);migrateCancellations(db);migrateResults(db);store.renameNode(db,"alpha");
  const local=store.localNode(db),remote=randomUUID(),remoteEpoch=randomUUID(),now=new Date().toISOString();
  const rootId=store.add(db,{subject:"本机父任务",kind:"goal",treeMode:"hierarchical"}),sourceId=store.add(db,{subject:"跨端委派工作",parentId:rootId,treeMode:"hierarchical"});
  for(const id of [rootId,sourceId])enrollTask(db,{id,projectId:"demo",workKind:"implement",capabilities:[],expectedVersion:store.get(db,id).aggregate_version});
  const root=store.get(db,rootId),source=store.get(db,sourceId),target=remote+"/"+randomUUID(),delegationId=randomUUID(),relationId=randomUUID();
- recordSource(db,{node_id:remote,display_name:"kanata",sync_epoch:remoteEpoch});
+ recordSource(db,{node_id:remote,display_name:"alpha",sync_epoch:remoteEpoch});
  db.prepare("INSERT INTO federation_cursors VALUES(?,?,?,?,?)").run(remote,"demo",remoteEpoch,1,now);
  const task={task_uid:target,owner_node_id:remote,subject:'远端工作 <img src=x onerror="alert(1)">',parent_uid:null,description:"仅测试缓存",acceptance:"测试证据",status:"waiting",kind:"task",aggregate_version:1,updated_at:now};
  db.prepare("INSERT INTO federation_replicas VALUES(?,?,?,?,?,?,?,?,?,?)").run(target,remote,remoteEpoch,"demo",1,1,0,canonical(task),1,now);

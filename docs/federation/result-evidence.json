@@ -95,7 +95,7 @@
     "no automatic send/poll service or global UI yet",
     "POSIX group_signalled does not provide strong process-tree stop proof",
     "synthetic supervised Node process uses provider execution mode but real_model_call_confirmed remains false",
-    "two physical kanata machines and each subscription executor remain untested"
+    "two physical machines and each subscription executor remain untested"
   ],
   "tested_commit": "edfb9e097e05ffc5c8f131c6b10c7d201c064ba3"
 }

@@ -14,9 +14,9 @@ import {migrateSync,recordSource,shareTask} from "../core/federation/sync-store.
 import {readFleetView,readFleetTask} from "../core/fleet-view.mjs";
 const store=createRequire(import.meta.url)("../core/store.js"),handles=[];
 const NOW=Date.parse("2026-09-30T12:00:00Z"),recent=new Date(NOW-1000).toISOString();
-function node(sync=true,path=":memory:"){const db=new DatabaseSync(path);handles.push(db);store.migrate(db);store.renameNode(db,"kanata");if(sync)migrateSync(db);return db;}
+function node(sync=true,path=":memory:"){const db=new DatabaseSync(path);handles.push(db);store.migrate(db);store.renameNode(db,"alpha");if(sync)migrateSync(db);return db;}
 after(()=>{for(const db of handles)try{db.close();}catch{}});
-function source(db,{name="kanata",project="demo",received=false}={}){
+function source(db,{name="alpha",project="demo",received=false}={}){
  const id=randomUUID(),epoch=randomUUID();recordSource(db,{node_id:id,display_name:name,sync_epoch:epoch});
  if(received)db.prepare("INSERT INTO federation_cursors VALUES(?,?,?,?,?)").run(id,project,epoch,0,recent);
  return {id,epoch,project};
@@ -38,8 +38,8 @@ test("ordinary local board can be read without creating sync tables or writing",
 test("three same-name roots keep distinct ownership after rename",()=>{
  const db=node(),a=source(db,{received:true}),b=source(db,{received:true}),local=store.add(db,{subject:"本机根",kind:"goal"});
  const parent=replica(db,a,{subject:"远端根"}),child=replica(db,a,{subject:"子任务",parent});replica(db,b);
- const v=view(db);assert.equal(v.nodes.length,3);assert.equal(new Set(v.nodes.map(n=>n.node_id)).size,3);assert.ok(v.nodes.every(n=>n.display_name==="kanata"));assert.equal(v.tasks.find(t=>t.task_uid===child).parent_in_view,true);
- recordSource(db,{node_id:a.id,display_name:"kanata-office",sync_epoch:a.epoch});assert.equal(view(db).tasks.find(t=>t.task_uid===child).owner_name,"kanata-office");assert.equal(store.get(db,local).owner_node_id,v.local_node_id);assert.equal(store.list(db).tasks.length,1);
+ const v=view(db);assert.equal(v.nodes.length,3);assert.equal(new Set(v.nodes.map(n=>n.node_id)).size,3);assert.ok(v.nodes.every(n=>n.display_name==="alpha"));assert.equal(v.tasks.find(t=>t.task_uid===child).parent_in_view,true);
+ recordSource(db,{node_id:a.id,display_name:"alpha-office",sync_epoch:a.epoch});assert.equal(view(db).tasks.find(t=>t.task_uid===child).owner_name,"alpha-office");assert.equal(store.get(db,local).owner_node_id,v.local_node_id);assert.equal(store.list(db).tasks.length,1);
 });
 test("unsynchronized node has unknown count; received empty list has zero",()=>{
  const db=node(),unknown=source(db),empty=source(db,{received:true});const v=view(db);
@@ -82,7 +82,7 @@ test("caller transaction is retained and old sync schema is not migrated by read
  db.exec("UPDATE federation_sync_schema SET version=3");assert.equal(view(db).sync_state,"upgrade_required");assert.equal(db.prepare("SELECT version FROM federation_sync_schema").get().version,3);
 });
 test("invalid filters are rejected before database work",()=>{
- const db=node();for(const bad of [{limit:0},{limit:10001},{limit:1.5},{query:"x".repeat(161)},{ownerNodeId:"kanata"},{projectId:""},{now:NaN}])assert.throws(()=>readFleetView(db,bad),e=>e.status===400);
+ const db=node();for(const bad of [{limit:0},{limit:10001},{limit:1.5},{query:"x".repeat(161)},{ownerNodeId:"alpha"},{projectId:""},{now:NaN}])assert.throws(()=>readFleetView(db,bad),e=>e.status===400);
  assert.throws(()=>readFleetTask(db,null),e=>e.status===400);
 });
 test("local project and publication backlog are represented without publishing",()=>{
@@ -103,7 +103,7 @@ test("real HTTP endpoints require operator token, reject foreign origin and rema
    assert.equal((await get(path,{"X-Board-Token":operator,Origin:"https://foreign.invalid"})).status,403);
    const r=await get(path,{"X-Board-Token":operator});assert.equal(r.status,200);assert.match(r.headers.get("cache-control"),/no-store/);assert.ok(!JSON.stringify(await r.json()).includes(operator));
   }
-  for(const path of ["/api/fleet?limit=0","/api/fleet?owner=kanata","/api/fleet/task","/api/fleet/evidence?uid="+encodeURIComponent(uid),"/api/fleet/evidence?section=runs&cursor=bad&uid="+encodeURIComponent(uid)])assert.equal((await get(path,{"X-Board-Token":operator})).status,400);
+  for(const path of ["/api/fleet?limit=0","/api/fleet?owner=alpha","/api/fleet/task","/api/fleet/evidence?uid="+encodeURIComponent(uid),"/api/fleet/evidence?section=runs&cursor=bad&uid="+encodeURIComponent(uid)])assert.equal((await get(path,{"X-Board-Token":operator})).status,400);
   assert.equal((await get("/api/fleet/task?uid=missing",{"X-Board-Token":operator})).status,404);assert.equal((await get("/fleet")).status,404);
  }finally{
   if(proc.exitCode===null){const closed=new Promise(r=>proc.once("exit",r));proc.kill();await closed;}

@@ -120,6 +120,6 @@
     "Zcode subscription startup, exact provider/model without fallback and real MCP/tool scope",
     "sealed adapter and one authorized minimal real task for each provider",
     "Windows OS permissions, scheduler, global UI and operations",
-    "two physical kanata Windows PCs over Tailscale and independent phase acceptance"
+    "two physical Windows PCs over Tailscale and independent phase acceptance"
   ]
 }

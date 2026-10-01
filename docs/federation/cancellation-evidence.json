@@ -96,7 +96,7 @@
     "POSIX group_signalled is not strong process-tree quiescence proof",
     "fixture stop proofs are labelled and cannot serve as real provider acceptance",
     "unmanaged or old-epoch run history remains unresolved without actual proof",
-    "physical integration is the two user-specified kanata computers; no physical test is claimed"
+    "physical integration is the two user-specified computers; no physical test is claimed"
   ],
   "tested_commit": "8f1c7198439cd0e0d5196db9d241ab40ff7857ab"
 }

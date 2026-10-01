@@ -18,7 +18,7 @@
     "node_id": "33333333-3333-4333-8333-333333333333",
     "node_epoch": "44444444-4444-4444-8444-444444444444",
     "projects": ["demo"],
-    "url": "https://kanata-office.example-tailnet.ts.net",
+    "url": "https://office-node.example-tailnet.ts.net",
     "credential_file": "C:\\FleetRuntime\\private\\office-peer.json"
   }]
 }

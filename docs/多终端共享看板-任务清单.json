@@ -6,7 +6,7 @@
   "created_date": "2026-09-29",
   "timezone": "Asia/Tokyo",
   "source_document": "多终端共享看板-实施与验收计划.md",
-  "source_sha256": "6102fe20b0b783b64f2075184817e74542247860a8a44332d40e176c990aae23",
+  "source_sha256": "482ceed0961ab3cb84c4bc07e3d13c9512a6a650aabb9ca32fc19a2c157be68c",
   "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
   "status": "implementation_in_progress",
   "execution_authorized": true,
@@ -122,7 +122,7 @@
       "decision_record": {
         "date": "2026-09-30",
         "physical_node_count": 2,
-        "selection": "the two kanata computers on Tailscale",
+        "selection": "the two physical computers on Tailscale",
         "both_windows_observed": true,
         "both_online_observed": true,
         "board_access_and_paths": "pending remote verification",
@@ -512,7 +512,7 @@
     {
       "id": "T00.02",
       "phase_id": "S00",
-      "subject": "登记两台 kanata 实体终端",
+      "subject": "登记两台实体机终端",
       "lead_role": "OPS",
       "depends_on": [
         "T00.01"
@@ -1986,7 +1986,7 @@
         "pending": [
           "exact-commit Windows CI",
           "Windows OS permission isolation and native provider adapters",
-          "physical two-kanata Windows integration and independent full-phase acceptance"
+          "physical two-node Windows integration and independent full-phase acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2148,7 +2148,7 @@
         "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
         "pending": [
           "independent verification runner and source acceptance",
-          "two physical kanata artifact delivery and G07 acceptance"
+          "two physical artifact delivery and G07 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2194,7 +2194,7 @@
         "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
         "pending": [
           "independent verification runner and source acceptance",
-          "two physical kanata artifact delivery and G07 acceptance"
+          "two physical artifact delivery and G07 acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2238,7 +2238,7 @@
         "pending": [
           "Exact-commit Windows CI and physical source-check profiles/dependencies",
           "Native model provider OS isolation and disk capacity limits",
-          "Physical two-kanata Windows integration and independent full-phase acceptance"
+          "Physical two-node Windows integration and independent full-phase acceptance"
         ]
       },
       "acceptance_receipt": null,
@@ -2621,7 +2621,7 @@
         "G08"
       ],
       "acceptance_criteria": [
-        "AT09–AT12 在两台 kanata 实体电脑通过",
+        "AT09–AT12 在两台实体机电脑通过",
         "另以三个隔离节点实例验证分区和非同时恢复，不把模拟记为实体结果"
       ],
       "evidence_required": [
@@ -3184,7 +3184,7 @@
     },
     {
       "id": "AT09",
-      "scenario": "两台 kanata 实体设备间双向委派并形成多层任务链",
+      "scenario": "两台实体机设备间双向委派并形成多层任务链",
       "expected_result": "每卡 owner 明确；本地树无多父；跨端结果使正确依赖推进",
       "acceptance_phases": [
         "S09"
@@ -3367,9 +3367,9 @@
       "date": "2026-09-30",
       "kind": "user_scope_clarification",
       "physical_nodes": 2,
-      "physical_selection": "the two kanata computers already on Tailscale",
+      "physical_selection": "the two physical computers already on Tailscale",
       "zcode_subscription": "Chinese Coding Plan",
-      "quota_statement": "user reports ample quota",
+      "quota_statement": "not recorded in the public manifest",
       "extra_physical_node_required": false,
       "real_model_call_limit_changed": false
     }
@@ -3382,7 +3382,7 @@
     "supported_os": [
       "Windows"
     ],
-    "physical_nodes": "two kanata Windows computers connected by Tailscale",
+    "physical_nodes": "two physical Windows computers connected by Tailscale",
     "linux": "out_of_scope_for_future_implementation_ci_deployment_and_acceptance",
     "historical_evidence": "preserved_as_record_only"
   }

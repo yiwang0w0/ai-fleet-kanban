@@ -39,6 +39,6 @@ expectedTools 可绑定 fleet 工具集：模型请求的工具数必须匹配�
 
 先前 app-server 空会话及无账号 /model 启动失败的记录仍保留。app-server 账号由桌面宿主提供，普通 --prompt 使用 standalone 常规登录仓。/model 在带账号时会走模型创建，不能作为零调用预检；app-server 请求 plan 后曾观察到 build，也不作为本次 headless 权限依据。
 
-当前真实调用 Claude/Codex/Zcode 均为 0/1，完整阶段验收 0/12。剩余为真实订阅兼容、授权模型任务、Windows 权限隔离及两台 kanata 的完整联调；后续仅支持 Windows。
+当前真实调用 Claude/Codex/Zcode 均为 0/1，完整阶段验收 0/12。剩余为真实订阅兼容、授权模型任务、Windows 权限隔离及两台实体机的完整联调；后续仅支持 Windows。
 
 产品说明见 [账号与模型配置](https://zcode.z.ai/cn/docs/configuration) 和 [MCP 服务](https://zcode.z.ai/cn/docs/mcp-services)。具体 CLI 行为以固定安装包和上述本机测量为依据。

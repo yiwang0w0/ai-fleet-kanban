@@ -35,7 +35,7 @@
   "draft": {
     "decision": "pending",
     "state": "awaiting_B_identity_and_network_review",
-    "project_id": "kanata-pilot",
+    "project_id": "physical-pilot",
     "local_ui_port": 47924,
     "local_peer_port": 47925,
     "private_https_port": 47925,
