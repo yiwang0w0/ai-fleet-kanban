@@ -1,3 +1,4 @@
+import {dispatchStale,inspectionError} from '../core/inspection.mjs';
 import {openSchedulerControlDatabase} from '../core/execution/lifecycle.mjs';
 import {workspaceLaunchDescriptor} from "../core/artifacts/workspace-session.mjs";
 import {readFileSync,statSync} from "node:fs";
@@ -13,6 +14,7 @@ import {exact,getRole} from "../core/mcp/policy.mjs";
 import {createSourceGate} from "../core/execution/source-gate.mjs";
 import {prepareUncertainResolution,recordUncertainResolution,migrateDispatch,putQuota,prepareDispatch,abandonPrepared,dispatchStatus,quotaStatus} from "../core/execution/dispatch.mjs";
 const usage=[
+ "node cli/dispatch.mjs stale --db <现存绝对路径> [--project <项目>] [--limit <1..100>] [--cursor <上一页游标>]",
  "node cli/dispatch.mjs quota --db <绝对路径> --policy-file <预算JSON> [--version <所见版本>]",
  "node cli/dispatch.mjs quota-status --db <绝对路径> --quota <ID>",
  "node cli/dispatch.mjs prepare --db <绝对路径> --assignment <ID> --quota <ID> --mode fixture|provider --credential-file <新绝对路径> --accepted-rev <治理树验收文件>",
@@ -26,19 +28,21 @@ const usage=[
  "prepare 只领取并保留预算，不发放启动许可或启动模型。已消费许可的运行禁止自动重启/退款。"
 ].join("\n");
 const [command,...args]=process.argv.slice(2);let db;
+const invalid=message=>Object.assign(new Error(message),command==="stale"?{code:"BAD_INPUT"}:{});
 try{
  if(!command||command==="--help")console.log(usage);
  else{
-  const fields={quota:["db","policy-file","version"],"quota-status":["db","quota"],prepare:["db","assignment","quota","mode","credential-file","accepted-rev"],status:["db","dispatch"],abandon:["db","dispatch","reason"],execute:["db","dispatch","config-file","prompt-file","accepted-rev"],reconcile:["db","journal-file"],"prepare-uncertain":["db","dispatch","plan-file"],"record-uncertain":["db","plan-file","plan-digest","attestation-file"]}[command];
-  if(!fields)throw Error(usage);const opts={};
-  for(let i=0;i<args.length;i+=2){const k=args[i].slice(2);if(!args[i].startsWith("--")||!fields.includes(k)||Object.hasOwn(opts,k)||args[i+1]===undefined||args[i+1].startsWith("--"))throw Error(usage);opts[k]=args[i+1];}
-  if(!opts.db)throw Error("--db 必填");
+  const fields={stale:["db","project","limit","cursor"],quota:["db","policy-file","version"],"quota-status":["db","quota"],prepare:["db","assignment","quota","mode","credential-file","accepted-rev"],status:["db","dispatch"],abandon:["db","dispatch","reason"],execute:["db","dispatch","config-file","prompt-file","accepted-rev"],reconcile:["db","journal-file"],"prepare-uncertain":["db","dispatch","plan-file"],"record-uncertain":["db","plan-file","plan-digest","attestation-file"]}[command];
+  if(!fields)throw invalid(usage);const opts={};
+  for(let i=0;i<args.length;i+=2){const k=args[i].slice(2);if(!args[i].startsWith("--")||!fields.includes(k)||Object.hasOwn(opts,k)||args[i+1]===undefined||args[i+1].startsWith("--"))throw invalid(usage);opts[k]=args[i+1];}
+  if(!opts.db)throw invalid("--db 必填");
   const codeRoot=fileURLToPath(new URL("../",import.meta.url));
   const sourceGate=["prepare","execute"].includes(command)?createSourceGate({codeRoot,approvalFile:opts["accepted-rev"]??""}):null;
-  if(command==="prepare-uncertain")db=openSchedulerControlDatabase(opts.db,{readOnly:true});
+  if(["prepare-uncertain","stale"].includes(command))db=openSchedulerControlDatabase(opts.db,{readOnly:true});
   else {db=openPeerDatabase(opts.db);migrateSync(db);migrateDispatch(db);}
   let result;
-  if(command==="quota")result=putQuota(db,readRecoveryJSON(opts["policy-file"]),opts.version===undefined?undefined:Number(opts.version));
+  if(command==="stale"){result=dispatchStale(db,{projectId:opts.project??null,limit:opts.limit===undefined?100:Number(opts.limit),cursor:opts.cursor??null});process.exitCode=result.total?2:0;}
+  else if(command==="quota")result=putQuota(db,readRecoveryJSON(opts["policy-file"]),opts.version===undefined?undefined:Number(opts.version));
   else if(command==="quota-status")result=quotaStatus(db,opts.quota);
   else if(command==="status")result=dispatchStatus(db,opts.dispatch);
   else if(command==="abandon")result=abandonPrepared(db,{dispatchId:opts.dispatch,reason:opts.reason});
@@ -60,5 +64,5 @@ try{
   else result=prepareDispatch(db,{assignmentId:opts.assignment,quotaId:opts.quota,executionMode:opts.mode,credentialFile:opts["credential-file"],sourceGate});
   console.log(JSON.stringify(result,null,2));
  }
-}catch(e){console.error((e.code?e.code+": ":"")+e.message);process.exitCode=1;}
+}catch(e){console.error(command==="stale"?JSON.stringify(inspectionError(e)):(e.code?e.code+": ":"")+e.message);process.exitCode=1;}
 finally{db?.close();}

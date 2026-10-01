@@ -1,3 +1,4 @@
+import {federationStuck} from '../core/inspection.mjs';
 import {prepareBindingRecovery,recordBindingRecovery,bindingRecovery,migrateBindingRecovery,BINDING_RECOVERY_CODE} from "../core/federation/binding-recovery.mjs";
 import http from "node:http";
 import {spawn,spawnSync} from "node:child_process";
@@ -51,9 +52,12 @@ async function network(n){const s=await listenPeerServer(n.db,{port:0});servers.
 
 test("both verified endpoint commitments permit an explicitly released target while holding its source",()=>{
  const f=fixture();begin(f);
+ assert.equal(federationStuck(f.b.db).items.find(i=>i.category==='delegation_unbound')?.record_id,f.out.delegation_id);
+ const pending=startBindingAttempt(f.b.db,{relationId:f.d.relation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version});
+ assert.equal(federationStuck(f.b.db).items.find(i=>i.category==='binding_attempt')?.record_id,pending.request_id);
  assert.equal(bindingState(f.b.db,f.d.relation_id).execution_authorized,false);
  assert.throws(()=>store.setReleased(f.b.db,{id:f.target.id,released:true}),/DELEGATION_UNCONFIRMED/);
- finish(f);assert.equal(bindingState(f.b.db,f.d.relation_id).execution_authorized,true);assert.equal(store.get(f.b.db,f.target.id).released,false);
+ finish(f);assert.equal(federationStuck(f.b.db).total,0);assert.equal(bindingState(f.b.db,f.d.relation_id).execution_authorized,true);assert.equal(store.get(f.b.db,f.target.id).released,false);
  store.setReleased(f.b.db,{id:f.target.id,released:true});assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"target"}).ok,true);
  assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"source"}).ok,false);
  assert.throws(()=>f.a.db.prepare("UPDATE tasks SET status='done' WHERE id=?").run(f.source.id),/BINDING_PENDING/);

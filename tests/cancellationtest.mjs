@@ -1,3 +1,4 @@
+import {federationStuck} from '../core/inspection.mjs';
 import {normalizeCancellationClosure} from '../core/federation/cancellation-contract.mjs';
 import {migrateCancellationClosure,cancellationClosureState,startCancellationRetirement,recordCancellationRetirement,settleCancellation} from "../core/federation/cancellation-closure.mjs";
 import {submitCancellationRetirement} from "../core/federation/cancellation-closure-client.mjs";
@@ -79,9 +80,11 @@ function worker(f,{mode="fixture",task=f.target}={}){
 const counts=db=>JSON.stringify(Object.fromEntries(["delegation_cancellations","cancellation_members","cancellation_proofs","cancellation_events","tasks","task_events"].map(t=>[t,db.prepare("SELECT * FROM "+t+" ORDER BY rowid").all()])));
 test("delivery acknowledgement is not a stop acknowledgement; a never-run target proves quiescence once",()=>{
  const f=fullyBound(),c=received(f);assert.equal(cancellationState(f.a.db,f.d.relation_id).state,"received");assert.equal(cancellationState(f.a.db,f.d.relation_id).stopped,false);
+ assert.equal(federationStuck(f.a.db).items.find(i=>i.category==='cancellation_received')?.record_id,c.cancel_id);
  assert.equal(bindingState(f.b.db,f.d.relation_id).execution_authorized,false);assert.throws(()=>releaseBoundTask(f.b.db,{relationId:f.d.relation_id,expectedTaskVersion:store.get(f.b.db,f.target.id).aggregate_version}),{code:"CONFIRMATION_REQUIRED"});
  const r=progressCancellation(f.b.db,f.d.relation_id);assert.equal(r.receipt.stopped,true);assert.equal(r.receipt.run_count,0);assert.deepEqual(progressCancellation(f.b.db,f.d.relation_id),r);
- assert.equal(recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:r.receipt}).stopped,true);assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"not-auto-reclaimed"}).ok,false);
+ assert.equal(recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:r.receipt}).stopped,true);
+ assert.equal(federationStuck(f.a.db).items.filter(i=>i.category==='cancellation_received').length,0);assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"not-auto-reclaimed"}).ok,false);
  const before=counts(f.a.db);recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:r.receipt});assert.equal(counts(f.a.db),before);assert.deepEqual(receiveCancellation(f.b.db,f.ab.peer,c.request),r.receipt);
 });
 test("source cancellation enforces current version, fixed request identity and local confirmation",()=>{

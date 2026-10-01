@@ -1,3 +1,4 @@
+import {federationStuck} from '../core/inspection.mjs';
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -36,7 +37,9 @@ async function network(f){const s=await listenPeerServer(f.r.db,{port:0});server
 const count=(db,table)=>db.prepare("SELECT count(*) n FROM "+table).get().n;
 test("explicit binding and first registration hold new claims until a matching registrar receipt commits",()=>{
  const f=setup(),t=card(f.a);assert.equal(bind(f).phase,"unregistered");assert.equal(store.claimById(f.a.db,{id:t.id,worker:"fixture"}).ok,false);
- const op=stage(f);assert.equal(op.state,"prepared");assert.equal(topologyState(f.a.db,"demo").phase,"pending");const result=commit(f,op);assert.equal(result.state,"applied");
+ const op=stage(f);assert.equal(op.state,"prepared");assert.equal(topologyState(f.a.db,"demo").phase,"pending");const pending=startTopologyAttempt(f.a.db,{operationId:op.operation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version});
+ assert.equal(federationStuck(f.a.db).items.find(i=>i.category==='topology_attempt')?.record_id,pending.request_id);
+ const result=commit(f,op);assert.equal(result.state,"applied");assert.equal(federationStuck(f.a.db).total,0);
  assert.equal(topologyState(f.a.db,"demo").revision,1);assert.equal(topologyState(f.a.db,"demo").phase,"ready");assert.equal(store.claimById(f.a.db,{id:t.id,worker:"fixture"}).ok,true);
  assert.throws(()=>bind(f),{code:"CONFLICT"});assert.equal(count(f.a.db,"topology_write_permits"),0);
 });

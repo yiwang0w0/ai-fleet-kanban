@@ -81,6 +81,7 @@
     "test:review-contracts": "node tests/review-contracttest.mjs",
     "test:appcontainer": "node tests/appcontainertest.mjs",
     "node:startup": "node cli/node-startup.mjs",
-    "test:node-startup": "node tests/nodestartuptest.mjs"
+    "test:node-startup": "node tests/nodestartuptest.mjs",
+    "test:inspection": "node tests/inspectiontest.mjs"
   }
 }

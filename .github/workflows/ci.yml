@@ -110,6 +110,8 @@ jobs:
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)
         run: bash hrun.sh node tests/dispatchtest.mjs
+      - name: inspectiontest (read-only pending inventories, scoped cursors and sanitized errors)
+        run: bash hrun.sh node tests/inspectiontest.mjs
       - name: outputtest (provider terminals, UTF-8, identity and bounds)
         run: bash hrun.sh node tests/outputtest.mjs
       - name: supervisortest (pinned processes, timeout, cancellation and descendants)
