@@ -107,3 +107,5 @@ node cli/scheduler.mjs reconcile --db C:/board-data/board.db --config-file C:/bo
 当前以有界批次运行，一批全部结束后再补下一批；源码/工作区准备含同步文件与 Git 操作，大规模任务的吞吐和心跳延迟尚未验收。没有安装 Windows 服务或设置开机启动，也未实施运行证据自动清理、完整 OS 权限隔离、每日预算窗口与模型用量限额。后续仍需完整界面操作、实际三执行器和双机断线闭环、72 小时及运维验收。正式阶段完成数保持 0/12。
 
 本机管理回归与故障记录见 [调度实例控制证据](scheduler-lifecycle-evidence.json)。控制记录新增 scheduler_lifecycle_schema v1、scheduler_instances 和 scheduler_control_requests；只由新调度器注册时创建，不改既有分派/schema或启动许可。
+
+CI #135 的启动测试已通过，调度器套件随后在状态读取时遇到真实写锁。独立进程实验确认旧测试连接没有锁等待，而既有生产控制入口已能有界等待。测试现复用实际控制连接；生产只读行为、5秒等待上限、实例身份与停止判据保持。29项调度器回归通过，见 [控制连接证据](scheduler-control-evidence.json)。这不表示一般数据库争用或异常实例锁恢复已经解决。

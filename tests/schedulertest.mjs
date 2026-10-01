@@ -2,7 +2,7 @@ import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {createRequire} from 'node:module';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,cpSync,readdirSync,realpathSync,unlinkSync} from 'node:fs';
 import {join,relative,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -34,7 +34,10 @@ const python=pinFile(execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||
 const environment=Object.fromEntries(Object.entries(process.env).filter(([k])=>['systemroot','windir','temp','tmp'].includes(k.toLowerCase())));
 after(()=>{for(const s of schedulers)try{s.close();}catch{}for(const d of dbs)try{d.close();}catch{}const rel=relative(resolve(tmpdir()),resolve(TMP));assert.ok(rel&&!rel.startsWith('..'));rmSync(TMP,{recursive:true,force:true});});
 function fixture({limit=5,max=1,wait=0,capability='board-tools'}={}){
- const base=mkdtempSync(join(TMP,'case-')),dbPath=join(base,'board.db'),db=new DatabaseSync(dbPath);dbs.push(db);store.migrate(db);migrateSync(db);migrateDispatch(db);
+ const base=mkdtempSync(join(TMP,'case-')),dbPath=join(base,'board.db'),setup=new DatabaseSync(dbPath);
+ try{store.migrate(setup);migrateSync(setup);migrateDispatch(setup);}finally{setup.close();}
+ // Observe a concurrently running scheduler through the same bounded policy as its control CLI.
+ const db=openSchedulerControlDatabase(dbPath);dbs.push(db);
  const limits={max_task_attempts:2,max_open_tasks:100,requests_per_minute:300};
  putRole(db,{role_id:'coordinator',kind:'coordinate',projects:['demo'],capabilities:[],runtime:null,model:null,effort:null,tools:'write',priority:10,enabled:true,limits});
  putRole(db,{role_id:'engine',kind:'implement',projects:['demo'],capabilities:[capability],runtime:'zcode',model:'GLM-5.3',effort:'low',tools:'write',priority:10,enabled:true,limits});
@@ -243,4 +246,31 @@ test('node host observes a durable startup drain before launching the first queu
  const f=fixture({limit:1}),config=await runtimeConfig(f);card(f);let requested=false;
  await runNodeRuntime({dbPath:f.dbPath,config,sourceGate:gate,environment,onEvent:e=>{if(e.kind==='component'&&e.name==='mcp'&&e.state==='listening'){nodeLifecycle.requestStop(f.db,{instanceId:e.instance_id,expectedRevision:1,requestId:randomUUID(),mode:'drain'});requested=true;}}});
  assert.equal(requested,true);assert.equal(used(f),0);assert.equal(launches(f),0);assert.equal(nodeRuntimeStatus(f.db).instances[0].observed_revision,2);
+});
+
+async function duringSchedulerWrite(f,read){
+ const script="const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.argv[1]);db.exec('PRAGMA busy_timeout=5000;BEGIN EXCLUSIVE');process.send({locked:true});setTimeout(()=>{db.exec('ROLLBACK');db.close();process.disconnect();},1000);";
+ const writer=spawn(process.execPath,['-e',script,f.dbPath],{windowsHide:true,stdio:['ignore','ignore','pipe','ipc'],timeout:10000});let error='';
+ writer.stderr.on('data',b=>error+=b);
+ const closed=new Promise((resolve,reject)=>{writer.once('error',reject);writer.once('close',code=>code===0?resolve():reject(Error('isolated scheduler writer failed: '+error)));});
+ closed.catch(()=>{});
+ try{
+  await new Promise((resolve,reject)=>{writer.once('message',m=>m.locked?resolve():reject(Error('lock not held')));writer.once('error',reject);writer.once('exit',()=>reject(Error('writer exited before lock observation')));});
+  return await read();
+ }finally{await closed;}
+}
+const fileHash=file=>createHash('sha256').update(readFileSync(file)).digest('hex');
+test('scheduler fixture status waits for an actual independent writer without changing data or starting work',async()=>{
+ const f=fixture(),before=fileHash(f.dbPath);
+ await duringSchedulerWrite(f,()=>{const s=status(f);assert.equal(s.node_id,f.config.node_id);assert.equal(s.configured,false);assert.deepEqual(s.instances,[]);assert.equal(s.process_liveness,'not_checked');});
+ assert.equal(fileHash(f.dbPath),before);assert.equal(used(f),0);assert.equal(launches(f),0);assert.equal(existsSync(f.marker),false);
+});
+test('production scheduler read-only control already tolerates a transient writer and refuses mutations',async()=>{
+ const f=fixture(),before=fileHash(f.dbPath);
+ await duringSchedulerWrite(f,()=>{
+  const db=openSchedulerControlDatabase(f.dbPath,{readOnly:true});
+  try{const s=schedulerStatus(db);assert.equal(s.node_id,f.config.node_id);assert.equal(s.configured,false);assert.deepEqual(s.instances,[]);assert.equal(db.prepare('PRAGMA query_only').get().query_only,1);assert.throws(()=>db.prepare("UPDATE board_node SET display_name='forbidden'").run(),/readonly/);}
+  finally{db.close();}
+ });
+ assert.equal(fileHash(f.dbPath),before);assert.equal(used(f),0);assert.equal(launches(f),0);
 });
