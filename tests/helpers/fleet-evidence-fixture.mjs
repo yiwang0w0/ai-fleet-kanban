@@ -25,3 +25,18 @@ export function evidenceFixture(path=":memory:",{withBinding=true}={}){
  if(withBinding)db.prepare("INSERT INTO delegation_bindings(relation_id,delegation_id,project_id,side,node_id,node_epoch,task_id,task_uid,task_version,registrar_node_id,registrar_epoch,descriptor_digest,descriptor_json,contract_json,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(relationId,delegationId,"demo","source",local.node_id,local.sync_epoch,sourceId,source.task_uid,source.aggregate_version,local.node_id,local.sync_epoch,digest(descriptor),canonical(descriptor),canonical({secret:"PRIVATE-CONTRACT"}),"prepared",now);
  return {db,local,remote,remoteEpoch,root,source,target,offer,receipt,descriptor,delegationId,relationId,now,store};
 }
+
+// Synthetic stored history; never launches a model or grants execution authority.
+export function addEvidenceHistory(f,count=205){
+ const {db,source,local,now}=f;
+ const binding=db.prepare("INSERT INTO delegation_bindings(relation_id,delegation_id,project_id,side,node_id,node_epoch,task_id,task_uid,task_version,registrar_node_id,registrar_epoch,descriptor_digest,descriptor_json,contract_json,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+ const result=db.prepare("INSERT INTO delegation_results(result_id,relation_id,project_id,side,node_id,node_epoch,sequence,task_uid,task_version,run_id,body_json,body_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)");
+ const run=db.prepare("INSERT INTO task_runs(run_id,task_id,task_uid,owner_node_id,executor_node_id,worker,role_id,runtime,agent_instance_id,policy_json,policy_sha256,started_at,first_attempt,last_attempt,state) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+ db.exec("BEGIN");try{for(let i=0;i<count;i++){
+  const d={...f.descriptor,relation_id:randomUUID(),delegation_id:randomUUID()},runId=randomUUID(),resultId=randomUUID();
+  binding.run(d.relation_id,d.delegation_id,"demo","source",local.node_id,local.sync_epoch,source.id,source.task_uid,source.aggregate_version,local.node_id,local.sync_epoch,digest(d),canonical(d),"{}","cancelled",now);
+  const body={result_id:resultId,relation:d,execution:{run_id:runId,runtime:"fixture",execution_mode:"fixture"},process_result:{status:"success"}};
+  result.run(resultId,d.relation_id,"demo","source",local.node_id,local.sync_epoch,1,source.task_uid,source.aggregate_version,runId,canonical(body),digest(body),now);
+  run.run(runId,source.id,source.task_uid,local.node_id,local.node_id,"fixture","implementer","fixture",randomUUID(),"{}",digest({}),now,1,1,"ended");
+ }db.exec("COMMIT");}catch(e){db.exec("ROLLBACK");throw e;}
+}

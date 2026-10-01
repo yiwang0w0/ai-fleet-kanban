@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
 import {createRequire} from "node:module";
 import {randomUUID,createHash} from "node:crypto";
-import {evidenceFixture} from "./helpers/fleet-evidence-fixture.mjs";
-import {readFleetView,readFleetTask} from "../core/fleet-view.mjs";
+import {evidenceFixture,addEvidenceHistory} from "./helpers/fleet-evidence-fixture.mjs";
+import {readFleetView,readFleetTask,readFleetEvidencePage} from "../core/fleet-view.mjs";
 import {taskContext,taskList,boardOverview} from "../core/mcp/context.mjs";
 import {canonical,digest,recordSource} from "../core/federation/sync-store.mjs";
 const store=createRequire(import.meta.url)("../core/store.js");
@@ -81,4 +81,46 @@ test("large relationship histories disclose truncation at board and detail limit
 test("corrupt scoped offer is counted without exposing its content",t=>{
  const f=fixture(t,{withBinding:false});f.db.exec("DROP TRIGGER delegation_outgoing_identity");f.db.prepare("UPDATE delegation_outgoing SET offer_json=?").run('{"private":"PRIVATE-BAD-OFFER"}');
  const v=readFleetView(f.db);assert.equal(v.relations.total,0);assert.equal(v.relations.unverified_records,1);assert.ok(!JSON.stringify(v).includes("PRIVATE-BAD-OFFER"));
+});
+
+test("results beyond the first relationship page remain in the evidence history",t=>{
+ const f=fixture(t);addEvidenceHistory(f);const e=readFleetTask(f.db,f.root.task_uid).evidence;
+ assert.equal(e.relations.total,206);assert.equal(e.results.total,205);assert.equal(e.results.items.length,100);
+});
+
+test("evidence pages traverse tied timestamps without loss, duplication, writes or schema changes",t=>{
+ const f=fixture(t);addEvidenceHistory(f);const before=f.db.prepare("SELECT total_changes() n").get().n;
+ for(const [section,key,total] of [["relations","relation_id",206],["results","result_id",205],["runs","run_id",205]]){
+  const first=readFleetTask(f.db,f.root.task_uid,["demo"]).evidence[section],all=[...first.items];let p=first;
+  while(p.next_cursor){p=readFleetEvidencePage(f.db,f.root.task_uid,{section,cursor:p.next_cursor},["demo"]).page;assert.equal(p.snapshot_id,first.snapshot_id);all.push(...p.items);}
+  assert.equal(all.length,total);assert.equal(new Set(all.map(r=>r[key])).size,total);assert.equal(p.truncated,false);assert.equal(p.offset,200);
+  assert.deepEqual(readFleetEvidencePage(f.db,f.root.task_uid,{section,cursor:first.cursor},["demo"]).page,first);
+ }
+ assert.equal(f.db.prepare("SELECT total_changes() n").get().n,before);
+});
+test("changed history and task version invalidate old evidence cursors",t=>{
+ const f=fixture(t);addEvidenceHistory(f,2);const query={section:"runs",limit:1};
+ let a=readFleetEvidencePage(f.db,f.root.task_uid,query).page;
+ addEvidenceHistory(f,1);assert.throws(()=>readFleetEvidencePage(f.db,f.root.task_uid,{...query,cursor:a.next_cursor}),{code:"EVIDENCE_CHANGED",status:409});
+ a=readFleetEvidencePage(f.db,f.root.task_uid,query).page;
+ f.db.prepare("UPDATE tasks SET description='changed root' WHERE id=?").run(f.root.id);
+ assert.throws(()=>readFleetEvidencePage(f.db,f.root.task_uid,{...query,cursor:a.cursor}),{code:"EVIDENCE_CHANGED"});
+
+});
+test("cursor is bound to task, section and page size and cannot restore revoked visibility",t=>{
+ const f=fixture(t);addEvidenceHistory(f,2);const a=readFleetEvidencePage(f.db,f.root.task_uid,{section:"runs",limit:1},["demo"]).page;
+ for(const [uid,q,scope,code] of [
+  [f.source.task_uid,{section:"runs",limit:1,cursor:a.next_cursor},["demo"],"BAD_INPUT"],
+  [f.root.task_uid,{section:"results",limit:1,cursor:a.next_cursor},["demo"],"BAD_INPUT"],
+  [f.root.task_uid,{section:"runs",cursor:a.next_cursor},["demo"],"BAD_INPUT"],
+  [f.root.task_uid,{section:"runs",limit:1,cursor:a.next_cursor},["private"],"NOT_FOUND"]])assert.throws(()=>readFleetEvidencePage(f.db,uid,q,scope),{code});
+ f.db.prepare("UPDATE federation_replicas SET withdrawn=1 WHERE task_uid=?").run(f.target);
+ assert.throws(()=>readFleetEvidencePage(f.db,f.root.task_uid,{section:"runs",limit:1,cursor:a.next_cursor},["demo"]),{code:"EVIDENCE_CHANGED"});
+ const refreshed=readFleetEvidencePage(f.db,f.root.task_uid,{section:"relations"},["demo"]);assert.ok(refreshed.page.items.every(r=>r.target===null));assert.ok(!JSON.stringify(refreshed).includes(f.target));
+});
+test("malformed and out-of-range pagination is rejected; empty sections and bounded limits remain readable",t=>{
+ const f=fixture(t),call=q=>readFleetEvidencePage(f.db,f.root.task_uid,q),encoded=o=>Buffer.from(JSON.stringify(o)).toString("base64url");
+ for(const q of [{},{section:"secret"},{section:"runs",limit:0},{section:"runs",limit:101},{section:"runs",limit:1.5},{section:"runs",limit:"1"},{section:"runs",cursor:""},{section:"runs",cursor:"x".repeat(1025)},{section:"runs",cursor:encoded([])},{section:"runs",extra:true}])assert.throws(()=>call(q),{code:"BAD_INPUT"});
+ const p=call({section:"runs"}).page,c=JSON.parse(Buffer.from(p.cursor,"base64url").toString());assert.equal(p.total,0);assert.equal(p.next_cursor,null);assert.deepEqual(call({section:"runs",cursor:p.cursor}).page,p);
+ for(const delta of [{offset:-1},{offset:1},{offset:1.5},{v:2},{extra:1},{snapshot_id:"x"}])assert.throws(()=>call({section:"runs",cursor:encoded({...c,...delta})}),{code:"BAD_INPUT"});
 });

@@ -1,3 +1,4 @@
+import {readFleetTask,readFleetEvidencePage} from "../core/fleet-view.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -275,4 +276,11 @@ test("legacy restore is opt-in and CLI upgrade produces a preparation-ready held
  const dir=path("cli-upgrade"),cli=spawnSync(process.execPath,[join(ROOT,"cli/backup.mjs"),"restore",b.destination,dir,"--upgrade-schema"],{encoding:"utf8",windowsHide:true});
  assert.equal(cli.status,0,cli.stderr);assert.equal(JSON.parse(cli.stdout).schema_upgrade.identity,"initialized");
  assert.equal(prepareRecovery({dbPath:join(dir,"board.db")}).counts.active_runs,1);assert.equal(recoveryStatus(join(dir,"board.db")).state,"restore_hold");
+});
+
+test("recovered board rejects an evidence cursor issued before its epoch rotation",()=>{
+ const r=restored(),uid=r.f.run.task_uid,old=readFleetTask(r.f.db,uid).evidence.runs.cursor;
+ const receipt=activate(r),db=open(r);assert.notEqual(receipt.new_epoch,r.f.node.sync_epoch);
+ assert.throws(()=>readFleetEvidencePage(db,uid,{section:"runs",cursor:old}),{code:"EVIDENCE_CHANGED",status:409});
+ const fresh=readFleetEvidencePage(db,uid,{section:"runs"});assert.equal(fresh.page.items[0].state,"ended");
 });

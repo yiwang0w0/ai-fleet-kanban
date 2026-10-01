@@ -19,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve, relative } from "node:path";
 import { createRequire } from "node:module";
 import { nodeTooOld } from "./env.mjs";
-import {readFleetView,readFleetTask} from "./fleet-view.mjs";
+import {readFleetView,readFleetTask,readFleetEvidencePage} from "./fleet-view.mjs";
 import {readFleetProgress} from "./fleet-progress.mjs";
 import {openFleetActions,loadFleetActionsConfig} from "./fleet-actions.mjs";
 import {PeerError} from "./federation/protocol.mjs";
@@ -2322,10 +2322,10 @@ const server = http.createServer(async (req, res) => {
     }
     // The new fleet reads require the existing operator credential. No new page
     // receives an injected credential; the view lives inside the existing panel.
-    if (m === "GET" && (p === "/api/fleet" || p === "/api/fleet/task")) {
+    if (m === "GET" && (p === "/api/fleet" || p === "/api/fleet/task" || p === "/api/fleet/evidence")) {
       if (!guardWrite(req,res,p)) return;
       try {
-        const value=p.endsWith("/task")?readFleetTask(db,url.searchParams.get("uid")):readFleetView(db,{projectId:url.searchParams.get("project"),ownerNodeId:url.searchParams.get("owner"),query:url.searchParams.get("q")??"",limit:url.searchParams.has("limit")?Number(url.searchParams.get("limit")):1000});
+        const value=p.endsWith("/evidence")?readFleetEvidencePage(db,url.searchParams.get("uid"),{section:url.searchParams.get("section"),cursor:url.searchParams.get("cursor"),limit:url.searchParams.has("limit")?Number(url.searchParams.get("limit")):100}):p.endsWith("/task")?readFleetTask(db,url.searchParams.get("uid")):readFleetView(db,{projectId:url.searchParams.get("project"),ownerNodeId:url.searchParams.get("owner"),query:url.searchParams.get("q")??"",limit:url.searchParams.has("limit")?Number(url.searchParams.get("limit")):1000});
         return json(res,200,value);
       } catch(e) {return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"FLEET_VIEW_UNAVAILABLE",error:e instanceof PeerError?e.message:"全局视图暂不可读；请检查数据库与升级状态"});}
     }

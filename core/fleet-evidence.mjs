@@ -1,5 +1,6 @@
 // Read-only history projection. Stored receipts never grant current execution authority.
 import {createHash} from "node:crypto";
+import {PeerError} from "./federation/protocol.mjs";
 import {digest} from "./federation/sync-store.mjs";
 const exists=(db,t)=>!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(t);
 const schema=(db,t,v)=>!exists(db,t)?"not_configured":db.prepare("SELECT version FROM "+t+" WHERE singleton=1").get()?.version===v?"available":"upgrade_required";
@@ -63,14 +64,28 @@ export function fleetRelations(db,allTasks,local,{matching=null,included=null,li
  const items=[...edges.values()].sort((a,b)=>(b.recorded_at??"").localeCompare(a.recorded_at??"")||(a.relation_id??a.delegation_id).localeCompare(b.relation_id??b.delegation_id));
  return {format:"ai-fleet-relations/v1",modules,unverified_records:unverified,coverage:"locally_recorded_history",...page(items,limit)};
 }
-export function fleetTaskEvidence(db,allTasks,local,uid){
- const catalog=uid===null,cap=catalog?10000:100,scopeCap=catalog?10000:1000;
+const evidenceSections=["children","relations","runs","results","artifacts","verifications","integrations","completions"];
+const badPage=()=>{throw new PeerError("BAD_INPUT","历史翻页参数无效",400);};
+function pageQuery(query){
+ if(!query||typeof query!=="object"||Array.isArray(query)||Object.keys(query).some(k=>!["section","limit","cursor"].includes(k)))badPage();
+ const {section,limit=100,cursor=null}=query;
+ if(!evidenceSections.includes(section)||!Number.isInteger(limit)||limit<1||limit>100)badPage();
+ let decoded=null;
+ if(cursor!==null){
+  if(typeof cursor!=="string"||cursor.length>1024||!cursor.length||!/^[A-Za-z0-9_-]+$/.test(cursor))badPage();
+  try{const raw=Buffer.from(cursor,"base64url");if(raw.toString("base64url")!==cursor)badPage();decoded=JSON.parse(raw.toString("utf8"));}catch{badPage();}
+  if(!decoded||Array.isArray(decoded)||Object.keys(decoded).sort().join(",")!=="limit,offset,section,snapshot_id,task_uid,v"||decoded.v!==1||decoded.section!==section||decoded.limit!==limit||!Number.isSafeInteger(decoded.offset)||decoded.offset<0||typeof decoded.task_uid!=="string"||typeof decoded.snapshot_id!=="string"||!/^[a-f0-9]{64}$/.test(decoded.snapshot_id))badPage();
+ }
+ return {section,limit,decoded};
+}
+export function fleetTaskEvidence(db,allTasks,local,uid,query=null){
+ const q=query===null?null:pageQuery(query),catalog=uid===null,cap=catalog?10000:100,scopeCap=catalog?10000:1000;
  const tasks=new Map(allTasks.map(t=>[t.task_uid,t])),focus=tasks.get(uid),children=new Map();
  for(const t of allTasks)if(t.parent_uid&&tasks.get(t.parent_uid)?.project_id===t.project_id&&tasks.get(t.parent_uid)?.owner_node_id===t.owner_node_id){
   if(!children.has(t.parent_uid))children.set(t.parent_uid,[]);children.get(t.parent_uid).push(t.task_uid);
  }
  const scope=new Set(),queue=catalog?[...tasks.keys()]:[uid];for(let i=0;i<queue.length&&scope.size<scopeCap;i++){const u=queue[i];if(scope.has(u))continue;scope.add(u);if(!catalog)queue.push(...(children.get(u)??[]));}
- const relations=fleetRelations(db,allTasks,local,{matching:scope,limit:cap}),relationById=new Map(relations.items.filter(r=>r.relation_id).map(r=>[r.relation_id,r])),relationIds=new Set(relationById.keys());
+ const relations=fleetRelations(db,allTasks,local,{matching:scope,limit:Number.MAX_SAFE_INTEGER}),relationById=new Map(relations.items.filter(r=>r.relation_id).map(r=>[r.relation_id,r])),relationIds=new Set(relationById.keys());
  const state={runs:exists(db,"task_runs")?"available":"not_configured",dispatch:schema(db,"broker_dispatch_schema",3),results:schema(db,"result_schema",1),artifacts:schema(db,"artifact_schema",1),verification:schema(db,"verification_schema",1),integration:schema(db,"integration_schema",1),completion:schema(db,"completion_schema",1)};
  const runs=[],results=[],artifacts=[],verifications=[],integrations=[],completions=[],unverified={results:0,artifacts:0};
  const dispatches=state.dispatch==="available"?new Map(db.prepare("SELECT run_id,dispatch_id,phase,execution_mode,created_at,launch_at,finished_at,result_digest FROM broker_dispatches").all().map(r=>[r.run_id,r])):new Map();
@@ -113,7 +128,25 @@ export function fleetTaskEvidence(db,allTasks,local,uid){
   completions.push({completion_id:r.completion_id,relation_id:r.relation_id,result_id:r.result_id,created_at:r.created_at,receipt_state:r.receipt_json?valid?"digest_checked":"unverified":"not_recorded",
    historical_accepted:valid&&v.accepted===true,task_uid:valid?v.task_uid:null,accepted_task_version:valid?v.task_version:null,settled_at:valid?v.settled_at:null,fixture_runs:valid?v.fixture_runs:null});
  }
- return {format:catalog?"ai-fleet-evidence-catalog/v1":"ai-fleet-task-evidence/v1",generated_at:new Date().toISOString(),coverage:"locally_recorded_history",modules:state,unverified_records:unverified,scope_tasks:scope.size,scope_truncated:queue.some(u=>!scope.has(u)),current_authorization_checked:false,
-  parent:focus?.parent_uid?endpoint(tasks,focus.parent_uid,focus.project_id,scope):null,children:page((children.get(uid)??[]).map(u=>endpoint(tasks,u,focus.project_id,scope))),
-  relations,runs:page(runs,cap),results:page(results,cap),artifacts:page(artifacts,cap),verifications:page(verifications,cap),integrations:page(integrations,cap),completions:page(completions,cap)};
+ const metadata={generated_at:new Date().toISOString(),coverage:"locally_recorded_history",modules:state,unverified_records:unverified,scope_tasks:scope.size,scope_truncated:queue.some(u=>!scope.has(u)),current_authorization_checked:false};
+ const family=(children.get(uid)??[]).map(u=>endpoint(tasks,u,focus.project_id,scope));
+ const sections={children:family,relations:relations.items,runs,results,artifacts,verifications,integrations,completions};
+ // All relation IDs participate in joins. Display limits must never filter downstream evidence.
+ if(catalog)return {format:"ai-fleet-evidence-catalog/v1",...metadata,parent:null,...Object.fromEntries(Object.entries(sections).map(([key,items])=>[key,{...(key==="relations"?relations:{}),...page(items,cap)}]))};
+ const snapshot_id=digest({task_uid:uid,node_id:local.node_id,sync_epoch:local.sync_epoch,
+  scope:[...scope].sort().map(u=>[u,tasks.get(u)?.project_id??null,tasks.get(u)?.aggregate_version??null]),
+  sections,modules:state,relation_modules:relations.modules,unverified,relation_unverified:relations.unverified_records,scope_truncated:metadata.scope_truncated});
+ function select(section,limit=100,offset=0){
+  const items=sections[section],encode=at=>Buffer.from(JSON.stringify({v:1,task_uid:uid,section,snapshot_id,offset:at,limit})).toString("base64url");
+  const selected=items.slice(offset,offset+limit),more=offset+selected.length<items.length;
+  return {...(section==="relations"?relations:{}),items:selected,total:items.length,truncated:more,offset,limit,snapshot_id,cursor:encode(offset),next_cursor:more?encode(offset+selected.length):null};
+ }
+ if(q){
+  const c=q.decoded;if(c&&c.task_uid!==uid)badPage();
+  if(c&&c.snapshot_id!==snapshot_id)throw new PeerError("EVIDENCE_CHANGED","记录或可见范围已变化，请返回最新记录重新读取",409);
+  if(c&&c.offset>=Math.max(1,sections[q.section].length))badPage();
+  return {format:"ai-fleet-evidence-page/v1",task_uid:uid,section:q.section,...metadata,page:select(q.section,q.limit,c?.offset??0)};
+ }
+ return {format:"ai-fleet-task-evidence/v1",task_uid:uid,...metadata,
+  parent:focus?.parent_uid?endpoint(tasks,focus.parent_uid,focus.project_id,scope):null,...Object.fromEntries(evidenceSections.map(key=>[key,select(key)]))};
 }

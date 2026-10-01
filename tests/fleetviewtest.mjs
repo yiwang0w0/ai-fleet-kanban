@@ -97,13 +97,13 @@ test("real HTTP endpoints require operator token, reject foreign origin and rema
  try{
   let ready=false;for(let i=0;i<80;i++){try{if((await get("/health")).ok){ready=true;break;}}catch{}if(exit!==null)break;await sleep(200);}assert.ok(ready,output);
   const operator=readFileSync(join(dir,"board_token"),"utf8").trim();
-  for(const path of ["/api/fleet","/api/fleet/task?uid="+encodeURIComponent(uid)]){
+  for(const path of ["/api/fleet","/api/fleet/task?uid="+encodeURIComponent(uid),"/api/fleet/evidence?section=runs&uid="+encodeURIComponent(uid)]){
    assert.equal((await get(path)).status,401);assert.equal((await get(path,{"X-Board-Token":"invalid"})).status,401);
    for(const role of ["worker","review"])assert.equal((await get(path,{"X-Board-Token":readFileSync(join(dir,role+"_token"),"utf8").trim()})).status,403);
    assert.equal((await get(path,{"X-Board-Token":operator,Origin:"https://foreign.invalid"})).status,403);
    const r=await get(path,{"X-Board-Token":operator});assert.equal(r.status,200);assert.match(r.headers.get("cache-control"),/no-store/);assert.ok(!JSON.stringify(await r.json()).includes(operator));
   }
-  for(const path of ["/api/fleet?limit=0","/api/fleet?owner=kanata","/api/fleet/task"])assert.equal((await get(path,{"X-Board-Token":operator})).status,400);
+  for(const path of ["/api/fleet?limit=0","/api/fleet?owner=kanata","/api/fleet/task","/api/fleet/evidence?uid="+encodeURIComponent(uid),"/api/fleet/evidence?section=runs&cursor=bad&uid="+encodeURIComponent(uid)])assert.equal((await get(path,{"X-Board-Token":operator})).status,400);
   assert.equal((await get("/api/fleet/task?uid=missing",{"X-Board-Token":operator})).status,404);assert.equal((await get("/fleet")).status,404);
  }finally{
   if(proc.exitCode===null){const closed=new Promise(r=>proc.once("exit",r));proc.kill();await closed;}

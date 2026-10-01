@@ -74,3 +74,8 @@ export function readFleetTask(db,uid,authorizedProjects=null){
  if(typeof uid!=="string"||uid.length>100)throw new PeerError("BAD_INPUT","任务 UID 无效",400);
  return snapshot(db,()=>{const d=data(db,authorizedProjects),t=[...d.localTasks,...d.remote].find(t=>t.task_uid===uid);if(!t)throw new PeerError("NOT_FOUND","当前视图中未找到任务",404);return {...detail(t),evidence:fleetTaskEvidence(db,[...d.localTasks,...d.remote],d.local,uid)};});
 }
+
+export function readFleetEvidencePage(db,uid,query={},authorizedProjects=null){
+ if(typeof uid!=="string"||!uid||uid.length>100)throw new PeerError("BAD_INPUT","任务 UID 无效",400);
+ return snapshot(db,()=>{const d=data(db,authorizedProjects),tasks=[...d.localTasks,...d.remote];if(!tasks.some(t=>t.task_uid===uid))throw new PeerError("NOT_FOUND","当前视图中未找到任务",404);return fleetTaskEvidence(db,tasks,d.local,uid,query);});
+}

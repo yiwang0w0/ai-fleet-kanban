@@ -2462,9 +2462,9 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection; atomic Markdown evidence catalog and explicit version-bound immutable handoff notes with recovery",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection; atomic Markdown evidence catalog and explicit version-bound immutable handoff notes with recovery; complete visible relation-to-result index and snapshot-bound operator panel/HTTP history pagination",
         "pending": [
-          "Receipted remote actions, dependency graph and historical pagination",
+          "MCP history paging, complete dependency/structure editing and action queue retention",
           "Actual Windows desktop clients and two-PC G08 acceptance"
         ]
       },
@@ -2486,7 +2486,9 @@
         "docs/federation/context-evidence.md",
         "docs/federation/context-evidence-evidence.json",
         "tests/contextevidencetest.mjs",
-        "docs/federation/desktop-package-native-evidence.json"
+        "docs/federation/desktop-package-native-evidence.json",
+        "docs/federation/fleet-history-evidence.json",
+        "tests/recoverytest.mjs"
       ]
     },
     {

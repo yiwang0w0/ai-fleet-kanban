@@ -3025,7 +3025,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
  const ownerNames=new Map(),projectNames=new Set(),folds=new Map();let generation=0,detailGeneration=0,limit=1000,timer=null,controller=null,last=null;
  const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
  const time=v=>{if(!v)return "尚无记录";const d=new Date(v);return Number.isNaN(d.valueOf())?"时间无效":d.toLocaleString();};
- const request=async(path,signal)=>{const r=await fetch(path,{headers:WH,cache:"no-store",signal});const value=await r.json();if(!r.ok)throw Error(value.error||"读取失败");return value;};
+ const request=async(path,signal)=>{const r=await fetch(path,{headers:WH,cache:"no-store",signal});const value=await r.json();if(!r.ok)throw Object.assign(Error(value.error||"读取失败"),{code:value.code,status:r.status});return value;};
  function choices(){const oldOwner=owner.value,oldProject=project.value;owner.replaceChildren(el("option","全部终端"));owner.firstChild.value="";for(const[id,name]of ownerNames){const option=el("option",name+" · "+id.slice(0,8));option.value=id;owner.append(option);}owner.value=oldOwner;project.replaceChildren(el("option","全部项目"));project.firstChild.value="";for(const name of [...projectNames].sort()){const option=el("option",name);option.value=name;project.append(option);}project.value=oldProject;}
  function taskRows(tasks,container){
   const byUid=new Map(tasks.map(t=>[t.task_uid,t])),children=new Map(),roots=[];
@@ -3045,7 +3045,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   if(!value){container.append(el("p","尚无关系视图。","fleet-note"));return;}
   if(value.unverified_records)container.append(el("p",value.unverified_records+" 条关系记录摘要不一致，未展示其内容。","fleet-note fleet-warning"));
   const unavailable=Object.entries(value.modules).filter(([,s])=>s!=="available");
-  container.append(el("p","本机保存的关系记录 · "+value.total+" 条"+(value.truncated?" · 仅显示前 "+value.items.length+" 条":"")+"。下方箭头表示跨端委派；上方缩进表示终端内父子关系。历史确认不代表当前允许启动。","fleet-note"));
+  container.append(el("p","本机保存的关系记录 · "+value.total+" 条"+(value.offset!==undefined?" · 当前 "+(value.items.length?value.offset+1:0)+"–"+(value.offset+value.items.length)+" 条":value.truncated?" · 仅显示前 "+value.items.length+" 条":"")+"。下方箭头表示跨端委派；上方缩进表示终端内父子关系。历史确认不代表当前允许启动。","fleet-note"));
   if(unavailable.length)container.append(el("p","部分关系信息尚不可用："+unavailable.map(([k,s])=>(moduleNames[k]||k)+"："+(moduleStates[s]||s)).join("，"),"fleet-note fleet-warning"));
   for(const r of value.items){const card=el("article",undefined,"fleet-edge"),path=el("div",undefined,"fleet-edge-path");path.append(taskButton(r.source),el("span","→","fleet-arrow"),taskButton(r.target));card.append(path);
    const labels=[r.project_id];for(const[k,label]of [["offer_state","委派"],["binding_state","端点绑定"],["registration_state","关系登记"],["cancellation_state","取消"]])if(r[k])labels.push(label+"："+(historyStates[r[k]]||r[k]));
@@ -3053,11 +3053,30 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   if(!value.items.length)container.append(el("p","当前范围未找到可显示的关系记录；远端未共享的历史不会出现在这里。","fleet-note"));
  }
+ function evidencePage(initial,uid,key,label,container,draw){
+  const content=el("div"),controls=el("div",undefined,"fleet-edge-path"),status=el("p",undefined,"fleet-note"),previous=el("button","上一页"),next=el("button","下一页"),reset=el("button","返回最新记录");
+  container.dataset.evidenceSection=key;status.setAttribute("role","status");
+  for(const[b,name]of [[previous,"上一页"],[next,"下一页"],[reset,"返回最新记录"]]){b.type="button";b.setAttribute("aria-label",label+name);}
+  controls.append(previous,next,reset);container.append(status,controls,content);
+  let current=initial,cursors=[initial.cursor],index=0,busy=false,failed=false;const detailId=detailGeneration;
+  function buttons(){previous.disabled=busy||failed||index===0;next.disabled=busy||failed||!current.next_cursor;reset.disabled=busy;controls.hidden=!busy&&!failed&&current.total<=current.limit&&index===0;}
+  function render(){draw(current,content);status.textContent=current.total?"第 "+(current.offset+1)+"–"+(current.offset+current.items.length)+" 条，共 "+current.total+" 条":"当前没有可显示的记录。";buttons();}
+  async function load(cursor,to,latest=false){
+   if(busy)return;busy=true;status.textContent="正在读取记录…";buttons();
+   try{const q=new URLSearchParams({uid,section:key});if(cursor)q.set("cursor",cursor);const result=await request("/api/fleet/evidence?"+q);
+    if(detailId!==detailGeneration||!detail.open)return;
+    current=result.page;failed=false;if(latest)cursors=[current.cursor];else cursors[to]=current.cursor;index=latest?0:to;render();
+   }catch(e){if(detailId!==detailGeneration||!detail.open)return;failed=true;content.replaceChildren();status.textContent=e.message;}
+   finally{busy=false;if(detailId===detailGeneration&&detail.open)buttons();}
+  }
+  previous.addEventListener("click",()=>load(cursors[index-1],index-1));next.addEventListener("click",()=>load(current.next_cursor,index+1));reset.addEventListener("click",()=>load(null,0,true));render();
+ }
  function evidence(value,body){
   if(!value)return;body.append(el("h3","任务追溯"),el("p","读取于 "+time(value.generated_at)+"。仅展示本机已保存、当前身份可见的记录；远端未同步历史不代表没有执行。验收回执对应其记录的任务版本。","fleet-note"));
-  const family=el("div",undefined,"fleet-edge-path");if(value.parent){family.append(el("span","父任务"),taskButton(value.parent));}for(const t of value.children.items)family.append(taskButton(t));body.append(family);
-  if(value.children.truncated||value.scope_truncated)body.append(el("p","任务树范围已截断，请打开具体子任务继续查看。","fleet-note fleet-warning"));
-  const related=el("section");relationships(value.relations,related);body.append(related);
+  const family=el("div",undefined,"fleet-edge-path");if(value.parent){family.append(el("span","父任务"),taskButton(value.parent));}body.append(family);
+  const childList=el("section");evidencePage(value.children,value.task_uid,"children","子任务",childList,(page,container)=>{container.replaceChildren();const row=el("div",undefined,"fleet-edge-path");for(const t of page.items)row.append(taskButton(t));container.append(row);});body.append(childList);
+  if(value.scope_truncated)body.append(el("p","任务树范围已截断，请打开具体子任务继续查看。","fleet-note fleet-warning"));
+  const related=el("section");evidencePage(value.relations,value.task_uid,"relations","跨终端委派",related,relationships);body.append(related);
   const groups=[
    ["执行记录","runs",r=>[["任务",r.task_uid],["运行",r.run_id],["执行器",r.runtime||"未记录"],["身份",r.role_id],["模型",r.model||"未记录"],["运行状态",r.state],["策略摘要",r.policy_integrity],["分派状态",r.dispatch?.phase||"未记录"],["调用模式",r.dispatch?.execution_mode||"未记录"],["开始",time(r.started_at)],["结束",time(r.ended_at)]]],
    ["交付候选","results",r=>[["候选",r.result_id],["运行",r.run_id||"不在可见范围"],["执行器",r.execution?.runtime||"未共享"],["调用模式",r.execution?.execution_mode||"未共享"],["进程结果",r.process_status],["记录",time(r.created_at)]]],
@@ -3066,9 +3085,8 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
    ["来源合并","integrations",r=>[["合并",r.integration_id],["候选",r.result_id],["回执",r.receipt_state],["写入来源",r.source_applied===null?"未知":r.source_applied?"已记录":"未确认"],["提交",r.merge_commit||"未记录"]]],
    ["历史验收","completions",r=>[["结案",r.completion_id],["候选",r.result_id],["回执",r.receipt_state],["当时验收",r.historical_accepted?"通过":"未证实"],["任务版本",r.accepted_task_version??"未知"],["模拟运行数",r.fixture_runs??"未知"],["验收时间",time(r.settled_at)]]]
   ];
-  for(const[label,key,fields]of groups){const valuePage=value[key],section=el("details",undefined,"fleet-trace");section.open=valuePage.items.length>0;section.append(el("summary",label+" · 本机记录 "+valuePage.total+(valuePage.truncated?"（截断）":"")));
-   for(const item of valuePage.items){const dl=el("dl");for(const[k,v]of fields(item))dl.append(el("dt",k),el("dd",String(v??"未记录")));section.append(dl);}
-   if(!valuePage.items.length)section.append(el("p","本机未找到当前范围内可显示的记录。","fleet-note"));body.append(section);
+  for(const[label,key,fields]of groups){const valuePage=value[key],section=el("details",undefined,"fleet-trace"),heading=el("summary");section.open=valuePage.items.length>0;section.append(heading);
+   evidencePage(valuePage,value.task_uid,key,label,section,(page,container)=>{heading.textContent=label+" · 本机记录 "+page.total;container.replaceChildren();for(const item of page.items){const dl=el("dl");for(const[k,v]of fields(item))dl.append(el("dt",k),el("dd",String(v??"未记录")));container.append(dl);}});body.append(section);
   }
   if(Object.values(value.unverified_records||{}).some(n=>n>0))body.append(el("p","部分候选或产物记录未通过摘要核对，已隐藏；请核查原始回执。","fleet-note fleet-warning"));
   const unavailable=Object.entries(value.modules).filter(([,s])=>s!=="available");if(unavailable.length)body.append(el("p","未读取的证据模块："+unavailable.map(([k,s])=>(moduleNames[k]||k)+"："+(moduleStates[s]||s)).join("，"),"fleet-note fleet-warning"));
