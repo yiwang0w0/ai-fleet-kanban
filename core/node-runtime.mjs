@@ -5,6 +5,7 @@ import {dirname,basename,join,isAbsolute} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createLifecycleRegistry,openSchedulerControlDatabase} from './execution/lifecycle.mjs';
 import {openScheduler} from './execution/scheduler.mjs';
+import {recoverStaleWorkspaces} from './artifacts/workspaces.mjs';
 import {migrateDispatch} from './execution/dispatch.mjs';
 import {migratePeers,localIdentity} from './federation/peers.mjs';
 import {migrateSync,digest,canonical} from './federation/sync-store.mjs';
@@ -60,6 +61,7 @@ export async function runNodeRuntime({dbPath,config,sourceGate,stopSignal=null,c
   nodeLifecycle.register(db,{instanceId:id,pid:process.pid,configDigest:digest(c)});registered=true;
   db.exec('CREATE TABLE IF NOT EXISTS node_runtime_components(instance_id TEXT NOT NULL,name TEXT NOT NULL,state TEXT NOT NULL,updated_at TEXT NOT NULL,summary_json TEXT NOT NULL,PRIMARY KEY(instance_id,name))');
   migratePeers(db);migrateSync(db);migrateBroker(db);
+  const recovered=recoverStaleWorkspaces(db);if(recovered.sealed.length)emit({kind:'workspace_recovery',...recovered});
   if(c.scheduler!==null){migrateDispatch(db);scheduler=openScheduler(db,{dbPath:database,sourceGate,config:c.scheduler,environment,onEvent:e=>emit({kind:'scheduler',scheduler_event:e})});component('scheduler','prepared',{instance_id:scheduler.instance_id});}
   if(c.peer!==null){const server=await listenPeerServer(db,c.peer);servers.push({name:'peer',server});component('peer','listening',{host:c.peer.host,port:server.address().port});server.on('error',fatal);}
   if(c.mcp!==null){const server=await listenBroker(db,{port:c.mcp.port,boardUrl:c.mcp.board_url});servers.push({name:'mcp',server});component('mcp','listening',{host:'127.0.0.1',port:server.address().port});server.on('error',fatal);}

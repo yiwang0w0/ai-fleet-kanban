@@ -1,7 +1,9 @@
+import {openSchedulerControlDatabase} from "../core/execution/lifecycle.mjs";
 import {openPeerDatabase} from "../core/federation/peers.mjs";
-import {migrateArtifacts,registerArtifactTarget,prepareArtifact,artifactState,verifyArtifact} from "../core/artifacts/transfers.mjs";
+import {migrateArtifacts,registerArtifactTarget,prepareArtifact,artifactState,artifactCapacity,verifyArtifact} from "../core/artifacts/transfers.mjs";
 import {deliverArtifact} from "../core/artifacts/transfer-client.mjs";
 const usage=[
+ "node cli/artifact.mjs capacity --db <DB> (所有代次的逻辑预留，不等于磁盘大小)",
  "node cli/artifact.mjs target --db <来源DB> --result <候选UUID> --mapping <本机仓库UUID> --base <批准基线> --allow-full-baseline-read true",
  "node cli/artifact.mjs prepare --db <执行端DB> --result <候选UUID> --id <传输UUID>",
  "node cli/artifact.mjs send --db <执行端DB> --transfer <UUID> --url <来源地址> --credential <反向凭据> [--max-chunks <1..768，默认64>]",
@@ -13,10 +15,11 @@ let db;try{
  const [command,...args]=process.argv.slice(2);
  if(!command||command==="--help")console.log(usage);
  else{
-  const fields={target:["db","result","mapping","base","allow-full-baseline-read"],prepare:["db","result","id"],send:["db","transfer","url","credential","max-chunks"],verify:["db","transfer"],get:["db","transfer"]}[command],o={};
+  const fields={capacity:["db"],target:["db","result","mapping","base","allow-full-baseline-read"],prepare:["db","result","id"],send:["db","transfer","url","credential","max-chunks"],verify:["db","transfer"],get:["db","transfer"]}[command],o={};
   if(!fields)throw Error(usage);for(let i=0;i<args.length;i+=2){const k=args[i].slice(2);if(!args[i].startsWith("--")||!fields.includes(k)||Object.hasOwn(o,k)||!args[i+1]||args[i+1].startsWith("--"))throw Error(usage);o[k]=args[i+1];}
-  if(fields.some(k=>k!=="max-chunks"&&!o[k]))throw Error(usage);db=openPeerDatabase(o.db);migrateArtifacts(db);let r;
-  if(command==="target")r=registerArtifactTarget(db,{resultId:o.result,mappingId:o.mapping,baseCommit:o.base,allowFullBaselineRead:o["allow-full-baseline-read"]==="true"});
+  if(fields.some(k=>k!=="max-chunks"&&!o[k]))throw Error(usage);db=command==="capacity"?openSchedulerControlDatabase(o.db,{readOnly:true}):openPeerDatabase(o.db);if(command!=="capacity")migrateArtifacts(db);let r;
+  if(command==="capacity")r=artifactCapacity(db);
+  else if(command==="target")r=registerArtifactTarget(db,{resultId:o.result,mappingId:o.mapping,baseCommit:o.base,allowFullBaselineRead:o["allow-full-baseline-read"]==="true"});
   else if(command==="prepare")r=prepareArtifact(db,{resultId:o.result,transferId:o.id});
   else if(command==="verify")r=verifyArtifact(db,{transferId:o.transfer});
   else if(command==="get")r=artifactState(db,o.transfer);

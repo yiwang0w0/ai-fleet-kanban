@@ -126,9 +126,10 @@ export function prepareDispatch(db,{assignmentId,quotaId,executionMode,credentia
  if(db.isTransaction)fail("TRANSACTION_CONTEXT","领取必须自行提交事务后才能交付运行凭据");
  uuid(assignmentId,"assignment_id");uuid(quotaId,"quota_id");
  if(!MODES.includes(executionMode)||typeof sourceGate?.check!=="function")fail("BAD_INPUT","需要显式执行类别和治理代码闸",400);
+ const source=sourceGate.check();credentialOutsideCode(credentialFile,source.code_root);
  let issued=false;
  try{return atomic(db,()=>{
-  const node=localIdentity(db),source=sourceGate.check();credentialOutsideCode(credentialFile,source.code_root);
+  const node=localIdentity(db);
   const a=db.prepare("SELECT * FROM broker_assignments WHERE assignment_id=?").get(assignmentId);
   if(!a||a.state!=="waiting_executor")fail("NOT_READY","路由请求未处于等待执行器状态");
   const t=task(db,a.task_uid);
@@ -155,10 +156,11 @@ export function prepareDispatch(db,{assignmentId,quotaId,executionMode,credentia
 export function authorizeLaunch(db,{dispatchId,sourceGate,execution=null}){
  if(execution!==null)execution=launchReceipt(execution);
  if(db.isTransaction)fail("TRANSACTION_CONTEXT","启动许可必须自行提交后才可交付");
+ if(fresh(db,dispatchId).phase!=="prepared")fail("LAUNCH_NOT_AVAILABLE","启动许可已经消费或运行已结束；不能自动重启");
+ const source=sourceGate.check();
  return atomic(db,()=>{
   const d=fresh(db,dispatchId);
   if(d.phase!=="prepared")fail("LAUNCH_NOT_AVAILABLE","启动许可已经消费或运行已结束；不能自动重启");
-  const source=sourceGate.check();
   if(canonical(source)!==d.source_json)fail("SOURCE_CHANGED","领取后治理代码身份已变化");
   const node=localIdentity(db),t=task(db,d.task_uid),a=db.prepare("SELECT * FROM broker_assignments WHERE assignment_id=?").get(d.assignment_id);
   if(!t||t.run_id!==d.run_id||t.status!=="in_progress"||t.archived_at||t.aggregate_version!==d.claimed_version)fail("CONFLICT","领取后的任务或运行状态已变化");

@@ -731,3 +731,20 @@ test("H7c settlement and abandonment clean credentials only after successful com
  f.db.exec("DROP TRIGGER h7_settle_failure");finish(f,w);assert.equal(existsSync(w.credentialFile),false);
  const v=prepare(f,assign(f,card(f)));abandonPrepared(f.db,{dispatchId:v.receipt.dispatch_id,reason:"H7 fixture"});assert.equal(existsSync(v.credentialFile),false);
 });
+
+test("source gate checks allow an independent writer before dispatch claim and launch transactions",()=>{
+ const f=fixture(),writer=new DatabaseSync(f.dbPath);writer.exec('PRAGMA busy_timeout=0; CREATE TABLE source_gate_probe(value INTEGER)');let checks=0;
+ const sourceGate={...f.source.gate,check(){assert.equal(f.db.isTransaction,false);writer.prepare('INSERT INTO source_gate_probe VALUES(?)').run(++checks);return f.source.gate.check();}};
+ try{const w=prepare(f,assign(f,card(f)),{sourceGate});authorizeLaunch(f.db,{dispatchId:w.receipt.dispatch_id,sourceGate});assert.equal(checks,2);assert.equal(writer.prepare('SELECT count(*) n FROM source_gate_probe').get().n,2);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);}finally{writer.close();}
+});
+
+test("source gate uses the configured Git pin and ignores inherited Git and PATH overrides",()=>{
+ const s=source(),gitRoot=execFileSync('git',['--exec-path'],{encoding:'utf8'}).trim(),pin=pinFile(join(gitRoot,'../../bin/git.exe'));
+ assert.throws(()=>createSourceGate({...s,git:{...pin,sha256:'0'.repeat(64)}}),{code:'GIT_CHANGED'});
+ const other=source(),saved={PATH:process.env.PATH,GIT_DIR:process.env.GIT_DIR,GIT_WORK_TREE:process.env.GIT_WORK_TREE};
+ try{process.env.PATH=path('not-a-command-directory');process.env.GIT_DIR=join(other.codeRoot,'.git');process.env.GIT_WORK_TREE=other.codeRoot;const gate=createSourceGate({...s,git:pin}),receipt=gate.check();assert.equal(receipt.tree,s.gate.loadedTree);assert.deepEqual(receipt.git,gate.git);assert.equal(receipt.git.sha256,pin.sha256);assert.equal(Object.isFrozen(gate.git),true);}finally{for(const [k,v] of Object.entries(saved))if(v===undefined)delete process.env[k];else process.env[k]=v;}
+});
+test("source gate sidecar selects a fixed CLI Git and invalid sidecars never silently fall back",()=>{
+ const s=source(),gitRoot=execFileSync('git',['--exec-path'],{encoding:'utf8'}).trim(),pin=pinFile(join(gitRoot,'../../bin/git.exe'));
+ writeFileSync(s.approvalFile+'.git.json',JSON.stringify(pin));const gate=createSourceGate(s);assert.equal(gate.check().git.sha256,pin.sha256);writeFileSync(s.approvalFile+'.git.json','invalid');assert.throws(()=>createSourceGate(s),{code:'BAD_GIT_PIN'});
+});

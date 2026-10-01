@@ -18,10 +18,11 @@ const require=createRequire(import.meta.url),store=require("../store.js");
 export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared,python,privateDirectory,
  timeoutMs=60000,idleTimeoutMs=DEFAULT_PROVIDER_IDLE_MS,heartbeatMs=10000,stderrLimit=1048576,signal=null}){
  if(process.platform!=="win32")fail("WINDOWS_REQUIRED","执行器仅支持 Windows；未领取启动许可");
- validatePreparedAdapter(prepared);
- const plan=prepared.plan,d=dispatchStatus(db,dispatchId);
+ const d=dispatchStatus(db,dispatchId);
  if(d.execution_mode!=="provider")fail("EXECUTION_MODE_MISMATCH","供应商适配器仅允许 provider 调用预算");
  if(d.phase!=="prepared")fail("LAUNCH_NOT_AVAILABLE","启动许可已消费或运行已结束");
+ validatePreparedAdapter(prepared);
+ const plan=prepared.plan;
  if(plan.codeRoot!==sourceGate.codeRoot||plan.codeRoot!==d.source.code_root)fail("SOURCE_CHANGED","启动适配器与治理代码根不一致");
  if(signal!==null&&(!(signal instanceof AbortSignal)))fail("BAD_INPUT","需要有效的取消信号",400);
  if(signal?.aborted)fail("EXECUTION_CANCELLED","调用尚未启动，取消不消耗额度");

@@ -62,9 +62,15 @@ function header(h,r){
  const proof=m.stop_proofs[0];if(e.execution_mode==="provider"?(m.fixture_runs!==0||m.launch_digest!==e.launch_digest||proof.observation_digest!==e.observation_digest||proof.kind!==e.quiescence):(m.fixture_runs!==1||proof.kind!=="fixture_terminal"))fail("ARTIFACT_RUN_MISMATCH","文件停止证明与候选执行不同");
 }
 function row(db,id){uuid(id,"transfer_id");const t=db.prepare("SELECT transfer_id,result_id,side,node_id,node_epoch,header_json,header_digest,payload_bytes,created_at FROM artifact_transfers WHERE transfer_id=?").get(id),n=localIdentity(db);if(!t)fail("NOT_FOUND","未找到文件传输",404);if(t.node_id!==n.node_id||t.node_epoch!==n.sync_epoch)fail("ARTIFACT_RECOVERY_REQUIRED","旧代次文件传输不可继续");if(digest(JSON.parse(t.header_json))!==t.header_digest)fail("ARTIFACT_CORRUPT","固定传输清单摘要变化");return t;}
+/** All durable reservations, including old epochs. No data or schema is changed. */
+export function artifactCapacity(db){
+ const configured=!!db.prepare("SELECT 1 FROM sqlite_master WHERE name='artifact_transfers'").get();
+ const r=configured?db.prepare("SELECT coalesce(sum(payload_bytes),0) payload,coalesce(sum(length(CAST(header_json AS BLOB))),0) metadata,count(*) count FROM artifact_transfers").get():{payload:0,metadata:0,count:0};
+ const used=r.payload+r.metadata;return {limit_bytes:MAX_ARTIFACT_STORAGE,used_bytes:used,remaining_bytes:Math.max(0,MAX_ARTIFACT_STORAGE-used),reserved_payload_bytes:r.payload,metadata_bytes:r.metadata,reserved_transfers:r.count,sqlite_file_bytes_reclaimed:false};
+}
 function reserve(db,h,side,payload=null){
  if(db.prepare("SELECT 1 FROM artifact_transfers WHERE result_id=?").get(h.result_id))fail("ARTIFACT_EXISTS","该候选已有固定文件传输");
- if(db.prepare("SELECT coalesce(sum(payload_bytes+length(CAST(header_json AS BLOB))),0) bytes FROM artifact_transfers").get().bytes+h.payload_bytes+Buffer.byteLength(canonical(h))>MAX_ARTIFACT_STORAGE)fail("ARTIFACT_STORAGE_LIMIT","保留产物已达本机 256 MiB 容量上限");
+ if(artifactCapacity(db).used_bytes+h.payload_bytes+Buffer.byteLength(canonical(h))>MAX_ARTIFACT_STORAGE)fail("ARTIFACT_STORAGE_LIMIT","保留产物已达本机 256 MiB 容量上限");
  const n=localIdentity(db);db.prepare("INSERT INTO artifact_transfers VALUES(?,?,?,?,?,?,?,?,?,?)").run(h.transfer_id,h.result_id,side,n.node_id,n.sync_epoch,canonical(h),digest(h),h.payload_bytes,payload,at());event(db,h.transfer_id,side==="target"?"prepared":"offered",{header_digest:digest(h)});
 }
 export function prepareArtifact(db,{resultId,transferId,authorize=()=>{}}){
@@ -80,9 +86,9 @@ function counts(db,t){return db.prepare("SELECT count(*) next_chunk,coalesce(sum
 function receipts(db,id){const rows=db.prepare("SELECT kind,receipt_json FROM artifact_receipts WHERE transfer_id=?").all(id);return {receipt:JSON.parse(rows.find(r=>r.kind==="artifact_received")?.receipt_json??"null"),verification:JSON.parse(rows.find(r=>r.kind==="artifact_content_verified")?.receipt_json??"null")};}
 export function artifactState(db,id){
  const t=row(db,id),h=JSON.parse(t.header_json),r=resultState(db,t.result_id),a=receipts(db,id),count=t.side==="source"?counts(db,t):{next_chunk:null,received_bytes:null};
- return {transfer_id:id,result_id:t.result_id,side:t.side,header:h,header_digest:t.header_digest,state:r.review_state!=="pending_evidence"?r.review_state:a.verification?"content_verified":a.receipt?"received":t.side==="source"?"receiving":"prepared",...count,...a,accepted:false};
+ return {transfer_id:id,result_id:t.result_id,side:t.side,header:h,header_digest:t.header_digest,state:r.review_state!=="pending_evidence"?r.review_state:a.verification?"content_verified":a.receipt?"received":t.side==="source"?"receiving":"prepared",...count,...a,storage:artifactCapacity(db),accepted:false};
 }
-function progress(db,id){const {header,side,...rest}=artifactState(db,id);return rest;}
+function progress(db,id){const {header,side,storage,...rest}=artifactState(db,id);return rest;}
 function incoming(db,peer,id,write=true){const t=row(db,id),r=write?pending(db,t.result_id,"source"):resultState(db,t.result_id);if(t.side!=="source")fail("FORBIDDEN","不能向发送端写入",403);peerGrant(db,r,peer);return t;}
 export function receiveArtifactOffer(db,peer,h){return unit(db,()=>{
  const r=pending(db,h?.result_id,"source");peerGrant(db,r,peer);header(h,r);const a=target(db,r.result_id),m=h.manifest;

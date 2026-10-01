@@ -225,3 +225,26 @@ test("full-tree expansion checks file counts and case-colliding directories befo
   assert.throws(()=>createTaskWorkspace(f.db,x.args),{code:kind==="count"?"WORKSPACE_CONTENT_LIMIT":"PATH_COLLISION"});assert.equal(state(f,x).state,"failed");
  }
 });
+
+// H10: terminate after the committed reservation, before the filesystem copy returns.
+import * as workspaceRecovery from "../core/artifacts/workspaces.mjs";
+function interruptedProvision(f,x,mode){
+ const script=path("provision-interruption")+".mjs";
+ writeFileSync(script,`import fs from 'node:fs'; import {syncBuiltinESMExports} from 'node:module'; import {DatabaseSync} from 'node:sqlite';
+ import * as w from ${JSON.stringify(new URL('../core/artifacts/workspaces.mjs',import.meta.url).href)};
+ const db=new DatabaseSync(process.argv[2]),args=JSON.parse(process.argv[3]),container=process.argv[4],mode=process.argv[5],mkdir=fs.mkdirSync;
+ fs.mkdirSync=function(p,...rest){if(p===container){if(mode==='late')w.recoverStaleWorkspaces(db,{now:Date.now()+w.STALE_WORKSPACE_MS+1});const r=mkdir.call(this,p,...rest);if(mode==='crash'){fs.writeFileSync(p+'/partial.txt','preserve partial copy');process.exit(77);}return r;}return mkdir.call(this,p,...rest);};syncBuiltinESMExports();
+ try{w.createTaskWorkspace(db,args);console.log('READY');}catch(e){console.log(e.code);process.exitCode=78;}finally{db.close();}`);
+ try{return execFileSync(process.execPath,[script,f.dbPath,JSON.stringify(x.args),join(f.poolRoot,x.args.workspaceId),mode],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']});}catch(e){assert.equal(e.status,mode==='crash'?77:78,e.stderr?.toString());return e.stdout.toString();}
+}
+test("interrupted workspace provisioning is sealed once without deleting partial files or granting a retry",()=>{
+ const f=setup(),x=request(f);interruptedProvision(f,x,'crash');assert.equal(state(f,x).state,'provisioning');const kept=join(f.poolRoot,x.args.workspaceId,'partial.txt'),stamp=Date.parse(f.db.prepare('SELECT created_at FROM task_workspaces WHERE workspace_id=?').get(x.args.workspaceId).created_at);
+ assert.equal(typeof workspaceRecovery.recoverStaleWorkspaces,'function');
+ assert.equal(workspaceRecovery.recoverStaleWorkspaces(f.db,{now:stamp+workspaceRecovery.STALE_WORKSPACE_MS-1}).sealed.length,0);
+ const receipt=workspaceRecovery.recoverStaleWorkspaces(f.db,{now:stamp+workspaceRecovery.STALE_WORKSPACE_MS});assert.deepEqual(receipt.sealed,[x.args.workspaceId]);assert.equal(receipt.physical_files_deleted,false);assert.equal(receipt.executor_stop_confirmed,false);assert.equal(state(f,x).state,'failed');assert.equal(state(f,x).failure_code,'WORKSPACE_PROVISION_EXPIRED');assert.equal(readFileSync(kept,'utf8'),'preserve partial copy');
+ assert.equal(createTaskWorkspace(f.db,x.args).state,'failed');assert.throws(()=>retain(f,x),{code:'WORKSPACE_RUN_NOT_STOPPED'});assert.equal(workspaceRecovery.recoverStaleWorkspaces(f.db,{now:stamp+workspaceRecovery.STALE_WORKSPACE_MS}).sealed.length,0);
+ const cli=JSON.parse(execFileSync(process.execPath,[join(ROOT,'cli/workspace.mjs'),'recover-stale','--db',f.dbPath],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}));assert.deepEqual(cli.sealed,[]);assert.equal(f.db.prepare("SELECT count(*) n FROM workspace_events WHERE workspace_id=? AND kind='failed_preserved'").get(x.args.workspaceId).n,1);
+});
+test("a provisioner finishing after expiry cannot publish a ready receipt",()=>{
+ const f=setup(),x=request(f);assert.match(interruptedProvision(f,x,'late'),/WORKSPACE_PROVISION_EXPIRED/);assert.equal(state(f,x).state,'failed');assert.equal(state(f,x).baseline,null);assert.equal(existsSync(join(f.poolRoot,x.args.workspaceId,'repo/src/demo.txt')),true);assert.equal(f.db.prepare("SELECT count(*) n FROM workspace_events WHERE workspace_id=? AND kind='ready'").get(x.args.workspaceId).n,0);
+});

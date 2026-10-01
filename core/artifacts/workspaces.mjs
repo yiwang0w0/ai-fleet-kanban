@@ -65,6 +65,19 @@ export function registerWorkspacePool(db,{poolId,mappingId,root,allowFullHistory
   db.prepare("INSERT INTO workspace_pools VALUES(?,?,?,?,?,?)").run(poolId,node.node_id,node.sync_epoch,mappingId,canonical(descriptor),at());event(db,poolId,null,"pool_registered",{mapping_id:mappingId,full_history_copy_authorized:true});return {pool_id:poolId,mapping_id:mappingId,full_history_copy_authorized:true};
  });
 }
+// Expiry closes publication authority; it never proves a copier or executor stopped.
+export const STALE_WORKSPACE_MS=10*60*1000;
+export function recoverStaleWorkspaces(db,{now=Date.now()}={}){
+ if(!Number.isSafeInteger(now)||now<STALE_WORKSPACE_MS)fail("BAD_INPUT","工作区恢复时间无效");
+ const result={sealed:[],physical_files_deleted:false,executor_stop_confirmed:false,expiry_ms:STALE_WORKSPACE_MS};
+ if(!exists(db,"task_workspaces"))return result;
+ return unit(db,()=>{
+  schema(db);const n=localIdentity(db),cutoff=new Date(now-STALE_WORKSPACE_MS).toISOString(),stamp=new Date(now).toISOString();
+  const rows=db.prepare("SELECT workspace_id,pool_id FROM task_workspaces WHERE node_id=? AND node_epoch=? AND state='provisioning' AND created_at<=? ORDER BY created_at,workspace_id").all(n.node_id,n.sync_epoch,cutoff);
+  for(const r of rows){db.prepare("UPDATE task_workspaces SET state='failed',failure_code='WORKSPACE_PROVISION_EXPIRED',updated_at=? WHERE workspace_id=? AND state='provisioning'").run(stamp,r.workspace_id);event(db,r.pool_id,r.workspace_id,"failed_preserved",{code:"WORKSPACE_PROVISION_EXPIRED",expiry_ms:STALE_WORKSPACE_MS,physical_files_deleted:false,executor_stop_confirmed:false});result.sealed.push(r.workspace_id);}
+  return result;
+ });
+}
 export function workspaceState(db,{workspaceId}){return publicRow(db,row(db,workspaceId));}
 export function workspaceConflicts(db,{workspaceId}){
  const r=row(db,workspaceId),binding=JSON.parse(r.binding_json),conflicts=[];
@@ -96,7 +109,7 @@ export function createTaskWorkspace(db,{workspaceId,poolId,dispatchId,baseCommit
  try{
   verifyDirectory(identity);const receipt=provisionGitWorkspace({source,baseCommit,container});verifyDirectory(identity);verifyInitialWorkspace(receipt);
   transaction(db,()=>{
-   row(db,workspaceId);pool(db,poolId);dispatch(db,dispatchId,{prepared:true});workspaceRepositorySource(db,{mappingId:p.mapping_id,baseCommit});
+   if(row(db,workspaceId).state!=="provisioning")fail("WORKSPACE_PROVISION_EXPIRED","工作区准备权限已结束，文件保留且不可自动续用");pool(db,poolId);dispatch(db,dispatchId,{prepared:true});workspaceRepositorySource(db,{mappingId:p.mapping_id,baseCommit});
    db.prepare("UPDATE task_workspaces SET state='ready',receipt_json=?,receipt_digest=?,updated_at=? WHERE workspace_id=? AND state='provisioning'").run(canonical(receipt),digest(receipt),at(),workspaceId);event(db,poolId,workspaceId,"ready",{manifest_digest:digest(receipt.manifest),filesystem_sandbox:false,executor_bound:false});
   });
  }catch(e){

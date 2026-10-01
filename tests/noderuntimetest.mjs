@@ -68,3 +68,11 @@ test('actual node CLI serves a scoped MCP desktop query and acknowledges durable
 test('replaced runtime lock remains untouched and cannot receive a successful terminal record',async()=>{
  const f=await fixture(),h=start(f);await h.ready();const lock=join(f.dir,'.board.db.fleet-node-runtime.lock'),replacement=JSON.stringify({instance_id:randomUUID(),pid:1});writeFileSync(lock,replacement);h.stop.abort();await assert.rejects(h.done,{code:'NODE_RUNTIME_LOCK_CHANGED'});assert.equal(readFileSync(lock,'utf8'),replacement);assert.equal(status(f).instances[0].ended_at,null);assert.equal(status(f).instances[0].executor_stop_confirmed,false);
 });
+
+import {migrateDispatch} from '../core/execution/dispatch.mjs';
+import {migrateWorkspaces} from '../core/artifacts/workspaces.mjs';
+test('node startup seals expired provisioning before exposing listeners and preserves fresh or old epoch rows',async()=>{
+ const f=await fixture();migrateDispatch(f.db);migrateWorkspaces(f.db);const ids={expired:randomUUID(),fresh:randomUUID(),old:randomUUID()},kept=join(f.dir,'partial.txt');writeFileSync(kept,'incomplete copy retained');
+ for(const [kind,id] of Object.entries(ids)){const stamp=kind==='fresh'?new Date().toISOString():'2020-01-01T00:00:00.000Z';f.db.prepare("INSERT INTO task_workspaces(workspace_id,pool_id,dispatch_id,run_id,node_id,node_epoch,binding_json,binding_digest,state,created_at,updated_at) VALUES(?,?,?,?,?,?,'{}','fixture','provisioning',?,?)").run(id,randomUUID(),randomUUID(),randomUUID(),f.n.node_id,kind==='old'?randomUUID():f.n.sync_epoch,stamp,stamp);}
+ const h=start(f);await h.ready();assert.equal(f.db.prepare('SELECT state FROM task_workspaces WHERE workspace_id=?').get(ids.expired).state,'failed');for(const id of [ids.fresh,ids.old])assert.equal(f.db.prepare('SELECT state FROM task_workspaces WHERE workspace_id=?').get(id).state,'provisioning');assert.equal(readFileSync(kept,'utf8'),'incomplete copy retained');const recovered=h.events.find(e=>e.kind==='workspace_recovery');assert.deepEqual(recovered.sealed,[ids.expired]);assert.equal(recovered.executor_stop_confirmed,false);assert.ok(h.events.indexOf(recovered)<h.events.findIndex(e=>e.state==='listening'));h.stop.abort();await h.done;
+});
