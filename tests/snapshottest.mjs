@@ -314,3 +314,34 @@ test("a third source cannot poison a snapshot by reusing its event UUID",()=>{
  beginSnapshot(f.b.db,g.source,m);assert.equal(receiveSnapshotPage(f.b.db,g.source,p).installed,true);
  assert.equal(listReplicas(f.b.db).length,2);assert.equal(count(f.b.db,"federation_inbox"),2);
 });
+
+test("H8 snapshot construction leaves the WAL write lock available and refuses a moved head before publication",()=>{
+ const f=pair();task(f.a);flush(f);
+ const writer=new DatabaseSync(f.a.dbPath);writer.exec("PRAGMA busy_timeout=20");
+ const prepare=f.a.db.prepare.bind(f.a.db),exec=f.a.db.exec.bind(f.a.db);let observed=false,move=false;
+ f.a.db.prepare=function(sql){
+  const statement=prepare(sql);
+  if(sql.includes("SELECT event_json FROM federation_published"))return {iterate(...args){writer.exec("BEGIN IMMEDIATE");writer.exec("ROLLBACK");observed=true;return statement.iterate(...args);}};
+  return statement;
+ };
+ f.a.db.exec=function(sql){
+  if(move&&observed&&sql==="BEGIN IMMEDIATE"){move=false;writer.prepare("UPDATE federation_streams SET seq=seq+1 WHERE project_id=?").run("demo");}
+  return exec(sql);
+ };
+ try{
+  const m=start(f);assert.equal(observed,true);assert.equal(m.record_count,1);
+  f.a.db.prepare=prepare;task(f.a);flush(f);f.a.db.prepare=function(sql){const statement=prepare(sql);if(sql.includes("SELECT event_json FROM federation_published"))return {iterate(...args){observed=true;return statement.iterate(...args);}};return statement;};
+  observed=false;move=true;const before=count(f.a.db,"federation_snapshots");
+  assert.throws(()=>startSnapshot(f.a.db,f.peer,{project_id:"demo",min_seq:2}),{code:"SNAPSHOT_CHANGED"});
+  assert.equal(count(f.a.db,"federation_snapshots"),before);
+ }finally{f.a.db.prepare=prepare;f.a.db.exec=exec;writer.close();}
+});
+
+test("H8 nonterminal snapshot pages remain readable while another connection owns the write lock",()=>{
+ const f=pair();for(let i=0;i<26;i++)task(f.a);flush(f);const m=start(f),writer=new DatabaseSync(f.a.dbPath);
+ f.a.db.exec("PRAGMA busy_timeout=20");writer.exec("BEGIN IMMEDIATE");
+ try{const p=page(f,m);assert.equal(p.done,false);assert.equal(p.events.length,25);}
+ finally{writer.exec("ROLLBACK");writer.close();}
+ const final=page(f,m,25);assert.equal(final.done,true);
+ assert.equal(f.a.db.prepare("SELECT offered_seq FROM federation_deliveries WHERE peer_node_id=? AND project_id=?").get(f.peer.peer_node_id,"demo").offered_seq,m.head_seq);
+});

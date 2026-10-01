@@ -23,6 +23,13 @@ export function transaction(db, work) {
   try { const value = work(); db.exec("COMMIT"); return value; }
   catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
 }
+/** A consistent deferred snapshot; unlike transaction(), it does not reserve the WAL writer. */
+export function readTransaction(db,work){
+  if(db.isTransaction)return work();
+  db.exec("BEGIN");
+  try{const result=work();db.exec("COMMIT");return result;}
+  catch(e){try{db.exec("ROLLBACK");}catch{}throw e;}
+}
 export function migratePeers(db) {
   transaction(db, () => {
     localIdentity(db);

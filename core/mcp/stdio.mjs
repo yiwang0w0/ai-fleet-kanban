@@ -53,7 +53,10 @@ export function createBridge({url,credentialFile,fetchImpl=directLoopbackRequest
    if(message.method==="initialize"){
     const p=message.params;
     if(state!=="new"||!p||typeof p.protocolVersion!=="string"||!p.capabilities||typeof p.capabilities!=="object"||Array.isArray(p.capabilities)||typeof p.clientInfo?.name!=="string"||typeof p.clientInfo?.version!=="string")return error(id,-32602,"Invalid initialization");
-    await broker("/local/v1/tools/list",{});state="initializing";
+    // A reconnect after report_result may negotiate the protocol solely to retry its receipt.
+    // This does not grant tools: every list/call is still authorized by the broker.
+    try{await broker("/local/v1/tools/list",{});}catch(e){if(e.code!=="RUN_EXPIRED")throw e;}
+    state="initializing";
     return {jsonrpc:"2.0",id,result:{protocolVersion:SUPPORTED.includes(p.protocolVersion)?p.protocolVersion:SUPPORTED[0],capabilities:{tools:{listChanged:false}},serverInfo:{name:"ai-fleet-board",version:"1.0.0"},instructions:"工具权限由本机授权身份决定。交付不等于验收；分派请求不代表执行器已启动。"}};
    }
    if(state!=="ready")return error(id,-32002,"Initialize and send notifications/initialized first");

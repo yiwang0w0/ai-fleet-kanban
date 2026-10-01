@@ -11,7 +11,7 @@ import {tmpdir} from "node:os";
 import {spawn, spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import http from "node:http";
-import {negotiateHello, CAPABILITIES} from "../core/federation/protocol.mjs";
+import {negotiateHello, CAPABILITIES, SCOPES} from "../core/federation/protocol.mjs";
 import {openPeerDatabase, migratePeers, issueCredential, revokePeer, listPeers, authenticate, localIdentity} from "../core/federation/peers.mjs";
 import {listenPeerServer} from "../core/federation/gateway.mjs";
 import {createBackup,restoreBackup} from "../core/backup.mjs";
@@ -387,4 +387,40 @@ test("failed Windows credential protection rolls back the grant without creating
  const f=fixture(),file=next("unavailable-protection")+".json",previous=process.env.SystemRoot;
  try{process.env.SystemRoot=next("missing-windows");assert.throws(()=>issue(f,{credentialFile:file}),{code:"PRIVATE_FILE_FAILED"});}finally{process.env.SystemRoot=previous;}
  assert.equal(existsSync(file),false);assert.equal(listPeers(f.db).length,0);assert.equal(f.db.prepare("SELECT count(*) n FROM federation_auth_events").get().n,0);
+});
+
+test("H8 one authenticated peer cannot overlap uploads while another peer remains admitted",async()=>{
+ const f=fixture(),a=issue(f),b=issue(f);
+ await running(f,async base=>{
+  const bytes=Buffer.from(JSON.stringify(hello(a.credential))),u=new URL(base);
+  let first;const done=new Promise((resolve,reject)=>{first=http.request({hostname:u.hostname,port:u.port,path:"/peer/v1/hello",method:"POST",headers:{authorization:"Bearer "+a.token,"content-type":"application/json","content-length":bytes.length}},r=>{r.resume();r.on("end",()=>resolve(r.statusCode));});first.on("error",reject);first.write(bytes.subarray(0,1));});
+  try{
+   await new Promise(r=>setTimeout(r,40));
+   const blocked=await api(base,"/peer/v1/health",a.token);assert.equal(blocked.status,429);assert.equal(blocked.body.code,"PEER_BUSY");
+   assert.equal((await api(base,"/peer/v1/health",b.token)).status,200);
+  }finally{first.end(bytes.subarray(1));await done;}
+  assert.equal((await api(base,"/peer/v1/health",a.token)).status,200);
+ });
+});
+
+test("H8 authenticated read routes do not compete for a WAL writer lock",async()=>{
+ const f=fixture(),a=issue(f,{scopes:[...SCOPES]});
+ await running(f,async base=>{
+  const writer=new DatabaseSync(f.dbPath);f.db.exec("PRAGMA busy_timeout=20");writer.exec("BEGIN IMMEDIATE");
+  try{
+   assert.equal((await api(base,"/peer/v1/health",a.token)).status,200);
+   assert.equal((await api(base,"/peer/v1/hello",a.token,{method:"POST",body:hello(a.credential)})).status,200);
+   for(const [route,body] of [
+    ["delegation/status",{delegation_id:randomUUID(),project_id:"demo"}],
+    ["delegation/result-status",{result_id:randomUUID(),project_id:"demo"}],
+    ["delegation/cancel-status",{relation_id:randomUUID(),cancel_id:randomUUID(),project_id:"demo"}],
+    ["artifact/status",{transfer_id:randomUUID(),header_digest:"0".repeat(64)}],
+    ["relations/status",{graph_id:randomUUID(),graph_epoch:randomUUID(),relation_id:null,project_id:"demo"}],
+    ["recovery/lineage",{node_id:f.node.node_id,from_epoch:randomUUID(),to_epoch:f.node.sync_epoch}]
+   ]){
+    const r=await api(base,"/peer/v1/"+route,a.token,{method:"POST",body});
+    assert.ok([403,404,409].includes(r.status),route+": "+JSON.stringify(r));
+   }
+  }finally{writer.exec("ROLLBACK");writer.close();}
+ });
 });

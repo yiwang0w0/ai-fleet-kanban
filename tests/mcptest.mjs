@@ -514,6 +514,14 @@ test("H7b ended workers lose tools while exact lost report receipts remain retri
  assert.throws(()=>authenticatePrincipal(f.db,w.identity.auth),{code:"RUN_EXPIRED"});
  for(const [name,a] of [["heartbeat",{...args}],["report_result",{...args,request_id:randomUUID()}],["report_result",{...args,evidence:"changed"}]])assert.notEqual((await send(name,a)).status,200);
  assert.deepEqual(await send("report_result",args),report);
+ const bridge=createBridge({url:n.url,credentialFile:w.identity.file});
+ const initialized=await bridge({jsonrpc:"2.0",id:1,method:"initialize",params:{protocolVersion:"2025-11-25",capabilities:{},clientInfo:{name:"receipt-reconnect",version:"1"}}});
+ assert.equal(initialized.error,undefined,JSON.stringify(initialized));
+ await bridge({jsonrpc:"2.0",method:"notifications/initialized"});
+ const replay=await bridge({jsonrpc:"2.0",id:2,method:"tools/call",params:{name:"report_result",arguments:args}});
+ assert.equal(replay.result.isError,false);assert.deepEqual(replay.result.structuredContent,report.body.result);
+ const denied=await bridge({jsonrpc:"2.0",id:3,method:"tools/call",params:{name:"get_task",arguments:{task_uid:w.task.task_uid}}});
+ assert.equal(denied.result.structuredContent.code,"RUN_EXPIRED");
  assert.equal(store.events(f.db,{taskId:w.task.id}).filter(x=>x.kind==="report").length,1);
  revokePrincipal(f.db,{principalId:w.identity.principal.principal_id,expectedVersion:1});
  assert.equal((await send("report_result",args)).body.code,"UNAUTHENTICATED");

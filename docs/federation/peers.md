@@ -125,3 +125,12 @@ node cli/peer.mjs auth-failures --db <数据库绝对路径> --limit 100
 ~~~
 
 limit 为 1–512。这是本机管理命令，没有新增网络查询接口。鉴权失败表是独立 schema 1，未知版本拒绝启动。当前验证与限制见 review-auth-evidence.json；此保护不代替实际 tailnet ACL、Windows 文件 ACL 或实体双机验收。
+
+
+## 已认证请求与写锁
+
+每个 gateway 进程对同一 peer_node_id 最多接纳一个在途请求，从认证通过覆盖正文上传直到响应 finish/close。重叠请求返回 429 / PEER_BUSY、Retry-After: 1，并关闭连接；其他已授权节点仍独立接纳。凭据轮换不会绕开此限制。此限制不替代网络限流，不跨 gateway 进程共享。
+
+hello、health、恢复链和委派/结果/取消/产物/关系的状态读取使用一致的 deferred 读事务，不预占 WAL 写锁。上传后仍重新验证凭据、节点代次和所需权限。pull 会物化事件及记录投递进度，ACK 和业务写入仍需要写事务。快照采用下述分段流程，末页仍须持久记录 offered_seq 后才成功响应。
+
+定向锁竞争及正常同步证据见 [网关准入证据](peer-admission-evidence.json)。这是同机真实双 SQLite 连接和回环 HTTP 实验，不代表实体双机吞吐或 72 小时验收。

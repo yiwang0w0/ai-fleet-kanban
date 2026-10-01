@@ -11,7 +11,7 @@ import {sourceRecoveryMarker,sourceRecoveryLineage} from "./epoch-state.mjs";
 import {startSnapshot,snapshotPage} from "./snapshots.mjs";
 import {migrateSync,exportBatch,acknowledge} from "./sync-store.mjs";
 import { PeerError, negotiateHello, keys } from "./protocol.mjs";
-import { authenticate, localIdentity, transaction } from "./peers.mjs";
+import { authenticate, localIdentity, transaction, readTransaction } from "./peers.mjs";
 
 function send(res, status, body, close = false) {
   res.writeHead(status, {"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store",
@@ -48,17 +48,22 @@ async function bodyJSON(req,limit=8192) {
 /** Separate authenticated node surface: explicit projections and delegation proposals; no operator UI, secrets or model execution. */
 function createPeerServer(db) {
   localIdentity(db);migrateSync(db);migrateDelegation(db);migrateRelations(db);migrateResults(db);migrateArtifacts(db);migrateCompletion(db);
-  const failures=createAuthFailureGuard(db);
+  const failures=createAuthFailureGuard(db),inFlight=new Set();
   const server = http.createServer({maxHeaderSize:8192}, async (req,res) => {
     try {
       const authCount = req.rawHeaders.filter((_,i)=>i%2===0 && req.rawHeaders[i].toLowerCase()==="authorization").length;
       if (authCount !== 1) throw new PeerError("UNAUTHENTICATED","需要唯一的对端凭据",401);
-      authenticate(db,req.headers.authorization); // Refuse before accepting a body.
+      const admitted=authenticate(db,req.headers.authorization); // Refuse before accepting a body.
+      const peerKey=admitted.peer_node_id;
+      if(inFlight.has(peerKey)){res.setHeader("Retry-After","1");throw new PeerError("PEER_BUSY","该对端已有进行中的请求，请稍后重试",429);}
+      inFlight.add(peerKey);
+      const release=()=>{inFlight.delete(peerKey);res.removeListener("finish",release);res.removeListener("close",release);};
+      res.once("finish",release);res.once("close",release);
       if (req.headers.origin) throw new PeerError("FORBIDDEN","节点接口不接受浏览器来源",403);
       if (req.url === "/peer/v1/hello" && req.method === "POST") {
         const body = await bodyJSON(req);
-        const hello = transaction(db,()=>{
-          // Upload may span credential rotation/revocation. Recheck inside the write lock.
+        const hello = readTransaction(db,()=>{
+          // Upload may span credential rotation/revocation. Recheck inside the read snapshot.
           const peer = authenticate(db,req.headers.authorization,"peer:handshake");
           const result=negotiateHello(body,peer,localIdentity(db));
           const marker=sourceRecoveryMarker(db);if(marker)result.extensions.source_recovery=marker;
@@ -68,7 +73,7 @@ function createPeerServer(db) {
       }
       if(req.url==="/peer/v1/recovery/lineage"&&req.method==="POST"){
         const body=await bodyJSON(req);
-        const lineage=transaction(db,()=>{authenticate(db,req.headers.authorization,"sync:pull");return sourceRecoveryLineage(db,body);});
+        const lineage=readTransaction(db,()=>{authenticate(db,req.headers.authorization,"sync:pull");return sourceRecoveryLineage(db,body);});
         return send(res,200,lineage);
       }
       if (["/peer/v1/pull","/peer/v1/ack"].includes(req.url) && req.method === "POST") {
@@ -83,16 +88,15 @@ function createPeerServer(db) {
       if (["/peer/v1/snapshot/start","/peer/v1/snapshot/page"].includes(req.url) && req.method==="POST"){
         const body=await bodyJSON(req),start=req.url.endsWith("/start");
         keys(body,start?["project_id","min_seq"]:["project_id","snapshot_id","offset"],"snapshot request");
-        const result=transaction(db,()=>{
-          const peer=authenticate(db,req.headers.authorization,"sync:pull");
-          return start?startSnapshot(db,peer,body):snapshotPage(db,peer,body);
-        });
+        const authorize=()=>authenticate(db,req.headers.authorization,"sync:pull");
+        const peer=authorize(),options={authorize};
+        const result=start?startSnapshot(db,peer,body,options):snapshotPage(db,peer,body,options);
         return send(res,200,result);
       }
       if (["/peer/v1/delegation/offer","/peer/v1/delegation/status"].includes(req.url) && req.method==="POST") {
         const offering=req.url.endsWith("/offer"),body=await bodyJSON(req,offering?128*1024:8192);
         keys(body,offering?["offer"]:["delegation_id","project_id"],"delegation request");
-        const result=transaction(db,()=>{
+        const result=(offering?transaction:readTransaction)(db,()=>{
           const peer=authenticate(db,req.headers.authorization,offering?"delegation:offer":"delegation:status");
           return offering?receiveOffer(db,peer,body.offer):peerDelegationStatus(db,peer,body);
         });
@@ -104,12 +108,12 @@ function createPeerServer(db) {
       if(["/peer/v1/delegation/result","/peer/v1/delegation/result-status"].includes(req.url)&&req.method==="POST"){
         const receiving=req.url.endsWith("/result"),body=await bodyJSON(req,receiving?MAX_RESULT_BYTES:8192);
         if(!receiving)keys(body,["result_id","project_id"],"result status");
-        const result=transaction(db,()=>{const peer=authenticate(db,req.headers.authorization,"delegation:result");return receiving?receiveResult(db,peer,body):peerResultStatus(db,peer,body);});
+        const result=(receiving?transaction:readTransaction)(db,()=>{const peer=authenticate(db,req.headers.authorization,"delegation:result");return receiving?receiveResult(db,peer,body):peerResultStatus(db,peer,body);});
         return send(res,200,result);
       }
       if(["/peer/v1/artifact/offer","/peer/v1/artifact/chunk","/peer/v1/artifact/seal","/peer/v1/artifact/status"].includes(req.url)&&req.method==="POST"){
         const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="offer"?MAX_ARTIFACT_HEADER:action==="chunk"?96*1024:8192);
-        const result=transaction(db,()=>{
+        const result=(action==="status"?readTransaction:transaction)(db,()=>{
           const peer=authenticate(db,req.headers.authorization,"artifact:write");
           return action==="offer"?receiveArtifactOffer(db,peer,body):action==="chunk"?receiveArtifactChunk(db,peer,body):action==="seal"?sealArtifact(db,peer,body):peerArtifactStatus(db,peer,body);
         });return send(res,200,result);
@@ -117,7 +121,7 @@ function createPeerServer(db) {
       if(["/peer/v1/delegation/cancel","/peer/v1/delegation/cancel-status"].includes(req.url)&&req.method==="POST"){
         const body=await bodyJSON(req,16384),receiving=req.url.endsWith("/cancel");
         if(!receiving)keys(body,["relation_id","project_id","cancel_id"],"cancellation status");
-        const result=transaction(db,()=>{const peer=authenticate(db,req.headers.authorization,"delegation:control");
+        const result=(receiving?transaction:readTransaction)(db,()=>{const peer=authenticate(db,req.headers.authorization,"delegation:control");
           if(receiving)return receiveCancellation(db,peer,body);
           return peerCancellationState(db,peer,body);
         });return send(res,200,result);
@@ -129,14 +133,14 @@ function createPeerServer(db) {
       }
       if (["/peer/v1/relations/publish","/peer/v1/relations/approve","/peer/v1/relations/status","/peer/v1/relations/withdraw","/peer/v1/relations/complete","/peer/v1/relations/cancel"].includes(req.url) && req.method==="POST") {
         const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="publish"?MAX_TOPOLOGY_BYTES+4096:["complete","cancel"].includes(action)?32768:8192);
-        const result=transaction(db,()=>{
+        const result=(action==="status"?readTransaction:transaction)(db,()=>{
           const peer=authenticate(db,req.headers.authorization,action==="status"?"relations:read":action==="withdraw"?"relations:approve":action==="cancel"?"relations:complete":"relations:"+action);
           return action==="publish"?publishTopology(db,peer,body):action==="approve"?approveRelation(db,peer,body):action==="withdraw"?withdrawRelation(db,peer,body):action==="complete"?completeRelation(db,peer,body):action==="cancel"?cancelRelation(db,peer,body):relationStatus(db,peer,body);
         });
         return send(res,200,result);
       }
       if (req.url === "/peer/v1/health" && req.method === "GET") {
-        const health = transaction(db,()=>{
+        const health = readTransaction(db,()=>{
           authenticate(db,req.headers.authorization,"peer:health");
           return {ok:true,protocol_version:1,node_id:localIdentity(db).node_id};
         });

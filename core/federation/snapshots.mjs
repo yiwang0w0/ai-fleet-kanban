@@ -2,7 +2,7 @@
 import {assertSourceEpoch,replicationCursor,pendingRecovery,archiveRecoveryProject,bindReplicaLocation,resolveRecoveryMissing} from "./epoch-state.mjs";
 import {randomUUID} from "node:crypto";
 import {PeerError,uuid,names,keys,version} from "./protocol.mjs";
-import {localIdentity} from "./peers.mjs";
+import {localIdentity,readTransaction} from "./peers.mjs";
 import {atomic,integer,allowed,canonical,digest,validateTask,taskUID,receivedCheckpoint,MAX_EVENT_BYTES,MAX_BATCH_BYTES} from "./sync-store.mjs";
 
 export const MAX_SNAPSHOT_RECORDS=10000,MAX_SNAPSHOT_BYTES=32*1024*1024,SNAPSHOT_TTL_MS=15*60*1000;
@@ -15,12 +15,12 @@ function disposeSnapshot(db,id){
  db.prepare("DELETE FROM federation_snapshot_offers WHERE snapshot_id=?").run(id);
  db.prepare("DELETE FROM federation_snapshots WHERE snapshot_id=?").run(id);
 }
-function sourceSnapshot(db,projectId,minSeq,now){
+function buildSourceSnapshot(db,projectId,minSeq,now){
  const node=localIdentity(db),head=db.prepare("SELECT seq FROM federation_streams WHERE project_id=?").get(projectId)?.seq??0;
  const floor=db.prepare("SELECT floor_seq FROM federation_retention WHERE project_id=?").get(projectId)?.floor_seq??0;
  if(minSeq>head)fail("CURSOR_AHEAD","快照不能恢复到来源尚未发布的游标");
  const cached=db.prepare("SELECT * FROM federation_snapshots WHERE project_id=? AND head_seq>=? AND expires_at>? ORDER BY head_seq DESC LIMIT 1").get(projectId,Math.max(minSeq,floor),now);
- if(cached)return JSON.parse(cached.manifest_json);
+ if(cached)return {manifest:JSON.parse(cached.manifest_json),manifestJSON:cached.manifest_json,events:null,observedHead:head,observedFloor:floor};
  const events=[];let bytes=2;
  for(const row of db.prepare("SELECT event_json FROM federation_published WHERE project_id=? ORDER BY task_uid").iterate(projectId)){
   bytes+=Buffer.byteLength(row.event_json)+1;
@@ -32,40 +32,66 @@ function sourceSnapshot(db,projectId,minSeq,now){
  const manifest={snapshot_version:1,snapshot_id:randomUUID(),origin_node_id:node.node_id,origin_epoch:node.sync_epoch,
   project_id:projectId,head_seq:head,checkpoint:checkpoint?{...checkpoint}:null,record_count:events.length,
   content_digest:digest(events),created_at:new Date(now).toISOString(),expires_at:new Date(now+SNAPSHOT_TTL_MS).toISOString()};
- db.prepare("INSERT INTO federation_snapshots VALUES(?,?,?,?,?)").run(manifest.snapshot_id,projectId,head,canonical(manifest),now+SNAPSHOT_TTL_MS);
+ return {manifest,manifestJSON:canonical(manifest),events:events.map(canonical),observedHead:head,observedFloor:floor};
+}
+function persistSourceSnapshot(db,projectId,draft,now){
+ const {manifest,manifestJSON,events,observedHead,observedFloor}=draft,node=localIdentity(db);
+ const head=db.prepare("SELECT seq FROM federation_streams WHERE project_id=?").get(projectId)?.seq??0;
+ const floor=db.prepare("SELECT floor_seq FROM federation_retention WHERE project_id=?").get(projectId)?.floor_seq??0;
+ if(node.node_id!==manifest.origin_node_id||node.sync_epoch!==manifest.origin_epoch||head!==observedHead||floor!==observedFloor)fail("SNAPSHOT_CHANGED","快照准备期间来源已改变，请重新请求");
+ if(events===null){
+  const current=db.prepare("SELECT manifest_json,expires_at FROM federation_snapshots WHERE snapshot_id=?").get(manifest.snapshot_id);
+  if(!current||current.manifest_json!==manifestJSON||current.expires_at<=now)fail("SNAPSHOT_CHANGED","已准备的快照不再可用，请重新请求");
+  return manifest;
+ }
+ db.prepare("INSERT INTO federation_snapshots VALUES(?,?,?,?,?)").run(manifest.snapshot_id,projectId,manifest.head_seq,manifestJSON,Date.parse(manifest.expires_at));
  const insert=db.prepare("INSERT INTO federation_snapshot_items VALUES(?,?,?)");
- for(let i=0;i<events.length;i++)insert.run(manifest.snapshot_id,i,canonical(events[i]));
+ for(let i=0;i<events.length;i++)insert.run(manifest.snapshot_id,i,events[i]);
  // Keep at most two generations per project. An interrupted client can safely start again.
  for(const row of db.prepare("SELECT snapshot_id FROM federation_snapshots WHERE project_id=? ORDER BY rowid DESC LIMIT -1 OFFSET 2").all(projectId))disposeSnapshot(db,row.snapshot_id);
  return manifest;
 }
-export function startSnapshot(db,peer,{project_id:projectId,min_seq:minSeq=0},{now=Date.now()}={}){
+// Local history pruning already owns its atomic write operation.
+function sourceSnapshot(db,projectId,minSeq,now){return persistSourceSnapshot(db,projectId,buildSourceSnapshot(db,projectId,minSeq,now),now);}
+export function startSnapshot(db,peer,{project_id:projectId,min_seq:minSeq=0},{now=Date.now(),authorize=()=>peer}={}){
  allowed(peer,projectId,"sync:pull");integer(minSeq,"min_seq");integer(now,"now");
+ if(db.isTransaction)fail("TRANSACTION_CONTEXT","对端快照准备必须在独立读快照中进行");
+ const draft=readTransaction(db,()=>{allowed(authorize(),projectId,"sync:pull");return buildSourceSnapshot(db,projectId,minSeq,now);});
  return atomic(db,()=>{
-  const manifest=sourceSnapshot(db,projectId,minSeq,now);
+  allowed(authorize(),projectId,"sync:pull");
+  const manifest=persistSourceSnapshot(db,projectId,draft,now);
   db.prepare("INSERT OR IGNORE INTO federation_snapshot_offers VALUES(?,?,?)").run(peer.peer_node_id,peer.peer_epoch,manifest.snapshot_id);
   return manifest;
  });
 }
-export function snapshotPage(db,peer,{project_id:projectId,snapshot_id:id,offset},{now=Date.now()}={}){
+export function snapshotPage(db,peer,{project_id:projectId,snapshot_id:id,offset},{now=Date.now(),authorize=()=>peer}={}){
  allowed(peer,projectId,"sync:pull");uuid(id,"snapshot_id");integer(offset,"offset");
- return atomic(db,()=>{
-  localIdentity(db);
+ const access=()=>{
+  allowed(authorize(),projectId,"sync:pull");localIdentity(db);
   const offer=db.prepare("SELECT 1 FROM federation_snapshot_offers WHERE peer_node_id=? AND peer_epoch=? AND snapshot_id=?").get(peer.peer_node_id,peer.peer_epoch,id);
   const s=db.prepare("SELECT * FROM federation_snapshots WHERE snapshot_id=? AND project_id=?").get(id,projectId);
   if(!offer||!s)fail("SNAPSHOT_EXPIRED","快照不可用，请重新取得授权清单",410);
   if(s.expires_at<=now)fail("SNAPSHOT_EXPIRED","快照已过期",410);
   const manifest=JSON.parse(s.manifest_json);if(offset>manifest.record_count)fail("BAD_INPUT","分页偏移超限",400);
+  return manifest;
+ };
+ const result=readTransaction(db,()=>{
+  const manifest=access();
   const events=[];let bytes=2048;
   for(const r of db.prepare("SELECT event_json FROM federation_snapshot_items WHERE snapshot_id=? AND ordinal>=? ORDER BY ordinal LIMIT 25").all(id,offset)){
    if(bytes+Buffer.byteLength(r.event_json)>MAX_BATCH_BYTES)break;
    events.push(JSON.parse(r.event_json));bytes+=Buffer.byteLength(r.event_json);
   }
   const next=offset+events.length,done=next===manifest.record_count;
-  if(done)db.prepare("INSERT INTO federation_deliveries(peer_node_id,peer_epoch,project_id,offered_seq) VALUES(?,?,?,?) ON CONFLICT(peer_node_id,peer_epoch,project_id) DO UPDATE SET offered_seq=MAX(offered_seq,excluded.offered_seq)").run(peer.peer_node_id,peer.peer_epoch,projectId,manifest.head_seq);
   const page={snapshot_id:id,offset,next_offset:next,done,events};
-  return {...page,page_digest:digest(page)};
+  return {page:{...page,page_digest:digest(page)},head:manifest.head_seq};
  });
+ if(result.page.done)atomic(db,()=>{
+  const current=access();
+  if(current.head_seq!==result.head)fail("SNAPSHOT_CHANGED","快照已变化，请重新请求");
+  db.prepare("INSERT INTO federation_deliveries(peer_node_id,peer_epoch,project_id,offered_seq) VALUES(?,?,?,?) ON CONFLICT(peer_node_id,peer_epoch,project_id) DO UPDATE SET offered_seq=MAX(offered_seq,excluded.offered_seq)").run(peer.peer_node_id,peer.peer_epoch,projectId,result.head);
+ });
+ return result.page;
 }
 export function validateManifest(m,{origin,epoch,projectId}){
  exact(m,["snapshot_version","snapshot_id","origin_node_id","origin_epoch","project_id","head_seq","checkpoint","record_count","content_digest","created_at","expires_at"],"snapshot");
