@@ -2497,13 +2497,27 @@
       "evidence_required": [
         "progress/gate 测试"
       ],
-      "status": "planned",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Read-only operator API and panel derive accepted-only task/phase progress from administrator-enrolled external review records. Scoped contract/input changes invalidate affected gates and dependants, preserve unrelated gates, and expose blocked/pending tasks and confirmation history. Actual HTTP, browser, CLI and the existing 72-task manifest were verified locally.",
+        "pending": [
+          "G08 independent review of the UI and administrator enrollment procedure",
+          "Actual desktop and two-PC use, confirmation distribution and Windows file permissions"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "core/fleet-progress.mjs",
+        "cli/progress.mjs",
+        "tests/fleetprogresstest.mjs",
+        "docs/federation/fleet-progress.md",
+        "docs/federation/fleet-progress-evidence.json"
+      ]
     },
     {
       "id": "T08.06",
