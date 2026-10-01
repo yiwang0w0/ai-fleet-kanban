@@ -104,7 +104,7 @@ test("real HTTP endpoints require operator token, reject foreign origin and rema
    const r=await get(path,{"X-Board-Token":operator});assert.equal(r.status,200);assert.match(r.headers.get("cache-control"),/no-store/);assert.ok(!JSON.stringify(await r.json()).includes(operator));
   }
   for(const path of ["/api/fleet?limit=0","/api/fleet?owner=kanata","/api/fleet/task","/api/fleet/evidence?uid="+encodeURIComponent(uid),"/api/fleet/evidence?section=runs&cursor=bad&uid="+encodeURIComponent(uid)])assert.equal((await get(path,{"X-Board-Token":operator})).status,400);
-  assert.equal((await get("/api/fleet/task?uid=missing",{"X-Board-Token":operator})).status,404);assert.equal((await get("/fleet")).status,404);
+  assert.equal((await get("/api/fleet/task?uid=missing",{"X-Board-Token":operator})).status,404);assert.equal((await get("/fleet",{"X-Board-Token":operator})).status,404);
  }finally{
   if(proc.exitCode===null){const closed=new Promise(r=>proc.once("exit",r));proc.kill();await closed;}
   const target=resolve(dir),baseTmp=resolve(tmpdir());assert.ok(relative(baseTmp,target)&&!relative(baseTmp,target).startsWith(".."));rmSync(target,{recursive:true,force:true});

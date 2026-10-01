@@ -4,9 +4,9 @@
 // Start: node core/server.mjs
 // Panel: http://127.0.0.1:47824
 //
-// ⚠ Binds 127.0.0.1 only. There is no authentication; binding 0.0.0.0 hands write
-//   access to the task queue to the whole LAN. The check at the bottom REFUSES to
-//   start on a non-loopback host — the warning is a gate, not a comment.
+// Binds loopback only and authenticates all operational reads/writes. Anonymous
+// access is limited to the pairing shell, health, and worker protocol discovery.
+// Non-loopback binding remains refused; use the separate peer gateway for federation.
 
 import http from "node:http";
 import { spawn } from "node:child_process";
@@ -2140,9 +2140,8 @@ function statusFor(e, where) {
 
 
 // ───────────────────────── The local write-endpoint gate ─────────────────────
-// The board binds loopback only, but "loopback = safe" does not hold against OTHER
-// processes on the same machine. A token lives in .data/; the server injects it
-// into the page. Browser-origin attacks cannot read it, so they fail.
+// Loopback can be forwarded. A token lives in the local data directory; browsers
+// pair explicitly and carry it in headers. No anonymous response contains it.
 // (An adversary who can already execute code on this machine wins regardless —
 //  that is outside this threat model. The target is "pages from other origins" and
 //  "random local scripts without the token".)
@@ -2151,7 +2150,7 @@ const TOKEN_FILE = join(store.DATA_DIR, "board_token");
 //   interactive agent granted the board FOLDER read board_token and self-approved
 //   its own card with resolved_by:'codex'). One token was one capability —
 //   "worker" and "ruler" were the same word. Now:
-//     board_token  = operator, full power (panel injection, board.py, humans)
+//     board_token  = operator, full power (explicit panel pairing, board.py, humans)
 //     worker_token = the EXECUTION face only: claim / report / heartbeat /
 //                    attempt / derived-card create / own-line compact / forked /
 //                    pool report. A worker loop compromised through card text
@@ -2183,10 +2182,8 @@ const REVIEW_WRITES = (p) =>
   p === "/api/pools/exhausted" ||
   /^\/api\/tasks\/\d+\/(?:resolve|autoreview)$/.test(p);
 // Requests with a foreign Origin are refused; no Origin (curl / CLI) is judged by
-// token. ⚠ BOARD_EXTRA_ORIGINS (comma-separated) widens this — the moment a
-// non-loopback origin is added, the write boundary is no longer "this machine":
-// any host on that network that can GET the page can read the token. Add entries
-// only with that understood.
+// token. BOARD_EXTRA_ORIGINS widens the allowed browser origins, never supplies
+// credentials or replaces authentication. Keep the management UI off peer forwards.
 const ALLOWED_ORIGINS = new Set([
   `http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`, `http://[::1]:${PORT}`,
   ...(process.env.BOARD_EXTRA_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
@@ -2254,10 +2251,10 @@ function closeGateOrThrow(t) {
         `\n  ⚠若这些改动不属于本卡(共享工作树上别的线在途),在 resolve 时带 allow_uncommitted:true 并写明归属。`);
 }
 
-function guardWrite(req, res, p) {
+function guardAuthentication(req, res) {
   const origin = req.headers.origin;
   if (origin && !ALLOWED_ORIGINS.has(origin)) {
-    json(res, 403, { error: "跨来源的写请求被拒绝", origin });
+    json(res, 403, { error: "跨来源的看板请求被拒绝", origin });
     return null;
   }
   const tok = req.headers["x-board-token"];
@@ -2268,10 +2265,14 @@ function guardWrite(req, res, p) {
     // ⚠ Echoing TOKEN_FILE raw would hand an unauthenticated caller an absolute
     //   path with the username in it. "Remember to redact at echo time" fails at
     //   exactly one site — this one, once.
-    json(res, 401, { error: "缺少或错误的 X-Board-Token",
-                     hint: `令牌在 ${redact(TOKEN_FILE)};页面由服务端注入,CLI 自行读取` });
+    json(res, 401, { error: "缺少或错误的 X-Board-Token", hint: "请使用本机凭据；管理面板需要先配对。" });
     return null;
   }
+  return role;
+}
+function guardWrite(req, res, p) {
+  const role = guardAuthentication(req, res);
+  if (!role) return null;
   const allowed = role === "operator" || (role === "worker" ? WORKER_WRITES(p) : REVIEW_WRITES(p));
   if (!allowed) {
     json(res, 403, { error: `${role} 令牌无权执行此操作 —— 裁定/编辑/治理动作只属于 operator 令牌(board_token)`,
@@ -2281,6 +2282,7 @@ function guardWrite(req, res, p) {
   return role;
 }
 
+if (process.env.BOARD_EXTRA_ORIGINS?.trim()) console.warn("⚠ BOARD_EXTRA_ORIGINS 扩大了允许来源；所有任务、节点身份和事件接口仍需认证，不要将管理面板用作 peer 转发。");
 const WORKER_PROTOCOL_VERSION = 2;
 function claimIdentity(body, role) {
   if (role === "worker" && (body.worker_protocol_version !== WORKER_PROTOCOL_VERSION ||
@@ -2302,26 +2304,36 @@ const server = http.createServer(async (req, res) => {
   const m = req.method;
 
   try {
-    // Reads pass; EVERY write goes through the gate here. Per-endpoint "remember to
-    // add it" forgets exactly one.
-    let boardRole = "operator";
-    if (m !== "GET" && m !== "HEAD") {
-      boardRole = guardWrite(req, res, p);
-      if (!boardRole) return;
-    }
-
-    // ── static
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cache-Control", "no-store");
+    // Anonymous shell and protocol discovery carry no operational data.
     if (m === "GET" && ["/", "/panel.html"].includes(p)) {
-      let html = String(await readFile(join(__dirname, "panel.html")));
-      // Inject the token so the page's fetches can carry it; the page is only
-      // readable same-origin.
-      html = html.replace("<script>",
-        `<script>window.__BOARD_TOKEN=${JSON.stringify(BOARD_TOKEN)};</script>\n<script>`);
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      const html = String(await readFile(join(__dirname, "panel.html")));
+      const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+        .map(match => "'sha256-" + createHash("sha256").update(match[1]).digest("base64") + "'");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self' " + scripts.join(" ") + "; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       return res.end(html);
     }
+    if (m === "GET" && p === "/panel-auth.js") {
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+      return res.end(await readFile(join(__dirname, "panel-auth.js")));
+    }
+    if (m === "GET" && p === "/health") return json(res, 200, { status: "ok", port: PORT });
+    if (m === "GET" && p === "/api/meta" && req.headers["x-board-token"] === undefined)
+      return json(res, 200, { worker_protocol_version: WORKER_PROTOCOL_VERSION });
+    // Authenticate every other request, including SSE and future read endpoints.
+    const boardRole = m === "GET" || m === "HEAD" ? guardAuthentication(req,res) : guardWrite(req,res,p);
+    if (!boardRole) return;
+    if (m === "GET" && p === "/api/auth") {
+      if (boardRole !== "operator") return json(res,403,{error:"管理面板需要操作员身份"});
+      return json(res,200,{role:"operator"});
+    }
+
     // The new fleet reads require the existing operator credential. No new page
-    // receives an injected credential; the view lives inside the existing panel.
+    // receives an injected credential; the view uses explicit operator pairing.
     if (m === "GET" && (p === "/api/fleet" || p === "/api/fleet/task" || p === "/api/fleet/evidence")) {
       if (!guardWrite(req,res,p)) return;
       try {
@@ -2350,8 +2362,6 @@ const server = http.createServer(async (req, res) => {
         return json(res,e instanceof PeerError?e.status:409,{code,error:reasons[code]||"操作未获准，请核对当前任务状态与权限"});
       }
     }
-    if (m === "GET" && p === "/health") return json(res, 200, { status: "ok", port: PORT });
-
     // ── SSE
     if (m === "GET" && p === "/api/events") {
       res.writeHead(200, {

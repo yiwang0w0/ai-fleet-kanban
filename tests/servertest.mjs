@@ -1002,7 +1002,7 @@ try {
     // stream is open (so a triggered event cannot slip in before we listen).
     const sseCount = async (ms, during = null) => {
       const ctl = new AbortController();
-      const r = await fetch(`${B.BASE}/api/events`, { signal: ctl.signal });
+      const r = await fetch(`${B.BASE}/api/events`, { headers: {"X-Board-Token": readFileSync(join(B.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal });
       const reader = r.body.getReader();
       let buf = "", n = 0;
       const t0 = Date.now();
@@ -1258,7 +1258,7 @@ try {
     let created = null, seen = 0;
     {
       const ctl = new AbortController();
-      const r = await fetch(`${B.BASE}/api/events`, { signal: ctl.signal });
+      const r = await fetch(`${B.BASE}/api/events`, { headers: {"X-Board-Token": readFileSync(join(B.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal });
       const reader = r.body.getReader();
       const stop = setTimeout(() => ctl.abort(), 1500);
       created = await B.api("POST", "/api/requests", { kind: "propose-lines", params: { days: 14, authorized: true } });
@@ -1352,7 +1352,7 @@ try {
     const D = await mk({ env: { BOARD_GATED_SUBTREE: ".", BOARD_RESTART_MODE: "exit" } });
     const before = (await D.api("GET", "/api/setup")).body.sentries;
     const ctl = new AbortController();
-    const streamed = fetch(`${D.BASE}/api/events?as=sentry`, { signal: ctl.signal })
+    const streamed = fetch(`${D.BASE}/api/events?as=sentry`, { headers: {"X-Board-Token": readFileSync(join(D.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal })
       .then((r) => r.body.getReader().read()).catch(() => null);
     await streamed;
     const during = (await D.api("GET", "/api/setup")).body.sentries;
@@ -1420,7 +1420,7 @@ try {
     const ctl = new AbortController();
     let staleBuf = "";
     try {
-      const rd = (await fetch(`${A.BASE}/api/events?as=sentry&rev=0ldrev`, { signal: ctl.signal })).body.getReader();
+      const rd = (await fetch(`${A.BASE}/api/events?as=sentry&rev=0ldrev`, { headers: {"X-Board-Token": readFileSync(join(A.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal })).body.getReader();
       const t0 = Date.now();
       while (!/sentry\.stale/.test(staleBuf) && Date.now() - t0 < 3000) {
         const { value, done } = await rd.read(); if (done) break;
@@ -1437,7 +1437,7 @@ try {
     ctl.abort();
     await sleep(400);
     const ctl2 = new AbortController();
-    await fetch(`${A.BASE}/api/events?as=sentry&rev=${ua.version}`, { signal: ctl2.signal })
+    await fetch(`${A.BASE}/api/events?as=sentry&rev=${ua.version}`, { headers: {"X-Board-Token": readFileSync(join(A.DATA, "board_token"), "utf8").trim()}, signal: ctl2.signal })
       .then((r) => r.body.getReader().read()).catch(() => null);
     const uc = (await A.api("GET", "/api/setup")).body.upgrade;
     ok("T3 哨也是当前版本 → 再次安静", uc.pending === false, JSON.stringify(uc.steps.map((s) => s.key)));

@@ -148,6 +148,8 @@ jobs:
           PYTHON: python
       - name: "servertest (supervisor: stop reasons, backoff, refusal)"
         run: bash hrun.sh node tests/servertest.mjs
+      - name: "panel authentication (anonymous boundary, local pairing and authenticated events)"
+        run: bash hrun.sh node --test tests/panelauth.test.mjs tests/panelclient.test.mjs
       - name: "reviewtest (auto-reviewer, end to end with a stub CLI)"
         run: bash hrun.sh node tests/reviewtest.mjs
         env:

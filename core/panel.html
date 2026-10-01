@@ -410,9 +410,20 @@
 </style>
 </head>
 <body>
+<main id="board-pair" style="max-width:480px;margin:12vh auto;padding:24px">
+ <h1>连接本机看板</h1>
+ <p>从本机看板数据目录的 <code>board_token</code> 文件复制操作员令牌，粘贴后连接。</p>
+ <form id="board-pair-form"><label for="board-pair-token">操作员令牌</label>
+  <input id="board-pair-token" type="password" autocomplete="off" spellcheck="false" required style="display:block;width:100%;box-sizing:border-box;margin:12px 0" />
+  <button type="submit" class="pri">连接看板</button>
+ </form>
+ <p id="board-pair-note" role="status">令牌仅保存在标签页会话中；点击退出连接即可清除。请勿填写到网址中。</p>
+</main>
+<div id="board-shell" hidden>
 <header>
   <h1>AI 舰队看板</h1>
   <button type="button" id="fleet-open">全局视图</button>
+  <button type="button" id="board-logout">退出连接</button>
   <span class="live"><span class="dot" id="dot"></span><span id="livetxt">连接中</span></span>
 </header>
 
@@ -529,9 +540,12 @@
   <span style="margin-left:auto" id="f-when">–</span>
 </footer>
 
+</div>
+<script src="/panel-auth.js"></script>
 <script>
-// Writes carry the token; the server injects it into the page (readable same-origin only).
-const WH = { "Content-Type":"application/json", "X-Board-Token": window.__BOARD_TOKEN || "" };
+window.boardSession.ready.then(()=>{
+const fetch = window.boardSession.fetch;
+const WH = { "Content-Type":"application/json" };
 // Five columns. Goal is a KIND, not a status — the state machine still has four values.
 const COLS = ["goal", "not_started", "in_progress", "waiting", "done"];
 // ⭐ Labels come from the server (GET /api/meta → status_labels / wf_labels): the ONE
@@ -2989,7 +3003,7 @@ document.getElementById("line-add").addEventListener("submit", async (e) => {
 
 // SSE: pushed on change only; heartbeat/lease countdowns are computed locally
 // (1s redraw, zero server load)
-const es = new EventSource("/api/events");
+const es = window.boardSession.events("/api/events");
 es.onopen = () => {
   if (restartPending){
     if (hasUnsavedInput()){ showRevBar(null, "看板已重启"); restartPending = null; live(true, "实时"); return; }
@@ -3334,6 +3348,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
  window.addEventListener("hashchange",linkedTask);linkedTask();
 })();
 
+});
 </script>
 </body>
 </html>

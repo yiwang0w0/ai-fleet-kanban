@@ -63,6 +63,18 @@ def _code_rev():
         return ""
 
 
+def _board_token():
+    data = os.environ.get("BOARD_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "core", ".data"))
+    try:
+        with open(os.path.join(data, "board_token"), encoding="utf-8") as f:
+            token = f.read().strip()
+        if token:
+            return token
+    except OSError:
+        pass
+    raise RuntimeError("SSE 需要本机看板凭据；请核对 BOARD_DATA_DIR")
+
+
 def stream_once():
     # ?as=sentry: announce what we are, so the board can MEASURE "is the
     # coordinator seat listening" (the setup guide's step 5 and the shortcut
@@ -71,7 +83,7 @@ def stream_once():
     # restart by reconnecting, so after an upgrade it keeps executing the old
     # file — invisible unless it says so (v0.8).
     req = urllib.request.Request(BASE + "/api/events?as=sentry&rev=" + _code_rev(),
-                                 headers={"Accept": "text/event-stream"})
+                                 headers={"Accept": "text/event-stream", "X-Board-Token": _board_token()})
     with urllib.request.urlopen(req, timeout=None) as r:
         emit(f"sse 已接上 {BASE}/api/events(v5·无事件名单)")
         for raw in r:
