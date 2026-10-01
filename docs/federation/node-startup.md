@@ -14,6 +14,8 @@ node cli/node-startup.mjs prepare --db C:/board-data/board.db --config-file C:/b
 
 输出新的受保护目录，含 STARTUP.json 和 task.xml。STARTUP.json 固定本机 UUID/epoch、当前用户 SID、数据库真实路径、源码树、Node/PowerShell/启动脚本/配置/验收文件的路径和摘要，并声明 scheduler 是否启用。任务名称包含节点 UUID 和启动包 UUID。已有目录不覆盖；启动包与治理仓分离，不接受路径中的环境变量展开符 `%`、引号或控制字符。
 
+Windows 8.3 短路径和长路径会先通过原生 realpath 统一，源码、程序和文件固定路径与 PowerShell 的脚本路径保持一致；新启动目录的现有父目录也先规范化，不能用短路径把启动包放进治理源码。相同内容的另一份启动脚本仍被拒绝。旧包若因短路径固定值不一致被拒，须从核对后的固定来源生成新包；工具不会改写旧包或任务。详见 [短路径修复证据](startup-path-evidence.json)。
+
 输出 manifest_sha256 是下列命令必须明确提供的摘要。操作者须核对 STARTUP.json、task.xml 的实际范围，尤其用户、来源、数据库、端口、同步项目及 scheduler_enabled。摘要绑定所核对文件，不是数字签名，也不代替 G03/G10 授权。凭据不复制到包中，仅通过既有配置引用；私有路径和 SID 也不应提交到公共仓库。
 
 ```powershell

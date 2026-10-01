@@ -2,7 +2,7 @@ import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {randomUUID,createHash} from 'node:crypto';
-import {mkdtempSync,mkdirSync,cpSync,writeFileSync,readFileSync,rmSync,readdirSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,cpSync,writeFileSync,readFileSync,rmSync,readdirSync,realpathSync} from 'node:fs';
 import {join,resolve,relative} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -30,6 +30,24 @@ const events=f=>readdirSync(f.bundle).filter(x=>x.endsWith('.jsonl')).flatMap(x=
 test('prepare is read-only for node data and actual Task Scheduler validates without registering',()=>{
  const f=fixture(),before=sha(readFileSync(f.dbPath)),plan=prepare(f);assert.equal(sha(readFileSync(f.dbPath)),before);assert.equal(plan.registered,false);assert.equal(plan.scheduler_enabled,false);const xml=readFileSync(join(f.bundle,'task.xml'),'utf8');assert.match(xml,/<LogonType>InteractiveToken/);assert.match(xml,/<RunLevel>LeastPrivilege/);assert.match(xml,/<ExecutionTimeLimit>PT0S/);assert.match(xml,/<Enabled>false/);assert.doesNotMatch(xml,/RestartOnFailure|BootTrigger|Password/);
  const r=ps(f,'Validate');assert.equal(r.status,0,r.stdout+r.stderr);assert.equal(JSON.parse(r.stdout).configuration_changed,false);const status=ps(f,'Status');assert.equal(status.status,0,status.stdout+status.stderr);assert.equal(JSON.parse(status.stdout).registered,false);assert.equal(nodeRuntimeStatus(f.db).configured,false);
+});
+
+test('short-path source preparation preserves wrapper identity and refuses identical copies',t=>{
+ const f=fixture(),wrapper=join(source,'packaging/windows/node-startup.ps1');
+ const script=String.raw`[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);$p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd()));(New-Object -ComObject Scripting.FileSystemObject).GetFolder($p).ShortPath`;
+ const r=spawnSync(PS,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{input:Buffer.from(source,'utf8').toString('base64'),encoding:'utf8',windowsHide:true,timeout:10000});assert.equal(r.status,0,r.stderr);const alias=r.stdout.trim();
+ if(alias.toLowerCase()===source.toLowerCase()){t.skip('This volume does not provide 8.3 aliases');return;}
+ const nested=join(alias,'unapproved-startup-bundle'),actualNested=join(realpathSync.native(source),'unapproved-startup-bundle');
+ try {const unsafe=node([join(alias,'cli/node-startup.mjs'),'prepare','--db',f.dbPath,'--config-file',f.config,'--accepted-rev',approval,'--output',nested]);assert.equal(unsafe.status,1,unsafe.stderr);assert.match(unsafe.stderr,/UNSAFE_RUNTIME_PATH/);}
+ finally {const rel=relative(realpathSync.native(source),resolve(actualNested));assert.equal(rel,'unapproved-startup-bundle');rmSync(actualNested,{recursive:true,force:true});}
+ assert.equal(realpathSync.native(alias),realpathSync.native(source));
+ assert.notEqual(realpathSync(alias).toLowerCase(),realpathSync.native(alias).toLowerCase());
+ t.diagnostic('Node ordinary realpath preserves the 8.3 spelling; native realpath expands it');
+ const prepared=node([join(alias,'cli/node-startup.mjs'),'prepare','--db',f.dbPath,'--config-file',f.config,'--accepted-rev',approval,'--output',f.bundle]);assert.equal(prepared.status,0,prepared.stderr);f.digest=JSON.parse(prepared.stdout).manifest_sha256;
+ const validated=ps(f,'Validate');assert.equal(validated.status,0,validated.stdout+validated.stderr);assert.equal(JSON.parse(validated.stdout).configuration_changed,false);
+ const manifest=JSON.parse(readFileSync(join(f.bundle,'STARTUP.json'),'utf8'));assert.equal(manifest.wrapper.path,realpathSync.native(wrapper));assert.equal(manifest.source_root,realpathSync.native(source));assert.equal(check(f).status,0);
+ const argv=args(f,'Validate');argv[4]=join(alias,'packaging/windows/node-startup.ps1');const viaAlias=spawnSync(PS,argv,{encoding:'utf8',windowsHide:true,timeout:30000});assert.equal(viaAlias.status,0,viaAlias.stdout+viaAlias.stderr);
+ const copy=join(f.dir,'copied-wrapper.ps1');writeFileSync(copy,readFileSync(wrapper));argv[4]=copy;const rejected=spawnSync(PS,argv,{encoding:'utf8',windowsHide:true,timeout:30000});assert.equal(rejected.status,1,rejected.stdout+rejected.stderr);assert.match(rejected.stdout,/STARTUP_BINDING_CHANGED/);assert.equal(nodeRuntimeStatus(f.db).configured,false);
 });
 
 test('hidden PowerShell launcher handles literal metacharacter paths, serves real MCP and drains its exact instance',async()=>{

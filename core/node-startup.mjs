@@ -1,6 +1,6 @@
 // Reviewable per-user Task Scheduler bundle. Preparation never registers or starts a task.
 import {readFileSync,writeFileSync,lstatSync,existsSync,realpathSync,openSync,closeSync,writeSync,fsyncSync} from 'node:fs';
-import {join,dirname,isAbsolute,relative,sep} from 'node:path';
+import {join,dirname,basename,isAbsolute,relative,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID,createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -12,10 +12,11 @@ import {localIdentity} from './federation/peers.mjs';
 import {validateNodeRuntimeConfig,runNodeRuntime} from './node-runtime.mjs';
 import {exact,fail} from './mcp/policy.mjs';
 import {uuid} from './federation/protocol.mjs';
-const ROOT=realpathSync(fileURLToPath(new URL('../',import.meta.url))),hash=b=>createHash('sha256').update(b).digest('hex');
+// Windows PowerShell expands 8.3 aliases; native realpath pins that same spelling.
+const ROOT=realpathSync.native(fileURLToPath(new URL('../',import.meta.url))),hash=b=>createHash('sha256').update(b).digest('hex');
 const inside=(a,b)=>{const r=relative(a,b);return !r||r!=='..'&&!r.startsWith('..'+sep)&&!isAbsolute(r);};
 function path(value){if(typeof value!=='string'||!isAbsolute(value)||!(/^[a-z]:[\\/]/i.test(value))||/[\x00-\x1f"%]/.test(value)||value.slice(2).includes(':'))fail('BAD_INPUT','启动路径必须是本地磁盘普通绝对路径');checkDirectoryPath(dirname(value));return value;}
-function pin(value){path(value);const s=lstatSync(value);if(!s.isFile()||s.isSymbolicLink())fail('BAD_INPUT','启动文件须为普通文件');return {path:realpathSync(value),sha256:hash(readFileSync(value))};}
+function pin(value){path(value);const s=lstatSync(value);if(!s.isFile()||s.isSymbolicLink())fail('BAD_INPUT','启动文件须为普通文件');return {path:realpathSync.native(value),sha256:hash(readFileSync(value))};}
 function checkPin(p){exact(p,['path','sha256'],'startup_pin');if(typeof p.sha256!=='string'||!/^[a-f0-9]{64}$/.test(p.sha256)||pin(p.path).sha256!==p.sha256)fail('STARTUP_INPUT_CHANGED','启动文件摘要已变化');}
 export function startupSID(){return execFileSync(join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-Command','[Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{encoding:'utf8',windowsHide:true,timeout:10000,stdio:['ignore','pipe','pipe']}).trim();}
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
@@ -32,17 +33,17 @@ export function startupTaskXML(m,digest){
 </Task>\n`;
 }
 function inputs(m){
- const gate=createSourceGate({codeRoot:m.source_root,approvalFile:m.approval.path}),g=gate.check();if(g.tree!==m.source_tree||realpathSync(m.source_root)!==ROOT)fail('STARTUP_SOURCE_CHANGED','启动源码不是已固定的当前代码');
+ const gate=createSourceGate({codeRoot:m.source_root,approvalFile:m.approval.path}),g=gate.check();if(g.tree!==m.source_tree||realpathSync.native(m.source_root)!==ROOT)fail('STARTUP_SOURCE_CHANGED','启动源码不是已固定的当前代码');
  for(const p of [m.node,m.powershell,m.wrapper,m.launcher,m.config,m.approval])checkPin(p);
- if(realpathSync(m.node.path)!==realpathSync(process.execPath))fail('STARTUP_INPUT_CHANGED','当前Node不是固定程序');
+ if(realpathSync.native(m.node.path)!==realpathSync.native(process.execPath))fail('STARTUP_INPUT_CHANGED','当前Node不是固定程序');
  const db=openSchedulerControlDatabase(m.database,{readOnly:true});let config;try{const n=localIdentity(db);if(n.node_id!==m.node_id||n.sync_epoch!==m.node_epoch)fail('EPOCH_CHANGED','启动包属于旧节点代次');config=validateNodeRuntimeConfig(db,readRecoveryJSON(m.config.path));}finally{db.close();}return {gate,config};
 }
 export function prepareNodeStartup({dbPath,configFile,approvalFile,output}){
  if(process.platform!=='win32')fail('WINDOWS_REQUIRED','启动包仅支持Windows');const gate=createSourceGate({codeRoot:ROOT,approvalFile}),g=gate.check(),db=openSchedulerControlDatabase(dbPath,{readOnly:true});let n,c;
  try{n=localIdentity(db);c=validateNodeRuntimeConfig(db,readRecoveryJSON(configFile));}finally{db.close();}
- output=checkDirectoryPath(output);path(join(output,'STARTUP.json'));if(existsSync(output))fail('STARTUP_EXISTS','启动包必须使用新目录');if(inside(ROOT,output)||inside(output,ROOT))fail('UNSAFE_RUNTIME_PATH','启动包和治理代码须分离');
+ output=checkDirectoryPath(output);path(join(output,'STARTUP.json'));if(existsSync(output))fail('STARTUP_EXISTS','启动包必须使用新目录');const canonicalOutput=join(realpathSync.native(dirname(output)),basename(output));if(inside(ROOT,canonicalOutput)||inside(canonicalOutput,ROOT))fail('UNSAFE_RUNTIME_PATH','启动包和治理代码须分离');
  const sid=startupSID();if(!/^S-1-5-\d+(?:-\d+)+$/.test(sid))fail('STARTUP_USER','无法识别当前用户SID');const id=randomUUID();
- const m={format:'ai-fleet-node-startup/v1',bundle_id:id,directory:output,task_name:'AiFleet-'+n.node_id+'-'+id,user_sid:sid,node_id:n.node_id,node_epoch:n.sync_epoch,database:realpathSync(dbPath),source_root:ROOT,source_tree:g.tree,node:pin(process.execPath),powershell:pin(join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe')),wrapper:pin(join(ROOT,'packaging/windows/node-startup.ps1')),launcher:pin(join(ROOT,'cli/node-startup.mjs')),config:pin(configFile),approval:pin(approvalFile),scheduler_enabled:c.scheduler!==null,trigger:'current-user-logon',initially_enabled:false};
+ const m={format:'ai-fleet-node-startup/v1',bundle_id:id,directory:output,task_name:'AiFleet-'+n.node_id+'-'+id,user_sid:sid,node_id:n.node_id,node_epoch:n.sync_epoch,database:realpathSync.native(dbPath),source_root:ROOT,source_tree:g.tree,node:pin(process.execPath),powershell:pin(join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe')),wrapper:pin(join(ROOT,'packaging/windows/node-startup.ps1')),launcher:pin(join(ROOT,'cli/node-startup.mjs')),config:pin(configFile),approval:pin(approvalFile),scheduler_enabled:c.scheduler!==null,trigger:'current-user-logon',initially_enabled:false};
  privateDirectory(output);const bytes=JSON.stringify(m,null,2)+'\n',digest=hash(bytes);writeFileSync(join(output,'STARTUP.json'),bytes,{flag:'wx',flush:true});writeFileSync(join(output,'task.xml'),startupTaskXML(m,digest),{flag:'wx',flush:true});
  return {format:'ai-fleet-node-startup-plan/v1',directory:output,manifest_sha256:digest,task_name:m.task_name,node_id:m.node_id,node_epoch:m.node_epoch,user_sid:sid,scheduler_enabled:m.scheduler_enabled,registered:false,enabled:false,started:false};
 }
