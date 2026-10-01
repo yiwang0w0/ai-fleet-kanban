@@ -7,7 +7,7 @@ export async function deliverIntent(db,{delegationId,url,credentialFile,mode="of
  if(!["offer","status"].includes(mode))throw new PeerError("BAD_INPUT","投递模式无效");
  migrateDelegation(db);
  const base=endpoint(url),node=localIdentity(db),current=outgoingStatus(db,delegationId),o=current.offer;
- const c=loadCredential(credentialFile,node,o.project_id,["peer:handshake","delegation:"+mode]);
+ const c=loadCredential(credentialFile,node,o.project_id,["peer:handshake","delegation:"+mode],base);
  if(c.server_node_id!==o.target_node_id||c.server_epoch!==o.target_epoch)throw new PeerError("IDENTITY_MISMATCH","投递凭据与指定接收节点不匹配",403);
  startDelivery(db,delegationId);let stage="network";
  try{

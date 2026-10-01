@@ -37,7 +37,7 @@ export function validateNodeRuntimeConfig(db,input){
  if(input.peer===null&&input.mcp===null&&!input.sync.length&&input.scheduler===null)fail('BAD_INPUT','至少配置一个节点组件',400);
  return structuredClone(input);
 }
-function credential(db,p){const c=loadCredential(p.credential_file,localIdentity(db),p.project_id);if(c.server_node_id!==p.server_node_id||c.server_epoch!==p.server_epoch)fail('SOURCE_MISMATCH','同步凭据不属于配置的固定来源');return c;}
+function credential(db,p){const c=loadCredential(p.credential_file,localIdentity(db),p.project_id,undefined,p.url);if(c.server_node_id!==p.server_node_id||c.server_epoch!==p.server_epoch)fail('SOURCE_MISMATCH','同步凭据不属于配置的固定来源');return c;}
 export function nodeRuntimeStatus(db,options={}){
  const status=nodeLifecycle.status(db,options),has=!!db.prepare("SELECT 1 FROM sqlite_master WHERE name='node_runtime_components'").get();
  return {...status,instances:status.instances.map(r=>({...r,components:has?db.prepare('SELECT name,state,updated_at,summary_json FROM node_runtime_components WHERE instance_id=? ORDER BY name').all(r.instance_id).map(({summary_json,...c})=>({...c,summary:JSON.parse(summary_json)})):[]}))};

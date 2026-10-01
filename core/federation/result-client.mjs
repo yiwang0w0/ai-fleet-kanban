@@ -7,7 +7,7 @@ export async function deliverResult(db,{resultId,mode="send",url,credentialFile,
  if(!["send","poll"].includes(mode))throw new PeerError("BAD_INPUT","交付投递模式无效");
  const state=resultState(db,resultId);if(state.side!=="target")throw new PeerError("FORBIDDEN","仅执行端回传交付",403);
  if(state.decision)return {...state,delivery_state:"acknowledged"};
- const body=state.body,d=body.relation,n=localIdentity(db),base=endpoint(url),credential=loadCredential(credentialFile,n,d.project_id,["peer:handshake","delegation:result"]);
+ const body=state.body,d=body.relation,n=localIdentity(db),base=endpoint(url),credential=loadCredential(credentialFile,n,d.project_id,["peer:handshake","delegation:result"],base);
  if(credential.server_node_id!==d.source_node_id||credential.server_epoch!==d.source_epoch)throw new PeerError("IDENTITY_MISMATCH","凭据不匹配固定来源端",403);
  let stage="network";
  try{

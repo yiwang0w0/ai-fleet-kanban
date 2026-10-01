@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import {federationStuck} from '../core/inspection.mjs';
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
@@ -9,14 +10,14 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawn,spawnSync} from "node:child_process";
-import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
+import {migratePeers,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
 import {migrateSync,digest} from "../core/federation/sync-store.mjs";
 import {migrateBroker,putRole,issuePrincipal} from "../core/mcp/policy.mjs";
 import {enrollTask,callTool} from "../core/mcp/tools.mjs";
 import {migrateRelations,createRelationGraph,publishTopology,approveRelation,relationStatus,localRegistrarPeer,previewTopology,validateCombinedGraph} from "../core/federation/relations.mjs";
 import {migrateTopology,bindTopology,topologyState,topologyOperation,prepareTopology,startTopologyAttempt,rejectTopologyAttempt,acceptTopologyReceipt,cancelPreparedTopology} from "../core/federation/topology.mjs";
 import {sendTopology} from "../core/federation/topology-client.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+
 import {createBackup,restoreBackup} from "../core/backup.mjs";
 import {prepareRecovery,activateRecovery,retireNode} from "../core/recovery.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js"),ROOT=fileURLToPath(new URL("../",import.meta.url));
@@ -108,7 +109,7 @@ test("prepare and commit are atomic with native task events and request receipts
 test("offline pending structural changes do not stop unrelated already-claimed work from heartbeat and reporting",async()=>{
  const f=setup(),a=card(f.a),b=card(f.a,{parentId:a.id}),running=card(f.a);init(f);
  const claim=store.claimById(f.a.db,{id:running.id,worker:"worker"});assert.equal(claim.ok,true);
- const op=stage(f,[edit(f,b)]),out=await sendTopology(f.a.db,{operationId:op.operation_id,url:"http://127.0.0.1:1",credentialFile:f.credential.file,fetchImpl:async()=>{throw Error("fixture offline");}});
+ const op=stage(f,[edit(f,b)]),out=await sendTopology(f.a.db,{operationId:op.operation_id,url:fixtureEndpoint(f.r.db),credentialFile:f.credential.file,fetchImpl:async()=>{throw Error("fixture offline");}});
  assert.equal(out.delivery_state,"retry_pending");assert.equal(topologyState(f.a.db,"demo").phase,"pending");
  assert.equal(store.heartbeat(f.a.db,{id:running.id,worker:"worker",runId:claim.task.run_id}).task.status,"in_progress");
  store.report(f.a.db,{id:running.id,worker:"worker",runId:claim.task.run_id,outcome:"done",evidence:"persisted while graph registrar offline"});

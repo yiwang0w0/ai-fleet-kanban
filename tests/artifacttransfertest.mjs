@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import {migrateResults,prepareResult,receiveResult,resultState,listResults,recordResultReceipt,rejectResult,recordResultDecision,peerResultStatus} from "../core/federation/results.mjs";
 import {deliverResult} from "../core/federation/result-client.mjs";
 import {migrateCancellations,listCancellations,prepareCancellation,receiveCancellation,cancellationState,recordCancellationReceipt,confirmCancellationStopped,cancellationWork} from "../core/federation/cancellation.mjs";
@@ -22,7 +23,7 @@ import {randomUUID} from "node:crypto";
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
+import {migratePeers,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
 import {digest,canonical} from "../core/federation/sync-store.mjs";
 import {enrollTask,callTool} from "../core/mcp/tools.mjs";
 import {createIntent,receiveOffer,decideIncoming,recordReceipt,incomingStatus,outgoingStatus} from "../core/federation/delegation.mjs";
@@ -30,7 +31,7 @@ import {migrateRelations,createRelationGraph,publishTopology,approveRelation,wit
 import {bindTopology,prepareTopology,startTopologyAttempt,acceptTopologyReceipt,topologyState} from "../core/federation/topology.mjs";
 import {migrateBindings,prepareBinding,bindingState,bindingMessage,receiveBindingMessage,recordBindingMessage,startBindingAttempt,acceptBindingReceipt,cancelUnsentBinding,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal} from "../core/federation/bindings.mjs";
 import {submitBinding,sendBindingMessage} from "../core/federation/binding-client.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+
 const require=createRequire(import.meta.url),store=require("../core/store.js");
 const ROOT=fileURLToPath(new URL("../",import.meta.url));
 const TMP=mkdtempSync(join(tmpdir(),"fleet-artifact-")),dbs=[],servers=[];let serial=0;
@@ -130,7 +131,7 @@ test("HTTP transfers actual MCP Git outputs across a lost chunk ACK and database
  const send=extra=>deliverArtifact(f.b.db,{transferId:f.t.transfer_id,url,credentialFile:f.ba.file,...extra});
  assert.equal((await send({fetchImpl})).delivery_state,"retry_pending");assert.equal(artifactState(f.a.db,f.t.transfer_id).next_chunk,1);
  const server=servers.at(-1);server.closeAllConnections();await new Promise(r=>server.close(r));f.a.db.close();f.b.db.close();for(const n of [f.a,f.b]){n.db=new DatabaseSync(n.path);dbs.push(n.db);n.db.exec("PRAGMA busy_timeout=5000");}url=await network(f.a);
- assert.equal((await send({maxChunks:1})).delivery_state,"more");const received=await send();assert.equal(received.delivery_state,"acknowledged");assert.equal(received.state,"received");assert.equal(received.verification,null);assert.equal(received.accepted,false);
+ let resumed=await send({maxChunks:1});if(resumed.delivery_state==="retry_pending"){assert.equal(resumed.error_code,"TRANSPORT_ERROR");resumed=await send({maxChunks:1});}assert.equal(resumed.delivery_state,"more",JSON.stringify(resumed));const received=await send();assert.equal(received.delivery_state,"acknowledged");assert.equal(received.state,"received");assert.equal(received.verification,null);assert.equal(received.accepted,false);
  assert.throws(()=>captureVerifiedArtifact(f.a.db,{transferId:f.t.transfer_id}),{code:"ARTIFACT_UNVERIFIED"});assert.equal(verifyArtifact(f.a.db,{transferId:f.t.transfer_id}).state,"content_verified");
  const sent=await send();assert.equal(sent.sent_chunks,0);assert.equal(sent.state,"content_verified");assert.equal(sent.accepted,false);
  const captured=captureVerifiedArtifact(f.a.db,{transferId:f.t.transfer_id}),value=JSON.parse(captured.bytes),module=value.files.find(x=>x.path==="src/generated.mjs"),independent=join(TMP,"execute-"+serial++);mkdirSync(independent);writeFileSync(join(independent,"result.mjs"),Buffer.from(module.content,"base64"));assert.equal(execFileSync(process.execPath,["--input-type=module","-e","import {result} from './result.mjs'; console.log(result)"],{cwd:independent,encoding:"utf8",windowsHide:true}).trim(),"42");

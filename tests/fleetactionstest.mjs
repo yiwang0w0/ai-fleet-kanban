@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import {readFleetHealth} from '../core/fleet-health.mjs';
 import {authenticate} from "../core/federation/peers.mjs";
 import {createIntent,receiveOffer,decideIncoming,recordReceipt} from "../core/federation/delegation.mjs";
@@ -18,11 +19,11 @@ import {randomUUID} from "node:crypto";
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from "node:fs";
 import {join,relative} from "node:path";
 import {tmpdir} from "node:os";
-import {localIdentity,issueCredential,migratePeers} from "../core/federation/peers.mjs";
+import {localIdentity,migratePeers} from "../core/federation/peers.mjs";
 import {migrateSync} from "../core/federation/sync-store.mjs";
 import {migrateBroker,putRole,issuePrincipal,revokePrincipal} from "../core/mcp/policy.mjs";
 import {enrollTask,callTool} from "../core/mcp/tools.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+
 import {openFleetActions} from "../core/fleet-actions.mjs";
 const store=createRequire(import.meta.url)("../core/store.js"),TMP=mkdtempSync(join(tmpdir(),"fleet-actions-")),dbs=[],servers=[],controllers=[];let serial=0;
 after(async()=>{for(const a of controllers)await a.close();for(const s of servers){s.closeAllConnections();await new Promise(r=>s.close(r));}for(const db of dbs)try{db.close();}catch{}assert.ok(!relative(tmpdir(),TMP).startsWith(".."));rmSync(TMP,{recursive:true,force:true});});

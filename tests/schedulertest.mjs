@@ -1,3 +1,4 @@
+import {issueCredential,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import {readFleetHealth} from '../core/fleet-health.mjs';
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ import {execFileSync,spawn} from 'node:child_process';
 import {openSchedulerControlDatabase,schedulerStatus,requestSchedulerStop} from '../core/execution/lifecycle.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 import {migrateSync} from '../core/federation/sync-store.mjs';
-import {localIdentity,migratePeers,issueCredential} from '../core/federation/peers.mjs';
+import {localIdentity,migratePeers} from "../core/federation/peers.mjs";
 import net from 'node:net';
 import {runNodeRuntime,nodeRuntimeStatus,nodeLifecycle} from '../core/node-runtime.mjs';
 import {migrateDispatch,putQuota,quotaStatus} from '../core/execution/dispatch.mjs';
@@ -230,7 +231,7 @@ async function runtimeConfig(f){const probe=net.createServer();await new Promise
 
 test('node host drain retains MCP during an offline in-flight synthetic task and closes components afterward',async()=>{
  const f=fixture({wait:3000,limit:2}),other=fixture(),config=await runtimeConfig(f),stop=new AbortController();card(f);card(f);migratePeers(other.db);const file=join(f.base,'offline-peer.json');issueCredential(other.db,{peerNodeId:f.config.node_id,peerEpoch:f.config.node_epoch,scopes:['peer:handshake','sync:pull','sync:ack'],projects:['demo'],credentialFile:file});
- const unused=net.createServer();await new Promise(r=>unused.listen(0,'127.0.0.1',r));const port=unused.address().port;await new Promise(r=>unused.close(r));config.sync=[{project_id:'demo',url:'http://127.0.0.1:'+port,credential_file:file,server_node_id:other.config.node_id,server_epoch:other.config.node_epoch,poll_ms:1000}];
+ config.sync=[{project_id:'demo',url:fixtureEndpoint(other.db),credential_file:file,server_node_id:other.config.node_id,server_epoch:other.config.node_epoch,poll_ms:1000}];
  const events=[],running=runNodeRuntime({dbPath:f.dbPath,config,sourceGate:gate,environment,stopSignal:stop.signal,onEvent:e=>events.push(e)});running.catch(()=>{});
  try{await started(f);await waitFor(()=>nodeRuntimeStatus(f.db).instances[0]?.components.some(c=>c.name.startsWith('sync:')&&['error','backoff'].includes(c.state)),'offline component');stop.abort();
   const r=await fetch('http://127.0.0.1:'+config.mcp.port+'/local/v1/tools/list',{method:'POST',headers:{Authorization:f.auth,'Content-Type':'application/json'},body:'{}'});assert.equal(r.status,200);assert.ok((await r.json()).result.tools.length>0);

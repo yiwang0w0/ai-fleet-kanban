@@ -5,7 +5,7 @@ import { listenPeerServer } from "../core/federation/gateway.mjs";
 const usage = [
   "用法: node cli/peer.mjs <command> --db <已初始化数据库绝对路径>",
   "  grant --peer <UUID> --epoch <UUID> --scopes peer:handshake,peer:health",
-  "        --projects <项目ID,...> --credential-file <新文件绝对路径> [--version <旧凭据版本>]",
+  "        --endpoint <本机对外根地址> --projects <项目ID,...> --credential-file <新文件绝对路径> [--version <旧凭据版本>]",
   "  revoke --peer <UUID> --version <当前凭据版本>",
   "  list",
   "  auth-failures [--limit 1–512]",
@@ -18,7 +18,7 @@ let db, serving = false;
 try {
   if (!command || ["help","--help"].includes(command)) { console.log(usage); }
   else {
-    const fields = {grant:["db","peer","epoch","scopes","projects","credential-file","version"],
+    const fields = {grant:["db","peer","epoch","scopes","projects","credential-file","version","endpoint"],
       revoke:["db","peer","version"],list:["db"],"auth-failures":["db","limit"],serve:["db","port","host"]}[command];
     if (!fields) throw Error(usage);
     const opts = {};
@@ -33,7 +33,7 @@ try {
     db = openPeerDatabase(opts.db);
     let result;
     if (command === "grant") result = issueCredential(db,{peerNodeId:opts.peer,peerEpoch:opts.epoch,
-      scopes:opts.scopes?.split(","),projects:opts.projects?.split(","),expectedVersion,credentialFile:opts["credential-file"]});
+      scopes:opts.scopes?.split(","),projects:opts.projects?.split(","),expectedVersion,credentialFile:opts["credential-file"],serverEndpoint:opts.endpoint});
     if (command === "revoke") result = revokePeer(db,{peerNodeId:opts.peer,expectedVersion});
     if (command === "list") result = {peers:listPeers(db)};
     if (command === "auth-failures") result=listAuthFailures(db,{limit:opts.limit===undefined?100:/^[1-9][0-9]*$/.test(opts.limit)?Number(opts.limit):NaN});

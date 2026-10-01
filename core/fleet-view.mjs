@@ -19,7 +19,7 @@ function data(db,authorizedProjects=null){
  const parents=new Map(db.prepare("SELECT id,task_uid FROM tasks").all().map(t=>[t.id,t.task_uid]));
  let localTasks=store.list(db).tasks.map(t=>({...t,parent_uid:t.parent_id===null?null:parents.get(t.parent_id)??null,project_id:shares.get(t.id)??admittedProjects.get(t.task_uid)??null,read_only:false,owner_name:local.display_name,recovery_state:null}));
  const schema=exists(db,"federation_sync_schema")?db.prepare("SELECT version FROM federation_sync_schema WHERE singleton=1").get()?.version:null;
- const ready=schema===4,sync=ready?syncStatus(db):{sources:[],cursors:[],attempts:[],epoch_projects:[],snapshot_staging:[],pending:[],deliveries:[]};
+ const ready=[4,5].includes(schema),sync=ready?syncStatus(db):{sources:[],cursors:[],attempts:[],epoch_projects:[],snapshot_staging:[],pending:[],deliveries:[]};
  let remote=ready?listReplicas(db).filter(t=>!t.archived_at):[];
  let peers=exists(db,"federation_peers")?db.prepare("SELECT peer_node_id,status,projects_json FROM federation_peers").all():[];
  if(scope){

@@ -5,7 +5,7 @@ import {localRegistrarPeer,approveRelation,withdrawRelation,relationStatus} from
 import {checkRegistrarStatus,topologyState} from "./topology.mjs";
 import {bindingState,startBindingAttempt,acceptBindingReceipt,rejectBindingAttempt,cancelUnsentBinding,bindingMessage,recordBindingMessage,BINDING_REJECTIONS} from "./bindings.mjs";
 function remote(db,{url,credentialFile,projectId,nodeId,epoch,scopes,capability,fetchImpl,signal}){
- const n=localIdentity(db),base=endpoint(url),c=loadCredential(credentialFile,n,projectId,["peer:handshake",...scopes]);
+ const n=localIdentity(db),base=endpoint(url),c=loadCredential(credentialFile,n,projectId,["peer:handshake",...scopes],base);
  if(c.server_node_id!==nodeId||c.server_epoch!==epoch)throw new PeerError("IDENTITY_MISMATCH","凭据与固定服务节点身份不一致",403);let ready=false;
  return async(path,body,errors=[])=>{
   if(!ready){const h=await request(base,"/peer/v1/hello",c,{node_id:n.node_id,sync_epoch:n.sync_epoch,protocol:{min:1,max:1},required_capabilities:[capability],required_extensions:[],extensions:{}},fetchImpl,signal);

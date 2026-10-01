@@ -1,3 +1,4 @@
+import {endpoint} from "./endpoint.mjs";
 import {writePrivateJSON} from "../private-json.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
@@ -90,11 +91,12 @@ function checkRevision(previous, expectedVersion) {
   }
 }
 /** Local administration only. Secret leaves this function only through the exclusive file. */
-export function issueCredential(db, {peerNodeId, peerEpoch, scopes, projects, expectedVersion, credentialFile}) {
+export function issueCredential(db, {peerNodeId, peerEpoch, scopes, projects, expectedVersion, credentialFile, serverEndpoint}) {
   uuid(peerNodeId, "peer_node_id"); uuid(peerEpoch, "peer_epoch");
   scopes = names(scopes, "scopes", SCOPES, 1); projects = names(projects, "projects", null, 1);
   if (typeof credentialFile !== "string" || !isAbsolute(credentialFile))
     throw new PeerError("BAD_INPUT", "凭据文件需要新文件的绝对路径", 400);
+  const server=endpoint(serverEndpoint);
   let created = false;
   try {
     return transaction(db, () => {
@@ -105,7 +107,7 @@ export function issueCredential(db, {peerNodeId, peerEpoch, scopes, projects, ex
       checkRevision(previous, expectedVersion);
       const credentialVersion = (previous?.credential_version ?? 0) + 1;
       const keyId = randomUUID(), token = keyId + "." + randomBytes(32).toString("base64url"), ts = at();
-      const credential = {format:1,server_node_id:local.node_id,server_epoch:local.sync_epoch,
+      const credential = {format:2,server_endpoint:server,server_node_id:local.node_id,server_epoch:local.sync_epoch,
         peer_node_id:peerNodeId,peer_epoch:peerEpoch,key_id:keyId,credential_version:credentialVersion,
         scopes,projects,token};
       writePrivateJSON(credentialFile,credential); created = true;
@@ -116,7 +118,7 @@ export function issueCredential(db, {peerNodeId, peerEpoch, scopes, projects, ex
         .run(peerNodeId,peerEpoch,keyId,credentialVersion,hash(token).toString("hex"),JSON.stringify(scopes),JSON.stringify(projects),ts,ts);
       db.prepare("INSERT INTO federation_auth_events(peer_node_id,credential_version,action,at) VALUES(?,?,?,?)")
         .run(peerNodeId,credentialVersion,previous ? "replace" : "issue",ts);
-      return {peer_node_id:peerNodeId,credential_version:credentialVersion,key_id:keyId,scopes,projects,credential_file:resolve(credentialFile)};
+      return {peer_node_id:peerNodeId,credential_version:credentialVersion,key_id:keyId,scopes,projects,server_endpoint:server,credential_file:resolve(credentialFile)};
     });
   } catch (e) {
     // Only the file created exclusively by this call may be removed on rollback.

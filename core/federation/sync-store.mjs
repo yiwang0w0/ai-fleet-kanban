@@ -1,3 +1,4 @@
+import {endpoint} from "./endpoint.mjs";
 // Durable task projections. All sequence numbers are scoped by origin epoch + project.
 import {migrateEpochState,assertSourceEpoch,pendingRecovery,bindReplicaLocation,resolveRecoveryMissing} from "./epoch-state.mjs";
 import {createHash,randomUUID} from "node:crypto";
@@ -29,7 +30,7 @@ export function migrateSync(db){
    "INSERT OR IGNORE INTO federation_sync_schema VALUES(1,1);"
   ].join("\n"));
   const schemaVersion=db.prepare("SELECT version FROM federation_sync_schema").get().version;
-  if(![1,2,3,4].includes(schemaVersion))throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
+  if(![1,2,3,4,5].includes(schemaVersion))throw conflict("SCHEMA_INCOMPATIBLE","同步存储格式不兼容");
   db.exec([
    "CREATE TABLE IF NOT EXISTS federation_shares(task_id INTEGER PRIMARY KEY,task_uid TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN(0,1)),revision INTEGER NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991));",
    "CREATE TABLE IF NOT EXISTS federation_dirty(task_id INTEGER PRIMARY KEY);",
@@ -50,6 +51,8 @@ export function migrateSync(db){
    "CREATE TRIGGER IF NOT EXISTS federation_outbox_no_update BEFORE UPDATE ON federation_outbox BEGIN SELECT RAISE(ABORT,'published event is immutable'); END;",
    "CREATE TRIGGER IF NOT EXISTS federation_outbox_no_delete BEFORE DELETE ON federation_outbox BEGIN SELECT RAISE(ABORT,'published event retention is not enabled'); END;"
   ].join("\n"));
+  if(!db.prepare("PRAGMA table_info(federation_sources)").all().some(c=>c.name==='server_endpoint'))db.exec("ALTER TABLE federation_sources ADD COLUMN server_endpoint TEXT");
+  db.exec("CREATE TRIGGER IF NOT EXISTS federation_source_endpoint_immutable BEFORE UPDATE OF server_endpoint ON federation_sources WHEN OLD.server_endpoint IS NOT NULL AND NEW.server_endpoint IS NOT OLD.server_endpoint BEGIN SELECT RAISE(ABORT,'source endpoint is immutable'); END; CREATE TRIGGER IF NOT EXISTS federation_source_endpoint_retained BEFORE DELETE ON federation_sources WHEN OLD.server_endpoint IS NOT NULL BEGIN SELECT RAISE(ABORT,'bound source endpoint must be retained'); END");
   db.exec("CREATE TABLE IF NOT EXISTS federation_published(project_id TEXT NOT NULL,task_uid TEXT NOT NULL,seq INTEGER NOT NULL,event_json TEXT NOT NULL,PRIMARY KEY(project_id,task_uid));\nCREATE TABLE IF NOT EXISTS federation_retention(project_id TEXT PRIMARY KEY,floor_seq INTEGER NOT NULL DEFAULT 0);\nCREATE TABLE IF NOT EXISTS federation_snapshots(snapshot_id TEXT PRIMARY KEY,project_id TEXT NOT NULL,head_seq INTEGER NOT NULL,manifest_json TEXT NOT NULL,expires_at INTEGER NOT NULL);\nCREATE TABLE IF NOT EXISTS federation_snapshot_items(snapshot_id TEXT NOT NULL,ordinal INTEGER NOT NULL,event_json TEXT NOT NULL,PRIMARY KEY(snapshot_id,ordinal));\nCREATE TABLE IF NOT EXISTS federation_snapshot_offers(peer_node_id TEXT NOT NULL,peer_epoch TEXT NOT NULL,snapshot_id TEXT NOT NULL,PRIMARY KEY(peer_node_id,peer_epoch,snapshot_id));\nCREATE TABLE IF NOT EXISTS federation_snapshot_staging(origin_node_id TEXT NOT NULL,project_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,snapshot_id TEXT NOT NULL UNIQUE,manifest_json TEXT NOT NULL,next_offset INTEGER NOT NULL DEFAULT 0,received_bytes INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(origin_node_id,project_id));\nCREATE TABLE IF NOT EXISTS federation_snapshot_received(snapshot_id TEXT NOT NULL,ordinal INTEGER NOT NULL,task_uid TEXT NOT NULL,event_json TEXT NOT NULL,event_id TEXT NOT NULL,seq INTEGER NOT NULL,PRIMARY KEY(snapshot_id,ordinal),UNIQUE(snapshot_id,task_uid),UNIQUE(snapshot_id,event_id),UNIQUE(snapshot_id,seq));\nCREATE TABLE IF NOT EXISTS federation_snapshot_anchors(origin_node_id TEXT NOT NULL,project_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,seq INTEGER NOT NULL,event_digest TEXT,snapshot_id TEXT NOT NULL,content_digest TEXT NOT NULL,PRIMARY KEY(origin_node_id,project_id));\nCREATE TABLE IF NOT EXISTS federation_retention_events(id INTEGER PRIMARY KEY,project_id TEXT NOT NULL,floor_seq INTEGER NOT NULL,head_seq INTEGER NOT NULL,snapshot_id TEXT NOT NULL,deleted_count INTEGER NOT NULL,lagging_peer_count INTEGER NOT NULL,at TEXT NOT NULL);");
   if(schemaVersion===1){
    db.exec("INSERT OR REPLACE INTO federation_published SELECT o.project_id,json_extract(o.event_json,'$.aggregate_uid'),o.seq,o.event_json FROM federation_outbox o JOIN (SELECT project_id,json_extract(event_json,'$.aggregate_uid') AS uid,MAX(seq) AS seq FROM federation_outbox GROUP BY project_id,uid) latest ON o.project_id=latest.project_id AND o.seq=latest.seq");
@@ -60,6 +63,7 @@ export function migrateSync(db){
    // another peer's UUID; sequence and event reuse within a source still conflict.
    db.exec("CREATE TABLE federation_inbox_v4(event_id TEXT NOT NULL,origin_node_id TEXT NOT NULL,origin_epoch TEXT NOT NULL,project_id TEXT NOT NULL,seq INTEGER NOT NULL,event_digest TEXT NOT NULL,PRIMARY KEY(origin_node_id,event_id),UNIQUE(origin_node_id,origin_epoch,project_id,seq)); INSERT INTO federation_inbox_v4 SELECT * FROM federation_inbox; DROP TABLE federation_inbox; ALTER TABLE federation_inbox_v4 RENAME TO federation_inbox; UPDATE federation_sync_schema SET version=4 WHERE singleton=1");
   }
+  db.exec("UPDATE federation_sync_schema SET version=5 WHERE singleton=1");
  });
 }
 /** Explicit opt-in. A stable project prevents accidental cross-project relocation. */
@@ -225,14 +229,19 @@ export function applyBatch(db,{origin,epoch,projectId},batch){
 export function receivedCheckpoint(db,origin,epoch,projectId,seq){
  return db.prepare("SELECT event_digest FROM federation_inbox WHERE origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=? UNION ALL SELECT event_digest FROM federation_snapshot_anchors WHERE origin_node_id=? AND origin_epoch=? AND project_id=? AND seq=? LIMIT 1").get(origin,epoch,projectId,seq,origin,epoch,projectId,seq);
 }
-export function recordSource(db,{node_id,display_name,sync_epoch}){
+export function assertSourceEndpoint(db,nodeId,value){
+ const base=endpoint(value),known=db.prepare("SELECT server_endpoint FROM federation_sources WHERE origin_node_id=?").get(nodeId);
+ if(known?.server_endpoint&&known.server_endpoint!==base)throw conflict("SOURCE_ENDPOINT_CHANGED","来源已绑定另一地址；未发送凭据，不能隐式更换来源端点");return base;
+}
+export function recordSource(db,{node_id,display_name,sync_epoch},serverEndpoint=null){
  return atomic(db,()=>{
  uuid(node_id,"node_id");uuid(sync_epoch,"sync_epoch");
  assertSourceEpoch(db,node_id,sync_epoch);
  if(typeof display_name!=="string"||!display_name.trim()||display_name.length>80||/[\u0000-\u001f\u007f]/.test(display_name))throw new PeerError("BAD_INPUT","来源终端名无效");
+ const bound=serverEndpoint===null?null:assertSourceEndpoint(db,node_id,serverEndpoint);
  const prior=db.prepare("SELECT origin_epoch FROM federation_sources WHERE origin_node_id=?").get(node_id);
  if(prior&&prior.origin_epoch!==sync_epoch)throw conflict("EPOCH_CHANGED","已登记来源 epoch 改变，需要恢复流程");
- db.prepare("INSERT INTO federation_sources VALUES(?,?,?,?) ON CONFLICT(origin_node_id) DO UPDATE SET display_name=excluded.display_name,last_seen_at=excluded.last_seen_at").run(node_id,sync_epoch,display_name,new Date().toISOString());
+ db.prepare("INSERT INTO federation_sources(origin_node_id,origin_epoch,display_name,last_seen_at,server_endpoint) VALUES(?,?,?,?,?) ON CONFLICT(origin_node_id) DO UPDATE SET display_name=excluded.display_name,last_seen_at=excluded.last_seen_at,server_endpoint=coalesce(federation_sources.server_endpoint,excluded.server_endpoint)").run(node_id,sync_epoch,display_name,new Date().toISOString(),bound);
  });
 }
 export function listReplicas(db,{projectId}={}){

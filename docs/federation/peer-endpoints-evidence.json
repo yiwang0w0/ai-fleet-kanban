@@ -1,0 +1,244 @@
+{
+  "format": "ai-fleet-peer-endpoints-evidence/v1",
+  "batch": 87,
+  "base_commit": "9cf862820a9d0b96d3680d506bcb852b579a3e63",
+  "checked_at": "2026-10-01T15:05:53.127398+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "review_items": [
+    "seven-module/H12",
+    "sync schema 5 fleet view compatibility"
+  ],
+  "red": [
+    {
+      "path": ".data/review87-endpoint-red.log",
+      "sha256": "bde0772afa848293af8652cb6fd9f634354997dc96a186c82c814e2b1b2c34aa",
+      "failed": 5
+    },
+    {
+      "path": ".data/review87-view-red.log",
+      "sha256": "5ca010309df292a7892c0353e76f372fc75a809944b40f14144b13a5ee2efde3",
+      "failed": 1
+    }
+  ],
+  "runs": [
+    {
+      "path": ".data/review87-endpoint-green.log",
+      "sha256": "b9704532829d5963e03ffd9009d3d24e815d0b24c68cbc373cabcb44da011c22",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "path": ".data/review87-protocol-green.log",
+      "sha256": "fde9a5f37c418e5af72e86090743df1ccfb00203f4e7f878308106493c4cc504",
+      "passed": 11,
+      "failed": 1,
+      "failure": "artifact reconnect transport retry, corrected and passed in clients run"
+    },
+    {
+      "path": ".data/review87-clients.log",
+      "sha256": "e4f278c12042364b25f5618a3a2a29a86bea0b64404d8421e5d061c8833ed081",
+      "passed": 6,
+      "failed": 1,
+      "failure": "Python PATH missing, corrected with absolute interpreter in completion run"
+    },
+    {
+      "path": ".data/review87-completion-green.log",
+      "sha256": "a7093d9eeead88d84f08f14b8b35c668851905f194fd06c379181bea5088c05a",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "path": ".data/review87-recovery-view-green.log",
+      "sha256": "c35d9c6c9c5f5568a30436c920fede32bcc0059b74d969396bb4b4c9a487380f",
+      "passed": 8,
+      "failed": 0
+    }
+  ],
+  "total_distinct_passed": 31,
+  "skipped": 0,
+  "sources": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "0f494bec538ecec4bd27670cdfa03e5b2f6e3e3779862fe96bf6ff2ed735b334"
+    },
+    {
+      "path": "cli/peer.mjs",
+      "sha256": "caf17ae5dc97d4880ea50751ef20737318c28d5322a5a837c014defff8e21b40"
+    },
+    {
+      "path": "core/artifacts/transfer-client.mjs",
+      "sha256": "c81cf7e2457084b26c94602e73a981ac563875800376c4782c0bced06d76757b"
+    },
+    {
+      "path": "core/federation/binding-client.mjs",
+      "sha256": "27c325e28314d57f4d4dded1481b899d934fbdde47da851376856577161bf236"
+    },
+    {
+      "path": "core/federation/cancellation-client.mjs",
+      "sha256": "730a53809c26613541b8f32c3faf5a4a7535e179a384bb8cfc7d6a7aaf880388"
+    },
+    {
+      "path": "core/federation/cancellation-closure-client.mjs",
+      "sha256": "ce498b6ada1e70ab4f6c161603f8b027754a7a035136093e410a975f8151af18"
+    },
+    {
+      "path": "core/federation/completion-client.mjs",
+      "sha256": "82a886160979255a0a900db2da0e2280582033e772dab4f98002957185b7a71c"
+    },
+    {
+      "path": "core/federation/delegation-client.mjs",
+      "sha256": "5459624bdb264f3af7b5be6e7e1750a2356667272eef6207f0f249da0e6602bd"
+    },
+    {
+      "path": "core/federation/endpoint.mjs",
+      "sha256": "52a72d4070685b6d0c6998ada3bd2273ad3888fd7310e17f928d4beef6b4189c"
+    },
+    {
+      "path": "core/federation/epoch-recovery.mjs",
+      "sha256": "6b47a62d37788adf68354a671751b21caa5cf568cfff709e51144a47dd32adbf"
+    },
+    {
+      "path": "core/federation/peers.mjs",
+      "sha256": "41a1f68be32ef12d29193a543695bf14ffce8ca10fa4d803dc69917bfdc0539b"
+    },
+    {
+      "path": "core/federation/result-client.mjs",
+      "sha256": "7e4ff2046f14114e441345b379cd83196c224c8e0851bee1a1e5d1bdb0ac0491"
+    },
+    {
+      "path": "core/federation/sync-client.mjs",
+      "sha256": "20e02f8c86ce233aa8ec692a78d4239043e0fb842f746427306721ec38193f51"
+    },
+    {
+      "path": "core/federation/sync-store.mjs",
+      "sha256": "9cd97daa7284858a37348ee726812b706772f2b6b381e000003b106507e92c5f"
+    },
+    {
+      "path": "core/federation/topology-client.mjs",
+      "sha256": "0c5f519c1c4dd13330e08f4a4f0fdb10422fcdc7f0ad4c18cac99c5ebdad4300"
+    },
+    {
+      "path": "core/fleet-view.mjs",
+      "sha256": "7875e36d9114f2b244773450e43bfbd15883f716f45173cffca2aeaa8e1f57f0"
+    },
+    {
+      "path": "core/node-runtime.mjs",
+      "sha256": "8a5f50f3acd7df63fbe3ad716482738c2963aefdc7d2147b825eb072f8d847e8"
+    },
+    {
+      "path": "package.json",
+      "sha256": "cc4a5df79d9e70bd34d351faf397b921bdfe72dc966fc0fe8399a570bf12d812"
+    },
+    {
+      "path": "tests/artifacttransfertest.mjs",
+      "sha256": "471c2e87eeff627fe071e45711883c2a6917bfedb49c9b377ee58f7e85e28a19"
+    },
+    {
+      "path": "tests/bindingtest.mjs",
+      "sha256": "0a25ed103a9d9079f9e9498e35e659f37d5de27238b937e8f8e985b936060e4b"
+    },
+    {
+      "path": "tests/cancellationtest.mjs",
+      "sha256": "4767b0cfa359919be7b819a2d74e35dbb377b0230e787c08365d1914bacc434c"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "84318e8432341c993bd73f0a39fe99f055d0f13d0a96bf0ed6dfca2f9552f40b"
+    },
+    {
+      "path": "tests/delegationtest.mjs",
+      "sha256": "350eee004441aa9841f5037fb58992b8066e050a63fc16e76c462934d0bbfef9"
+    },
+    {
+      "path": "tests/epochrecoverytest.mjs",
+      "sha256": "c2fc84c5aa16e71981caa3f9c594a1c306ac941ced8f9223f4a8d336bef8700f"
+    },
+    {
+      "path": "tests/fleetactionstest.mjs",
+      "sha256": "f8e894398c11592ddd2335335be2c56ff75cbd1788c2160bc0608c37ec55fe14"
+    },
+    {
+      "path": "tests/helpers/peer-network.mjs",
+      "sha256": "3c0f819187d882a6b5b1fb75c13b6d5bc125e942051cfa5f6d861fbd00de074a"
+    },
+    {
+      "path": "tests/integrationtest.mjs",
+      "sha256": "3d1afbfe640e87ec928a1afb0518c78c0d9f266fa4468d89210d3357a383468f"
+    },
+    {
+      "path": "tests/noderuntimetest.mjs",
+      "sha256": "314b27724aa96dc7306723ba3070f9531e20787a78c448f7219a5eeef5b4c05a"
+    },
+    {
+      "path": "tests/peer-endpointtest.mjs",
+      "sha256": "9218cd7cd0c995b7c57ba51215a6c288a63660b510b4f85c53f435de34989ffe"
+    },
+    {
+      "path": "tests/peertest.mjs",
+      "sha256": "dc225bbed17ae99d925c1d1fdce84227cee2b54d5e4a6403d684e3e5bb657c02"
+    },
+    {
+      "path": "tests/recoverytest.mjs",
+      "sha256": "10e2bbfc5f3b97b0d31929037c93fb4dd07d593116a77068fe680a6711581368"
+    },
+    {
+      "path": "tests/relationstest.mjs",
+      "sha256": "946542a7495b8dffe82e21f298de981bdfb82aa29b92ffef2b95e24fe8820348"
+    },
+    {
+      "path": "tests/resulttest.mjs",
+      "sha256": "31a06e6d37009fcd550ae89b725ebbb0189e3e5f6820a948790d7b3c30c84be8"
+    },
+    {
+      "path": "tests/schedulertest.mjs",
+      "sha256": "a8ad23a2b622ed13e942d6d14ee54acdf1741368b25646fc9998eb7eb4f455d0"
+    },
+    {
+      "path": "tests/snapshottest.mjs",
+      "sha256": "2e03f3793191596a050036c10ac39b633cbd6741d9125a63b8f3cf84e72c33d7"
+    },
+    {
+      "path": "tests/synctest.mjs",
+      "sha256": "32e70d4d549a68d81a6f76406a7f356af8ffbe82a0047e1ac711f5853f2938b2"
+    },
+    {
+      "path": "tests/topologytest.mjs",
+      "sha256": "cd8b90ea65df307771cd0f04f646f269cce1fde29600c209dca5c03d2900d1f0"
+    },
+    {
+      "path": "tests/verificationworkspacetest.mjs",
+      "sha256": "0fe5b8806748891c96580296d1e5a3a65eaa711bf9535d32ea8dae15ba38a7db"
+    },
+    {
+      "path": "tests/workspacetest.mjs",
+      "sha256": "fd1f50b1e87300adc6be56de5552ce55819931eba0f9ec77e5bcabcbbbbc3fc3"
+    }
+  ],
+  "providers_called": false,
+  "production_changed": false,
+  "tailscale_changed": false,
+  "real_multi_pc_acceptance": false,
+  "formal_accepted_tasks": 0,
+  "formal_total_tasks": 72,
+  "formal_accepted_stages": 0,
+  "formal_total_stages": 12,
+  "scope_note": "Synthetic Windows nodes and credentials; all selected directly affected cases eventually passed. Does not sign G receipts.",
+  "ci144_repair": {
+    "run": 36878685018,
+    "head": "9cf862820a9d0b96d3680d506bcb852b579a3e63",
+    "red": {
+      "path": ".data/review87-ci144-job-110424604033.log",
+      "sha256": "c926ef6c14d5afbf2062888bd79f96dc07a70cc87e002838c809e788c2048073",
+      "failed": 2
+    },
+    "green": {
+      "path": ".data/review87-ci144-green.log",
+      "sha256": "2a1679560bc993984af5fba89fe006708988fe828c905aee65d37bf14f1a540c",
+      "passed": 2,
+      "failed": 0
+    },
+    "change": "Use registered canonical workspace pool path for fault injection; explicitly require intended child exit status."
+  },
+  "batch_total_distinct_passed": 33
+}

@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import {federationStuck} from '../core/inspection.mjs';
 import {prepareBindingRecovery,recordBindingRecovery,bindingRecovery,migrateBindingRecovery,BINDING_RECOVERY_CODE} from "../core/federation/binding-recovery.mjs";
 import http from "node:http";
@@ -14,7 +15,7 @@ import {randomUUID} from "node:crypto";
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
+import {migratePeers,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
 import {digest,canonical} from "../core/federation/sync-store.mjs";
 import {enrollTask,callTool} from "../core/mcp/tools.mjs";
 import {createIntent,receiveOffer,decideIncoming,recordReceipt,incomingStatus,outgoingStatus} from "../core/federation/delegation.mjs";
@@ -22,7 +23,7 @@ import {migrateRelations,localRegistrarPeer,createRelationGraph,publishTopology,
 import {bindTopology,prepareTopology,startTopologyAttempt,acceptTopologyReceipt,topologyState} from "../core/federation/topology.mjs";
 import {migrateBindings,prepareBinding,bindingState,bindingMessage,receiveBindingMessage,recordBindingMessage,startBindingAttempt,acceptBindingReceipt,cancelUnsentBinding,rejectBindingAttempt,listBindings,releaseBoundTask,bindingProposalState,declineBindingProposal} from "../core/federation/bindings.mjs";
 import {submitBinding,sendBindingMessage} from "../core/federation/binding-client.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+
 const require=createRequire(import.meta.url),store=require("../core/store.js");
 const ROOT=fileURLToPath(new URL("../",import.meta.url));
 const TMP=mkdtempSync(join(tmpdir(),"fleet-binding-")),dbs=[],servers=[];let serial=0;

@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import http from "node:http";
 import {checkRecoveryLineage,MAX_RECOVERY_HOPS} from "../core/federation/recovery-lineage.mjs";
 import test,{after} from "node:test";
@@ -12,12 +13,12 @@ import {spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {createBackup,restoreBackup} from "../core/backup.mjs";
 import {prepareRecovery,activateRecovery,retireNode,writeRecoveryJSON} from "../core/recovery.mjs";
-import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
+import {migratePeers,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
 import {migrateSync,shareTask,exportBatch,applyBatch,cursor,recordSource,listReplicas,digest,canonical,syncStatus} from "../core/federation/sync-store.mjs";
 import {startSnapshot,snapshotPage,beginSnapshot,receiveSnapshotPage,snapshotStage} from "../core/federation/snapshots.mjs";
 import {prepareSourceRecovery,acceptSourceRecovery,sourceRecoveryHistory} from "../core/federation/epoch-recovery.mjs";
 import {sourceRecoveryMarker,sourceRecoveryLineage,replicationCursor} from "../core/federation/epoch-state.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+
 import {syncOnce} from "../core/federation/sync-client.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
 const ROOT=fileURLToPath(new URL("../",import.meta.url)),TMP=mkdtempSync(join(tmpdir(),"fleet-epoch-")),handles=[],servers=[];

@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -8,11 +9,11 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawn,spawnSync} from "node:child_process";
-import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
+import {migratePeers,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
 import {migrateSync,digest} from "../core/federation/sync-store.mjs";
 import {migrateBroker,putRole,issuePrincipal} from "../core/mcp/policy.mjs";
 import {enrollTask,callTool} from "../core/mcp/tools.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+
 import {migrateDelegation,createIntent,receiveOffer,decideIncoming,outgoingStatus,incomingStatus,recordReceipt,peerDelegationStatus,listDelegations,MAX_OPEN_OFFERS} from "../core/federation/delegation.mjs";
 import {deliverIntent} from "../core/federation/delegation-client.mjs";
 import {createBackup,restoreBackup} from "../core/backup.mjs";
@@ -145,7 +146,7 @@ test("existing sync-only credentials cannot post an offer and status cannot read
 });
 test("wrong pinned receiver credentials are refused before making any network request",async()=>{
  const f=pair(),other=fixture(),g=grant(f.a,other);let called=false;
- await assert.rejects(()=>deliverIntent(f.a.db,{delegationId:f.out.delegation_id,url:"http://127.0.0.1:1",credentialFile:g.file,fetchImpl:async()=>{called=true;}}),{code:"IDENTITY_MISMATCH"});
+ await assert.rejects(()=>deliverIntent(f.a.db,{delegationId:f.out.delegation_id,url:fixtureEndpoint(other.db),credentialFile:g.file,fetchImpl:async()=>{called=true;}}),{code:"IDENTITY_MISMATCH"});
  assert.equal(called,false);assert.equal(outgoingStatus(f.a.db,f.out.delegation_id).attempts,0);
 });
 test("invalid receipt persistence stays retryable and does not acknowledge a successful write",async()=>{

@@ -1,3 +1,4 @@
+import {issueCredential,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import {readFleetTask,readFleetEvidencePage} from "../core/fleet-view.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +12,7 @@ import {spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {createBackup,restoreBackup,inspectRestore,verifyBackup} from "../core/backup.mjs";
 import {prepareRecovery,activateRecovery,retireNode,recoveryStatus,recoveryFingerprint,writeRecoveryJSON} from "../core/recovery.mjs";
-import {migratePeers,issueCredential,authenticate,localIdentity} from "../core/federation/peers.mjs";
+import {migratePeers,authenticate,localIdentity} from "../core/federation/peers.mjs";
 import {migrateSync,shareTask,exportBatch,digest} from "../core/federation/sync-store.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
 const ROOT=fileURLToPath(new URL("../",import.meta.url)),TMP=mkdtempSync(join(tmpdir(),"fleet-recovery-")),handles=[];

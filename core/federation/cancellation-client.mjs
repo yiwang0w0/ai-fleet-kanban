@@ -5,7 +5,7 @@ import {cancellationState,recordCancellationReceipt} from "./cancellation.mjs";
 export async function deliverCancellation(db,{relationId,mode="send",url,credentialFile,fetchImpl=fetch,signal}){
  if(!["send","poll"].includes(mode))throw new PeerError("BAD_INPUT","取消投递模式无效");
  const state=cancellationState(db,relationId);if(state.side!=="source")throw new PeerError("FORBIDDEN","仅来源可以投递取消",403);if(state.state==="stopped")return {...state,delivery_state:"acknowledged"};
- const body=state.request,d=body.relation,n=localIdentity(db),base=endpoint(url),credential=loadCredential(credentialFile,n,d.project_id,["peer:handshake","delegation:offer","delegation:control"]);
+ const body=state.request,d=body.relation,n=localIdentity(db),base=endpoint(url),credential=loadCredential(credentialFile,n,d.project_id,["peer:handshake","delegation:offer","delegation:control"],base);
  if(credential.server_node_id!==d.target_node_id||credential.server_epoch!==d.target_epoch)throw new PeerError("IDENTITY_MISMATCH","取消凭据不匹配固定接收端",403);
  const requiredCapabilities=["delegation-cancellation-v1",...(mode==="poll"?[READONLY_CANCELLATION_STATUS]:[])];
  let stage="network";

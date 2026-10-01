@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import {allowInheritedRead,inspectAcl} from "./helpers/windows-acl.mjs";
 import {createAuthFailureGuard,listAuthFailures,AUTH_FAILURE_LIMITS} from "../core/federation/auth-failures.mjs";
 import test, {after} from "node:test";
@@ -12,8 +13,8 @@ import {spawn, spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import http from "node:http";
 import {negotiateHello, CAPABILITIES, SCOPES} from "../core/federation/protocol.mjs";
-import {openPeerDatabase, migratePeers, issueCredential, revokePeer, listPeers, authenticate, localIdentity} from "../core/federation/peers.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+import {openPeerDatabase,migratePeers,revokePeer,listPeers,authenticate,localIdentity} from "../core/federation/peers.mjs";
+
 import {createBackup,restoreBackup} from "../core/backup.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
 const ROOT=fileURLToPath(new URL("../",import.meta.url)),TMP=mkdtempSync(join(tmpdir(),"fleet-peers-"));
@@ -207,7 +208,7 @@ test("local CLI requires explicit database and never prints the credential secre
  const f=fixture(),p=next("cli-credential"),id=randomUUID(),epoch=randomUUID();
  const cli=(...args)=>spawnSync(process.execPath,[join(ROOT,"cli/peer.mjs"),...args],{encoding:"utf8",windowsHide:true});
  assert.equal(cli("list").status,1);
- const result=cli("grant","--db",f.dbPath,"--peer",id,"--epoch",epoch,"--projects","demo","--scopes","peer:handshake,peer:health","--credential-file",p);
+ const result=cli("grant","--db",f.dbPath,"--endpoint",fixtureEndpoint(f.db),"--peer",id,"--epoch",epoch,"--projects","demo","--scopes","peer:handshake,peer:health","--credential-file",p);
  assert.equal(result.status,0,result.stderr);const c=JSON.parse(readFileSync(p,"utf8"));
  assert.ok(!result.stdout.includes(c.token));assert.equal(JSON.parse(result.stdout).credential_version,1);
  const list=cli("list","--db",f.dbPath);assert.equal(list.status,0,list.stderr);assert.ok(!list.stdout.includes(c.token));assert.ok(!list.stdout.includes("secret_hash"));

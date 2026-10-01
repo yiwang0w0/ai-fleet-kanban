@@ -6,7 +6,7 @@ import {createHash,randomUUID} from "node:crypto";
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync,realpathSync,statSync,renameSync,symlinkSync,openSync,ftruncateSync,closeSync} from "node:fs";
 import {join,dirname} from "node:path";
 import {tmpdir} from "node:os";
-import {execFileSync,spawn} from "node:child_process";
+import {execFileSync,spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {prepareAdapter} from "../core/execution/adapters.mjs";
 import {executePreparedDispatch,reconcileExecutionJournal} from "../core/execution/runner.mjs";
@@ -229,13 +229,13 @@ test("full-tree expansion checks file counts and case-colliding directories befo
 // H10: terminate after the committed reservation, before the filesystem copy returns.
 import * as workspaceRecovery from "../core/artifacts/workspaces.mjs";
 function interruptedProvision(f,x,mode){
- const script=path("provision-interruption")+".mjs";
+ const script=path("provision-interruption")+".mjs",poolIdentity=JSON.parse(f.db.prepare("SELECT descriptor_json FROM workspace_pools WHERE pool_id=?").get(x.args.poolId).descriptor_json).identity,container=join(poolIdentity.root,x.args.workspaceId);
  writeFileSync(script,`import fs from 'node:fs'; import {syncBuiltinESMExports} from 'node:module'; import {DatabaseSync} from 'node:sqlite';
  import * as w from ${JSON.stringify(new URL('../core/artifacts/workspaces.mjs',import.meta.url).href)};
  const db=new DatabaseSync(process.argv[2]),args=JSON.parse(process.argv[3]),container=process.argv[4],mode=process.argv[5],mkdir=fs.mkdirSync;
  fs.mkdirSync=function(p,...rest){if(p===container){if(mode==='late')w.recoverStaleWorkspaces(db,{now:Date.now()+w.STALE_WORKSPACE_MS+1});const r=mkdir.call(this,p,...rest);if(mode==='crash'){fs.writeFileSync(p+'/partial.txt','preserve partial copy');process.exit(77);}return r;}return mkdir.call(this,p,...rest);};syncBuiltinESMExports();
  try{w.createTaskWorkspace(db,args);console.log('READY');}catch(e){console.log(e.code);process.exitCode=78;}finally{db.close();}`);
- try{return execFileSync(process.execPath,[script,f.dbPath,JSON.stringify(x.args),join(f.poolRoot,x.args.workspaceId),mode],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']});}catch(e){assert.equal(e.status,mode==='crash'?77:78,e.stderr?.toString());return e.stdout.toString();}
+ const result=spawnSync(process.execPath,[script,f.dbPath,JSON.stringify(x.args),container,mode],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']});assert.equal(result.status,mode==='crash'?77:78,"provisioning interruption hook must execute: "+result.stdout+result.stderr);return result.stdout;
 }
 test("interrupted workspace provisioning is sealed once without deleting partial files or granting a retry",()=>{
  const f=setup(),x=request(f);interruptedProvision(f,x,'crash');assert.equal(state(f,x).state,'provisioning');const kept=join(f.poolRoot,x.args.workspaceId,'partial.txt'),stamp=Date.parse(f.db.prepare('SELECT created_at FROM task_workspaces WHERE workspace_id=?').get(x.args.workspaceId).created_at);

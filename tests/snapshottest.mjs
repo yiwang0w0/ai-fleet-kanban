@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -8,8 +9,8 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {migratePeers,issueCredential,authenticate,revokePeer,localIdentity} from "../core/federation/peers.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+import {migratePeers,authenticate,revokePeer,localIdentity} from "../core/federation/peers.mjs";
+
 import {migrateSync,shareTask,exportBatch,applyBatch,listReplicas,syncStatus,cursor,digest,canonical,acknowledge} from "../core/federation/sync-store.mjs";
 import {startSnapshot,snapshotPage,beginSnapshot,receiveSnapshotPage,snapshotStage,pruneHistory,SNAPSHOT_TTL_MS,MAX_SNAPSHOT_RECORDS} from "../core/federation/snapshots.mjs";
 import {syncOnce} from "../core/federation/sync-client.mjs";
@@ -57,7 +58,7 @@ test("v1 migration rebuilds published state from the latest immutable event and 
  f.a.db.exec("DROP TABLE federation_published; UPDATE federation_sync_schema SET version=1");
  migrateSync(f.a.db);migrateSync(f.a.db);
  assert.equal(count(f.a.db,"federation_published"),1);assert.equal(start(f).head_seq,2);
- assert.equal(f.a.db.prepare("SELECT version FROM federation_sync_schema").get().version,4);
+ assert.equal(f.a.db.prepare("SELECT version FROM federation_sync_schema").get().version,5);
  assert.equal(install(f).records,1);assert.equal(listReplicas(f.b.db)[0].description,"newer");
 });
 

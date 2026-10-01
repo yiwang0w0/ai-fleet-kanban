@@ -1,3 +1,4 @@
+import {issueCredential,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import test,{after} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -10,7 +11,7 @@ import {createRequire} from 'node:module';
 import {execFileSync,spawn} from 'node:child_process';
 import net from 'node:net';
 import {setTimeout as delay} from 'node:timers/promises';
-import {migratePeers,issueCredential,localIdentity} from '../core/federation/peers.mjs';
+import {migratePeers,localIdentity} from "../core/federation/peers.mjs";
 import {migrateSync,shareTask,listReplicas} from '../core/federation/sync-store.mjs';
 import {migrateBroker,putRole,issuePrincipal} from '../core/mcp/policy.mjs';
 import {createSourceGate} from '../core/execution/source-gate.mjs';
@@ -25,7 +26,7 @@ async function waitFor(check,label,ms=12000){const end=Date.now()+ms;for(;;){con
 async function fixture(){const dir=mkdtempSync(join(TMP,'node-')),dbPath=join(dir,'board.db'),db=new DatabaseSync(dbPath);dbs.push(db);db.exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000');store.migrate(db);migratePeers(db);migrateSync(db);migrateBroker(db);store.renameNode(db,'alpha');const n=localIdentity(db);return {dir,dbPath,db,n,config:{format:'ai-fleet-node-runtime/v1',node_id:n.node_id,node_epoch:n.sync_epoch,peer:{host:'127.0.0.1',port:await freePort()},mcp:{port:await freePort(),board_url:null},sync:[],scheduler:null}};}
 function start(f){const stop=new AbortController(),events=[],h={stop,events};h.done=runNodeRuntime({dbPath:f.dbPath,config:f.config,sourceGate:gate,stopSignal:stop.signal,onEvent:e=>events.push(e)});h.done.catch(e=>h.error=e);hosts.push(h);h.ready=()=>waitFor(()=>{if(h.error)throw h.error;return events.find(e=>e.kind==='started');},'runtime start');return h;}
 const status=f=>nodeRuntimeStatus(f.db);
-function connection(a,b){const file=join(b.dir,'from-'+a.n.node_id+'.json');issueCredential(a.db,{peerNodeId:b.n.node_id,peerEpoch:b.n.sync_epoch,scopes:['peer:handshake','sync:pull','sync:ack'],projects:['demo'],credentialFile:file});return {project_id:'demo',url:'http://127.0.0.1:'+a.config.peer.port,credential_file:file,server_node_id:a.n.node_id,server_epoch:a.n.sync_epoch,poll_ms:1000};}
+function connection(a,b){const file=join(b.dir,'from-'+a.n.node_id+'.json');issueCredential(a.db,{serverEndpoint:'http://127.0.0.1:'+a.config.peer.port,peerNodeId:b.n.node_id,peerEpoch:b.n.sync_epoch,scopes:['peer:handshake','sync:pull','sync:ack'],projects:['demo'],credentialFile:file});return {project_id:'demo',url:'http://127.0.0.1:'+a.config.peer.port,credential_file:file,server_node_id:a.n.node_id,server_epoch:a.n.sync_epoch,poll_ms:1000};}
 function task(f,subject){const id=store.add(f.db,{subject});shareTask(f.db,{id,projectId:'demo',expectedVersion:store.get(f.db,id).aggregate_version});return store.get(f.db,id);}
 const command=(f,name,args=[])=>JSON.parse(execFileSync(process.execPath,[join(source,'cli','node-runtime.mjs'),name,'--db',f.dbPath,...args],{encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe'],timeout:10000}));
 

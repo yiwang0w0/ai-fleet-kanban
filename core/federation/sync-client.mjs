@@ -1,25 +1,19 @@
+import {endpoint,assertCredentialEndpoint} from "./endpoint.mjs";
+export {endpoint} from "./endpoint.mjs";
 import {replicationCursor,pendingRecovery} from "./epoch-state.mjs";
 import {readFileSync,statSync} from "node:fs";
 import {beginSnapshot,snapshotStage,receiveSnapshotPage,discardSnapshotStage} from "./snapshots.mjs";
 import {PeerError,uuid,names,SCOPES} from "./protocol.mjs";
 import {localIdentity} from "./peers.mjs";
-import {migrateSync,applyBatch,recordSource,MAX_BATCH_BYTES} from "./sync-store.mjs";
+import {migrateSync,applyBatch,recordSource,assertSourceEndpoint,MAX_BATCH_BYTES} from "./sync-store.mjs";
 
-export function endpoint(value){
- let url;try{url=new URL(value);}catch{throw new PeerError("BAD_ENDPOINT","同步地址无效");}
- if(url.username||url.password||url.search||url.hash||url.pathname!=="/")throw new PeerError("BAD_ENDPOINT","同步地址必须是没有账号、查询参数或子路径的根地址");
- const loop=["127.0.0.1","[::1]"].includes(url.hostname);
- if(!(url.protocol==="http:"&&loop)&&!(url.protocol==="https:"&&url.hostname.endsWith(".ts.net")))
-  throw new PeerError("BAD_ENDPOINT","只接受回环 HTTP 或显式指定的 Tailscale HTTPS 地址");
- return url.origin;
-}
-export function loadCredential(file,local,projectId,requiredScopes=["peer:handshake","sync:pull","sync:ack"]){
+export function loadCredential(file,local,projectId,requiredScopes=["peer:handshake","sync:pull","sync:ack"],serverEndpoint){
  names(requiredScopes,"required_scopes",SCOPES,1);
- if(statSync(file).size>16384)throw new PeerError("BAD_CREDENTIAL","凭据文件超限");
- let c;try{c=JSON.parse(readFileSync(file,"utf8"));}catch{throw new PeerError("BAD_CREDENTIAL","凭据文件不是有效 JSON");}
+ let c;try{if(statSync(file).size>16384)throw Error();c=JSON.parse(readFileSync(file,"utf8"));}catch{throw new PeerError("BAD_CREDENTIAL","凭据文件缺失、不可读或格式无效");}
  if(!c||typeof c!=="object"||Array.isArray(c))throw new PeerError("BAD_CREDENTIAL","凭据格式无效");
  for(const k of ["server_node_id","server_epoch","peer_node_id","peer_epoch","key_id"])uuid(c[k],k);
- if(c.format!==1||!Number.isSafeInteger(c.credential_version)||c.credential_version<1||
+ if(c.format===1||!c.server_endpoint)throw new PeerError("CREDENTIAL_REISSUE_REQUIRED","旧对端凭据未绑定地址，请重新签发",403);
+ if(c.format!==2||!Number.isSafeInteger(c.credential_version)||c.credential_version<1||
    typeof c.token!=="string"||!new RegExp("^"+c.key_id+"\\.[A-Za-z0-9_-]{43}$").test(c.token))
   throw new PeerError("BAD_CREDENTIAL","凭据格式无效");
  names(c.scopes,"scopes",SCOPES,1);names(c.projects,"projects",null,1);
@@ -28,9 +22,11 @@ export function loadCredential(file,local,projectId,requiredScopes=["peer:handsh
   throw new PeerError("IDENTITY_MISMATCH","凭据未绑定本机身份与 epoch",403);
  if(!c.projects.includes(projectId)||requiredScopes.some(s=>!c.scopes.includes(s)))
   throw new PeerError("FORBIDDEN","凭据没有该项目所需的节点接口权限",403);
+ assertCredentialEndpoint(c,serverEndpoint);
  return c;
 }
 export async function request(base,path,c,body,fetchImpl,signal,knownErrors=[]){
+ base=assertCredentialEndpoint(c,base);
  const r=await fetchImpl(base+path,{method:"POST",redirect:"error",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),
   headers:{Authorization:"Bearer "+c.token,"Content-Type":"application/json"},body:JSON.stringify(body)});
  const reader=r.body?.getReader();if(!reader)throw new PeerError("BAD_RESPONSE","对端响应为空");
@@ -51,7 +47,9 @@ function initAttempts(db){
 export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,now=Date.now(),maxBatches=10,signal}){
  const started=performance.now();
  const base=endpoint(url),local=localIdentity(db);names([projectId],"project_id",null,1);
- const c=loadCredential(credentialFile,local,projectId);migrateSync(db);initAttempts(db);
+ const c=loadCredential(credentialFile,local,projectId,undefined,base);migrateSync(db);initAttempts(db);
+ assertSourceEndpoint(db,c.server_node_id,base);
+ const sendFetch=(...args)=>{assertSourceEndpoint(db,c.server_node_id,base);return fetchImpl(...args);};
  if(!Number.isInteger(maxBatches)||maxBatches<1||maxBatches>20)throw new PeerError("BAD_INPUT","maxBatches 无效");
  const previous=db.prepare("SELECT * FROM federation_sync_attempts WHERE origin_node_id=? AND project_id=?").get(c.server_node_id,projectId);
  if(previous?.retry_after>now && previous.retry_after-now<=30000)return {state:"backoff",retry_after:previous.retry_after,error_code:previous.error_code};
@@ -60,7 +58,7 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
   // Check stored epoch before sending a credential or requesting a reset.
   replicationCursor(db,c.server_node_id,c.server_epoch,projectId);
   const hello=await request(base,"/peer/v1/hello",c,{node_id:local.node_id,sync_epoch:local.sync_epoch,
-   protocol:{min:1,max:1},required_capabilities:["task-projection-sync-v1"],required_extensions:[],extensions:{}},fetchImpl,signal);
+   protocol:{min:1,max:1},required_capabilities:["task-projection-sync-v1"],required_extensions:[],extensions:{}},sendFetch,signal);
   if(hello.protocol_version!==1||hello.node?.node_id!==c.server_node_id||hello.node?.sync_epoch!==c.server_epoch||
     hello.authorized?.peer_node_id!==local.node_id||hello.authorized?.credential_version!==c.credential_version||
     (!Array.isArray(hello.capabilities)||!hello.capabilities.includes("task-projection-sync-v1")))
@@ -70,7 +68,7 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
   const canSnapshot=hello.capabilities.includes("task-snapshot-v1");
   const ack=async checkpoint=>{
    if(!checkpoint)return;
-   const r=await request(base,"/peer/v1/ack",c,{project_id:projectId,...checkpoint},fetchImpl,signal);
+   const r=await request(base,"/peer/v1/ack",c,{project_id:projectId,...checkpoint},sendFetch,signal);
    if(!Number.isSafeInteger(r.acked_seq)||r.acked_seq<checkpoint.seq)throw new PeerError("INVALID_ACK","对端未确认持久游标");
   };
   const downloadSnapshot=async()=>{
@@ -78,11 +76,11 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
    let staged=snapshotStage(db,source);
    if(staged&&replicationCursor(db,source.origin,source.epoch,projectId)>staged.manifest.head_seq){discardSnapshotStage(db,source);return true;}
    if(!staged){
-    const manifest=await request(base,"/peer/v1/snapshot/start",c,{project_id:projectId,min_seq:replicationCursor(db,source.origin,source.epoch,projectId)},fetchImpl,signal);
+    const manifest=await request(base,"/peer/v1/snapshot/start",c,{project_id:projectId,min_seq:replicationCursor(db,source.origin,source.epoch,projectId)},sendFetch,signal);
     staged=beginSnapshot(db,source,manifest);
    }
    while(snapshotPages<maxBatches){
-    let page;try{page=await request(base,"/peer/v1/snapshot/page",c,{project_id:projectId,snapshot_id:staged.manifest.snapshot_id,offset:staged.next_offset},fetchImpl,signal);}
+    let page;try{page=await request(base,"/peer/v1/snapshot/page",c,{project_id:projectId,snapshot_id:staged.manifest.snapshot_id,offset:staged.next_offset},sendFetch,signal);}
     catch(e){if(e.code==="SNAPSHOT_EXPIRED")discardSnapshotStage(db,source);throw e;}
     let result;try{result=receiveSnapshotPage(db,source,page);}catch(e){
      if(e.code==="VERSION_REGRESSION"&&replicationCursor(db,source.origin,source.epoch,projectId)>staged.manifest.head_seq){discardSnapshotStage(db,source);return true;}throw e;
@@ -99,7 +97,7 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
   if(!ready)more=true;
   while(ready&&batches<maxBatches){
    const after=replicationCursor(db,source.origin,source.epoch,projectId);
-   let batch;try{batch=await request(base,"/peer/v1/pull",c,{project_id:projectId,after_seq:after,limit:25},fetchImpl,signal);}
+   let batch;try{batch=await request(base,"/peer/v1/pull",c,{project_id:projectId,after_seq:after,limit:25},sendFetch,signal);}
    catch(e){
     if(e.code!=="SNAPSHOT_REQUIRED")throw e;
     ready=await downloadSnapshot();more=true;if(!ready)break;continue;
@@ -110,6 +108,7 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
    await ack(result.checkpoint);
    if(!more)break;
   }
+  recordSource(db,hello.node,base);
   const at=new Date(now).toISOString();
   db.prepare("INSERT INTO federation_sync_attempts(origin_node_id,project_id,last_attempt_at,last_success_at,has_more) VALUES(?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET last_attempt_at=excluded.last_attempt_at,last_success_at=excluded.last_success_at,error_code=NULL,failure_count=0,retry_after=0,has_more=excluded.has_more")
    .run(c.server_node_id,projectId,at,at,Number(more));

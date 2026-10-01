@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -8,8 +9,8 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {migratePeers,issueCredential,localIdentity,authenticate} from "../core/federation/peers.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+import {migratePeers,localIdentity,authenticate} from "../core/federation/peers.mjs";
+
 import {migrateSync,shareTask,exportBatch,acknowledge,applyBatch,listReplicas,syncStatus,cursor,digest,canonical} from "../core/federation/sync-store.mjs";
 import {syncOnce,endpoint} from "../core/federation/sync-client.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
@@ -195,11 +196,11 @@ test("endpoint policy and credential binding reject before leaking credentials",
 test("network retries are persisted, bounded and honor backoff across attempts",async()=>{
  const f=pair();let calls=0,now=Date.now(),result;
  for(let i=0;i<8;i++){
-  result=await syncOnce(f.b.db,{url:"http://127.0.0.1:1",credentialFile:f.credentialFile,projectId:"demo",now,fetchImpl:async()=>{calls++;throw Error("offline");}});
+  result=await syncOnce(f.b.db,{url:fixtureEndpoint(f.a.db),credentialFile:f.credentialFile,projectId:"demo",now,fetchImpl:async()=>{calls++;throw Error("offline");}});
   assert.equal(result.state,"error");assert.ok(result.retry_after-now<=30500);now=result.retry_after+1;
  }
  const before=calls;
- const backed=await syncOnce(f.b.db,{url:"http://127.0.0.1:1",credentialFile:f.credentialFile,projectId:"demo",now:result.retry_after-1,fetchImpl:async()=>{calls++;}});
+ const backed=await syncOnce(f.b.db,{url:fixtureEndpoint(f.a.db),credentialFile:f.credentialFile,projectId:"demo",now:result.retry_after-1,fetchImpl:async()=>{calls++;}});
  assert.equal(backed.state,"backoff");assert.equal(calls,before);
 });
 test("the sync CLI performs an actual pull and never copies tasks into the execution queue",async()=>{
@@ -340,7 +341,7 @@ test("inbox v3 upgrade preserves receipts and rolls back atomically on failure",
  assert.equal(db.prepare("PRAGMA table_info(federation_inbox)").all().find(c=>c.name==="origin_node_id").pk,0);
  assert.deepEqual(db.prepare("SELECT * FROM federation_inbox").all(),before);
  db.exec("DROP TRIGGER fail_inbox_migration");migrateSync(db);migrateSync(db);
- assert.equal(db.prepare("SELECT version FROM federation_sync_schema").get().version,4);
+ assert.equal(db.prepare("SELECT version FROM federation_sync_schema").get().version,5);
  assert.deepEqual(db.prepare("SELECT * FROM federation_inbox").all(),before);
  assert.equal(accept(f,pull(f)).applied,0);
 });

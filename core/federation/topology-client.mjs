@@ -17,7 +17,7 @@ export async function sendTopology(db,{operationId,url,credentialFile,mode="publ
   const peer=localRegistrarPeer(db,b.project_id);
   call=async(action,body)=>action==="status"?relationStatus(db,peer,body):publishTopology(db,peer,body);
  }else{
-  const base=endpoint(url),c=loadCredential(credentialFile,n,b.project_id,["peer:handshake","relations:publish","relations:read"]);
+  const base=endpoint(url),c=loadCredential(credentialFile,n,b.project_id,["peer:handshake","relations:publish","relations:read"],base);
   if(c.server_node_id!==b.registrar_node_id||c.server_epoch!==b.registrar_epoch)throw new PeerError("IDENTITY_MISMATCH","凭据未绑定指定登记节点",403);
   let helloDone=false;
   call=async(action,body)=>{
@@ -61,7 +61,7 @@ export async function readRegistrarStatus(db,{projectId,url,credentialFile,fetch
   if(b.registrar_epoch!==n.sync_epoch)throw new PeerError("GRAPH_RECOVERY_REQUIRED","登记节点已换代",409);
   s=relationStatus(db,localRegistrarPeer(db,projectId),args);
  }else{
-  const base=endpoint(url),c=loadCredential(credentialFile,n,projectId,["peer:handshake","relations:read"]);
+  const base=endpoint(url),c=loadCredential(credentialFile,n,projectId,["peer:handshake","relations:read"],base);
   if(c.server_node_id!==b.registrar_node_id||c.server_epoch!==b.registrar_epoch)throw new PeerError("IDENTITY_MISMATCH","凭据未绑定指定登记节点",403);
   const h=await request(base,"/peer/v1/hello",c,{node_id:n.node_id,sync_epoch:n.sync_epoch,protocol:{min:1,max:1},required_capabilities:["project-relations-v1"],required_extensions:[],extensions:{}},fetchImpl,signal);
   if(h.protocol_version!==1||h.node?.node_id!==c.server_node_id||h.node?.sync_epoch!==c.server_epoch||h.authorized?.peer_node_id!==n.node_id||h.authorized?.credential_version!==c.credential_version||!h.capabilities?.includes("project-relations-v1"))throw new PeerError("SOURCE_MISMATCH","登记节点握手未通过身份核对");

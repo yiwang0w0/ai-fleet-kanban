@@ -42,7 +42,7 @@ evidence_path、verify_cmd、执行策略、文件内容和操作员令牌不在
 
 单事件最多 256 KiB，单响应最多 1 MiB，每批最多 25 条。超大任务保留待发送标记并返回 413，维护者需要缩减共享文本后重试。普通增量单轮默认最多 10 批，内部参数允许 1–20 批；快照模式还允许最多同样数量的分页（见 snapshots.md）；到上限仍有积压时返回 pending/has_more=true。一次请求最长 10 秒，失败间隔依次约 1、2、4、8、16、30 秒，后续最多 30 秒；重启继续使用持久退避记录。时钟倒退超过退避上限时重新尝试。
 
-客户端只接受操作员显式指定的根地址：本机回环 HTTP，或 .ts.net 域名 HTTPS。禁止重定向、账号参数、路径和查询参数；不会使用任务文本或远端响应中的 URL。主机名限制不等于已验证物理设备，真实 Tailscale 规则、证书、端点和凭据分发仍需 G03 验收。
+客户端只接受操作员显式指定的根地址：本机回环 HTTP，或 .ts.net 域名 HTTPS。禁止重定向、账号参数、路径和查询参数；不会使用任务文本或远端响应中的 URL。凭据必须在签发时绑定同一根地址；第一次成功交换还会在接收数据库保存来源地址，重启和来源换代均保留，见 [端点绑定与升级](peer-endpoints.md)。主机名限制不等于已验证物理设备，真实 Tailscale 规则、证书、端点和凭据分发仍需 G03 验收。
 
 摘要使用 SHA-256：对象键排序后以紧凑 UTF-8 JSON 序列化，数组顺序保留。payload_digest 对 payload 计算；event_digest 对去掉 event_digest 的整个事件计算。摘要用于一致性验证，不是数字签名；来源可信度依赖固定端点、TLS 与凭据绑定。
 
@@ -50,10 +50,10 @@ evidence_path、verify_cmd、执行策略、文件内容和操作员令牌不在
 
 支持的最低版本统一为 Node 24.0.0，安装时使用 Node 24 LTS；package、服务启动检查、doctor 和快速入门保持一致。doctor 在内存数据库中实测事务前、BEGIN 后及 ROLLBACK 后的 isTransaction；缺少该接口的同步实例仍在安装同步表前拒绝。[官方 API 记录](https://nodejs.org/api/sqlite.html#databaseistransaction)显示该接口自 24.0.0 / 22.16.0 提供，但本项目不声明 Node 22 支持。CI 验证 Node 24 分支，不代表每个补丁版本都已逐一测试。
 
-在 A 登记读取者 B，凭据只写新文件，再经可信方式交付 B：
+在 A 登记读取者 B，凭据只写新文件，再经可信方式交付 B。下面为本机联调；实体两机须将 grant 的 --endpoint 和 B 的 --url 一起替换为 A 的已核对 Tailscale HTTPS 根地址：
 
 ~~~text
-node cli/peer.mjs grant --db <A数据库绝对路径> --peer <B的node_id> --epoch <B的sync_epoch> --scopes peer:handshake,sync:pull,sync:ack --projects demo --credential-file <新凭据文件绝对路径>
+node cli/peer.mjs grant --db <A数据库绝对路径> --peer <B的node_id> --epoch <B的sync_epoch> --scopes peer:handshake,sync:pull,sync:ack --projects demo --endpoint http://127.0.0.1:47825 --credential-file <新凭据文件绝对路径>
 node cli/sync.mjs share --db <A数据库绝对路径> --task 12 --project demo --version 7
 node cli/peer.mjs serve --db <A数据库绝对路径> --port 47825
 ~~~

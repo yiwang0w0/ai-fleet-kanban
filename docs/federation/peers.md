@@ -10,7 +10,7 @@
 
 ## 身份与凭据
 
-每个接收节点独立签发一份用于访问自己的随机凭据，绑定 peer_node_id、peer_epoch、scopes、projects 和 credential_version。双向连接需要两份独立登记。凭据持有者只能使用其绑定身份，不能凭显示名、IP、转发头或请求体 owner 字段冒充其他节点。UUID 是标识，不是秘密。
+每个接收节点独立签发一份用于访问自己的随机凭据；format 2 在签发时固定 server_endpoint，客户端发送任何请求前核对地址，详见 [端点绑定与升级](peer-endpoints.md)。凭据还绑定 peer_node_id、peer_epoch、scopes、projects 和 credential_version。双向连接需要两份独立登记。凭据持有者只能使用其绑定身份，不能凭显示名、IP、转发头或请求体 owner 字段冒充其他节点。UUID 是标识，不是秘密。
 
 凭据包含随机 key_id 和 32 字节随机秘密，数据库只存完整 token 的 SHA-256 摘要。请求使用 Authorization: Bearer <token>，不接受 URL 查询参数或 X-Board-Token。摘要比较使用 Node timingSafeEqual；完整认证流程不宣称无时序差异。[Node 24 crypto 文档](https://nodejs.org/docs/latest-v24.x/api/crypto.html)。
 
@@ -27,7 +27,7 @@
 所有命令必须显式指定已初始化看板数据库的绝对路径，没有部署目录默认值。数据库须已具有 node_id 和 sync_epoch。首次命令会事务化安装 federation_schema、federation_peers、federation_auth_events，不改任务队列。
 
 ~~~text
-node cli/peer.mjs grant --db <board.db绝对路径> --peer <对端node_id> --epoch <对端sync_epoch> --scopes peer:handshake,peer:health --projects demo --credential-file <新凭据文件绝对路径>
+node cli/peer.mjs grant --db <board.db绝对路径> --peer <对端node_id> --epoch <对端sync_epoch> --scopes peer:handshake,peer:health --projects demo --endpoint <签发节点对外根地址> --credential-file <新凭据文件绝对路径>
 node cli/peer.mjs list --db <board.db绝对路径>
 node cli/peer.mjs serve --db <board.db绝对路径> --port 47825
 node cli/peer.mjs revoke --db <board.db绝对路径> --peer <对端node_id> --version 1

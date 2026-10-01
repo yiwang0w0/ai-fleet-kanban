@@ -1,3 +1,4 @@
+import {issueCredential,listenPeerServer,fixtureEndpoint} from "./helpers/peer-network.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -9,11 +10,11 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawn,spawnSync} from "node:child_process";
 import http from "node:http";
-import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
+import {migratePeers,authenticate,localIdentity,revokePeer} from "../core/federation/peers.mjs";
 import {migrateSync,digest} from "../core/federation/sync-store.mjs";
 import {migrateBroker} from "../core/mcp/policy.mjs";
 import {enrollTask} from "../core/mcp/tools.mjs";
-import {listenPeerServer} from "../core/federation/gateway.mjs";
+
 import {migrateRelations,createRelationGraph,localRegistrarPeer,listRelationGraphs,normalizeTopology,normalizeRelation,validateCombinedGraph,publishTopology,approveRelation,withdrawRelation,relationStatus,previewTopology,MAX_GRAPH_VERTICES,MAX_GRAPH_EDGES,MAX_PENDING_RELATIONS} from "../core/federation/relations.mjs";
 import {migrateDelegation,createIntent,receiveOffer,decideIncoming,incomingStatus} from "../core/federation/delegation.mjs";
 import {createBackup,restoreBackup} from "../core/backup.mjs";

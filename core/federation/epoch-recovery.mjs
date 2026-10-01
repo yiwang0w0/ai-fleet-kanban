@@ -4,7 +4,7 @@ import {randomUUID} from "node:crypto";
 import {realpathSync} from "node:fs";
 import {PeerError,keys,uuid,SOURCE_RECOVERY_LINEAGE} from "./protocol.mjs";
 import {localIdentity} from "./peers.mjs";
-import {canonical,digest,atomic,migrateSync} from "./sync-store.mjs";
+import {canonical,digest,atomic,migrateSync,assertSourceEndpoint} from "./sync-store.mjs";
 import {endpoint,loadCredential,request} from "./sync-client.mjs";
 const fail=(code,message)=>{throw new PeerError(code,message,409);};
 const hash=x=>typeof x==="string"&&/^[0-9a-f]{64}$/.test(x);
@@ -15,7 +15,7 @@ function databasePath(db){
  return realpathSync(file);
 }
 function originState(db,origin){
- const source=db.prepare("SELECT origin_node_id,origin_epoch,display_name FROM federation_sources WHERE origin_node_id=?").get(origin)??null;
+ const source=db.prepare("SELECT origin_node_id,origin_epoch,display_name,server_endpoint FROM federation_sources WHERE origin_node_id=?").get(origin)??null;
  const rows={};
  for(const [table,owner,order] of [
   ["federation_peers","peer_node_id","peer_node_id"],["federation_cursors","origin_node_id","project_id"],["federation_replicas","owner_node_id","task_uid"],
@@ -31,7 +31,8 @@ async function observe(db,{url,credentialFile,expectedEpoch,fetchImpl=fetch,sign
  uuid(expectedEpoch,"expected_epoch");
  const base=endpoint(url),local=localIdentity(db);
  // Credential scope is still checked by loadCredential before sending any secret.
- const c=loadCredential(credentialFile,local);
+ const c=loadCredential(credentialFile,local,undefined,undefined,base);
+ assertSourceEndpoint(db,c.server_node_id,base);
  const known=originState(db,c.server_node_id);
  if(known.epoch!==expectedEpoch)fail("EPOCH_CHANGED","已知来源代次与所见旧代次不一致");
  if(known.rows.federation_retired_epochs.some(x=>x.origin_epoch===c.server_epoch))fail("RETIRED_EPOCH","不能重新接纳已退役代次");
@@ -110,7 +111,7 @@ export async function acceptSourceRecovery(db,{plan,expectedPlanDigest,fetchImpl
    plan_digest:plan_digest,local_credentials_revoked:revoked,marker:plan.marker,projects:plan.projects.map(p=>p.project_id),accepted_at:now,snapshot_required:true,physical_retirement:"operator_attested_at_source_not_verified_here"};
   db.prepare("INSERT INTO federation_epoch_acceptances VALUES(?,?,?,?,?,?,?)").run(id,origin,receipt.previous_epoch,receipt.new_epoch,plan_digest,canonical(receipt),now);
   for(const epoch of retiredEpochs)db.prepare("INSERT INTO federation_retired_epochs VALUES(?,?,?)").run(origin,epoch,id);
-  db.prepare("INSERT INTO federation_sources VALUES(?,?,?,?) ON CONFLICT(origin_node_id) DO UPDATE SET origin_epoch=excluded.origin_epoch,display_name=excluded.display_name,last_seen_at=excluded.last_seen_at")
+  db.prepare("INSERT INTO federation_sources(origin_node_id,origin_epoch,display_name,last_seen_at) VALUES(?,?,?,?) ON CONFLICT(origin_node_id) DO UPDATE SET origin_epoch=excluded.origin_epoch,display_name=excluded.display_name,last_seen_at=excluded.last_seen_at")
    .run(origin,receipt.new_epoch,observation.hello.node.display_name,now);
   for(const p of plan.projects){
    const old=db.prepare("SELECT * FROM federation_epoch_projects WHERE origin_node_id=? AND project_id=?").get(origin,p.project_id);

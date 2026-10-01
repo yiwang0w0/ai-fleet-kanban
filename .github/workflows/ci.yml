@@ -65,6 +65,8 @@ jobs:
         run: bash hrun.sh node tests/versiontest.mjs
       - name: peertest (credential binding, revocation and protocol negotiation)
         run: bash hrun.sh node tests/peertest.mjs
+      - name: peer endpoints (pre-send address binding and persisted source origin)
+        run: bash hrun.sh node --test tests/peer-endpointtest.mjs
       - name: synctest (durable projections, replay, lost ACK and offline resume)
         run: bash hrun.sh node tests/synctest.mjs
       - name: snapshottest (frozen pages, crash resume and retained-history recovery)
