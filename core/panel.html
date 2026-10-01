@@ -3162,7 +3162,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
    for(const r of items){
     const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
     card.append(el("p",r.subject||r.result_id||r.relation_id,"fleet-task-title"),el("p",r.project_id+" · "+(label==="待确认绑定"&&r.state==="pending"?"待本方确认":historyStates[r.state]||({accepted:"已验收",delivered:"已送达 · 待决定"}[r.state])||r.state),"fleet-note"));
-    const review=(r.subject?r.subject+"\n":"")+"项目："+r.project_id+"\n对象："+(r.delegation_id||r.relation_id||r.result_id);
+    const review=(r.subject?r.subject+"\n":"")+"项目："+r.project_id+(label==="交付候选"?"\n候选："+r.result_id:"\n对象："+(r.delegation_id||r.relation_id||r.result_id));
     if(!r.identity_current){card.append(el("p","旧节点代次，仅供查看。","fleet-note fleet-warning"));}
     else if(label==="待接收委派"){
      if(r.state==="received")for(const[decision,text]of [["accept","接收为待确认任务"],["reject","拒绝委派"]])bar.append(actionButton(text,r.project_id,"decide_delegation",{delegation_id:r.delegation_id,expected_version:r.version,decision},review+"\n来源终端："+r.source_node_id+"\n任务说明："+r.description+"\n验收条件："+r.acceptance,{note:true}));
