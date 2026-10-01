@@ -45,7 +45,7 @@ test("names can change without changing node identity, epoch or task ownership",
 
 test("two nodes with the same display name and local card number have distinct global IDs", () => {
   const a = migrated(), b = migrated();
-  store.renameNode(a, "Kanata"); store.renameNode(b, "Kanata");
+  store.renameNode(a, "Alpha"); store.renameNode(b, "Alpha");
   const aid = store.add(a, { subject: "same title" });
   const bid = store.add(b, { subject: "same title" });
   assert.equal(aid, bid);

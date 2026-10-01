@@ -93,7 +93,7 @@
   ],
   "remaining": [
     "Native Claude/Codex/Zcode isolation and real subscription/desktop acceptance",
-    "Actual Windows pilot profile and dependency preparation on both kanata machines",
+    "Actual Windows pilot profile and dependency preparation on both physical machines",
     "Disk quota/capacity enforcement; 50000 entries and512MiB output are post-check bounds only",
     "Windows service lifecycle, action retention and phase integration acceptance",
     "Full current-commit CI after push"

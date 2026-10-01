@@ -62,7 +62,7 @@
     ]
   },
   "browser": {
-    "data": "three isolated fixture nodes; two share display name kanata",
+    "data": "three isolated fixture nodes; two share display name alpha",
     "verified": [
       "per-node trees and stable identities",
       "unknown count distinct from zero",

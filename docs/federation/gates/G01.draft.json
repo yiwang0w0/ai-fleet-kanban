@@ -17,7 +17,7 @@
   },
   "config_digest": null,
   "node_aliases": [],
-  "node_note": "The user selected two physical kanata PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
+  "node_note": "The user selected two physical PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
   "runtime_versions": {
     "local_test_node": "24.16.0",
     "local_test_python": "3.12.14"

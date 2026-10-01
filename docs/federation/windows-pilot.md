@@ -1,4 +1,4 @@
-# 两台 Windows kanata 的隔离试点准备
+# 两台 Windows 实体机的隔离试点准备
 
 当前这份记录是 G03 的准备材料，不是网络已启用或双机已验收的回执。两台设备均已取得 Windows 预检，Node/SQLite/Git 可用，Tailscale 稳定 ID 不同；同名主机不能代替身份核对。第二台预检由用户返回，其初始化 node-receipt.json 仍待取得。
 
@@ -23,7 +23,7 @@ B 已发送的 prepare-node.ps1 默认创建 `%LOCALAPPDATA%/AiFleetKanban/pilot
 
 本机于记录时未发现 47924/47925/47926 的 TCP 监听；这只描述当时 A 的端口状态，启动前及 B 端仍需复核。A 的 Tailscale 1.102.2、Serve 帮助与当前配置已实读，MagicDNS 已开启。B 当前在线可见不代表它的端口、Serve 或 HTTPS 配置已经核实。
 
-拟定项目为 `kanata-pilot`，不共享其他项目。第一步双向各签一份用于访问签发方的凭据，只含 `peer:handshake`、`peer:health`、`sync:pull`、`sync:ack`，先验证互信、授权投影和重连补发。后续委派、关系登记、取消、交付及结案按完整访问矩阵升级独立凭据版本；第一步同步通过不等于完整协作验收。
+拟定项目为 `physical-pilot`，不共享其他项目。第一步双向各签一份用于访问签发方的凭据，只含 `peer:handshake`、`peer:health`、`sync:pull`、`sync:ack`，先验证互信、授权投影和重连补发。后续委派、关系登记、取消、交付及结案按完整访问矩阵升级独立凭据版本；第一步同步通过不等于完整协作验收。
 
 应用身份始终绑定看板 UUID、epoch、凭据版本和项目范围，不能依赖 Tailscale 转发的姓名/IP 作为授权。凭据不写入日志、聊天或 Markdown；传给对端后要确认其目标账户文件 ACL，再使用 credential-file。源端签发时的保护不等于复制后的权限仍然正确。
 

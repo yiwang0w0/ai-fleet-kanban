@@ -70,7 +70,7 @@ Node 模块测试应在批准的 args 中明确加入 --preserve-symlinks 和 --
 
 AppContainer 仍能访问 Windows 明确授予应用容器的公共系统资源；宿主管理员、其他具有本机账户权限的进程以及管理员配置属于可信边界。本机负向测试证明受保护的目录外文件及来源数据库不可读取/改写，不能外推为每个现存宿主文件均不可读。网络测试使用前后可正常连接的本机监听端口，未访问外部服务。
 
-工作目录核对的 50,000 条目 / 512 MiB 是事后检查上限，并非磁盘配额。磁盘容量限制、真实验证配置/依赖、模型适配器 OS 隔离以及两台 kanata 实体演练仍需完成。没有改动生产 profile、accepted_rev 或真实任务，也未调用模型。
+工作目录核对的 50,000 条目 / 512 MiB 是事后检查上限，并非磁盘配额。磁盘容量限制、真实验证配置/依赖、模型适配器 OS 隔离以及两台实体机演练仍需完成。没有改动生产 profile、accepted_rev 或真实任务，也未调用模型。
 
 实现依据：[微软 AppContainer 启动与令牌边界](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)，[Node 模块路径参数](https://nodejs.org/download/release/v25.9.0/docs/api/cli.html#--preserve-symlinks-main)。行为结论以本项目 Windows 实测为准，详见 windows-appcontainer-evidence.json。
 

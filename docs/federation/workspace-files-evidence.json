@@ -121,7 +121,7 @@
   },
   "phase_gates_passed": 0,
   "phase_gates_total": 12,
-  "physical_integration": "not_run; two Tailscale kanata Windows computers are the user-selected scope",
+  "physical_integration": "not_run; two Tailscale Windows computers are the user-selected scope",
   "limitations": [
     "No real provider invocation in these fixtures; fake provider-labelled processes do not prove model usage",
     "No OS filesystem sandbox claim; providers use empty scratch cwd and mediated MCP file tools",

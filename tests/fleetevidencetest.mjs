@@ -19,7 +19,7 @@ test("same-name endpoints remain distinct, filters preserve links to visible tas
  const f=fixture(t),v=readFleetView(f.db,{query:"跨端",limit:1}),e=v.relations.items[0];
  assert.equal(v.tasks.length,1);assert.equal(e.source.task_uid,f.source.task_uid);assert.equal(e.target.task_uid,f.target);assert.notEqual(e.source.owner_node_id,e.target.owner_node_id);assert.equal(e.source.owner_name,e.target.owner_name);
  assert.equal(e.source.in_view,true);assert.equal(e.target.in_view,false);assert.equal(e.current_authorization_checked,false);
- recordSource(f.db,{node_id:f.remote,display_name:"kanata-office",sync_epoch:f.remoteEpoch});const renamed=readFleetView(f.db).relations.items[0];assert.equal(renamed.target.owner_name,"kanata-office");assert.equal(renamed.target.task_uid,f.target);
+ recordSource(f.db,{node_id:f.remote,display_name:"alpha-office",sync_epoch:f.remoteEpoch});const renamed=readFleetView(f.db).relations.items[0];assert.equal(renamed.target.owner_name,"alpha-office");assert.equal(renamed.target.task_uid,f.target);
  assert.equal(readFleetTask(f.db,f.target).subject,e.target.subject);
 });
 test("relation snapshot is stable across pages and changes on a cancellation receipt",t=>{
