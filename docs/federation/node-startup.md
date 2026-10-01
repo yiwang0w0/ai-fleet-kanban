@@ -25,7 +25,7 @@ Validate 调用 Windows Task Scheduler 的 TASK_VALIDATE_ONLY，仅验证 XML，
 
 ## 安装与启用
 
-以下是具体部署范围确认后执行的操作，不是普通预检。本开发批次没有在两台 kanata 上执行安装/启用。
+以下是具体部署范围确认后执行的操作，不是普通预检。本开发批次没有在两台实体机 上执行安装/启用。
 
 ```powershell
 $startupScript='C:/fixed-source/packaging/windows/node-startup.ps1'

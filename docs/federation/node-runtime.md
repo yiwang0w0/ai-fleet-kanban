@@ -6,7 +6,7 @@
 
 需要已初始化的本机数据库、已验收且干净的源码 checkout，以及按既有流程签发的逐对端凭据。配置固定本机 UUID/epoch；同步另固定来源 UUID/epoch，加载时和每次拉取前核对凭据绑定。凭据只通过绝对路径引用，不把令牌写进此文件或日志。
 
-以下只启用通信组件，`scheduler:null` 不领取任务或调用模型。替换所有占位符；没有同步对端时使用空数组。此示例不是任一实体 kanata 的已批准部署配置。
+以下只启用通信组件，`scheduler:null` 不领取任务或调用模型。替换所有占位符；没有同步对端时使用空数组。此示例不是任一实体节点 的已批准部署配置。
 
 ```json
 {
@@ -16,7 +16,7 @@
   "peer": {"host": "127.0.0.1", "port": 47925},
   "mcp": {"port": 48320, "board_url": null},
   "sync": [{
-    "project_id": "kanata-pilot",
+    "project_id": "physical-pilot",
     "url": "https://<已核对的对端 DNS>.ts.net:47925",
     "credential_file": "C:/board-private/from-peer.json",
     "server_node_id": "<来源 UUID>",
