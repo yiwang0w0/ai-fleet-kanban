@@ -2,7 +2,7 @@ import {boardURL} from "./context.mjs";
 import http from "node:http";
 import {localIdentity} from "../federation/peers.mjs";
 import {PeerError,keys} from "../federation/protocol.mjs";
-import {authenticatePrincipal,fail} from "./policy.mjs";
+import {authenticateCredential,fail} from "./policy.mjs";
 import {listTools,callTool} from "./tools.mjs";
 function send(res,status,data){res.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});res.end(JSON.stringify(data));}
 async function readBody(req){
@@ -26,7 +26,7 @@ export async function listenBroker(db,{host="127.0.0.1",port,boardUrl=null}){
   try{
    const authCount=req.rawHeaders.filter((_,i)=>i%2===0&&req.rawHeaders[i].toLowerCase()==="authorization").length;
    if(authCount!==1)fail("UNAUTHENTICATED","需要唯一的身份凭据",401);
-   authenticatePrincipal(db,req.headers.authorization);
+   authenticateCredential(db,req.headers.authorization);
    if(req.headers.origin)fail("FORBIDDEN","本机工具代理不接受浏览器来源",403);
    if(req.method!=="POST"||!["/local/v1/tools/list","/local/v1/tools/call"].includes(req.url))fail("NOT_FOUND","接口不存在",404);
    const body=await readBody(req);

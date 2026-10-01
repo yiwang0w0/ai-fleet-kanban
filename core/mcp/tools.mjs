@@ -14,7 +14,7 @@ import {randomUUID} from "node:crypto";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {localIdentity} from "../federation/peers.mjs";
 import {uuid,names,version} from "../federation/protocol.mjs";
-import {ROLE_TOOLS,READ_TOOLS,roleTools,isReadTool,authenticatePrincipal,availableRoles,fail} from "./policy.mjs";
+import {ROLE_TOOLS,READ_TOOLS,roleTools,isReadTool,authenticatePrincipal,authenticateCredential,requireActiveRun,availableRoles,fail} from "./policy.mjs";
 const require=createRequire(import.meta.url),store=require("../store.js");
 const text=(max=16384)=>({type:"string",maxLength:max});
 const uuidSchema={type:"string",pattern:"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"};
@@ -286,12 +286,13 @@ export function listTools(db,authorization){
 export function callTool(db,authorization,name,args,presentation={}){
  let principal;
  // The rate receipt commits even if the business operation later rolls back.
- atomic(db,()=>{principal=authenticatePrincipal(db,authorization);tickRate(db,principal);});
+ atomic(db,()=>{principal=authenticateCredential(db,authorization);tickRate(db,principal);});
  const argDigest=digest(args??null),requestId=typeof args?.request_id==="string"?args.request_id:null;
  try{return atomic(db,()=>{
-  const p=authenticatePrincipal(db,authorization),definition=TOOL_DEFINITIONS.find(t=>t.name===name);
+  const p=authenticateCredential(db,authorization),definition=TOOL_DEFINITIONS.find(t=>t.name===name);
   if(!definition)fail("UNKNOWN_TOOL","工具不存在",404);permitted(p,name);validate(args,definition.inputSchema);
   const mutation=!isReadTool(name),prior=mutation?db.prepare("SELECT * FROM broker_requests WHERE principal_id=? AND request_id=?").get(p.principal_id,args.request_id):null;
+  if(p.run?.state!=="running"&&p.run&&!(name==="report_result"&&prior?.tool_name===name&&prior.args_digest===argDigest))requireActiveRun(p);
   if(prior){
    if(prior.tool_name!==name||prior.args_digest!==argDigest)fail("REQUEST_CONFLICT","同一请求号不能对应不同操作或内容");
    db.prepare("INSERT INTO broker_audit(principal_id,tool_name,request_id,args_digest,outcome,at) VALUES(?,?,?,?,?,?)").run(p.principal_id,name,args.request_id,argDigest,"replayed",new Date().toISOString());

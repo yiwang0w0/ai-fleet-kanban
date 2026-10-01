@@ -494,3 +494,42 @@ for(const kind of ["implement","review"])test(kind+" run cannot discover or call
  assert.ok(!listTools(f.db,w.identity.auth).tools.some(t=>t.name==="get_task_evidence"));
  assert.throws(()=>callTool(f.db,w.identity.auth,"get_task_evidence",{task_uid:w.task.task_uid,section:"runs"}),{code:"FORBIDDEN",status:403});
 });
+
+
+test("H7a missing credential paths remain private in CLI diagnostics",()=>{
+ const file=path("private-account-missing")+".json";
+ const r=spawnSync(process.execPath,[join(ROOT,"cli/mcp.mjs"),"--url","http://127.0.0.1:1","--credential-file",file],{windowsHide:true,encoding:"utf8",timeout:10000});
+ assert.equal(r.status,1);assert.match(r.stderr,/BAD_CREDENTIAL/);
+ assert.equal(r.stdout,"");assert.ok(!r.stderr.includes(file));assert.ok(!r.stderr.includes("private-account"));assert.ok(!r.stderr.includes("ENOENT"));
+});
+
+test("H7b ended workers lose tools while exact lost report receipts remain retrievable over HTTP",async()=>{
+ const f=fixture(),w=worker(f),n=await network(f);
+ const send=async(name,args)=>{const r=await fetch(n.url+"/local/v1/tools/call",{method:"POST",headers:{authorization:w.identity.auth,"content-type":"application/json"},body:JSON.stringify({name,arguments:args})});return {status:r.status,body:await r.json()};};
+ assert.equal((await send("get_task",{task_uid:w.task.task_uid})).status,200);
+ const args={request_id:randomUUID(),task_uid:w.task.task_uid,run_id:w.task.run_id,outcome:"done",evidence:"H7 fixture result"};
+ const report=await send("report_result",args);assert.equal(report.status,200);
+ assert.equal((await send("get_task",{task_uid:w.task.task_uid})).body.code,"RUN_EXPIRED");
+ assert.throws(()=>listTools(f.db,w.identity.auth),{code:"RUN_EXPIRED"});
+ assert.throws(()=>authenticatePrincipal(f.db,w.identity.auth),{code:"RUN_EXPIRED"});
+ for(const [name,a] of [["heartbeat",{...args}],["report_result",{...args,request_id:randomUUID()}],["report_result",{...args,evidence:"changed"}]])assert.notEqual((await send(name,a)).status,200);
+ assert.deepEqual(await send("report_result",args),report);
+ assert.equal(store.events(f.db,{taskId:w.task.id}).filter(x=>x.kind==="report").length,1);
+ revokePrincipal(f.db,{principalId:w.identity.principal.principal_id,expectedVersion:1});
+ assert.equal((await send("report_result",args)).body.code,"UNAUTHENTICATED");
+});
+
+test("H7c credential revocation removes only registered matching files after commit and can resume cleanup",async()=>{
+ const f=fixture(),c=f.coord;
+ f.db.exec("BEGIN IMMEDIATE");revokePrincipal(f.db,{principalId:c.principal.principal_id,expectedVersion:1});assert.equal(existsSync(c.file),true);f.db.exec("ROLLBACK");
+ assert.doesNotThrow(()=>authenticatePrincipal(f.db,c.auth));assert.equal(existsSync(c.file),true);
+ revokePrincipal(f.db,{principalId:c.principal.principal_id,expectedVersion:1});assert.equal(existsSync(c.file),false);
+ const d=grant(f,"coord"),original=readFileSync(d.file,"utf8");writeFileSync(d.file,"replacement owned by caller");
+ revokePrincipal(f.db,{principalId:d.principal.principal_id,expectedVersion:1});assert.equal(readFileSync(d.file,"utf8"),"replacement owned by caller");
+ const run=()=>spawnSync(process.execPath,[join(ROOT,"cli/mcp-admin.mjs"),"cleanup-credentials","--db",f.dbPath],{windowsHide:true,encoding:"utf8",timeout:30000});
+ const refused=run();assert.equal(refused.status,0,refused.stderr);assert.ok(JSON.parse(refused.stdout).items.some(x=>x.principal_id===d.principal.principal_id&&x.status==="changed"));
+ writeFileSync(d.file,original);const cleaned=run();assert.equal(cleaned.status,0,cleaned.stderr);assert.equal(existsSync(d.file),false);
+ const output=cleaned.stdout+refused.stdout;assert.ok(!output.includes(d.file));assert.ok(!output.includes(d.credential.token));
+ const {cleanupPrincipalCredentials}=await import("../core/mcp/policy.mjs");assert.equal(cleanupPrincipalCredentials(f.db).items.length,0);
+ const active=grant(f,"coord");assert.equal(cleanupPrincipalCredentials(f.db).items.length,0);assert.equal(existsSync(active.file),true);
+});

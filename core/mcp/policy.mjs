@@ -1,7 +1,8 @@
 // Local administration of MCP role policies and per-agent capabilities.
 import {randomUUID,randomBytes,createHash,timingSafeEqual} from "node:crypto";
 import {unlinkSync} from "node:fs";
-import {isAbsolute} from "node:path";
+import {isAbsolute,resolve} from "node:path";
+import {removePrivateCredential} from "./credential-cleanup.mjs";
 import {localIdentity} from "../federation/peers.mjs";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {PeerError,keys,names,uuid,version} from "../federation/protocol.mjs";
@@ -46,6 +47,7 @@ export function migrateBroker(db){
    "INSERT OR IGNORE INTO broker_schema VALUES(1,1);",
    "CREATE TABLE IF NOT EXISTS broker_roles(role_id TEXT PRIMARY KEY,version INTEGER NOT NULL,policy_json TEXT NOT NULL,policy_digest TEXT NOT NULL,updated_at TEXT NOT NULL);",
    "CREATE TABLE IF NOT EXISTS broker_principals(principal_id TEXT PRIMARY KEY,node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,role_id TEXT NOT NULL,role_version INTEGER NOT NULL,projects_json TEXT NOT NULL,agent_instance_id TEXT NOT NULL,run_id TEXT,secret_hash TEXT NOT NULL,version INTEGER NOT NULL,status TEXT NOT NULL CHECK(status IN('active','revoked')),created_at TEXT NOT NULL);",
+   "CREATE TABLE IF NOT EXISTS broker_credential_files(principal_id TEXT PRIMARY KEY,file_path TEXT NOT NULL,sha256 TEXT NOT NULL,cleanup_status TEXT NOT NULL DEFAULT 'pending',checked_at TEXT);",
    "CREATE TABLE IF NOT EXISTS broker_auth_events(id INTEGER PRIMARY KEY,principal_id TEXT,role_id TEXT,action TEXT NOT NULL,version INTEGER NOT NULL,at TEXT NOT NULL);",
    "CREATE TABLE IF NOT EXISTS broker_task_projects(task_id INTEGER PRIMARY KEY,task_uid TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,work_kind TEXT NOT NULL,capabilities_json TEXT NOT NULL);",
    "CREATE TRIGGER IF NOT EXISTS broker_task_project_immutable BEFORE UPDATE ON broker_task_projects BEGIN SELECT RAISE(ABORT,'broker project admission is immutable'); END;",
@@ -90,7 +92,7 @@ export function putRole(db,policy,expectedVersion){
   return getRole(db,policy.role_id);
  });
 }
-function boundRun(db,principal,role,{requireLaunch=true}={}){
+function boundRun(db,principal,role,{requireLaunch=true,allowEnded=false}={}){
  if(!principal.run_id)return null;
  const r=db.prepare("SELECT * FROM task_runs WHERE run_id=?").get(principal.run_id);
  if(!r||r.agent_instance_id!==principal.agent_instance_id||r.role_id!==role.role_id||r.runtime!==role.policy.runtime)fail("RUN_MISMATCH","凭据未绑定该执行实例",403);
@@ -105,6 +107,7 @@ function boundRun(db,principal,role,{requireLaunch=true}={}){
   const dispatch=table?db.prepare("SELECT run_id,agent_instance_id,launch_at,phase FROM broker_dispatches WHERE dispatch_id=?").get(context.dispatch_id):null;
   if(!dispatch||dispatch.run_id!==r.run_id||dispatch.agent_instance_id!==principal.agent_instance_id||!dispatch.launch_at||dispatch.phase==="abandoned")fail("LAUNCH_NOT_AVAILABLE","运行尚未获得已提交的启动许可",403);
  }
+ if(!allowEnded&&r.state!=="running")fail("RUN_EXPIRED","执行实例已结束",403);
  return {...r,task:t,project_id:project};
 }
 export function issuePrincipal(db,{roleId,projects,runId=null,credentialFile}){
@@ -126,13 +129,16 @@ export function issuePrincipal(db,{roleId,projects,runId=null,credentialFile}){
   const token=principal_id+"."+randomBytes(32).toString("base64url"),now=new Date().toISOString();
   db.prepare("INSERT INTO broker_principals VALUES(?,?,?,?,?,?,?,?,?,1,'active',?)").run(principal_id,node.node_id,node.sync_epoch,roleId,role.version,JSON.stringify(projects),agent_instance_id,runId,createHash("sha256").update(token).digest("hex"),now);
   db.prepare("INSERT INTO broker_auth_events(principal_id,role_id,action,version,at) VALUES(?,?,'issue',1,?)").run(principal_id,roleId,now);
-  writePrivateJSON(credentialFile,{format:"ai-fleet-mcp-credential/v1",node_id:node.node_id,node_epoch:node.sync_epoch,principal_id,credential_version:1,token});created=true;
+  const credential={format:"ai-fleet-mcp-credential/v1",node_id:node.node_id,node_epoch:node.sync_epoch,principal_id,credential_version:1,token};
+  writePrivateJSON(credentialFile,credential);created=true;
+  const fileHash=createHash("sha256").update(JSON.stringify(credential,null,2)+"\n").digest("hex");
+  db.prepare("INSERT INTO broker_credential_files(principal_id,file_path,sha256) VALUES(?,?,?)").run(principal_id,resolve(credentialFile),fileHash);
   return {...principal,role_id:roleId,role_version:role.version,credential_version:1,node_id:node.node_id,node_epoch:node.sync_epoch};
  });}catch(e){if(created){try{unlinkSync(credentialFile);}catch{}}throw e;}
 }
 export function revokePrincipal(db,{principalId,expectedVersion}){
  uuid(principalId,"principal_id");version(expectedVersion);
- return atomic(db,()=>{
+ return credentialLifecycle(db,()=>{
   localIdentity(db);const p=db.prepare("SELECT * FROM broker_principals WHERE principal_id=?").get(principalId);
   if(!p||p.version!==expectedVersion)fail("CONFLICT","凭据版本已变化或不存在");
   if(p.version>=Number.MAX_SAFE_INTEGER)fail("VERSION_EXHAUSTED","凭据版本已达上限");
@@ -141,7 +147,8 @@ export function revokePrincipal(db,{principalId,expectedVersion}){
   return {principal_id:principalId,status:"revoked",credential_version:p.version+1};
  });
 }
-export function authenticatePrincipal(db,authorization){
+/** Credential/binding check before bounded request upload or exact receipt validation. No tool authority by itself. */
+export function authenticateCredential(db,authorization){
  const node=localIdentity(db),m=typeof authorization==="string"&&authorization.match(/^Bearer ([0-9a-f-]{36}\.[A-Za-z0-9_-]{43})$/);
  const token=m?m[1]:"",p=db.prepare("SELECT * FROM broker_principals WHERE principal_id=?").get(token.split(".")[0]);
  const valid=p?.status==="active"&&/^[0-9a-f]{64}$/.test(p.secret_hash),expected=valid?Buffer.from(p.secret_hash,"hex"):Buffer.alloc(32);
@@ -151,7 +158,36 @@ export function authenticatePrincipal(db,authorization){
  if(!role?.policy.enabled||role.version!==p.role_version)fail("POLICY_CHANGED","角色策略已更新，需重新授权",403);
  const principal={principal_id:p.principal_id,version:p.version,role,projects:JSON.parse(p.projects_json),agent_instance_id:p.agent_instance_id,run_id:p.run_id};
  if(principal.projects.some(x=>!role.policy.projects.includes(x)))fail("FORBIDDEN","凭据项目不再获准",403);
- principal.run=boundRun(db,principal,role);
+ principal.run=boundRun(db,principal,role,{allowEnded:true});
  return principal;
 }
 export {loadPrincipalCredential} from "./credential.mjs";
+
+export function requireActiveRun(principal){
+ if(principal.run&&principal.run.state!=="running")fail("RUN_EXPIRED","执行实例已结束",403);
+ return principal;
+}
+export function authenticatePrincipal(db,authorization){return requireActiveRun(authenticateCredential(db,authorization));}
+/** Local-only, bounded cleanup. Older unregistered files are never discovered by scanning. */
+export function cleanupPrincipalCredentials(db,{principalId=null,runId=null}={}){
+ if(db.isTransaction)fail("TRANSACTION_ACTIVE","凭据清理必须在数据库提交后执行",409);
+ localIdentity(db);
+ if(principalId!==null)uuid(principalId,"principal_id");if(runId!==null)uuid(runId,"run_id");
+ const rows=db.prepare("SELECT f.* FROM broker_credential_files f JOIN broker_principals p USING(principal_id) WHERE p.status='revoked' AND f.cleanup_status NOT IN ('deleted','missing') AND (? IS NULL OR p.principal_id=?) AND (? IS NULL OR p.run_id=?) ORDER BY p.created_at,p.principal_id LIMIT 100").all(principalId,principalId,runId,runId);
+ const items=[];
+ for(const row of rows){
+  const status=removePrivateCredential(row.file_path,row.sha256);
+  db.prepare("UPDATE broker_credential_files SET cleanup_status=?,checked_at=? WHERE principal_id=?").run(status,new Date().toISOString(),row.principal_id);
+  items.push({principal_id:row.principal_id,status});
+ }
+ return {format:"ai-fleet-credential-cleanup/v1",items,limit:100};
+}
+/** Revocation commits first. Nested caller-owned transactions defer file work to the explicit cleanup command. */
+export function credentialLifecycle(db,fn){
+ const result=atomic(db,fn);
+ if(!db.isTransaction){
+  // Cleanup failure cannot undo or disguise a committed revocation. The retained ledger allows retry.
+  try{cleanupPrincipalCredentials(db,result.run_id?{runId:result.run_id}:{principalId:result.principal_id});}catch{}
+ }
+ return result;
+}

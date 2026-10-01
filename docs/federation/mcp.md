@@ -108,7 +108,7 @@ request_assignment 要求当前 expected_version，且任务未开始、未归�
 
 更新角色需 --version <所见角色版本>，旧凭据随即失效。撤销使用 revoke --db <绝对路径> --principal <ID> --version <凭据版本>。已有任务登记使用 enroll --db <绝对路径> --task <数字ID> --project demo --work-kind implement --capabilities board-tools --version <当前任务版本>；父卡应先登记同项目，不能改变已有登记。
 
-implement/review 角色必须声明 claude、codex 或 zcode 以及已核实的 model/effort；review 必须 tools=read-only。执行角色的 capabilities 必须且只能选择 ["board-tools"] 或 ["workspace-files"] 一个配置，与适配器共用支持集合；空数组、组合配置、code、shell-anything 等其他值在角色登记前返回 BAD_INPUT。workspace-files 已包含该角色所需的看板工具，无需再添加 board-tools。业务技能名称不构成工具授权。执行凭据 grant 还要求 --run <实际运行ID>。该 run 必须由可信调度器写入匹配的 broker_role_version / broker_role_digest 策略上下文。该上下文由受控 dispatch prepare 原子生成；其运行凭据必须等一次性启动许可提交后才能调用 MCP 工具。实际执行器监督与适配未完成；参见 [受控调度](dispatch.md)，不要手工伪造 run。
+implement/review 角色必须声明 claude、codex 或 zcode 以及已核实的 model/effort；review 必须 tools=read-only。执行角色的 capabilities 必须且只能选择 ["board-tools"] 或 ["workspace-files"] 一个配置，与适配器共用支持集合；空数组、组合配置、code、shell-anything 等其他值在角色登记前返回 BAD_INPUT。workspace-files 已包含该角色所需的看板工具，无需再添加 board-tools。业务技能名称不构成工具授权。执行凭据 grant 还要求 --run <实际运行ID>。该 run 必须由可信调度器写入匹配的 broker_role_version / broker_role_digest 策略上下文。该上下文由受控 dispatch prepare 原子生成；其运行凭据必须等一次性启动许可提交后才能调用 MCP 工具。执行器监督与适配的实现和验收边界参见 [受控调度](dispatch.md)，不要手工伪造 run。
 
 ## MCP 协议与验证
 
@@ -145,3 +145,20 @@ stdio 实现版本协商、initialize / notifications/initialized、ping、tools
 审阅补充：输入 schema 明确检查 boolean，executable 只接受 true/false；字符串或数字不能在工具入口被宽松转换。运行身份查询或修改其他任务，与未知 task_uid 使用同一 NOT_FOUND / HTTP 404 正文，避免错误差异暴露任务存在性。角色无权使用某个工具仍返回 FORBIDDEN；该处理不承诺恒定时间响应。相关回归见 review-mcp-boundaries-evidence.json。
 
 桌面查询、按身份绑定的 Markdown 版本导出及客户端接入示例见 [桌面聊天上下文](desktop-context.md)。serve 可选 --board-url <回环 HTTP 根地址>，仅用于生成无凭据的任务链接，不启动 UI，也不扩展其权限。
+
+## 运行结束与凭据清理
+
+凭据文件不存在、不可读、不是普通文件或超过 16 KiB 时，stdio 启动只返回固定 BAD_CREDENTIAL 文案，不输出路径、系统异常或凭据内容。
+
+执行 run 结束后不能再列工具、读取或修改任务。唯一保留的是已成功 report_result 的原 request_id 与原参数的精确回执重放；它不再执行上报。节点代次、角色版本、授权状态、任务当前 run 和封存状态仍须有效。替换运行、撤销凭据或修改角色后，旧回执也不能凭旧身份取回。
+
+新签发的凭据在本机数据库登记原路径及文件 SHA-256，不保存明文 token。revoke、dispatch settle/abandon、人工记录未知运行结果先提交数据库撤销，再尝试删除登记文件。Windows 助手以独占句柄读取核对摘要，并对同一句柄设置删除；不同内容、重解析点或被占用文件不删除。文件清理失败不恢复权限，也不把已提交的业务操作报告为失败。
+
+本机管理员可重试：
+
+    node cli/mcp-admin.mjs cleanup-credentials --db C:/board-test/board.db
+    node cli/mcp-admin.mjs cleanup-credentials --db C:/board-test/board.db --principal <ID>
+
+每次最多处理 100 个未完成的撤销项，输出 principal_id 和 deleted / missing / changed / busy / unavailable，不输出路径或秘密。changed 项需由操作者检查；可以按 principal 指定其他项。外层调用者自有事务中的撤销只登记数据库变化，提交后用此命令清理；回滚不得删文件。清理崩溃后可重试，已不存在的文件记 missing。旧版未登记路径的文件不自动扫描或删除，角色变更导致失效但尚未显式撤销的凭据也不清理。此机制删除文件，不承诺存储介质安全擦除。
+
+H7 定向证据见 [凭据生命周期](mcp-lifecycle-evidence.json)，不代表实体桌面或双机验收。

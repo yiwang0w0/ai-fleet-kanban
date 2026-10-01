@@ -722,3 +722,12 @@ test("invalid idle policy is refused before the runner consumes a launch permit"
   assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);assert.equal(count(f,"broker_execution_records"),0);
  }
 });
+
+
+test("H7c settlement and abandonment clean credentials only after successful commit",()=>{
+ const f=fixture(),w=prepare(f,assign(f,card(f)));launch(f,w);
+ f.db.exec("CREATE TRIGGER h7_settle_failure BEFORE INSERT ON broker_dispatch_events WHEN NEW.kind='settled' BEGIN SELECT RAISE(ABORT,'H7 rollback'); END");
+ assert.throws(()=>finish(f,w),/H7 rollback/);assert.equal(existsSync(w.credentialFile),true);assert.doesNotThrow(()=>authenticatePrincipal(f.db,w.auth));
+ f.db.exec("DROP TRIGGER h7_settle_failure");finish(f,w);assert.equal(existsSync(w.credentialFile),false);
+ const v=prepare(f,assign(f,card(f)));abandonPrepared(f.db,{dispatchId:v.receipt.dispatch_id,reason:"H7 fixture"});assert.equal(existsSync(v.credentialFile),false);
+});

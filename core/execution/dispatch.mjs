@@ -7,7 +7,7 @@ import {realpathSync,unlinkSync} from "node:fs";
 import {atomic,canonical,digest} from "../federation/sync-store.mjs";
 import {localIdentity} from "../federation/peers.mjs";
 import {uuid,names,version} from "../federation/protocol.mjs";
-import {exact,fail,getRole,issuePrincipal,migrateBroker} from "../mcp/policy.mjs";
+import {exact,fail,getRole,issuePrincipal,migrateBroker,credentialLifecycle} from "../mcp/policy.mjs";
 import {launchReceipt,processObservation} from "./receipts.mjs";
 import {chooseRole} from "../mcp/tools.mjs";
 const require=createRequire(import.meta.url),store=require("../store.js"),cancellation=require("../cancellation_guard.js");
@@ -194,7 +194,7 @@ function revokeRunPrincipals(db,runId,action="dispatch_abandoned"){
 }
 export function abandonPrepared(db,{dispatchId,reason}){
  if(typeof reason!=="string"||!reason.trim()||reason.length>1000)fail("BAD_INPUT","需要简短放弃原因",400);
- return atomic(db,()=>{
+ return credentialLifecycle(db,()=>{
   const d=fresh(db,dispatchId);if(!["prepared","interrupted"].includes(d.phase)||d.launch_at)fail("CONFLICT","仅能直接放弃尚未消费启动许可的运行");
   const t=task(db,d.task_uid);
   if(t?.run_id===d.run_id&&t.status==="in_progress")store.report(db,{id:t.id,worker:d.worker,runId:d.run_id,outcome:"wait",evidence:"执行器未启动："+reason});
@@ -217,7 +217,7 @@ function processResult(input){
 /** Records an observed process outcome. Late results are retained but never overwrite a replacement run. */
 export function finishDispatch(db,{dispatchId,result,observation=null}){
  result=processResult(result);const resultDigest=digest(result);
- return atomic(db,()=>{
+ return credentialLifecycle(db,()=>{
   const d=fresh(db,dispatchId);
   const execution=db.prepare("SELECT * FROM broker_execution_records WHERE dispatch_id=?").get(dispatchId);
   if(execution){
@@ -272,7 +272,7 @@ export function recordUncertainResolution(db,{plan,expectedPlanDigest,attestatio
  exact(attestation,['format','node_id','node_epoch','dispatch_id','run_id','launch_digest','plan_digest','supervisor_stopped','process_tree_stopped','remote_session_stopped','no_automatic_retry','evidence_ref','attested_at'],'uncertain_execution_attestation');
  if(attestation.format!==UNCERTAIN_ATTESTATION||['node_id','node_epoch','dispatch_id','run_id','launch_digest','plan_digest'].some(k=>attestation[k]!==plan[k]))fail('ATTESTATION_MISMATCH','声明未绑定此节点、运行与已核对计划');
  if(['supervisor_stopped','process_tree_stopped','remote_session_stopped','no_automatic_retry'].some(k=>attestation[k]!==true)||typeof attestation.evidence_ref!=='string'||attestation.evidence_ref.trim().length<8||attestation.evidence_ref.length>2048||/[\x00-\x1f\x7f]/.test(attestation.evidence_ref)||!Number.isFinite(Date.parse(attestation.attested_at)))fail('STOP_ATTESTATION_REQUIRED','需要完整停止声明、证据引用与时间');
- return atomic(db,()=>{
+ return credentialLifecycle(db,()=>{
   const d=fresh(db,plan.dispatch_id),attestationDigest=digest(attestation),old=executionResolution(db,d.dispatch_id);
   if(old){if(old.plan_digest!==plan_digest||old.attestation_digest!==attestationDigest)fail('REQUEST_CONFLICT','同一运行已有不同人工恢复决定');return old;}
   const current=uncertainSnapshot(db,d.dispatch_id);if(Object.entries(current).some(([k,v])=>canonical(v)!==canonical(plan[k])))fail('PLAN_STALE','运行、任务或凭据状态已改变，需重新核对计划');
