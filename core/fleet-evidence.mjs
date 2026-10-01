@@ -1,3 +1,4 @@
+import {relationGraphsTable} from "./federation/graph-generations.mjs";
 // Read-only history projection. Stored receipts never grant current execution authority.
 import {createHash} from "node:crypto";
 import {PeerError} from "./federation/protocol.mjs";
@@ -22,7 +23,7 @@ function endpoint(tasks,uid,project,inView){
 export function fleetRelations(db,allTasks,local,{matching=null,included=null,limit=500}={}){
  let unverified=0;
  const tasks=new Map(allTasks.map(t=>[t.task_uid,t])),match=matching??new Set(tasks.keys()),visible=included??match,edges=new Map();
- const modules={delegation:schema(db,"federation_delegation_schema",1),binding:schema(db,"binding_schema",[3,4]),registration:schema(db,"relation_schema",[2,3]),cancellation:schema(db,"cancellation_schema",1)};
+ const modules={delegation:schema(db,"federation_delegation_schema",1),binding:schema(db,"binding_schema",[3,4]),registration:schema(db,"relation_schema",[2,3,4]),cancellation:schema(db,"cancellation_schema",1)};
  const admitted=(p,a,b)=>[a,b].some(uid=>match.has(uid)&&tasks.get(uid)?.project_id===p);
  const endpoints=(p,a,b)=>({source:endpoint(tasks,a,p,visible),target:endpoint(tasks,b,p,visible)});
  function offer(r,side){
@@ -52,7 +53,7 @@ export function fleetRelations(db,allTasks,local,{matching=null,included=null,li
   const d=json(r.descriptor_json,r.descriptor_digest);if(d?.project_id!==r.project_id||d?.delegation_id!==r.delegation_id){if(admitted(r.project_id,r.task_uid,null))unverified++;continue;}
   relation(r,d,{binding_state:r.state,closed:!!r.closed,identity_current:r.node_id===local.node_id&&r.node_epoch===local.sync_epoch});
  }
- if(modules.registration==="available")for(const r of db.prepare("SELECT p.relation_id,p.descriptor_json,p.descriptor_digest,p.created_at,g.project_id,e.relation_id AS confirmed,w.relation_id AS withdrawn,c.relation_id AS completed FROM relation_proposals p JOIN relation_graphs g ON g.graph_id=p.graph_id LEFT JOIN relation_edges e ON e.relation_id=p.relation_id LEFT JOIN relation_withdrawals w ON w.relation_id=p.relation_id LEFT JOIN relation_completions c ON c.relation_id=p.relation_id ORDER BY p.created_at,p.relation_id").iterate()){
+ if(modules.registration==="available")for(const r of db.prepare("SELECT p.relation_id,p.descriptor_json,p.descriptor_digest,p.created_at,g.project_id,e.relation_id AS confirmed,w.relation_id AS withdrawn,c.relation_id AS completed FROM relation_proposals p JOIN "+relationGraphsTable(db)+" g ON g.graph_id=p.graph_id LEFT JOIN relation_edges e ON e.relation_id=p.relation_id LEFT JOIN relation_withdrawals w ON w.relation_id=p.relation_id LEFT JOIN relation_completions c ON c.relation_id=p.relation_id ORDER BY p.created_at,p.relation_id").iterate()){
   const d=json(r.descriptor_json,r.descriptor_digest);if(d?.project_id!==r.project_id)continue;
   const cancelled=exists(db,"relation_cancellations")&&db.prepare("SELECT 1 FROM relation_cancellations WHERE relation_id=?").get(r.relation_id);
   relation(r,d,{registration_state:cancelled?"cancelled":r.completed?"completed":r.withdrawn?"withdrawn":r.confirmed?"confirmed":"proposed"});

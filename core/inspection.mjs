@@ -1,3 +1,4 @@
+import {topologyBindingsTable} from "./federation/topology-generations.mjs";
 // Local operational inventory. No migration, network I/O or execution-state transitions.
 import {createRequire} from 'node:module';
 import {localIdentity} from './federation/peers.mjs';
@@ -75,7 +76,7 @@ const scope=column=>'(? IS NULL OR '+column+'=? OR '+column+' IS NULL)';
 export function federationStuck(db,input){
  return inspect(db,'federation-stuck',input,({modules,scan,add})=>{
   modules.binding=moduleState(db,'binding_schema',[3,4],['delegation_bindings','binding_attempts','binding_source_commits','federation_peers','federation_retired_epochs'],['delegation_bindings','binding_attempts','binding_source_commits']);
-  modules.topology=moduleState(db,'topology_schema',[1],['topology_bindings','topology_operations','topology_attempts']);
+  modules.topology=moduleState(db,'topology_schema',[1,2],['topology_bindings','topology_operations','topology_attempts']);
   modules.completion=moduleState(db,'completion_schema',[1],['completion_plans','completion_ready','completion_registrar_attempts','completion_retirements','completion_settlements']);
   modules.cancellation=moduleState(db,'cancellation_schema',[1],['delegation_cancellations','cancellation_members']);
   modules.delegation=moduleState(db,'federation_delegation_schema',[1],['delegation_incoming']);
@@ -86,7 +87,7 @@ export function federationStuck(db,input){
    }
   }
   if(modules.topology==='available'){
-   for(const r of scan("SELECT a.request_id record_id,a.operation_id related_id,a.state,a.created_at,o.project_id,b.owner_node_id node_id,o.owner_epoch node_epoch FROM topology_attempts a LEFT JOIN topology_operations o USING(operation_id) LEFT JOIN topology_bindings b USING(project_id) WHERE a.state='pending' AND "+scope('o.project_id')))
+   for(const r of scan("SELECT a.request_id record_id,a.operation_id related_id,a.state,a.created_at,o.project_id,b.owner_node_id node_id,o.owner_epoch node_epoch FROM topology_attempts a LEFT JOIN topology_operations o USING(operation_id) LEFT JOIN "+topologyBindingsTable(db)+" b USING(project_id) WHERE a.state='pending' AND "+scope('o.project_id')))
     add('topology_attempt',r,'TOPOLOGY_RECEIPT_PENDING','resume_topology_submit');
   }
   if(modules.completion==='available'){

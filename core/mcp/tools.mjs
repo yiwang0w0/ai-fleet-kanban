@@ -1,3 +1,4 @@
+import {topologyBindingsTable} from "../federation/topology-generations.mjs";
 import {migrateCancellationClosure,cancellationClosureState,settleCancellation} from "../federation/cancellation-closure.mjs";
 import {evidenceSections} from "../fleet-evidence.mjs";
 import {boardOverview,taskList,taskContext,taskEvidence} from "./context.mjs";
@@ -106,7 +107,7 @@ function taskOut(db,t,project){
  const parent=t.parent_id==null?null:db.prepare("SELECT task_uid FROM broker_task_projects WHERE task_id=? AND project_id=?").get(t.parent_id,project)?.task_uid??null;
  let topology=null;
  if(db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()){
-  const b=db.prepare("SELECT b.phase,b.revision,b.owner_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current,EXISTS(SELECT 1 FROM topology_vertices v WHERE v.task_id=? AND v.task_uid=?) registered FROM topology_bindings b WHERE b.project_id=?").get(t.id,t.task_uid,project);
+  const b=db.prepare("SELECT b.phase,b.revision,b.owner_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current,EXISTS(SELECT 1 FROM topology_vertices v WHERE v.task_id=? AND v.task_uid=?) registered FROM "+topologyBindingsTable(db)+" b WHERE b.project_id=?").get(t.id,t.task_uid,project);
   if(b){const pending=db.prepare("SELECT o.operation_id,json_extract(v.value,\'$.parent_uid\') desired_parent_uid FROM topology_operations o,json_each(o.desired_json,\'$.vertices\') v WHERE o.project_id=? AND o.state=\'prepared\' AND json_extract(v.value,\'$.task_uid\')=?").get(project,t.task_uid);topology={...b,identity_current:!!b.identity_current,registered:!!b.registered,pending:pending?{...pending}:null};}
  }
  return {...out,project_id:project,parent_uid:parent,released:Boolean(t.released),read_only:false,...(topology?{topology}:{})};
@@ -124,7 +125,7 @@ function newTask(db,p,args,split){
  if(open>=p.role.policy.limits.max_open_tasks)fail("BUDGET_EXHAUSTED","项目未完成任务数已达到该角色上限");
  if(split&&store.placeInChain(db,{kind:"task",parentId:parent.id,released:0,description:args.description}).uplifted)fail("CHAIN_LIMIT","当前任务树规则不允许该深度；没有悄悄改挂任务");
  if(parent&&db.prepare("SELECT 1 FROM tasks WHERE parent_id=? AND lower(replace(replace(subject, ' ', ''), '　', ''))=lower(replace(replace(?, ' ', ''), '　', '')) AND archived_at IS NULL").get(parent.id,args.subject.trim()))fail("CONFLICT","该父任务下已经存在同名子任务");
- const managed=split&&db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()&&db.prepare("SELECT 1 FROM topology_bindings WHERE project_id=?").get(args.project_id);
+ const managed=split&&db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()&&db.prepare("SELECT 1 FROM "+topologyBindingsTable(db)+" WHERE project_id=?").get(args.project_id);
  const id=store.add(db,{subject:args.subject,description:args.description,acceptance:args.acceptance,
   kind:split?"task":args.kind,parentId:managed?null:parent?.id??null,treeMode:managed?parent.tree_mode:split?undefined:"hierarchical",released:0,route:"mcp",maxAttempts:p.role.policy.limits.max_task_attempts,
   actor:"mcp:"+p.principal_id,...(p.run&&!managed?{parentRunId:p.run_id,parentWorker:p.run.worker}:{})});
@@ -226,7 +227,7 @@ function execute(db,p,name,args,presentation){
  }
  case "get_sync_status":return {
   bindings:db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_bindings'").get()?db.prepare("SELECT relation_id,delegation_id,project_id,side,state,task_uid FROM delegation_bindings WHERE project_id IN("+marks(p)+") ORDER BY rowid DESC LIMIT 100").all(...p.projects).map(b=>({...b,state:db.prepare("SELECT 1 FROM sqlite_master WHERE name='binding_completions'").get()&&db.prepare("SELECT 1 FROM binding_completions WHERE relation_id=?").get(b.relation_id)?"completed":b.state})):[],
-  topologies:db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()?db.prepare("SELECT b.project_id,b.graph_id,b.graph_epoch,b.registrar_node_id,b.registrar_epoch,b.revision,b.phase,b.owner_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current,o.operation_id FROM topology_bindings b LEFT JOIN topology_operations o ON o.project_id=b.project_id AND o.state=\'prepared\' WHERE b.project_id IN("+marks(p)+") ORDER BY b.project_id").all(...p.projects):[],
+  topologies:db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'topology_bindings\'").get()?db.prepare("SELECT b.project_id,b.graph_id,b.graph_epoch,b.registrar_node_id,b.registrar_epoch,b.revision,b.phase,b.owner_epoch=(SELECT sync_epoch FROM board_node WHERE singleton=1) identity_current,o.operation_id FROM "+topologyBindingsTable(db)+" b LEFT JOIN topology_operations o ON o.project_id=b.project_id AND o.state=\'prepared\' WHERE b.project_id IN("+marks(p)+") ORDER BY b.project_id").all(...p.projects):[],
   dispatches:db.prepare("SELECT 1 FROM sqlite_master WHERE name='broker_dispatches'").get()?db.prepare("SELECT d.dispatch_id,d.task_uid,d.run_id,d.role_id,d.execution_mode,d.phase,d.reason,d.launch_at,d.finished_at FROM broker_dispatches d JOIN broker_assignments a ON d.assignment_id=a.assignment_id WHERE a.project_id IN("+marks(p)+") ORDER BY d.rowid DESC LIMIT 100").all(...p.projects):[],
   cursors:db.prepare("SELECT * FROM federation_cursors WHERE project_id IN("+marks(p)+")").all(...p.projects),
   recovery:db.prepare("SELECT * FROM federation_epoch_projects WHERE project_id IN("+marks(p)+")").all(...p.projects),

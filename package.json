@@ -89,6 +89,8 @@
     "test:fleet-health": "node tests/fleethealthtest.mjs",
     "test:conflicts": "node tests/conflicttest.mjs",
     "test:peer-endpoints": "node --test tests/peer-endpointtest.mjs",
-    "test:runtime-lock": "node --test tests/runtimelocktest.mjs"
+    "test:runtime-lock": "node --test tests/runtimelocktest.mjs",
+    "graph:recovery": "node cli/graph-recovery.mjs",
+    "test:graph-recovery": "node --test tests/graphrecoverytest.mjs"
   }
 }

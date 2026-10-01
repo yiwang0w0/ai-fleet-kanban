@@ -52,7 +52,7 @@ function restore(a,backup,retiredEpoch=a.identity.sync_epoch){
  const db=new DatabaseSync(dbPath);handles.push(db);migrateSync(db);
  return {dir,dbPath,db,evidence:join(dir,"evidence"),identity:localIdentity(db),receipt};
 }
-async function pair({cards=1,multi=false,newProjects,initialSnapshot=false}={}){
+async function pair({cards=1,multi=false,newProjects,initialSnapshot=false,freshConnections=false}={}){
  const a=node(),b=node(),projects=multi?["demo","other"]:["demo"],old=credential(a,b,projects);
  const ids=Array.from({length:cards},()=>task(a));
  const other=multi?task(a,"other"):null;
@@ -73,6 +73,8 @@ async function pair({cards=1,multi=false,newProjects,initialSnapshot=false}={}){
  const recovered=restore(a,backup),fresh=credential(recovered,b,newProjects??projects,2);
  for(const p of newProjects??projects)flush(recovered,fresh.peer,p);
  const server=await listenPeerServer(recovered.db,{port:0});servers.push(server);
+ // Restart at the same authenticated origin; do not reuse sockets owned by the retired fixture.
+ if(freshConnections)server.prependListener("request",(_req,res)=>res.setHeader("Connection","close"));
  const url="http://127.0.0.1:"+server.address().port;
  const options={url,credentialFile:fresh.file,expectedEpoch:a.identity.sync_epoch};
  return {a,b,old,ids,other,missing,late,backup,recovered,fresh,server,url,options,
@@ -215,7 +217,7 @@ test("recovery cannot move a previously observed task into another project",asyn
 });
 
 test("another recovery supersedes unfinished project staging without losing the old visible results",async()=>{
- const f=await pair({cards:30,multi:true});await accept(f);
+ const f=await pair({cards:30,multi:true,freshConnections:true});await accept(f);
  assert.equal((await sync(f,{maxBatches:1})).state,"pending");const stale=manifest(f),staleSource={...f.source};
  const backup=createBackup({dbPath:f.recovered.dbPath,evidenceDir:f.recovered.evidence,destination:path("second-backup")});
  f.server.closeAllConnections();await new Promise(r=>f.server.close(r));

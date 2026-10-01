@@ -1,3 +1,4 @@
+import {migrateGraphGenerations,relationGraphsTable,currentRelationGraphs,assertGraphCurrent,advanceGraphVersion,graphDescendsFrom} from "./graph-generations.mjs";
 import {normalizeCancellationClosure} from "./cancellation-contract.mjs";
 import {normalizeCompletion} from "./completion-contract.mjs";
 // Project-scoped, serialized relationship registry. Local topology enforcement is a separate integration.
@@ -13,7 +14,7 @@ const project=x=>names([x],"project_id",null,1)[0];
 function unit(db,fn){if(!db.isTransaction)return transaction(db,fn);db.exec("SAVEPOINT relations_unit");try{const r=fn();db.exec("RELEASE relations_unit");return r;}catch(e){db.exec("ROLLBACK TO relations_unit; RELEASE relations_unit");throw e;}}
 export function migrateRelations(db){return unit(db,()=>{
  localIdentity(db);db.exec("CREATE TABLE IF NOT EXISTS relation_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL); INSERT OR IGNORE INTO relation_schema VALUES(1,1)");
- if(![1,2,3].includes(db.prepare("SELECT version FROM relation_schema WHERE singleton=1").get().version))fail("SCHEMA_INCOMPATIBLE","关系登记存储格式不兼容");
+ if(![1,2,3,4].includes(db.prepare("SELECT version FROM relation_schema WHERE singleton=1").get().version))fail("SCHEMA_INCOMPATIBLE","关系登记存储格式不兼容");
  db.exec([
   "CREATE TABLE IF NOT EXISTS relation_graphs(project_id TEXT PRIMARY KEY,graph_id TEXT NOT NULL UNIQUE,graph_epoch TEXT NOT NULL,registrar_node_id TEXT NOT NULL,registrar_epoch TEXT NOT NULL,version INTEGER NOT NULL CHECK(version BETWEEN 1 AND 9007199254740991),created_at TEXT NOT NULL);",
   "CREATE TABLE IF NOT EXISTS relation_members(graph_id TEXT NOT NULL,node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,PRIMARY KEY(graph_id,node_id));",
@@ -43,12 +44,12 @@ export function migrateRelations(db){return unit(db,()=>{
  for(const table of ["relation_graphs","relation_members","relation_vertex_locations","relation_topologies","relation_proposals","relation_approvals","relation_edges","relation_withdrawals","relation_requests","relation_events","relation_completion_proposals","relation_completion_votes","relation_completions","relation_cancellation_proposals","relation_cancellation_votes","relation_cancellations"]){
   db.exec("CREATE TRIGGER IF NOT EXISTS "+table+"_retained BEFORE DELETE ON "+table+" BEGIN SELECT RAISE(ABORT,'relation retention is not enabled'); END");
  }
- db.exec("UPDATE relation_schema SET version=3 WHERE singleton=1 AND version<3");
+ migrateGraphGenerations(db);db.exec("UPDATE relation_schema SET version=4 WHERE singleton=1 AND version<4");
 });}
 function graph(db,{project_id,graph_id,graph_epoch}){
  project(project_id);uuid(graph_id,"graph_id");uuid(graph_epoch,"graph_epoch");const node=localIdentity(db);
- const g=db.prepare("SELECT * FROM relation_graphs WHERE project_id=? AND graph_id=? AND graph_epoch=?").get(project_id,graph_id,graph_epoch);
- if(!g)fail("GRAPH_MISMATCH","项目关系图身份不匹配");
+ const g=db.prepare("SELECT * FROM "+relationGraphsTable(db)+" WHERE project_id=? AND graph_id=? AND graph_epoch=?").get(project_id,graph_id,graph_epoch);
+ if(!g)fail("GRAPH_MISMATCH","项目关系图身份不匹配");assertGraphCurrent(db,g);
  if(g.registrar_node_id!==node.node_id||g.registrar_epoch!==node.sync_epoch)fail("GRAPH_RECOVERY_REQUIRED","关系登记节点已恢复换代，旧确认必须先核对");return g;
 }
 function authorize(db,g,peer,scope){
@@ -123,12 +124,12 @@ export function publishTopology(db,peer,args){
   return request(db,g,peer,args.request_id,"publish",{...args,snapshot:s},()=>{
    seenVersion(g,args.expected_version);const previous=db.prepare("SELECT * FROM relation_topologies WHERE graph_id=? AND node_id=?").get(g.graph_id,peer.peer_node_id);
    if(s.revision!==(previous?.revision??0)+1)fail("TOPOLOGY_VERSION_CONFLICT","本地图修订须严格递增一版");
-   for(const v of s.vertices){const loc=db.prepare("SELECT * FROM relation_vertex_locations WHERE task_uid=?").get(v.task_uid);if(loc&&(loc.graph_id!==g.graph_id||loc.node_id!==s.owner_node_id))fail("OWNER_MISMATCH","任务已绑定其他项目或终端");}
+   for(const v of s.vertices){const loc=db.prepare("SELECT * FROM relation_vertex_locations WHERE task_uid=?").get(v.task_uid);if(loc&&(!graphDescendsFrom(db,loc.graph_id,g.graph_id)||loc.node_id!==s.owner_node_id))fail("OWNER_MISMATCH","任务已绑定其他项目或终端");}
    const proof=validateCombinedGraph(snapshots(db,g,s),edges(db,g));
    db.prepare("INSERT INTO relation_topologies VALUES(?,?,?,?,?,?,?) ON CONFLICT(graph_id,node_id) DO UPDATE SET revision=excluded.revision,snapshot_digest=excluded.snapshot_digest,snapshot_json=excluded.snapshot_json,updated_at=excluded.updated_at")
     .run(g.graph_id,s.owner_node_id,s.owner_epoch,s.revision,digest(s),canonical(s),at());
    for(const v of s.vertices)db.prepare("INSERT OR IGNORE INTO relation_vertex_locations VALUES(?,?,?)").run(v.task_uid,g.graph_id,s.owner_node_id);
-   db.prepare("UPDATE relation_graphs SET version=version+1 WHERE graph_id=?").run(g.graph_id);g.version++;
+   advanceGraphVersion(db,g);
    const receipt={schema_version:1,kind:"topology_registered",project_id:g.project_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,registrar_node_id:g.registrar_node_id,registrar_epoch:g.registrar_epoch,owner_node_id:s.owner_node_id,owner_epoch:s.owner_epoch,revision:s.revision,snapshot_digest:digest(s),...proof};
    event(db,g,"topology_registered",peer.peer_node_id,{snapshot_digest:digest(s),revision:s.revision,...proof});return receipt;
   });
@@ -186,7 +187,7 @@ export function approveRelation(db,peer,args){
    if(approvals.length<2)return {schema_version:1,kind:"relation_pending",relation_id:d.relation_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,descriptor_digest:digest(d),approved_by:approvals.map(a=>a.node_id),confirmed:false,dispatch_ready:false};
    if(approvals.some(a=>a.descriptor_digest!==digest(d)||![d.source_node_id,d.target_node_id].includes(a.node_id)||a.node_epoch!==(a.node_id===d.source_node_id?d.source_epoch:d.target_epoch)))fail("APPROVAL_MISMATCH","双方确认记录不匹配");
    const proof=validateCombinedGraph(snapshots(db,g),[...edges(db,g),{from_uid:d.source_task_uid,to_uid:d.target_task_uid}]);
-   db.prepare("UPDATE relation_graphs SET version=version+1 WHERE graph_id=?").run(g.graph_id);g.version++;
+   advanceGraphVersion(db,g);
    const receipt={schema_version:1,kind:"relation_confirmed",project_id:g.project_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,registrar_node_id:g.registrar_node_id,registrar_epoch:g.registrar_epoch,relation_id:d.relation_id,descriptor_digest:digest(d),relation:d,approved_by:approvals.map(a=>({node_id:a.node_id,node_epoch:a.node_epoch,credential_version:a.credential_version})),...proof,confirmed:true,dispatch_ready:false};
    db.prepare("INSERT INTO relation_edges VALUES(?,?,?,?,?,?,?)").run(d.relation_id,d.delegation_id,g.graph_id,d.source_task_uid,d.target_task_uid,g.version,canonical(receipt));
    event(db,g,"relation_confirmed",peer.peer_node_id,{relation_id:d.relation_id,descriptor_digest:digest(d),...proof});return receipt;
@@ -241,7 +242,7 @@ export function previewTopology(db,{projectId,graphId,graphEpoch,revision}){
  });
  const s=normalizeTopology({schema_version:1,project_id:projectId,graph_id:graphId,graph_epoch:graphEpoch,owner_node_id:n.node_id,owner_epoch:n.sync_epoch,revision,vertices});validateCombinedGraph([s]);return {snapshot:s,snapshot_digest:digest(s),frozen:false,dispatch_ready:false};
 }
-export function listRelationGraphs(db){const n=localIdentity(db);return db.prepare("SELECT * FROM relation_graphs ORDER BY project_id").all().map(g=>({...g,identity_current:g.registrar_node_id===n.node_id&&g.registrar_epoch===n.sync_epoch}));}
+export function listRelationGraphs(db){const n=localIdentity(db);return currentRelationGraphs(db).map(g=>({...g,identity_current:g.registrar_node_id===n.node_id&&g.registrar_epoch===n.sync_epoch}));}
 
 /** Both authenticated endpoints approve the same source decision and target readiness.
  * Historical edges remain; the active graph excludes only durable completion receipts. */
@@ -258,7 +259,7 @@ export function completeRelation(db,peer,args){
    db.prepare("INSERT OR IGNORE INTO relation_completion_votes VALUES(?,?,?,?,?,?)").run(d.relation_id,peer.peer_node_id,peer.peer_epoch,peer.peer_node_id===g.registrar_node_id?0:peer.credential_version,digest(c),at());
    const approvals=validApprovals(db,g,d,{completion:c});if(approvals.length<2)return {schema_version:1,kind:"relation_completion_pending",relation_id:d.relation_id,completion_digest:digest(c),graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,approved_by:approvals.map(a=>a.node_id),completed:false,dispatch_ready:false};
    const proof=validateCombinedGraph(snapshots(db,g),edges(db,g,d.relation_id));
-   db.prepare("UPDATE relation_graphs SET version=version+1 WHERE graph_id=?").run(g.graph_id);g.version++;
+   advanceGraphVersion(db,g);
    const receipt={schema_version:1,kind:"relation_completed",project_id:g.project_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,registrar_node_id:g.registrar_node_id,registrar_epoch:g.registrar_epoch,relation_id:d.relation_id,descriptor_digest:digest(d),completion:c,completion_digest:digest(c),approved_by:approvals.map(a=>({node_id:a.node_id,node_epoch:a.node_epoch,credential_version:a.credential_version})),...proof,completed:true,dispatch_ready:false};
    db.prepare("INSERT INTO relation_completions VALUES(?,?,?,?,?,?)").run(d.relation_id,g.graph_id,c.plan.completion_id,digest(c),canonical(receipt),at());event(db,g,"relation_completed",peer.peer_node_id,{relation_id:d.relation_id,completion_digest:digest(c),...proof});return receipt;
   });
@@ -278,7 +279,7 @@ export function cancelRelation(db,peer,args){
    if(!prior)db.prepare("INSERT INTO relation_cancellation_proposals VALUES(?,?,?,?,?)").run(d.relation_id,c.request.cancel_id,canonical(c),digest(c),at());
    db.prepare("INSERT OR IGNORE INTO relation_cancellation_votes VALUES(?,?,?,?,?,?)").run(d.relation_id,peer.peer_node_id,peer.peer_epoch,peer.peer_node_id===g.registrar_node_id?0:peer.credential_version,digest(c),at());
    const approvals=validApprovals(db,g,d,{cancellation:c});if(approvals.length<2)return {schema_version:1,kind:"relation_cancellation_pending",relation_id:d.relation_id,cancellation_digest:digest(c),graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,approved_by:approvals.map(a=>a.node_id),cancelled:false,dispatch_ready:false};
-   const proof=validateCombinedGraph(snapshots(db,g),edges(db,g,d.relation_id));db.prepare("UPDATE relation_graphs SET version=version+1 WHERE graph_id=?").run(g.graph_id);g.version++;
+   const proof=validateCombinedGraph(snapshots(db,g),edges(db,g,d.relation_id));advanceGraphVersion(db,g);
    const receipt={schema_version:1,kind:"relation_cancelled",project_id:g.project_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,registrar_node_id:g.registrar_node_id,registrar_epoch:g.registrar_epoch,relation_id:d.relation_id,descriptor_digest:digest(d),cancellation:c,cancellation_digest:digest(c),approved_by:approvals.map(a=>({node_id:a.node_id,node_epoch:a.node_epoch,credential_version:a.credential_version})),...proof,cancelled:true,dispatch_ready:false};
    db.prepare("INSERT INTO relation_cancellations VALUES(?,?,?,?,?,?)").run(d.relation_id,g.graph_id,c.request.cancel_id,digest(c),canonical(receipt),at());event(db,g,"relation_cancelled",peer.peer_node_id,{relation_id:d.relation_id,cancellation_digest:digest(c),...proof});return receipt;
   });

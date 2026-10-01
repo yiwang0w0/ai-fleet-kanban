@@ -99,3 +99,8 @@ H5b 增加 source-epoch-lineage-v1 能力及受 sync:pull 保护的只读恢复�
 ## 实例锁恢复记录
 
 新增独立 runtime_lock_recovery_schema=1 和不可变 runtime_lock_recoveries；只读 prepare 不迁移，明确 apply 才安装并记录。既有任务、生命周期版本和配额不改；新旧代次不可重放恢复决定。见 [实例锁恢复](runtime-lock-recovery.md)。
+
+
+## 图与拓扑后继代次
+
+第八十九批关系 schema 3→4、拓扑 1→2，追加代次及恢复回执，原图/绑定不覆盖。升级前停止旧写入进程、备份数据库；旧版本不能继续写入新结构，回滚须恢复升级前备份。只读准备和全员停工声明、端点重新登记及任务放行顺序见 [图恢复](graph-recovery.md)。存在活动合同或未知拓扑请求仍阻断，不能用后继代次丢弃在途工作。

@@ -1,3 +1,4 @@
+import {migrateTopologyGenerations,topologyBindingsTable,writeTopologyBinding} from "./topology-generations.mjs";
 import {createRequire} from "node:module";
 import {randomUUID} from "node:crypto";
 import {PeerError,keys,uuid,names,version} from "./protocol.mjs";
@@ -18,7 +19,7 @@ function reservedSibling(column){return "EXISTS(SELECT 1 FROM topology_operation
 export function migrateTopology(db){return unit(db,()=>{
  localIdentity(db);migrateBroker(db);
  db.exec("CREATE TABLE IF NOT EXISTS topology_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL); INSERT OR IGNORE INTO topology_schema VALUES(1,1)");
- if(db.prepare("SELECT version FROM topology_schema").get().version!==1)fail("SCHEMA_INCOMPATIBLE","本地关系提交存储格式不兼容");
+ if(![1,2].includes(db.prepare("SELECT version FROM topology_schema").get().version))fail("SCHEMA_INCOMPATIBLE","本地关系提交存储格式不兼容");
  db.exec([
  "CREATE TABLE IF NOT EXISTS topology_bindings(project_id TEXT PRIMARY KEY,graph_id TEXT NOT NULL,graph_epoch TEXT NOT NULL,registrar_node_id TEXT NOT NULL,registrar_epoch TEXT NOT NULL,owner_node_id TEXT NOT NULL,owner_epoch TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,phase TEXT NOT NULL CHECK(phase IN('unregistered','ready','pending')),snapshot_json TEXT,receipt_json TEXT,created_at TEXT NOT NULL);",
  "CREATE TABLE IF NOT EXISTS topology_operations(operation_id TEXT PRIMARY KEY,project_id TEXT NOT NULL,owner_epoch TEXT NOT NULL,base_revision INTEGER NOT NULL,args_digest TEXT NOT NULL,before_json TEXT NOT NULL,intersection_json TEXT NOT NULL,desired_json TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('prepared','applied','cancelled')),receipt_json TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);",
@@ -39,15 +40,18 @@ export function migrateTopology(db){return unit(db,()=>{
  "CREATE TRIGGER IF NOT EXISTS topology_task_id BEFORE UPDATE OF id ON tasks WHEN NEW.id<>OLD.id AND "+owns("OLD.id")+" BEGIN SELECT RAISE(ABORT,\'topology task identity is immutable\'); END;",
  "CREATE TRIGGER IF NOT EXISTS topology_task_retained BEFORE DELETE ON tasks WHEN "+owns("OLD.id")+" BEGIN SELECT RAISE(ABORT,'topology task must be retained'); END;",
  "CREATE TRIGGER IF NOT EXISTS topology_admission_delete BEFORE DELETE ON broker_task_projects WHEN EXISTS(SELECT 1 FROM topology_bindings WHERE project_id=OLD.project_id) BEGIN SELECT RAISE(ABORT,'topology project admission must be retained'); END;",
- "CREATE TRIGGER IF NOT EXISTS topology_admission_insert BEFORE INSERT ON broker_task_projects WHEN EXISTS(SELECT 1 FROM topology_bindings WHERE project_id=NEW.project_id) AND (EXISTS(SELECT 1 FROM topology_bindings WHERE project_id=NEW.project_id AND (phase='pending' OR owner_epoch<>(SELECT sync_epoch FROM board_node WHERE singleton=1))) OR NOT EXISTS(SELECT 1 FROM tasks t WHERE t.id=NEW.task_id AND t.task_uid=NEW.task_uid AND t.parent_id IS NULL AND t.blocked_by='[]' AND t.status<>'in_progress' AND t.owner_node_id=(SELECT node_id FROM board_node WHERE singleton=1)) OR EXISTS(SELECT 1 FROM tasks t WHERE t.parent_id=NEW.task_id OR EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(t.blocked_by) THEN t.blocked_by ELSE '[]' END) d WHERE d.value=NEW.task_id))) BEGIN SELECT RAISE(ABORT,'TOPOLOGY_MANAGED: only isolated idle tasks can enter a ready project'); END;",
- "CREATE TRIGGER IF NOT EXISTS topology_claim_hold BEFORE UPDATE OF status ON tasks WHEN NEW.status='in_progress' AND OLD.status<>'in_progress' AND EXISTS(SELECT 1 FROM broker_task_projects p JOIN topology_bindings b USING(project_id) WHERE p.task_id=NEW.id AND (b.phase<>'ready' OR b.owner_epoch<>(SELECT sync_epoch FROM board_node WHERE singleton=1) OR NOT EXISTS(SELECT 1 FROM topology_vertices v WHERE v.task_id=NEW.id AND v.task_uid=NEW.task_uid))) BEGIN SELECT RAISE(ABORT,'TOPOLOGY_PENDING: local structure is not committed'); END;",
+ "DROP TRIGGER IF EXISTS topology_admission_insert;",
+ "CREATE TRIGGER IF NOT EXISTS topology_admission_insert BEFORE INSERT ON broker_task_projects WHEN EXISTS(SELECT 1 FROM topology_current_bindings WHERE project_id=NEW.project_id) AND (EXISTS(SELECT 1 FROM topology_current_bindings WHERE project_id=NEW.project_id AND (phase='pending' OR owner_epoch<>(SELECT sync_epoch FROM board_node WHERE singleton=1))) OR NOT EXISTS(SELECT 1 FROM tasks t WHERE t.id=NEW.task_id AND t.task_uid=NEW.task_uid AND t.parent_id IS NULL AND t.blocked_by='[]' AND t.status<>'in_progress' AND t.owner_node_id=(SELECT node_id FROM board_node WHERE singleton=1)) OR EXISTS(SELECT 1 FROM tasks t WHERE t.parent_id=NEW.task_id OR EXISTS(SELECT 1 FROM json_each(CASE WHEN json_valid(t.blocked_by) THEN t.blocked_by ELSE '[]' END) d WHERE d.value=NEW.task_id))) BEGIN SELECT RAISE(ABORT,'TOPOLOGY_MANAGED: only isolated idle tasks can enter a ready project'); END;",
+ "DROP TRIGGER IF EXISTS topology_claim_hold;",
+ "CREATE TRIGGER IF NOT EXISTS topology_claim_hold BEFORE UPDATE OF status ON tasks WHEN NEW.status='in_progress' AND OLD.status<>'in_progress' AND EXISTS(SELECT 1 FROM broker_task_projects p JOIN topology_current_bindings b USING(project_id) WHERE p.task_id=NEW.id AND (b.phase<>'ready' OR b.owner_epoch<>(SELECT sync_epoch FROM board_node WHERE singleton=1) OR NOT EXISTS(SELECT 1 FROM topology_vertices v WHERE v.task_id=NEW.id AND v.task_uid=NEW.task_uid))) BEGIN SELECT RAISE(ABORT,'TOPOLOGY_PENDING: local structure is not committed'); END;",
  "CREATE TRIGGER IF NOT EXISTS topology_subject_reservation BEFORE UPDATE OF subject,archived_at ON tasks WHEN NEW.archived_at IS NULL AND (NEW.subject IS NOT OLD.subject OR NEW.archived_at IS NOT OLD.archived_at) AND ("+reservedSibling("desired_json")+" OR "+reservedSibling("before_json")+") BEGIN SELECT RAISE(ABORT,'TOPOLOGY_PENDING: title conflicts with reserved sibling placement'); END;",
  "CREATE TRIGGER IF NOT EXISTS topology_transition_hold BEFORE UPDATE OF status,archived_at ON tasks WHEN EXISTS(SELECT 1 FROM topology_holds h JOIN topology_operations o USING(operation_id) WHERE h.task_id=NEW.id AND o.state='prepared' AND (NEW.archived_at IS NOT OLD.archived_at OR h.block_finish=1 AND NEW.status='done' AND OLD.status<>'done')) BEGIN SELECT RAISE(ABORT,'TOPOLOGY_PENDING: task participates in a structure transition'); END;"
  ].join("\n"));
  for(const t of ["topology_vertices","topology_holds","topology_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_immutable BEFORE UPDATE ON "+t+" BEGIN SELECT RAISE(ABORT,'topology history is immutable'); END");
+ migrateTopologyGenerations(db);db.exec("UPDATE topology_schema SET version=2 WHERE singleton=1");
  for(const t of ["topology_bindings","topology_operations","topology_attempts","topology_vertices","topology_holds","topology_events"])db.exec("CREATE TRIGGER IF NOT EXISTS "+t+"_retained BEFORE DELETE ON "+t+" BEGIN SELECT RAISE(ABORT,'topology history must be retained'); END");
 });}
-function binding(db,id){project(id);const n=localIdentity(db),b=db.prepare("SELECT * FROM topology_bindings WHERE project_id=?").get(id);if(!b)fail("NOT_FOUND","项目尚未绑定关系登记节点",404);if(b.owner_node_id!==n.node_id||b.owner_epoch!==n.sync_epoch)fail("TOPOLOGY_RECOVERY_REQUIRED","恢复换代后须重新核对本地关系提交");return b;}
+function binding(db,id){project(id);const n=localIdentity(db),b=db.prepare("SELECT * FROM "+topologyBindingsTable(db)+" WHERE project_id=?").get(id);if(!b)fail("NOT_FOUND","项目尚未绑定关系登记节点",404);if(b.owner_node_id!==n.node_id||b.owner_epoch!==n.sync_epoch)fail("TOPOLOGY_RECOVERY_REQUIRED","恢复换代后须重新核对本地关系提交");return b;}
 function event(db,b,op,kind,detail){db.prepare("INSERT INTO topology_events(project_id,operation_id,kind,detail_json,created_at) VALUES(?,?,?,?,?)").run(b.project_id,op,kind,canonical(detail),at());}
 function rows(db,b){const rs=db.prepare("SELECT t.id,t.task_uid,t.parent_id,t.blocked_by,t.kind,t.tree_mode,t.status,t.archived_at,t.aggregate_version,lower(replace(replace(t.subject, ' ', ''), '　', '')) normalized_subject FROM tasks t JOIN broker_task_projects p ON p.task_id=t.id AND p.task_uid=t.task_uid WHERE p.project_id=? ORDER BY t.id LIMIT ?").all(b.project_id,MAX_GRAPH_VERTICES+1);if(rs.length>MAX_GRAPH_VERTICES)fail("GRAPH_LIMIT","项目任务数超限");return rs;}
 function capture(db,b,revision){
@@ -130,7 +134,7 @@ export function prepareTopology(db,{projectId,operationId,expectedRevision,edits
   const intersection=normalizeTopology({...before,vertices:before.vertices.map(v=>({task_uid:v.task_uid,parent_uid:v.parent_uid===next.get(v.task_uid).parent_uid?v.parent_uid:null,blocked_by:v.blocked_by.filter(uid=>next.get(v.task_uid).blocked_by.includes(uid))}))});
   db.prepare("INSERT INTO topology_operations VALUES(?,?,?,?,?,?,?,?,'prepared',NULL,?,?)").run(operationId,projectId,b.owner_epoch,b.revision,argsHash,canonical(before),canonical(intersection),canonical(desired),at(),at());
   for(const [uid,finish] of held)db.prepare("INSERT INTO topology_holds VALUES(?,?,?)").run(operationId,map.get(uid).id,finish);
-  db.prepare("UPDATE topology_bindings SET phase='pending' WHERE project_id=?").run(projectId);
+  writeTopologyBinding(db,b,{phase:"pending"});
   apply(db,b,operationId,intersection);
   // Both roll-forward and cancellation must satisfy native constraints before publication.
   for(const snapshot of [before,desired]){db.exec("SAVEPOINT topology_preview");try{apply(db,b,operationId,snapshot);}finally{db.exec("ROLLBACK TO topology_preview; RELEASE topology_preview");}}
@@ -168,7 +172,7 @@ export function acceptTopologyReceipt(db,{operationId,requestId,receipt}){
   const map=new Map(rows(db,b).map(r=>[r.task_uid,r.id]));for(const v of desired.vertices)db.prepare("INSERT OR IGNORE INTO topology_vertices VALUES(?,?,?)").run(map.get(v.task_uid),v.task_uid,b.project_id);
   db.prepare("UPDATE topology_attempts SET state='acknowledged',receipt_json=? WHERE request_id=?").run(canonical(receipt),requestId);
   db.prepare("UPDATE topology_operations SET state='applied',receipt_json=?,updated_at=? WHERE operation_id=?").run(canonical(receipt),at(),operationId);
-  db.prepare("UPDATE topology_bindings SET phase='ready',revision=?,snapshot_json=?,receipt_json=? WHERE project_id=?").run(desired.revision,canonical(desired),canonical(receipt),b.project_id);
+  writeTopologyBinding(db,b,{phase:"ready",revision:desired.revision,snapshot_json:canonical(desired),receipt_json:canonical(receipt)});
   event(db,b,operationId,"applied",{request_id:requestId,snapshot_digest:receipt.snapshot_digest,graph_version:receipt.graph_version});return topologyOperation(db,operationId);
  });
 }
@@ -183,7 +187,7 @@ export function cancelPreparedTopology(db,{operationId,observedGraph=null}){
   if(canonical(capture(db,b,o.base_revision+1))!==o.intersection_json)fail("TOPOLOGY_DIVERGED","本地中间结构已变化");
   apply(db,b,operationId,JSON.parse(o.before_json));
   db.prepare("UPDATE topology_operations SET state='cancelled',updated_at=? WHERE operation_id=?").run(at(),operationId);
-  db.prepare("UPDATE topology_bindings SET phase=? WHERE project_id=?").run(b.revision?"ready":"unregistered",b.project_id);
+  writeTopologyBinding(db,b,{phase:b.revision?"ready":"unregistered"});
   event(db,b,operationId,"cancelled",{});return topologyOperation(db,operationId);
  });
 }

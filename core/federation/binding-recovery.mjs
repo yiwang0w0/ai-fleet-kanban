@@ -1,3 +1,4 @@
+import {topologyBindingsTable} from "./topology-generations.mjs";
 // Local operator control only; never classify an unknown network reply as rejection.
 import {createRequire} from "node:module";
 import {PeerError,keys,uuid} from "./protocol.mjs";
@@ -47,7 +48,7 @@ function snapshot(db,relationId,registrarEpoch){
  const attempts=db.prepare("SELECT * FROM binding_attempts WHERE relation_id=? ORDER BY request_id").all(relationId);
  const outbox=db.prepare("SELECT * FROM binding_outbox WHERE relation_id=? ORDER BY request_id").all(relationId);
  const commits=db.prepare("SELECT * FROM binding_source_commits WHERE relation_id=? ORDER BY credential_version").all(relationId);
- const topology=db.prepare("SELECT * FROM topology_bindings WHERE project_id=?").get(b.project_id)??null;
+ const topology=db.prepare("SELECT * FROM "+topologyBindingsTable(db)+" WHERE project_id=?").get(b.project_id)??null;
  const d=JSON.parse(b.descriptor_json);
  return {node_id:n.node_id,node_epoch:n.sync_epoch,binding_epoch:b.node_epoch,relation_id:relationId,delegation_id:b.delegation_id,project_id:b.project_id,side:b.side,task_uid:b.task_uid,task_version:t.aggregate_version,
   graph_id:d.graph_id,graph_epoch:d.graph_epoch,registrar_node_id:b.registrar_node_id,retired_registrar_epoch:b.registrar_epoch,observed_registrar_epoch:registrarEpoch,descriptor_digest:b.descriptor_digest,
