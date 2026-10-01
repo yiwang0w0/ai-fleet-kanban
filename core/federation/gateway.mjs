@@ -7,7 +7,7 @@ import {migrateBindings,receiveBindingMessage} from "./bindings.mjs";
 import http from "node:http";
 import {migrateRelations,publishTopology,approveRelation,withdrawRelation,completeRelation,cancelRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
 import {migrateDelegation,receiveOffer,peerDelegationStatus} from "./delegation.mjs";
-import {sourceRecoveryMarker} from "./epoch-state.mjs";
+import {sourceRecoveryMarker,sourceRecoveryLineage} from "./epoch-state.mjs";
 import {startSnapshot,snapshotPage} from "./snapshots.mjs";
 import {migrateSync,exportBatch,acknowledge} from "./sync-store.mjs";
 import { PeerError, negotiateHello, keys } from "./protocol.mjs";
@@ -65,6 +65,11 @@ function createPeerServer(db) {
           return result;
         });
         return send(res,200,hello);
+      }
+      if(req.url==="/peer/v1/recovery/lineage"&&req.method==="POST"){
+        const body=await bodyJSON(req);
+        const lineage=transaction(db,()=>{authenticate(db,req.headers.authorization,"sync:pull");return sourceRecoveryLineage(db,body);});
+        return send(res,200,lineage);
       }
       if (["/peer/v1/pull","/peer/v1/ack"].includes(req.url) && req.method === "POST") {
         const body=await bodyJSON(req),pull=req.url.endsWith("/pull");

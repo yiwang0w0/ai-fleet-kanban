@@ -1,3 +1,5 @@
+import http from "node:http";
+import {checkRecoveryLineage,MAX_RECOVERY_HOPS} from "../core/federation/recovery-lineage.mjs";
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -14,7 +16,7 @@ import {migratePeers,issueCredential,authenticate,localIdentity,revokePeer} from
 import {migrateSync,shareTask,exportBatch,applyBatch,cursor,recordSource,listReplicas,digest,canonical,syncStatus} from "../core/federation/sync-store.mjs";
 import {startSnapshot,snapshotPage,beginSnapshot,receiveSnapshotPage,snapshotStage} from "../core/federation/snapshots.mjs";
 import {prepareSourceRecovery,acceptSourceRecovery,sourceRecoveryHistory} from "../core/federation/epoch-recovery.mjs";
-import {sourceRecoveryMarker,replicationCursor} from "../core/federation/epoch-state.mjs";
+import {sourceRecoveryMarker,sourceRecoveryLineage,replicationCursor} from "../core/federation/epoch-state.mjs";
 import {listenPeerServer} from "../core/federation/gateway.mjs";
 import {syncOnce} from "../core/federation/sync-client.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
@@ -72,7 +74,7 @@ async function pair({cards=1,multi=false,newProjects,initialSnapshot=false}={}){
  const server=await listenPeerServer(recovered.db,{port:0});servers.push(server);
  const url="http://127.0.0.1:"+server.address().port;
  const options={url,credentialFile:fresh.file,expectedEpoch:a.identity.sync_epoch};
- return {a,b,old,ids,other,missing,late,recovered,fresh,server,url,options,
+ return {a,b,old,ids,other,missing,late,backup,recovered,fresh,server,url,options,
   source:{origin:a.identity.node_id,epoch:recovered.identity.sync_epoch,projectId:"demo"}};
 }
 const prepare=f=>prepareSourceRecovery(f.b.db,f.options);
@@ -131,6 +133,7 @@ test("bad or disconnected source recovery markers and unsupported capabilities r
 
 test("edited, miscounted, stale or wrong-directory plans cannot authorize a transition",async()=>{
  const f=await pair(),p=await prepare(f);
+ await assert.rejects(acceptSourceRecovery(f.b.db,{plan:null,expectedPlanDigest:p.plan_digest}),{code:"BAD_INPUT"});
  await assert.rejects(acceptSourceRecovery(f.b.db,{plan:p,expectedPlanDigest:"0".repeat(64)}),{code:"PLAN_CHANGED"});
  const changed=structuredClone(p);changed.projects[0].replicas=999;const {plan_digest,...body}=changed;changed.plan_digest=digest(body);
  await assert.rejects(acceptSourceRecovery(f.b.db,{plan:changed,expectedPlanDigest:changed.plan_digest}),{code:"PLAN_CHANGED"});
@@ -300,4 +303,164 @@ test("acceptance revokes the reverse-direction old credential and forbids reauth
  const renewed=credential(f.b,f.recovered,["demo"],2);
  assert.equal(authenticate(f.b.db,"Bearer "+renewed.c.token).peer_epoch,f.recovered.identity.sync_epoch);
  assert.ok(f.b.db.prepare("SELECT 1 FROM federation_auth_events WHERE action='source_epoch_revoke'").get());
+});
+
+async function restoreAgainOffline(f,{backup=null}={}){
+ backup??=createBackup({dbPath:f.recovered.dbPath,evidenceDir:f.recovered.evidence,destination:path("offline-backup")});
+ const intermediate={...f.recovered.identity},oldCredential=f.fresh;
+ f.server.closeAllConnections();await new Promise(r=>f.server.close(r));
+ const next=restore(f.recovered,backup),version=next.db.prepare("SELECT credential_version FROM federation_peers WHERE peer_node_id=?").get(f.b.identity.node_id).credential_version;
+ f.fresh=credential(next,f.b,oldCredential.c.projects,version);f.recovered=next;
+ for(const project of oldCredential.c.projects)flush(next,f.fresh.peer,project);
+ f.server=await listenPeerServer(next.db,{port:0});servers.push(f.server);f.url="http://127.0.0.1:"+f.server.address().port;
+ f.options={url:f.url,credentialFile:f.fresh.file,expectedEpoch:f.options.expectedEpoch};
+ f.source={origin:next.identity.node_id,epoch:next.identity.sync_epoch,projectId:"demo"};
+ return {intermediate,oldCredential};
+}
+test("H5b an offline receiver accepts a continuous two-restore lineage without losing old visible results",async()=>{
+ const f=await pair(),before=canonical(visible(f)),{intermediate,oldCredential}=await restoreAgainOffline(f);
+ assert.equal((await sync(f)).error_code,"EPOCH_CHANGED");
+ const plan=await prepare(f);
+ assert.equal(plan.format,"ai-fleet-source-acceptance-plan/v2");
+ assert.equal(plan.lineage.transitions.length,2);assert.equal(canonical(visible(f)),before);
+ const receipt=await accept(f,plan);assert.equal(receipt.format,"ai-fleet-source-acceptance/v2");
+ assert.deepEqual(receipt.retired_epochs,[f.a.identity.sync_epoch,intermediate.sync_epoch]);
+ assert.equal(visible(f).find(x=>x.task_uid===store.get(f.a.db,f.ids[0]).task_uid).result,"result after backup");
+ let sent=0;const blocked=await sync(f,{credentialFile:oldCredential.file,fetchImpl:()=>{sent++;throw Error("old credential sent");}});
+ assert.equal(blocked.error_code,"RETIRED_EPOCH");assert.equal(sent,0);
+ assert.throws(()=>recordSource(f.b.db,intermediate),{code:"RETIRED_EPOCH"});
+ assert.equal((await sync(f)).state,"synced");
+ const history=sourceRecoveryHistory(f.b.db,f.a.identity.node_id);
+ assert.equal(history.acceptances.length,1);assert.equal(history.acceptances[0].lineage.transitions.length,2);
+ assert.ok(history.archive.some(x=>x.table_name==="federation_replicas"&&JSON.parse(x.row.task_json??"null")?.result==="result after backup"));
+ assert.equal(history.missing.length,1);assert.equal(store.list(f.b.db).tasks.length,0);
+});
+
+function lineageArgs(f){return {node_id:f.source.origin,from_epoch:f.options.expectedEpoch,to_epoch:f.source.epoch};}
+function mutateLineage(f,mutate){return async(...args)=>{
+ const response=await fetch(...args);if(!args[0].endsWith("/recovery/lineage"))return response;
+ const value=await response.json();mutate(value);return new Response(JSON.stringify(value));
+};}
+function rehashLineage(value){const {chain_digest,...payload}=value;value.chain_digest=digest(payload);}
+const receiverEvidence=f=>canonical({source:rawSource(f),visible:visible(f),history:sourceRecoveryHistory(f.b.db,f.source.origin),retired:f.b.db.prepare("SELECT * FROM federation_retired_epochs ORDER BY origin_epoch").all()});
+
+test("H5b three offline recoveries preserve paged cutover and project authorization",async()=>{
+ const f=await pair({cards:30,multi:true,newProjects:["demo"]});
+ const one=await restoreAgainOffline(f),two=await restoreAgainOffline(f),plan=await prepare(f);
+ assert.equal(plan.lineage.transitions.length,3);assert.deepEqual(plan.authorized_projects,["demo"]);
+ await accept(f,plan);assert.equal((await sync(f,{maxBatches:1})).state,"pending");
+ assert.equal(f.b.db.prepare("SELECT origin_epoch FROM federation_cursors WHERE project_id='demo'").get().origin_epoch,f.a.identity.sync_epoch);
+ assert.equal((await sync(f)).state,"synced");
+ assert.equal(syncStatus(f.b.db).epoch_projects.find(p=>p.project_id==="other").state,"pending");
+ await assert.rejects(sync(f,{projectId:"other"}),{code:"FORBIDDEN"});
+ for(const epoch of [one.intermediate.sync_epoch,two.intermediate.sync_epoch])assert.throws(()=>recordSource(f.b.db,{...f.a.identity,sync_epoch:epoch}),{code:"RETIRED_EPOCH"});
+ assert.equal(store.claim(f.b.db,{worker:"replicas-are-not-work"}),null);
+});
+
+test("H5b forged, incomplete, reordered, cyclic and wrong-tip chains cannot prepare acceptance",async()=>{
+ const f=await pair();await restoreAgainOffline(f);const before=receiverEvidence(f);
+ const mutations=[
+  x=>{x.transitions.shift();rehashLineage(x);},
+  x=>{x.transitions.reverse();rehashLineage(x);},
+  x=>{x.transitions[1].recovery_id=x.transitions[0].recovery_id;rehashLineage(x);},
+  x=>{x.transitions[0].new_epoch=x.from_epoch;rehashLineage(x);},
+  x=>{x.transitions[0].node_id=randomUUID();rehashLineage(x);},
+  x=>{x.transitions.at(-1).receipt_digest="0".repeat(64);rehashLineage(x);},
+  x=>{x.to_epoch=randomUUID();rehashLineage(x);},
+  x=>{x.transitions=[];rehashLineage(x);},
+  x=>{x.chain_digest="0".repeat(64);},
+  x=>{x.unreviewed="field";},
+ ];
+ for(const mutate of mutations)await assert.rejects(prepareSourceRecovery(f.b.db,{...f.options,fetchImpl:mutateLineage(f,mutate)}));
+ assert.equal(receiverEvidence(f),before);
+ let requested=false;
+ await assert.rejects(prepareSourceRecovery(f.b.db,{...f.options,fetchImpl:async(...args)=>{
+  if(args[0].endsWith("/recovery/lineage"))requested=true;const response=await fetch(...args),h=await response.json();
+  h.capabilities=h.capabilities.filter(c=>c!=="source-epoch-lineage-v1");return new Response(JSON.stringify(h));
+ }}),{code:"RECOVERY_LINEAGE_REQUIRED"});assert.equal(requested,false);assert.equal(receiverEvidence(f),before);
+});
+
+test("H5b restoring an older backup without the intermediary receipt refuses a shortcut",async()=>{
+ const f=await pair(),before=receiverEvidence(f);await restoreAgainOffline(f,{backup:f.backup});
+ assert.equal(sourceRecoveryMarker(f.recovered.db).backup_epoch,f.a.identity.sync_epoch);
+ await assert.rejects(prepare(f),{code:"RECOVERY_LINEAGE_MISSING"});
+ assert.equal(receiverEvidence(f),before);assert.equal((await sync(f)).error_code,"EPOCH_CHANGED");
+});
+
+test("H5b accepting a reviewed chain reobserves provenance and rolls back every retired epoch",async()=>{
+ const f=await pair();const {intermediate}=await restoreAgainOffline(f);
+ const reverse=credential(f.b,{identity:intermediate},["demo"]),plan=await prepare(f),before=receiverEvidence(f),peerBefore=canonical(f.b.db.prepare("SELECT * FROM federation_peers").all());
+ f.b.db.exec("CREATE TRIGGER refuse_mid_epoch BEFORE INSERT ON federation_retired_epochs WHEN NEW.origin_epoch='"+intermediate.sync_epoch+"' BEGIN SELECT RAISE(ABORT,'injected middle retirement'); END");
+ await assert.rejects(accept(f,plan),/injected middle retirement/);assert.equal(receiverEvidence(f),before);assert.equal(canonical(f.b.db.prepare("SELECT * FROM federation_peers").all()),peerBefore);
+ f.b.db.exec("DROP TRIGGER refuse_mid_epoch");
+ const tampered=structuredClone(plan);tampered.lineage.transitions[0].activated_at="2020-01-01T00:00:00.000Z";rehashLineage(tampered.lineage);const {plan_digest,...payload}=tampered;tampered.plan_digest=digest(payload);
+ await assert.rejects(accept(f,tampered),{code:"PLAN_CHANGED"});assert.equal(receiverEvidence(f),before);
+ const first=f.recovered.db.prepare("SELECT * FROM board_recoveries WHERE recovery_id=?").get(plan.lineage.transitions[0].recovery_id),changed=JSON.parse(first.receipt_json);
+ changed.retirement_attestation_digest="0".repeat(64);f.recovered.db.prepare("UPDATE board_recoveries SET receipt_json=? WHERE recovery_id=?").run(canonical(changed),first.recovery_id);
+ await assert.rejects(accept(f,plan),{code:"PLAN_CHANGED"});assert.equal(receiverEvidence(f),before);
+ f.recovered.db.prepare("UPDATE board_recoveries SET receipt_json=? WHERE recovery_id=?").run(first.receipt_json,first.recovery_id);
+ const receipt=await accept(f,plan);assert.equal(receipt.local_credentials_revoked,1);
+ assert.throws(()=>authenticate(f.b.db,"Bearer "+reverse.c.token),{code:"UNAUTHENTICATED"});
+ assert.throws(()=>issueCredential(f.b.db,{peerNodeId:intermediate.node_id,peerEpoch:intermediate.sync_epoch,scopes:["peer:handshake"],projects:["demo"],credentialFile:path("retired-grant")+".json",expectedVersion:2}),{code:"RETIRED_EPOCH"});
+});
+
+test("H5b lineage endpoint requires live pull authorization and reveals only minimal markers",async()=>{
+ const f=await pair();await restoreAgainOffline(f);const body=JSON.stringify(lineageArgs(f)),url=f.url+"/peer/v1/recovery/lineage";
+ assert.equal((await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body})).status,401);
+ const headers={Authorization:"Bearer "+f.fresh.c.token,"Content-Type":"application/json"};
+ const r=await fetch(url,{method:"POST",headers,body});assert.equal(r.status,200);const chain=await r.json();
+ assert.equal(chain.transitions.length,2);for(const m of chain.transitions)assert.deepEqual(Object.keys(m).sort(),["activated_at","backup_epoch","format","new_epoch","node_id","receipt_digest","recovery_id","retired_epoch"]);
+ assert.ok(!JSON.stringify(chain).includes(f.recovered.dir));assert.ok(!JSON.stringify(chain).includes("attestation"));assert.ok(!JSON.stringify(chain).includes(f.fresh.c.token));
+ assert.equal((await fetch(url,{method:"POST",headers,body:JSON.stringify({...lineageArgs(f),to_epoch:randomUUID()})})).status,409);
+ const observer=node(),file=path("handshake-only")+".json";
+ issueCredential(f.recovered.db,{peerNodeId:observer.identity.node_id,peerEpoch:observer.identity.sync_epoch,scopes:["peer:handshake"],projects:["demo"],credentialFile:file});
+ const c=JSON.parse(readFileSync(file,"utf8"));assert.equal((await fetch(url,{method:"POST",headers:{...headers,Authorization:"Bearer "+c.token},body})).status,403);
+ const status=await new Promise((resolve,reject)=>{
+  const req=http.request(url,{method:"POST",headers:{...headers,"Content-Length":Buffer.byteLength(body)}},res=>{res.resume();res.on("end",()=>resolve(res.statusCode));});req.on("error",reject);
+  f.server.once("request",()=>{revokePeer(f.recovered.db,{peerNodeId:f.b.identity.node_id,expectedVersion:f.fresh.c.credential_version});req.end(body.slice(1));});req.write(body.slice(0,1));
+ });assert.equal(status,401);
+});
+
+test("H5b direct recovery keeps v1 plans and does not require the new chain endpoint",async()=>{
+ const f=await pair();let requested=false;
+ const fetchImpl=async(...args)=>{if(args[0].endsWith("/recovery/lineage")){requested=true;throw Error("unneeded lineage");}const response=await fetch(...args),hello=await response.json();hello.capabilities=hello.capabilities.filter(c=>c!=="source-epoch-lineage-v1");return new Response(JSON.stringify(hello));};
+ const plan=await prepareSourceRecovery(f.b.db,{...f.options,fetchImpl});assert.equal(plan.format,"ai-fleet-source-acceptance-plan/v1");assert.equal(Object.hasOwn(plan,"lineage"),false);
+ const receipt=await acceptSourceRecovery(f.b.db,{plan,expectedPlanDigest:plan.plan_digest,fetchImpl});assert.equal(receipt.format,"ai-fleet-source-acceptance/v1");assert.equal(requested,false);
+});
+
+test("H5b ambiguous retained history and source-side cycles fail before returning a lineage",async()=>{
+ const f=await pair();await restoreAgainOffline(f);const plan=await prepare(f);
+ const first=f.recovered.db.prepare("SELECT * FROM board_recoveries WHERE recovery_id=?").get(plan.lineage.transitions[0].recovery_id),duplicate={...JSON.parse(first.receipt_json),recovery_id:randomUUID()};
+ f.recovered.db.prepare("INSERT INTO board_recoveries VALUES(?,?)").run(duplicate.recovery_id,canonical(duplicate));
+ assert.throws(()=>sourceRecoveryLineage(f.recovered.db,lineageArgs(f)),{code:"RECOVERY_INCONSISTENT"});
+ f.recovered.db.prepare("DELETE FROM board_recoveries WHERE recovery_id=?").run(duplicate.recovery_id);
+ const cycle={...JSON.parse(first.receipt_json),retired_epoch:f.source.epoch};
+ f.recovered.db.prepare("UPDATE board_recoveries SET receipt_json=? WHERE recovery_id=?").run(canonical(cycle),first.recovery_id);
+ assert.throws(()=>sourceRecoveryLineage(f.recovered.db,lineageArgs(f)),{code:"RECOVERY_INCONSISTENT"});
+});
+
+test("H5b bounded lineage accepts 64 links and rejects an oversized chain",()=>{
+ const n=node(),from=randomUUID(),transitions=[];let prior=from;
+ for(let i=0;i<MAX_RECOVERY_HOPS;i++){const next=i===MAX_RECOVERY_HOPS-1?n.identity.sync_epoch:randomUUID();transitions.push({format:"ai-fleet-source-recovery/v1",node_id:n.identity.node_id,recovery_id:randomUUID(),retired_epoch:prior,backup_epoch:prior,new_epoch:next,activated_at:new Date().toISOString(),receipt_digest:digest({i})});prior=next;}
+ const line={format:"ai-fleet-source-recovery-chain/v1",node_id:n.identity.node_id,from_epoch:from,to_epoch:prior,transitions};rehashLineage(line);
+ assert.equal(checkRecoveryLineage(line,{nodeId:n.identity.node_id,fromEpoch:from,toEpoch:prior,tip:transitions.at(-1)}),line);
+ n.db.exec("CREATE TABLE IF NOT EXISTS board_recoveries(recovery_id TEXT PRIMARY KEY,receipt_json TEXT NOT NULL)");
+ for(const m of transitions){const receipt={...m,format:"ai-fleet-recovery/v1"};n.db.prepare("INSERT INTO board_recoveries VALUES(?,?)").run(m.recovery_id,canonical(receipt));}
+ assert.equal(sourceRecoveryLineage(n.db,{node_id:n.identity.node_id,from_epoch:from,to_epoch:prior}).transitions.length,64);
+ const earlier=randomUUID(),extra={...transitions[0],format:"ai-fleet-recovery/v1",recovery_id:randomUUID(),retired_epoch:earlier,backup_epoch:earlier,new_epoch:from};
+ n.db.prepare("INSERT INTO board_recoveries VALUES(?,?)").run(extra.recovery_id,canonical(extra));
+ assert.throws(()=>sourceRecoveryLineage(n.db,{node_id:n.identity.node_id,from_epoch:earlier,to_epoch:prior}),{code:"RECOVERY_LINEAGE_LIMIT"});
+
+ line.transitions.push({...transitions.at(-1),recovery_id:randomUUID()});rehashLineage(line);
+ assert.throws(()=>checkRecoveryLineage(line,{nodeId:n.identity.node_id,fromEpoch:from,toEpoch:prior,tip:transitions.at(-1)}),{code:"RECOVERY_MISMATCH"});
+});
+
+test("H5b independent CLI reviews and accepts the v2 lineage and retains it in history",async()=>{
+ const f=await pair();await restoreAgainOffline(f);const file=path("lineage-plan")+".json";
+ const prepared=await cli(["prepare","--db",f.b.dbPath,"--url",f.url,"--credential-file",f.fresh.file,"--expected-epoch",f.a.identity.sync_epoch,"--plan-file",file]);
+ assert.equal(prepared.status,0,prepared.error);const plan=JSON.parse(readFileSync(file,"utf8"));assert.equal(plan.format,"ai-fleet-source-acceptance-plan/v2");
+ const accepted=await cli(["accept","--db",f.b.dbPath,"--plan-file",file,"--plan-digest",plan.plan_digest]);assert.equal(accepted.status,0,accepted.error);
+ assert.equal(JSON.parse(accepted.out).retired_epochs.length,2);assert.equal((await sync(f)).state,"synced");
+ const history=await cli(["history","--db",f.b.dbPath,"--origin",f.source.origin]);assert.equal(history.status,0,history.error);assert.equal(JSON.parse(history.out).acceptances[0].lineage.chain_digest,plan.lineage.chain_digest);
+ assert.ok(!history.out.includes(f.fresh.c.token));
 });

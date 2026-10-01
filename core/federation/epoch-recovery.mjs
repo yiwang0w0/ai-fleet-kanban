@@ -1,7 +1,8 @@
+import {checkRecoveryMarker,checkRecoveryLineage} from "./recovery-lineage.mjs";
 // Explicit local review of a recovered source; no peer can approve its own receiver transition.
 import {randomUUID} from "node:crypto";
 import {realpathSync} from "node:fs";
-import {PeerError,keys,uuid} from "./protocol.mjs";
+import {PeerError,keys,uuid,SOURCE_RECOVERY_LINEAGE} from "./protocol.mjs";
 import {localIdentity} from "./peers.mjs";
 import {canonical,digest,atomic,migrateSync} from "./sync-store.mjs";
 import {endpoint,loadCredential,request} from "./sync-client.mjs";
@@ -26,13 +27,6 @@ function originState(db,origin){
  const epoch=typeof observed==="string"?observed:observed.length===1?observed[0]:null;
  return {source,rows,epoch,digest:digest({source,rows})};
 }
-function validateMarker(marker,c,expectedEpoch){
- exact(marker,["format","node_id","recovery_id","retired_epoch","backup_epoch","new_epoch","activated_at","receipt_digest"],"source recovery");
- for(const k of ["node_id","recovery_id","retired_epoch","backup_epoch","new_epoch"])uuid(marker[k],k);
- if(marker.format!=="ai-fleet-source-recovery/v1"||marker.node_id!==c.server_node_id||marker.new_epoch!==c.server_epoch||
-  marker.retired_epoch!==expectedEpoch||marker.new_epoch===expectedEpoch||!hash(marker.receipt_digest)||!Number.isFinite(Date.parse(marker.activated_at)))
-  fail("RECOVERY_MISMATCH","源端恢复标记未连接所见旧代次与新凭据");
-}
 async function observe(db,{url,credentialFile,expectedEpoch,fetchImpl=fetch,signal}){
  uuid(expectedEpoch,"expected_epoch");
  const base=endpoint(url),local=localIdentity(db);
@@ -50,22 +44,30 @@ async function observe(db,{url,credentialFile,expectedEpoch,fetchImpl=fetch,sign
   canonical(hello.authorized?.projects)!==canonical(c.projects)||canonical(hello.authorized?.scopes)!==canonical(c.scopes))
   fail("SOURCE_MISMATCH","恢复握手与已固定凭据不一致");
  if(typeof hello.node.display_name!=="string"||!hello.node.display_name.trim()||hello.node.display_name.length>80||/[\u0000-\u001f\u007f]/.test(hello.node.display_name))fail("BAD_INPUT","来源显示名无效");
- const marker=hello.extensions?.source_recovery;validateMarker(marker,c,expectedEpoch);
- return {local,c,marker,hello,base,credentialPath:realpathSync(credentialFile)};
+ const marker=checkRecoveryMarker(hello.extensions?.source_recovery);
+ if(marker.node_id!==c.server_node_id||marker.new_epoch!==c.server_epoch)fail("RECOVERY_MISMATCH","恢复标记与已固定凭据不同");
+ let lineage=null;
+ if(marker.retired_epoch!==expectedEpoch){
+  if(!hello.capabilities.includes(SOURCE_RECOVERY_LINEAGE))fail("RECOVERY_LINEAGE_REQUIRED","来源必须提供连续恢复链才能跨过未观察的代次");
+  lineage=await request(base,"/peer/v1/recovery/lineage",c,{node_id:c.server_node_id,from_epoch:expectedEpoch,to_epoch:c.server_epoch},fetchImpl,signal,["RECOVERY_LINEAGE_MISSING","RECOVERY_LINEAGE_LIMIT","RECOVERY_INCONSISTENT"]);
+  checkRecoveryLineage(lineage,{nodeId:c.server_node_id,fromEpoch:expectedEpoch,toEpoch:c.server_epoch,tip:marker});
+ }
+ return {local,c,marker,lineage,hello,base,credentialPath:realpathSync(credentialFile)};
 }
 function reviewFields(db,observation,expectedEpoch){
- const {local,c,marker,base,credentialPath}=observation,nowLocal=localIdentity(db);
+ const {local,c,marker,lineage,base,credentialPath}=observation,nowLocal=localIdentity(db);
  if(nowLocal.node_id!==local.node_id||nowLocal.sync_epoch!==local.sync_epoch)fail("PLAN_CHANGED","握手期间本机身份已变化");
  const state=originState(db,c.server_node_id);
  if(state.epoch!==expectedEpoch)fail("EPOCH_CHANGED","已知来源代次与所见旧代次不一致");
  if(state.rows.federation_retired_epochs.some(x=>x.origin_epoch===c.server_epoch))fail("RETIRED_EPOCH","不能重新接纳已退役的来源代次");
+ if(lineage&&lineage.transitions.some(m=>state.rows.federation_retired_epochs.some(x=>x.origin_epoch===m.new_epoch)))fail("RETIRED_EPOCH","恢复链不能重新经过已退役代次");
  const projects=[...new Set([...c.projects,...Object.values(state.rows).flatMap(rows=>rows.map(x=>x.project_id).filter(Boolean))])].sort();
  if(projects.length>1000)fail("BAD_INPUT","来源项目清单超过1000项");
  const peer=state.rows.federation_peers[0];
  const localCredential=peer?{peer_epoch:peer.peer_epoch,key_id:peer.key_id,credential_version:peer.credential_version,status:peer.status,revocation_required:peer.status==="active"&&peer.peer_epoch!==c.server_epoch}:null;
  return {local_credential:localCredential,database_path:databasePath(db),receiver:{node_id:local.node_id,sync_epoch:local.sync_epoch},
   binding:{origin_node_id:c.server_node_id,previous_epoch:expectedEpoch,new_epoch:c.server_epoch,url:base,credential_file:credentialPath,key_id:c.key_id,credential_version:c.credential_version},
-  marker,authorized_projects:c.projects,projects:projects.map(project_id=>({
+  marker,...(lineage?{lineage}:{}),authorized_projects:c.projects,projects:projects.map(project_id=>({
    project_id,visible_epoch:state.rows.federation_cursors.find(x=>x.project_id===project_id)?.origin_epoch??null,
    visible_seq:state.rows.federation_cursors.find(x=>x.project_id===project_id)?.seq??0,
    replicas:state.rows.federation_replicas.filter(x=>x.project_id===project_id).length,
@@ -78,19 +80,21 @@ export async function prepareSourceRecovery(db,options){
  const observation=await observe(db,options);
  return atomic(db,()=>{
   const fields=reviewFields(db,observation,options.expectedEpoch);
-  const plan={format:"ai-fleet-source-acceptance-plan/v1",plan_id:randomUUID(),...fields,created_at:new Date().toISOString()};
+  const plan={format:observation.lineage?"ai-fleet-source-acceptance-plan/v2":"ai-fleet-source-acceptance-plan/v1",plan_id:randomUUID(),...fields,created_at:new Date().toISOString()};
   return {...plan,plan_digest:digest(plan)};
  });
 }
 export async function acceptSourceRecovery(db,{plan,expectedPlanDigest,fetchImpl=fetch,signal}){
  // Detach caller-owned objects before the network await.
  plan=JSON.parse(canonical(plan));
- exact(plan,["format","plan_id","local_credential","database_path","receiver","binding","marker","authorized_projects","projects","state_digest","created_at","plan_digest"],"acceptance plan");
+ const chained=plan?.format==="ai-fleet-source-acceptance-plan/v2";
+ exact(plan,["format","plan_id","local_credential","database_path","receiver","binding","marker","authorized_projects","projects","state_digest","created_at","plan_digest",...(chained?["lineage"]:[])],"acceptance plan");
  uuid(plan.plan_id,"plan_id");
  const {plan_digest,...unsigned}=plan;
- if(plan.format!=="ai-fleet-source-acceptance-plan/v1"||!hash(plan_digest)||plan_digest!==expectedPlanDigest||digest(unsigned)!==plan_digest||
+ if(!["ai-fleet-source-acceptance-plan/v1","ai-fleet-source-acceptance-plan/v2"].includes(plan.format)||!hash(plan_digest)||plan_digest!==expectedPlanDigest||digest(unsigned)!==plan_digest||
   !Number.isFinite(Date.parse(plan.created_at))||plan.database_path!==databasePath(db))fail("PLAN_CHANGED","接纳计划、摘要或数据库路径不匹配");
  const observation=await observe(db,{url:plan.binding.url,credentialFile:plan.binding.credential_file,expectedEpoch:plan.binding.previous_epoch,fetchImpl,signal});
+ if(Boolean(observation.lineage)!==chained)fail("PLAN_CHANGED","恢复链合同已变化");
  return atomic(db,()=>{
   const fields=reviewFields(db,observation,plan.binding.previous_epoch);
   for(const [key,value] of Object.entries(fields))if(canonical(plan[key])!==canonical(value))fail("PLAN_CHANGED","来源、凭据或副本状态已变化，请重新核对计划");
@@ -101,10 +105,11 @@ export async function acceptSourceRecovery(db,{plan,expectedPlanDigest,fetchImpl
    db.prepare("UPDATE federation_peers SET status=\'revoked\',secret_hash=\'\',credential_version=?,updated_at=? WHERE peer_node_id=?").run(previous+1,now,origin);
    db.prepare("INSERT INTO federation_auth_events(peer_node_id,credential_version,action,at) VALUES(?,?,\'source_epoch_revoke\',?)").run(origin,previous+1,now);revoked=1;
   }
-  const receipt={format:"ai-fleet-source-acceptance/v1",acceptance_id:id,origin_node_id:origin,previous_epoch:plan.binding.previous_epoch,new_epoch:plan.binding.new_epoch,
+  const retiredEpochs=chained?plan.lineage.transitions.map(m=>m.retired_epoch):[plan.binding.previous_epoch];
+  const receipt={format:chained?"ai-fleet-source-acceptance/v2":"ai-fleet-source-acceptance/v1",...(chained?{lineage:plan.lineage,retired_epochs:retiredEpochs}:{}),acceptance_id:id,origin_node_id:origin,previous_epoch:plan.binding.previous_epoch,new_epoch:plan.binding.new_epoch,
    plan_digest:plan_digest,local_credentials_revoked:revoked,marker:plan.marker,projects:plan.projects.map(p=>p.project_id),accepted_at:now,snapshot_required:true,physical_retirement:"operator_attested_at_source_not_verified_here"};
   db.prepare("INSERT INTO federation_epoch_acceptances VALUES(?,?,?,?,?,?,?)").run(id,origin,receipt.previous_epoch,receipt.new_epoch,plan_digest,canonical(receipt),now);
-  db.prepare("INSERT INTO federation_retired_epochs VALUES(?,?,?)").run(origin,receipt.previous_epoch,id);
+  for(const epoch of retiredEpochs)db.prepare("INSERT INTO federation_retired_epochs VALUES(?,?,?)").run(origin,epoch,id);
   db.prepare("INSERT INTO federation_sources VALUES(?,?,?,?) ON CONFLICT(origin_node_id) DO UPDATE SET origin_epoch=excluded.origin_epoch,display_name=excluded.display_name,last_seen_at=excluded.last_seen_at")
    .run(origin,receipt.new_epoch,observation.hello.node.display_name,now);
   for(const p of plan.projects){

@@ -1,3 +1,5 @@
+import {MAX_RECOVERY_HOPS,checkRecoveryMarker,checkRecoveryLineage} from "./recovery-lineage.mjs";
+import {digest} from "./sync-store.mjs";
 // Receiver epoch state. Authorization is node-wide; snapshot installation is per project.
 import {createHash} from "node:crypto";
 import {PeerError,uuid} from "./protocol.mjs";
@@ -62,12 +64,29 @@ export function archiveRecoveryProject(db,source,events){
  db.prepare("UPDATE federation_epoch_projects SET state='installed',updated_at=? WHERE origin_node_id=? AND project_id=? AND acceptance_id=?").run(now,source.origin,source.projectId,pending.acceptance_id);
  return pending;
 }
-export function sourceRecoveryMarker(db){
- const local=localIdentity(db);
+function recoveryMarkerAt(db,nodeId,epoch){
  if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_recoveries'").get())return null;
- const row=db.prepare("SELECT receipt_json FROM board_recoveries WHERE json_extract(receipt_json,'$.new_epoch')=? ORDER BY rowid DESC LIMIT 1").get(local.sync_epoch);
- if(!row)return null;
- const r=JSON.parse(row.receipt_json);
- if(r.node_id!==local.node_id||r.format!=="ai-fleet-recovery/v1")fail("RECOVERY_INCONSISTENT","本机恢复回执与身份不匹配");
- return {format:"ai-fleet-source-recovery/v1",node_id:r.node_id,recovery_id:r.recovery_id,retired_epoch:r.retired_epoch,backup_epoch:r.backup_epoch,new_epoch:r.new_epoch,activated_at:r.activated_at,receipt_digest:createHash("sha256").update(row.receipt_json).digest("hex")};
+ const rows=db.prepare("SELECT recovery_id,receipt_json FROM board_recoveries WHERE json_extract(receipt_json,'$.new_epoch')=? LIMIT 2").all(epoch);
+ if(!rows.length)return null;if(rows.length!==1)fail("RECOVERY_INCONSISTENT","同一代次有多个恢复回执");
+ const row=rows[0],r=JSON.parse(row.receipt_json);
+ if(r.node_id!==nodeId||r.recovery_id!==row.recovery_id||r.format!=="ai-fleet-recovery/v1")fail("RECOVERY_INCONSISTENT","本机恢复回执与身份不匹配");
+ return checkRecoveryMarker({format:"ai-fleet-source-recovery/v1",node_id:r.node_id,recovery_id:r.recovery_id,retired_epoch:r.retired_epoch,backup_epoch:r.backup_epoch,new_epoch:r.new_epoch,activated_at:r.activated_at,receipt_digest:createHash("sha256").update(row.receipt_json).digest("hex")});
+}
+export function sourceRecoveryMarker(db){const local=localIdentity(db);return recoveryMarkerAt(db,local.node_id,local.sync_epoch);}
+/** Authenticated, on-demand chain only; never expose private recovery receipt fields. */
+export function sourceRecoveryLineage(db,args){
+ const fields=["node_id","from_epoch","to_epoch"];
+ if(!args||typeof args!=="object"||Array.isArray(args)||Object.keys(args).length!==fields.length||Object.keys(args).some(k=>!fields.includes(k)))fail("BAD_INPUT","恢复链请求字段无效");
+ for(const k of fields)uuid(args[k],k);
+ const local=localIdentity(db);
+ if(args.node_id!==local.node_id||args.to_epoch!==local.sync_epoch||args.from_epoch===args.to_epoch)fail("EPOCH_CHANGED","恢复链请求必须连接所见旧代次与当前本机");
+ let epoch=args.to_epoch;const reverse=[],seen=new Set([epoch]);
+ while(epoch!==args.from_epoch){
+  if(reverse.length>=MAX_RECOVERY_HOPS)fail("RECOVERY_LINEAGE_LIMIT","恢复链超过64次，需补充核对历史");
+  const marker=recoveryMarkerAt(db,local.node_id,epoch);if(!marker)fail("RECOVERY_LINEAGE_MISSING","本机保留的恢复回执不能连续连接接收端旧代次");
+  if(seen.has(marker.retired_epoch))fail("RECOVERY_INCONSISTENT","本机恢复回执存在循环");
+  reverse.push(marker);epoch=marker.retired_epoch;seen.add(epoch);
+ }
+ const transitions=reverse.reverse(),payload={format:"ai-fleet-source-recovery-chain/v1",node_id:local.node_id,from_epoch:args.from_epoch,to_epoch:args.to_epoch,transitions};
+ const lineage={...payload,chain_digest:digest(payload)};checkRecoveryLineage(lineage,{nodeId:local.node_id,fromEpoch:args.from_epoch,toEpoch:args.to_epoch,tip:transitions.at(-1)});return lineage;
 }
