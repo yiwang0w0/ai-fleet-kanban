@@ -2,12 +2,12 @@
 
 2026-09-30 收到 1 条总评、14 条行内评论；总评另含未独立标注的事项。本表按总评编号跟踪，不能将“14 条评论”当作全部问题数量。审阅基线为 601890a，本轮核对并修改前的分支 HEAD 为 0f6935e67a2f044aa462ba37eb49910940130f3a。
 
-“已修复”表示本地代码及对应验证，尚需当前提交完整 Windows CI 和后续复核；未自动回复或解决 GitHub 评论，PR 保持草稿。原生配置/隔离及其余未完成项仍阻止宣称审阅通过。审阅建议调整 deploy/main 基线单独评估，本批未合并或变更部署分支。
+“已修复”表示本地代码及对应验证，尚需当前提交完整 Windows CI 和后续复核；未自动回复或解决 GitHub 评论，PR 保持草稿。原生配置/隔离及其余未完成项仍阻止宣称审阅通过。以上为首次处理时的边界；当前基线调整和失败对照见下方 2026-10-01 补记。
 
 | 编号 | 问题 | 状态 | 处置与验收依据 |
 |---|---|---|---|
 | B1 | 运行中 description 追记被版本参数误挡 | 已修复 | HTTP 追记保留 run/worker，旧版本及未知字段仍拒绝；versiontest |
-| B2 | 机器字段、角色域、版本与贡献/安全文档不齐 | 已补齐 | 0.24.0-dev.1 未发布标识、限定对象的角色域、新字段词汇表、三个入口与 Windows 贡献要求；发布/实体验收未冒充完成 |
+| B2 | 机器字段、角色域、版本与贡献/安全文档不齐 | 已补齐 | 0.24.0 未发布标识、限定对象的角色域、新字段词汇表、三个入口与 Windows 贡献要求；发布/实体验收未冒充完成 |
 | B3 | worker protocol v2 和 CLI --version 的用户迁移文档不足 | 已补齐 | migration-0.24.md 含停写、备份、统一升级、旧 run 处置与回滚；README/QUICKSTART/OPERATE/协调席/CLI 示例对齐 |
 | H1 | 版本触发器漏掉后续迁移新增列 | 已修复 | 迁移事务内重建触发器；新增语义列及重复升级用例 |
 | H2 | 损坏旧父链阻止任务树修复 | 已修复 | 校验新挂接位置及整个分支，允许脱离缺失旧父节点；活动分支仍拒绝 |
@@ -31,6 +31,29 @@
 | N2 | 已授权节点的长期保留、文档计数与 Node 最低版 | 部分补齐 | 文档按实际 40 Node 主套件 + 4 Python/1 Node 附加入口更新；网关 23 路径 / 12 能力 / 15 scope 及载荷限额已按源码补齐；最低 Node 24.0.0 已统一并由 doctor 实测事务接口；已授权数据保留继续处理 |
 | N3 | 工具参数 schema、任务存在性、代理环境与回环连接 | 已修复 | boolean 入口严格校验；运行身份的范围外任务与未知任务同为 404；回环专用无代理连接；启动前拒绝带凭据或含混代理 URL |
 | N4 | gitleaks 来源链接、旧测试包装命名、历史 CI 标识 | 待复核 | 保留历史事实，不将历史 Linux 证据伪装为 Windows 验收 |
+
+## 2026-10-01：基线、0.24.0 与逐条失败对照
+
+按用户最新授权将 origin/main afe1b5a 合入 deploy/kanata（5f8fa9c），并重放本分支；唯一冲突保留 main 的 Windows 路径断言。B1–B3、H1–H7 的主要修复已在先前批次完成，本批补齐 B2/B3 的持久回归断言并逐条做缺陷恢复对照，不重复实现。
+
+版本统一为 0.24.0，仍未发布。已应用用户提供的 pr2-desktop-archive.patch，新增独立 Python 解码、确定性、边界及无压缩子进程检查；补丁原始摘要与小幅调整列于 [证据](pr2-0.24-evidence.json)。
+
+| 评审 | 断言所在套件 | 证据 case |
+|---|---|---|
+| B1 | [versiontest.mjs](../../tests/versiontest.mjs) | B1 |
+| B2 | [review-contracttest.mjs](../../tests/review-contracttest.mjs) | B2-version / B2-domains |
+| B3 | [review-contracttest.mjs](../../tests/review-contracttest.mjs) | B3-doc / B3-cli |
+| H1 | [versiontest.mjs](../../tests/versiontest.mjs) | H1 |
+| H2 | [treetest.mjs](../../tests/treetest.mjs) | H2 |
+| H3 | [dispatchtest.mjs](../../tests/dispatchtest.mjs) | H3-signature / H3-settlement |
+| H4 | [mcptest.mjs](../../tests/mcptest.mjs) | H4 |
+| H5 | [repositorytest.mjs](../../tests/repositorytest.mjs) | H5 |
+| H6 | [recoverytest.mjs](../../tests/recoverytest.mjs) | H6 |
+| H7 | [synctest.mjs](../../tests/synctest.mjs) | H7 |
+
+13 组正常/失败对照全部成立，覆盖 15 个测试单元；另有桌面打包、ZIP 和文档合同 19 项通过（与前述重叠 4 项），合计 30 个独立 Node 测试及 57 个 Python 提示词断言。每个 case 的精确测试名、缺陷恢复方式、退出码和日志摘要都在证据文件。当前代码 SHA 为 dfcbc73cf918aef65ca3f3847f00adc1a6db451a；完整新 PR head CI 仍待确认。临时副本最初缺 Git 提交导致的环境失败单独保留，不计为缺陷转红。
+
+已准备 [G01/G02/G05 草稿](gates/README.md)，未签收阶段，也未自动回复或解决 GitHub 评论。其余 M/N、实体联调和部署工作仍按原清单推进。
 
 ## 批次 31 验证边界
 

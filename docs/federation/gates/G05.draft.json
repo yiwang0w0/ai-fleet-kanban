@@ -1,0 +1,142 @@
+{
+  "artifact_type": "phase_gate_receipt_draft",
+  "gate_id": "G05",
+  "phase_id": "S05",
+  "plan_id": "AFK-FED-001",
+  "plan_version": "1.3",
+  "decision": "pending",
+  "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
+  "schema_version": {
+    "federation_sync": 4,
+    "broker_dispatch": 3
+  },
+  "schema_note": "Code contracts only; no production database schema inspection is claimed. Other components version independently.",
+  "protocol_version": {
+    "worker": 2,
+    "peer": 1
+  },
+  "config_digest": null,
+  "node_aliases": [],
+  "node_note": "The user selected two physical kanata PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
+  "runtime_versions": {
+    "local_test_node": "24.16.0",
+    "local_test_python": "3.12.14"
+  },
+  "accepted_task_ids": [],
+  "test_results": [
+    {
+      "case": "H7",
+      "green": "passed",
+      "negative_control": "expected_failure",
+      "test_file": "tests/synctest.mjs",
+      "test_name_pattern": "three nodes isolate event UUIDs"
+    }
+  ],
+  "task_assessments": [
+    {
+      "task_id": "T05.01",
+      "acceptance_criteria": [
+        "状态更新与 outbox 同事务",
+        "事务中断不出现“已完成但无事件”",
+        "本机重启后仍能发送"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/synctest.mjs",
+        "docs/federation/sync-evidence.json"
+      ],
+      "remaining": "Atomic state/outbox and crash evidence is historical; current full CI and independent review pending."
+    },
+    {
+      "task_id": "T05.02",
+      "acceptance_criteria": [
+        "接收方落盘后确认",
+        "重复批次不重复应用",
+        "ACK 丢失后可重发",
+        "重试退避有上限"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/synctest.mjs",
+        "docs/federation/sync-evidence.json"
+      ],
+      "remaining": "Local replay/ACK-loss evidence exists; current full suite pending and physical peer ACK path unverified."
+    },
+    {
+      "task_id": "T05.03",
+      "acceptance_criteria": [
+        "按节点 epoch/seq 检测缺口",
+        "同 ID 异内容隔离",
+        "时间倒退不覆盖新版本"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/synctest.mjs",
+        "docs/federation/pr2-0.24-evidence.json"
+      ],
+      "remaining": "Current three-source event UUID isolation green/red verified; reorder/clock cases remain historical until current CI."
+    },
+    {
+      "task_id": "T05.04",
+      "acceptance_criteria": [
+        "已领取任务在隧道断线时继续",
+        "本机持久化进度",
+        "远端不重派",
+        "恢复后补齐结果"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/synctest.mjs",
+        "docs/federation/sync-evidence.json"
+      ],
+      "remaining": "Local gateway-outage fixture exists; physical Tailscale disconnect with continued claimed work and reconnect result sync has not been performed."
+    },
+    {
+      "task_id": "T05.05",
+      "acceptance_criteria": [
+        "新节点从授权快照加增量恢复",
+        "落后超保留期可重建",
+        "备份恢复不复用事件身份"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/snapshottest.mjs",
+        "tests/epochrecoverytest.mjs",
+        "docs/federation/snapshots-evidence.json",
+        "docs/federation/source-recovery-evidence.json"
+      ],
+      "remaining": "Local snapshot/retention/recovery evidence exists; physical rejoin/recovery and current full CI pending."
+    },
+    {
+      "task_id": "T05.06",
+      "acceptance_criteria": [
+        "重复、乱序、丢 ACK、断线、崩溃场景均通过",
+        "比较权威数据的授权投影哈希一致"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/gates/G05.draft.json"
+      ],
+      "remaining": "G02/G03, physical bilateral fault-scenario projection hashes and independent TEST/REVIEW acceptance pending."
+    }
+  ],
+  "evidence_manifest": "docs/federation/pr2-0.24-evidence.json",
+  "evidence_sha256": "1a633f4037c41f35e8e62d12535f6ab2b88b576e935fd869cacfecdb03687cca",
+  "evidence_hash_format": "UTF-8 LF",
+  "required_roles": [
+    "TEST",
+    "REVIEW"
+  ],
+  "unresolved_findings": [
+    "G02 and G03 not accepted",
+    "Current complete Windows CI pending",
+    "Physical two-PC offline/reconnect test and projection hash comparison missing",
+    "Independent reviewer receipt missing"
+  ],
+  "reviewer_instance_id": null,
+  "operator_decision_ref": null,
+  "verified_at": null,
+  "drafted_at": "2026-10-01",
+  "rollback_ref": "backup/pr2-before-main-20261001",
+  "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database."
+}

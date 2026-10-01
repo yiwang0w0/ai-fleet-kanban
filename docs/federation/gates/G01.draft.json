@@ -1,0 +1,172 @@
+{
+  "artifact_type": "phase_gate_receipt_draft",
+  "gate_id": "G01",
+  "phase_id": "S01",
+  "plan_id": "AFK-FED-001",
+  "plan_version": "1.3",
+  "decision": "pending",
+  "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
+  "schema_version": {
+    "federation_sync": 4,
+    "broker_dispatch": 3
+  },
+  "schema_note": "Code contracts only; no production database schema inspection is claimed. Other components version independently.",
+  "protocol_version": {
+    "worker": 2,
+    "peer": 1
+  },
+  "config_digest": null,
+  "node_aliases": [],
+  "node_note": "The user selected two physical kanata PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
+  "runtime_versions": {
+    "local_test_node": "24.16.0",
+    "local_test_python": "3.12.14"
+  },
+  "accepted_task_ids": [],
+  "test_results": [
+    {
+      "case": "B2-version",
+      "green": "passed",
+      "negative_control": "expected_failure",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B2 package, desktop manifests"
+    },
+    {
+      "case": "B2-domains",
+      "green": "passed",
+      "negative_control": "expected_failure",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B2 glossary distinguishes"
+    },
+    {
+      "case": "B3-doc",
+      "green": "passed",
+      "negative_control": "expected_failure",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B3 every operator entry"
+    },
+    {
+      "case": "B3-cli",
+      "green": "passed",
+      "negative_control": "expected_failure",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B3 CLI refuses"
+    },
+    {
+      "case": "H5",
+      "green": "passed",
+      "negative_control": "expected_failure",
+      "test_file": "tests/repositorytest.mjs",
+      "test_name_pattern": "Git version and required no-lazy-fetch"
+    },
+    {
+      "case": "H6",
+      "green": "passed",
+      "negative_control": "expected_failure",
+      "test_file": "tests/recoverytest.mjs",
+      "test_name_pattern": "explicit restore upgrade reaches reviewed activation"
+    }
+  ],
+  "task_assessments": [
+    {
+      "task_id": "T01.01",
+      "acceptance_criteria": [
+        "Node、Python、Git、三类 CLI 实際路径和版本有记录",
+        "区分桌面与独立 CLI",
+        "无必需入口失效"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/foundation-evidence.json",
+        "docs/federation/real-provider-probes.md"
+      ],
+      "remaining": "Current local test runtimes recorded; both PCs and all three native executors are not fully verified."
+    },
+    {
+      "task_id": "T01.02",
+      "acceptance_criteria": [
+        "工作仓、数据目录、验证登记簿、证据目录存在且权限符合合同",
+        "清除未采用的示例路径"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/foundation-evidence.json",
+        "cli/doctor.mjs"
+      ],
+      "remaining": "Production directory/ACL/configuration digest and second-PC setup remain unverified."
+    },
+    {
+      "task_id": "T01.03",
+      "acceptance_criteria": [
+        "冻结 SHA 上全部必选回归通过",
+        "Windows 路径断言有定位、修正或经核准的替代测试",
+        "不删测试凑绿"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/pr2-0.24-evidence.json"
+      ],
+      "remaining": "30 unique targeted Node tests and 57 worker prompt assertions pass; new PR head full Windows CI still pending."
+    },
+    {
+      "task_id": "T01.04",
+      "acceptance_criteria": [
+        "桩执行器覆盖领取、报告、租约、重启、失败",
+        "使用独立端口和临时数据",
+        "不触及真实任务"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/looptest.mjs",
+        "tests/dispatchtest.mjs",
+        "tests/servertest.mjs"
+      ],
+      "remaining": "Existing model-free process fixtures; this batch only reran named PR2 cases, not every lifecycle scenario."
+    },
+    {
+      "task_id": "T01.05",
+      "acceptance_criteria": [
+        "运行中数据库使用一致性备份方式",
+        "恢复后任务、事件、证据索引可校验",
+        "恢复副本不连接生产 peers"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/backup-evidence.json",
+        "docs/federation/review-recovery-evidence.json",
+        "tests/recoverytest.mjs"
+      ],
+      "remaining": "Historical consistent-backup drill plus current two legacy upgrade cases; current deployed configuration restore drill remains pending."
+    },
+    {
+      "task_id": "T01.06",
+      "acceptance_criteria": [
+        "配置有效、回归全绿、一次恢复演练通过，风险未被隐藏为 WARN"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/gates/G01.draft.json"
+      ],
+      "remaining": "Independent TEST/REVIEW acceptance, G00 and remaining S01 evidence are pending."
+    }
+  ],
+  "evidence_manifest": "docs/federation/pr2-0.24-evidence.json",
+  "evidence_sha256": "1a633f4037c41f35e8e62d12535f6ab2b88b576e935fd869cacfecdb03687cca",
+  "evidence_hash_format": "UTF-8 LF",
+  "required_roles": [
+    "TEST",
+    "REVIEW"
+  ],
+  "unresolved_findings": [
+    "G00 not accepted",
+    "Current complete Windows CI pending",
+    "Two-PC/runtime/configuration evidence incomplete",
+    "Independent reviewer receipt missing"
+  ],
+  "reviewer_instance_id": null,
+  "operator_decision_ref": null,
+  "verified_at": null,
+  "drafted_at": "2026-10-01",
+  "rollback_ref": "backup/pr2-before-main-20261001",
+  "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database."
+}
