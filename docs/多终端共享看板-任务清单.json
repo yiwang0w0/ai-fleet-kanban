@@ -2399,9 +2399,9 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Panel delivery now covers approved receiving baseline, actual file packaging and resumable transfer, content verification, independent input preparation, one-use fixed checks and receipt reconciliation. Related Windows tests and actual localhost two-board browser flow passed; no physical two-PC or new real-provider calls.",
+        "scope": "Panel delivery includes approved source Git integration, explicit version-bound acceptance, bilateral completion approvals and local settlement; actual Git/HTTP regressions and nine browser actions passed on two temporary localhost boards, with one synthetic fixture run and no new real-provider call.",
         "pending": [
-          "Final Git integration/completion UI and full structural editor",
+          "Full dependency graph and structural editor",
           "History pagination and operator queue retention procedure",
           "Actual Tailscale two-PC and desktop G08 acceptance"
         ]
@@ -2416,7 +2416,9 @@
         "docs/federation/fleet-binding-actions-evidence.json",
         "core/fleet-delivery-actions.mjs",
         "tests/completiontest.mjs",
-        "docs/federation/fleet-delivery-actions-evidence.json"
+        "docs/federation/fleet-delivery-actions-evidence.json",
+        "core/fleet-completion-actions.mjs",
+        "docs/federation/fleet-completion-actions-evidence.json"
       ]
     },
     {
