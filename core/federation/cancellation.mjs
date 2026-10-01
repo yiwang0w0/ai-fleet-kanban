@@ -49,8 +49,9 @@ export function listCancellations(db,{projectId,limit=100}){
 export function cancellationState(db,relationId){const c=row(db,relationId);return {relation_id:c.relation_id,cancel_id:c.cancel_id,project_id:c.project_id,side:c.side,state:c.state,stopped:c.state==="stopped",request:JSON.parse(c.request_json),receipt:c.stopped_json?JSON.parse(c.stopped_json):c.received_json?JSON.parse(c.received_json):null,dispatch_started:false};}
 export function prepareCancellation(db,{relationId,cancelId,expectedTaskVersion,reasonCode="operator_cancelled"}){
  uuid(cancelId,"cancel_id");version(expectedTaskVersion);if(!reasons.includes(reasonCode))fail("BAD_INPUT","取消原因无效",400);
- return unit(db,()=>{const b=bindingState(db,relationId);if(b.side!=="source"||b.state!=="confirmed")fail("CONFIRMATION_REQUIRED","已确认的来源委派才能请求执行取消");
+ return unit(db,()=>{const b=bindingState(db,relationId);
   const prior=db.prepare("SELECT * FROM delegation_cancellations WHERE relation_id=?").get(relationId);if(prior){row(db,relationId);if(prior.cancel_id!==cancelId||prior.expected_task_version!==expectedTaskVersion||JSON.parse(prior.request_json).reason_code!==reasonCode)fail("REQUEST_CONFLICT","取消请求已固定");return cancellationState(db,relationId);}
+  if(b.side!=="source"||b.state!=="confirmed")fail("CONFIRMATION_REQUIRED","已确认的来源委派才能请求执行取消");
   const n=localIdentity(db),t=db.prepare("SELECT aggregate_version FROM tasks WHERE task_uid=?").get(b.task_uid);if(!t||t.aggregate_version!==expectedTaskVersion)fail("CONFLICT","来源任务版本已变化");
   const body={schema_version:1,kind:"cancel_delegation",cancel_id:cancelId,relation:b.relation,reason_code:reasonCode};
   db.prepare("INSERT INTO delegation_cancellations VALUES(?,?,?,?,?,?,?,?,?,'pending',NULL,NULL,NULL,?)").run(relationId,cancelId,b.project_id,"source",n.node_id,n.sync_epoch,canonical(body),digest(body),expectedTaskVersion,at());event(db,relationId,"cancel_requested",{cancel_id:cancelId});return cancellationState(db,relationId);
@@ -67,8 +68,9 @@ function scope(db,d){
 }
 function receipt(c,kind,extra={}){const d=JSON.parse(c.request_json).relation;return {schema_version:1,kind,cancel_id:c.cancel_id,relation_id:c.relation_id,request_digest:c.request_digest,source_node_id:d.source_node_id,source_epoch:d.source_epoch,target_node_id:d.target_node_id,target_epoch:d.target_epoch,stopped:kind==="cancel_stopped",...extra};}
 export function receiveCancellation(db,peer,body){const d=message(body);return unit(db,()=>{
- targetGrant(db,d,peer);const b=bindingState(db,d.relation_id);if(b.side!=="target"||!["prepared","confirmed"].includes(b.state)||canonical(b.relation)!==canonical(d))fail("CONTRACT_MISMATCH","取消不属于本方实际委派绑定");
+ targetGrant(db,d,peer);const b=bindingState(db,d.relation_id);if(b.side!=="target"||canonical(b.relation)!==canonical(d))fail("CONTRACT_MISMATCH","取消不属于本方实际委派绑定");
  const prior=db.prepare("SELECT * FROM delegation_cancellations WHERE relation_id=? OR cancel_id=?").get(d.relation_id,body.cancel_id);if(prior){if(prior.request_digest!==digest(body))fail("REQUEST_CONFLICT","取消请求内容改变");const c=row(db,d.relation_id);return JSON.parse(c.stopped_json||c.received_json);}
+ if(!["prepared","confirmed"].includes(b.state))fail("CONTRACT_MISMATCH","取消端点已结束");
  const n=localIdentity(db),members=scope(db,d),scopeDigest=digest(members.map(t=>t.task_uid));
  db.prepare("INSERT INTO delegation_cancellations VALUES(?,?,?,?,?,?,?,?,NULL,'received',NULL,NULL,?,?)").run(d.relation_id,body.cancel_id,d.project_id,"target",n.node_id,n.sync_epoch,canonical(body),digest(body),scopeDigest,at());
  for(const t of members)db.prepare("INSERT INTO cancellation_members VALUES(?,?,?)").run(body.cancel_id,t.id,t.task_uid);

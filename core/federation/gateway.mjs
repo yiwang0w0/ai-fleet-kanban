@@ -5,7 +5,7 @@ import {migrateResults,receiveResult,peerResultStatus,MAX_RESULT_BYTES} from "./
 import {receiveCancellation,peerCancellationState} from "./cancellation.mjs";
 import {migrateBindings,receiveBindingMessage} from "./bindings.mjs";
 import http from "node:http";
-import {migrateRelations,publishTopology,approveRelation,withdrawRelation,completeRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
+import {migrateRelations,publishTopology,approveRelation,withdrawRelation,completeRelation,cancelRelation,relationStatus,MAX_TOPOLOGY_BYTES} from "./relations.mjs";
 import {migrateDelegation,receiveOffer,peerDelegationStatus} from "./delegation.mjs";
 import {sourceRecoveryMarker} from "./epoch-state.mjs";
 import {startSnapshot,snapshotPage} from "./snapshots.mjs";
@@ -122,11 +122,11 @@ function createPeerServer(db) {
         const result=transaction(db,()=>receiveBindingMessage(db,authenticate(db,req.headers.authorization,"delegation:binding"),body));
         return send(res,200,result);
       }
-      if (["/peer/v1/relations/publish","/peer/v1/relations/approve","/peer/v1/relations/status","/peer/v1/relations/withdraw","/peer/v1/relations/complete"].includes(req.url) && req.method==="POST") {
-        const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="publish"?MAX_TOPOLOGY_BYTES+4096:action==="complete"?32768:8192);
+      if (["/peer/v1/relations/publish","/peer/v1/relations/approve","/peer/v1/relations/status","/peer/v1/relations/withdraw","/peer/v1/relations/complete","/peer/v1/relations/cancel"].includes(req.url) && req.method==="POST") {
+        const action=req.url.slice(req.url.lastIndexOf("/")+1),body=await bodyJSON(req,action==="publish"?MAX_TOPOLOGY_BYTES+4096:["complete","cancel"].includes(action)?32768:8192);
         const result=transaction(db,()=>{
-          const peer=authenticate(db,req.headers.authorization,action==="status"?"relations:read":action==="withdraw"?"relations:approve":"relations:"+action);
-          return action==="publish"?publishTopology(db,peer,body):action==="approve"?approveRelation(db,peer,body):action==="withdraw"?withdrawRelation(db,peer,body):action==="complete"?completeRelation(db,peer,body):relationStatus(db,peer,body);
+          const peer=authenticate(db,req.headers.authorization,action==="status"?"relations:read":action==="withdraw"?"relations:approve":action==="cancel"?"relations:complete":"relations:"+action);
+          return action==="publish"?publishTopology(db,peer,body):action==="approve"?approveRelation(db,peer,body):action==="withdraw"?withdrawRelation(db,peer,body):action==="complete"?completeRelation(db,peer,body):action==="cancel"?cancelRelation(db,peer,body):relationStatus(db,peer,body);
         });
         return send(res,200,result);
       }

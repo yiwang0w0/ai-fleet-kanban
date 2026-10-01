@@ -14,5 +14,6 @@ function claimable(db,id){
  if(!exists(db,"delegation_incoming")||!db.prepare("SELECT 1 FROM delegation_incoming WHERE target_task_id=? AND state='accepted_unconfirmed'").get(id))return true;
  return ready(db,id);
 }
-function projection(db,delegationId){if(!exists(db,"delegation_bindings"))return null;const b=db.prepare("SELECT * FROM delegation_bindings WHERE delegation_id=? ORDER BY rowid DESC LIMIT 1").get(delegationId);if(!b)return null;const n=db.prepare("SELECT node_id,sync_epoch FROM board_node WHERE singleton=1").get();return {relation_id:b.relation_id,task_uid:b.task_uid,side:b.side,state:b.closed?"completed":b.state,identity_current:b.node_id===n.node_id&&b.node_epoch===n.sync_epoch,binding_authorized:b.side==="target"&&ready(db,b.task_id)};}
-module.exports={cancellationProjection:cancellation.projection,cancellationHeld:cancellation.held,projection,heldSQL,readySQL,ready,sourceHeld,claimable};
+function projection(db,delegationId){if(!exists(db,"delegation_bindings"))return null;const b=db.prepare("SELECT * FROM delegation_bindings WHERE delegation_id=? ORDER BY rowid DESC LIMIT 1").get(delegationId);if(!b)return null;const n=db.prepare("SELECT node_id,sync_epoch FROM board_node WHERE singleton=1").get();return {relation_id:b.relation_id,task_uid:b.task_uid,side:b.side,state:outcome(b),identity_current:b.node_id===n.node_id&&b.node_epoch===n.sync_epoch,binding_authorized:b.side==="target"&&ready(db,b.task_id)};}
+const outcome=b=>b.state==="cancelled"?"cancelled":b.closed?"completed":b.state;
+module.exports={outcome,cancellationProjection:cancellation.projection,cancellationHeld:cancellation.held,projection,heldSQL,readySQL,ready,sourceHeld,claimable};

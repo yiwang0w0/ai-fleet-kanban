@@ -87,7 +87,7 @@ export function prepareResult(db,{resultId,relationId,expectedTaskVersion}){
  return unit(db,()=>{
   const b=bindingState(db,relationId),old=db.prepare("SELECT * FROM delegation_results WHERE result_id=?").get(resultId);
   if(old){if(old.relation_id!==relationId||old.task_version!==expectedTaskVersion)fail("REQUEST_CONFLICT","交付编号已绑定其他内容");return resultState(db,resultId);}
-  if(b.side!=="target"||b.state!=="confirmed")fail("CONFIRMATION_REQUIRED","已确认接收任务才能交付");
+  if(b.side!=="target"||!(b.state==="confirmed"||b.state==="cancelled"&&b.cancellation?.stopped))fail("CONFIRMATION_REQUIRED","已确认接收任务才能交付");
   if(topologyState(db,b.project_id).phase!=="ready")fail("TOPOLOGY_PENDING","先恢复待提交结构");
   if(db.prepare("SELECT 1 FROM delegation_results r WHERE relation_id=? AND NOT EXISTS(SELECT 1 FROM result_decisions d WHERE d.result_id=r.result_id)").get(relationId))fail("RESULT_PENDING","上一候选尚待来源决定");
   const t=db.prepare("SELECT * FROM tasks WHERE task_uid=?").get(b.task_uid);
@@ -118,7 +118,7 @@ export function receiveResult(db,peer,body){
  const d=validate(body);
  return unit(db,()=>{
   grant(db,d,peer,"target");const b=bindingState(db,d.relation_id);
-  if(b.side!=="source"||b.state!=="confirmed"||canonical(b.relation)!==canonical(d))fail("CONTRACT_MISMATCH","交付不属于已确认的来源合同");
+  if(b.side!=="source"||!(b.state==="confirmed"||b.state==="cancelled"&&b.cancellation?.stopped)||canonical(b.relation)!==canonical(d))fail("CONTRACT_MISMATCH","交付不属于已确认的来源合同");
   const prior=db.prepare("SELECT * FROM delegation_results WHERE result_id=?").get(body.result_id);
   if(prior){if(prior.body_digest!==digest(body))fail("REQUEST_CONFLICT","同一交付号内容不同");row(db,body.result_id);return receipt(prior);}
   if(db.prepare("SELECT 1 FROM delegation_results WHERE relation_id=? AND run_id=?").get(d.relation_id,body.execution.run_id))fail("RESULT_RUN_REUSED","旧运行已有候选交付");

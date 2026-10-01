@@ -1,3 +1,4 @@
+import {normalizeCancellationClosure} from "./cancellation-contract.mjs";
 import {normalizeCompletion} from "./completion-contract.mjs";
 // Project-scoped, serialized relationship registry. Local topology enforcement is a separate integration.
 import {randomUUID} from "node:crypto";
@@ -12,7 +13,7 @@ const project=x=>names([x],"project_id",null,1)[0];
 function unit(db,fn){if(!db.isTransaction)return transaction(db,fn);db.exec("SAVEPOINT relations_unit");try{const r=fn();db.exec("RELEASE relations_unit");return r;}catch(e){db.exec("ROLLBACK TO relations_unit; RELEASE relations_unit");throw e;}}
 export function migrateRelations(db){return unit(db,()=>{
  localIdentity(db);db.exec("CREATE TABLE IF NOT EXISTS relation_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL); INSERT OR IGNORE INTO relation_schema VALUES(1,1)");
- if(db.prepare("SELECT version FROM relation_schema WHERE singleton=1").get().version!==1&&db.prepare("SELECT version FROM relation_schema WHERE singleton=1").get().version!==2)fail("SCHEMA_INCOMPATIBLE","关系登记存储格式不兼容");
+ if(![1,2,3].includes(db.prepare("SELECT version FROM relation_schema WHERE singleton=1").get().version))fail("SCHEMA_INCOMPATIBLE","关系登记存储格式不兼容");
  db.exec([
   "CREATE TABLE IF NOT EXISTS relation_graphs(project_id TEXT PRIMARY KEY,graph_id TEXT NOT NULL UNIQUE,graph_epoch TEXT NOT NULL,registrar_node_id TEXT NOT NULL,registrar_epoch TEXT NOT NULL,version INTEGER NOT NULL CHECK(version BETWEEN 1 AND 9007199254740991),created_at TEXT NOT NULL);",
   "CREATE TABLE IF NOT EXISTS relation_members(graph_id TEXT NOT NULL,node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,PRIMARY KEY(graph_id,node_id));",
@@ -27,17 +28,22 @@ export function migrateRelations(db){return unit(db,()=>{
   "CREATE TABLE IF NOT EXISTS relation_completion_proposals(relation_id TEXT PRIMARY KEY,completion_id TEXT NOT NULL UNIQUE,completion_json TEXT NOT NULL,completion_digest TEXT NOT NULL,created_at TEXT NOT NULL);",
   "CREATE TABLE IF NOT EXISTS relation_completion_votes(relation_id TEXT NOT NULL,node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,credential_version INTEGER NOT NULL,completion_digest TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(relation_id,node_id,credential_version));",
   "CREATE TABLE IF NOT EXISTS relation_completions(relation_id TEXT PRIMARY KEY,graph_id TEXT NOT NULL,completion_id TEXT NOT NULL UNIQUE,completion_digest TEXT NOT NULL,receipt_json TEXT NOT NULL,created_at TEXT NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS relation_cancellation_proposals(relation_id TEXT PRIMARY KEY,cancel_id TEXT NOT NULL UNIQUE,cancellation_json TEXT NOT NULL,cancellation_digest TEXT NOT NULL,created_at TEXT NOT NULL);",
+  "CREATE TABLE IF NOT EXISTS relation_cancellation_votes(relation_id TEXT NOT NULL,node_id TEXT NOT NULL,node_epoch TEXT NOT NULL,credential_version INTEGER NOT NULL,cancellation_digest TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(relation_id,node_id,credential_version));",
+  "CREATE TABLE IF NOT EXISTS relation_cancellations(relation_id TEXT PRIMARY KEY,graph_id TEXT NOT NULL,cancel_id TEXT NOT NULL UNIQUE,cancellation_digest TEXT NOT NULL,receipt_json TEXT NOT NULL,created_at TEXT NOT NULL);",
+  "CREATE TRIGGER IF NOT EXISTS relation_completion_exclusive BEFORE INSERT ON relation_completion_proposals WHEN EXISTS(SELECT 1 FROM relation_cancellation_proposals WHERE relation_id=NEW.relation_id) BEGIN SELECT RAISE(ABORT,'CANCELLATION_COMMITTED: relation cannot complete'); END;",
+  "CREATE TRIGGER IF NOT EXISTS relation_cancellation_exclusive BEFORE INSERT ON relation_cancellation_proposals WHEN EXISTS(SELECT 1 FROM relation_completion_proposals WHERE relation_id=NEW.relation_id) BEGIN SELECT RAISE(ABORT,'COMPLETION_COMMITTED: relation cannot cancel'); END;",
   "CREATE INDEX IF NOT EXISTS relation_edges_graph ON relation_edges(graph_id);",
   "CREATE INDEX IF NOT EXISTS relation_proposals_graph ON relation_proposals(graph_id);",
   "CREATE TRIGGER IF NOT EXISTS relation_graph_identity BEFORE UPDATE OF project_id,graph_id,graph_epoch,registrar_node_id,registrar_epoch,created_at ON relation_graphs BEGIN SELECT RAISE(ABORT,'relation graph identity is immutable'); END;"
  ].join("\n"));
- for(const table of ["relation_members","relation_vertex_locations","relation_proposals","relation_approvals","relation_edges","relation_withdrawals","relation_requests","relation_events","relation_completion_proposals","relation_completion_votes","relation_completions"]){
+ for(const table of ["relation_members","relation_vertex_locations","relation_proposals","relation_approvals","relation_edges","relation_withdrawals","relation_requests","relation_events","relation_completion_proposals","relation_completion_votes","relation_completions","relation_cancellation_proposals","relation_cancellation_votes","relation_cancellations"]){
   db.exec("CREATE TRIGGER IF NOT EXISTS "+table+"_immutable BEFORE UPDATE ON "+table+" BEGIN SELECT RAISE(ABORT,'relation history is immutable'); END");
  }
- for(const table of ["relation_graphs","relation_members","relation_vertex_locations","relation_topologies","relation_proposals","relation_approvals","relation_edges","relation_withdrawals","relation_requests","relation_events","relation_completion_proposals","relation_completion_votes","relation_completions"]){
+ for(const table of ["relation_graphs","relation_members","relation_vertex_locations","relation_topologies","relation_proposals","relation_approvals","relation_edges","relation_withdrawals","relation_requests","relation_events","relation_completion_proposals","relation_completion_votes","relation_completions","relation_cancellation_proposals","relation_cancellation_votes","relation_cancellations"]){
   db.exec("CREATE TRIGGER IF NOT EXISTS "+table+"_retained BEFORE DELETE ON "+table+" BEGIN SELECT RAISE(ABORT,'relation retention is not enabled'); END");
  }
- db.exec("UPDATE relation_schema SET version=2 WHERE singleton=1 AND version=1");
+ db.exec("UPDATE relation_schema SET version=3 WHERE singleton=1 AND version<3");
 });}
 function graph(db,{project_id,graph_id,graph_epoch}){
  project(project_id);uuid(graph_id,"graph_id");uuid(graph_epoch,"graph_epoch");const node=localIdentity(db);
@@ -105,7 +111,7 @@ export function validateCombinedGraph(snapshots,relations=[]){
 function snapshots(db,g,replacement=null){
  const all=db.prepare("SELECT node_id,snapshot_json FROM relation_topologies WHERE graph_id=?").all(g.graph_id).filter(r=>r.node_id!==replacement?.owner_node_id).map(r=>JSON.parse(r.snapshot_json));if(replacement)all.push(replacement);return all;
 }
-function edges(db,g,exclude=null){const rows=db.prepare("SELECT from_uid,to_uid FROM relation_edges e WHERE graph_id=? AND NOT EXISTS(SELECT 1 FROM relation_completions c WHERE c.relation_id=e.relation_id) AND (? IS NULL OR e.relation_id<>?) LIMIT ?").all(g.graph_id,exclude,exclude,MAX_GRAPH_EDGES+1);if(rows.length>MAX_GRAPH_EDGES)fail("GRAPH_LIMIT","跨端关系数量超过上限");return rows;}
+function edges(db,g,exclude=null){const rows=db.prepare("SELECT from_uid,to_uid FROM relation_edges e WHERE graph_id=? AND NOT EXISTS(SELECT 1 FROM relation_completions c WHERE c.relation_id=e.relation_id) AND NOT EXISTS(SELECT 1 FROM relation_cancellations c WHERE c.relation_id=e.relation_id) AND (? IS NULL OR e.relation_id<>?) LIMIT ?").all(g.graph_id,exclude,exclude,MAX_GRAPH_EDGES+1);if(rows.length>MAX_GRAPH_EDGES)fail("GRAPH_LIMIT","跨端关系数量超过上限");return rows;}
 function request(db,g,peer,id,operation,args,work){
  uuid(id,"request_id");const hash=digest(args),prior=db.prepare("SELECT * FROM relation_requests WHERE graph_id=? AND node_id=? AND node_epoch=? AND request_id=?").get(g.graph_id,peer.peer_node_id,peer.peer_epoch,id);
  if(prior){if(prior.operation!==operation||prior.args_digest!==hash)fail("REQUEST_CONFLICT","请求 ID 已绑定不同操作或内容");return JSON.parse(prior.result_json);}
@@ -144,19 +150,19 @@ function relationEndpoints(db,g,d){
   if(!JSON.parse(t.snapshot_json).vertices.some(v=>v.task_uid===uid))fail("DANGLING_RELATION","委派端点未登记");
  }
 }
-function validApprovals(db,g,d,{completion=null}={}){
+function validApprovals(db,g,d,{completion=null,cancellation=null}={}){
  const local=localIdentity(db),out=[];
  for(const nodeId of [d.source_node_id,d.target_node_id]){
   const epoch=nodeId===d.source_node_id?d.source_epoch:d.target_epoch;let credentialVersion;
   if(nodeId===local.node_id){if(epoch!==local.sync_epoch)continue;credentialVersion=0;}
   else{
    const p=db.prepare("SELECT * FROM federation_peers WHERE peer_node_id=?").get(nodeId);
-   if(!p||p.status!=="active"||p.peer_epoch!==epoch||!JSON.parse(p.scopes_json).includes(completion?"relations:complete":"relations:approve")||!JSON.parse(p.projects_json).includes(g.project_id))continue;
+   if(!p||p.status!=="active"||p.peer_epoch!==epoch||!JSON.parse(p.scopes_json).includes(completion||cancellation?"relations:complete":"relations:approve")||!JSON.parse(p.projects_json).includes(g.project_id))continue;
    if(db.prepare("SELECT 1 FROM sqlite_master WHERE name='federation_retired_epochs'").get()&&db.prepare("SELECT 1 FROM federation_retired_epochs WHERE origin_node_id=? AND origin_epoch=?").get(nodeId,epoch))continue;
    credentialVersion=p.credential_version;
   }
-  const row=db.prepare("SELECT node_id,node_epoch,credential_version,"+(completion?"completion_digest":"descriptor_digest")+" AS bound_digest FROM "+(completion?"relation_completion_votes":"relation_approvals")+" WHERE relation_id=? AND node_id=? AND credential_version=?").get(d.relation_id,nodeId,credentialVersion);
-  if(row&&row.node_epoch===epoch&&row.bound_digest===digest(completion??d))out.push({...row,descriptor_digest:digest(d)});
+  const row=db.prepare("SELECT node_id,node_epoch,credential_version,"+(cancellation?"cancellation_digest":completion?"completion_digest":"descriptor_digest")+" AS bound_digest FROM "+(cancellation?"relation_cancellation_votes":completion?"relation_completion_votes":"relation_approvals")+" WHERE relation_id=? AND node_id=? AND credential_version=?").get(d.relation_id,nodeId,credentialVersion);
+  if(row&&row.node_epoch===epoch&&row.bound_digest===digest(cancellation??completion??d))out.push({...row,descriptor_digest:digest(d)});
  }
  return out.sort((a,b)=>a.node_id.localeCompare(b.node_id));
 }
@@ -170,6 +176,7 @@ export function approveRelation(db,peer,args){
    if(prior&&(prior.graph_id!==g.graph_id||prior.descriptor_digest!==digest(d)))fail("REQUEST_CONFLICT","关系 ID 已绑定其他合同");
    if(db.prepare("SELECT 1 FROM relation_withdrawals WHERE relation_id=?").get(d.relation_id))fail("RELATION_WITHDRAWN","该确认申请已撤回，须使用新的关系 ID");
    if(db.prepare("SELECT 1 FROM relation_completions WHERE relation_id=?").get(d.relation_id))fail("RELATION_COMPLETED","已结束关系不能重新确认");
+   if(db.prepare("SELECT 1 FROM relation_cancellations WHERE relation_id=?").get(d.relation_id))fail("RELATION_CANCELLED","已取消关系不能重新确认");
    const confirmed=db.prepare("SELECT receipt_json FROM relation_edges WHERE relation_id=? AND graph_id=?").get(d.relation_id,g.graph_id);if(confirmed)return JSON.parse(confirmed.receipt_json);
    if(db.prepare("SELECT 1 FROM relation_edges WHERE delegation_id=?").get(d.delegation_id))fail("DELEGATION_ALREADY_REGISTERED","该委派已有已确认关系");
    seenVersion(g,args.expected_version);relationEndpoints(db,g,d);
@@ -210,6 +217,7 @@ export function relationStatus(db,peer,args){
   if(args.relation_id!==null){
    const p=db.prepare("SELECT * FROM relation_proposals WHERE graph_id=? AND relation_id=?").get(g.graph_id,args.relation_id);if(!p)fail("NOT_FOUND","关系未登记",404);
    if(db.prepare("SELECT 1 FROM relation_withdrawals WHERE relation_id=?").get(args.relation_id))return {schema_version:1,kind:"relation_withdrawn",relation_id:args.relation_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,confirmed:false,dispatch_ready:false};
+   const cancelled=db.prepare("SELECT receipt_json FROM relation_cancellations WHERE relation_id=?").get(args.relation_id);if(cancelled)return JSON.parse(cancelled.receipt_json);
    const completed=db.prepare("SELECT receipt_json FROM relation_completions WHERE relation_id=?").get(args.relation_id);if(completed)return JSON.parse(completed.receipt_json);
    const r=db.prepare("SELECT receipt_json FROM relation_edges WHERE relation_id=?").get(args.relation_id);if(r)return JSON.parse(r.receipt_json);
    return {schema_version:1,kind:"relation_pending",relation_id:args.relation_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,descriptor_digest:p.descriptor_digest,approved_by:validApprovals(db,g,JSON.parse(p.descriptor_json)).map(a=>a.node_id),confirmed:false,dispatch_ready:false};
@@ -242,6 +250,7 @@ export function completeRelation(db,peer,args){
  return unit(db,()=>{const g=graph(db,d);authorize(db,g,peer,"relations:complete");const side=peer.peer_node_id===d.source_node_id?"source":peer.peer_node_id===d.target_node_id?"target":null;if(!side||peer.peer_epoch!==d[side+"_epoch"])fail("FORBIDDEN","只有原委派双方可确认完成",403);
   return request(db,g,peer,args.request_id,"complete",args,()=>{
    const edge=db.prepare("SELECT receipt_json FROM relation_edges WHERE relation_id=? AND graph_id=?").get(d.relation_id,g.graph_id);if(!edge||canonical(JSON.parse(edge.receipt_json).relation)!==canonical(d))fail("CONTRACT_MISMATCH","完成不属于已确认关系");
+   if(db.prepare("SELECT 1 FROM relation_cancellation_proposals WHERE relation_id=?").get(d.relation_id))fail("CANCELLATION_COMMITTED","关系已进入取消退役");
    const prior=db.prepare("SELECT * FROM relation_completion_proposals WHERE relation_id=?").get(d.relation_id);if(prior&&prior.completion_digest!==digest(c))fail("REQUEST_CONFLICT","完成合同已固定");
    const done=db.prepare("SELECT receipt_json FROM relation_completions WHERE relation_id=?").get(d.relation_id);if(done)return JSON.parse(done.receipt_json);
    seenVersion(g,args.expected_version);
@@ -252,6 +261,26 @@ export function completeRelation(db,peer,args){
    db.prepare("UPDATE relation_graphs SET version=version+1 WHERE graph_id=?").run(g.graph_id);g.version++;
    const receipt={schema_version:1,kind:"relation_completed",project_id:g.project_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,registrar_node_id:g.registrar_node_id,registrar_epoch:g.registrar_epoch,relation_id:d.relation_id,descriptor_digest:digest(d),completion:c,completion_digest:digest(c),approved_by:approvals.map(a=>({node_id:a.node_id,node_epoch:a.node_epoch,credential_version:a.credential_version})),...proof,completed:true,dispatch_ready:false};
    db.prepare("INSERT INTO relation_completions VALUES(?,?,?,?,?,?)").run(d.relation_id,g.graph_id,c.plan.completion_id,digest(c),canonical(receipt),at());event(db,g,"relation_completed",peer.peer_node_id,{relation_id:d.relation_id,completion_digest:digest(c),...proof});return receipt;
+  });
+ });
+}
+
+/** Retire only after both current authenticated endpoints bind the same stop proof.
+ * Original edges and cancellation evidence stay in history; no business acceptance. */
+export function cancelRelation(db,peer,args){
+ exact(args,["request_id","expected_version","cancellation"],"cancel relation");const c=normalizeCancellationClosure(args.cancellation),d=c.request.relation;version(args.expected_version);
+ return unit(db,()=>{const g=graph(db,d);authorize(db,g,peer,"relations:complete");const side=peer.peer_node_id===d.source_node_id?"source":peer.peer_node_id===d.target_node_id?"target":null;if(!side||peer.peer_epoch!==d[side+"_epoch"])fail("FORBIDDEN","只有原委派双方可确认取消退役",403);
+  return request(db,g,peer,args.request_id,"cancel",args,()=>{
+   const edge=db.prepare("SELECT receipt_json FROM relation_edges WHERE relation_id=? AND graph_id=?").get(d.relation_id,g.graph_id);if(!edge||canonical(JSON.parse(edge.receipt_json).relation)!==canonical(d))fail("CONTRACT_MISMATCH","取消不属于已确认关系");
+   if(db.prepare("SELECT 1 FROM relation_completion_proposals WHERE relation_id=?").get(d.relation_id))fail("COMPLETION_COMMITTED","关系已进入完成登记");
+   const prior=db.prepare("SELECT * FROM relation_cancellation_proposals WHERE relation_id=?").get(d.relation_id);if(prior&&prior.cancellation_digest!==digest(c))fail("REQUEST_CONFLICT","取消停止证明已固定");
+   const done=db.prepare("SELECT receipt_json FROM relation_cancellations WHERE relation_id=?").get(d.relation_id);if(done)return JSON.parse(done.receipt_json);seenVersion(g,args.expected_version);
+   if(!prior)db.prepare("INSERT INTO relation_cancellation_proposals VALUES(?,?,?,?,?)").run(d.relation_id,c.request.cancel_id,canonical(c),digest(c),at());
+   db.prepare("INSERT OR IGNORE INTO relation_cancellation_votes VALUES(?,?,?,?,?,?)").run(d.relation_id,peer.peer_node_id,peer.peer_epoch,peer.peer_node_id===g.registrar_node_id?0:peer.credential_version,digest(c),at());
+   const approvals=validApprovals(db,g,d,{cancellation:c});if(approvals.length<2)return {schema_version:1,kind:"relation_cancellation_pending",relation_id:d.relation_id,cancellation_digest:digest(c),graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,approved_by:approvals.map(a=>a.node_id),cancelled:false,dispatch_ready:false};
+   const proof=validateCombinedGraph(snapshots(db,g),edges(db,g,d.relation_id));db.prepare("UPDATE relation_graphs SET version=version+1 WHERE graph_id=?").run(g.graph_id);g.version++;
+   const receipt={schema_version:1,kind:"relation_cancelled",project_id:g.project_id,graph_id:g.graph_id,graph_epoch:g.graph_epoch,graph_version:g.version,registrar_node_id:g.registrar_node_id,registrar_epoch:g.registrar_epoch,relation_id:d.relation_id,descriptor_digest:digest(d),cancellation:c,cancellation_digest:digest(c),approved_by:approvals.map(a=>({node_id:a.node_id,node_epoch:a.node_epoch,credential_version:a.credential_version})),...proof,cancelled:true,dispatch_ready:false};
+   db.prepare("INSERT INTO relation_cancellations VALUES(?,?,?,?,?,?)").run(d.relation_id,g.graph_id,c.request.cancel_id,digest(c),canonical(receipt),at());event(db,g,"relation_cancelled",peer.peer_node_id,{relation_id:d.relation_id,cancellation_digest:digest(c),...proof});return receipt;
   });
  });
 }

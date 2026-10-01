@@ -320,7 +320,7 @@ test("schema v1 upgrades transactionally and read-only inspection remains availa
  f.b.db.exec("CREATE TRIGGER injected BEFORE UPDATE ON binding_schema BEGIN SELECT RAISE(ABORT,'migration fault'); END");
  assert.throws(()=>migrateBindings(f.b.db),/migration fault/);assert.equal(f.b.db.prepare("SELECT version FROM binding_schema").get().version,1);assert.equal(f.b.db.prepare("SELECT count(*) n FROM sqlite_master WHERE name='binding_proposal_decisions'").get().n,0);
  f.b.db.exec("DROP TRIGGER injected");migrateBindings(f.b.db);decline(f);migrateBindings(f.b.db);
- assert.equal(f.b.db.prepare("SELECT version FROM binding_schema").get().version,3);assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"declined");
+ assert.equal(f.b.db.prepare("SELECT version FROM binding_schema").get().version,4);assert.equal(bindingProposalState(f.b.db,f.d.relation_id).state,"declined");
  const db=new DatabaseSync(f.b.path);try{migrateBindings(db);assert.equal(bindingProposalState(db,f.d.relation_id).state,"declined");}finally{db.close();}
 });
 test("stale topology and revoked source access do not prevent an offline local decline",()=>{

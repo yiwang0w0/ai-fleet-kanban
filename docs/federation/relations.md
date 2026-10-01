@@ -45,7 +45,7 @@ relation_confirmed 回执含图版本/摘要、完整关系描述及双方 node_
 | /peer/v1/relations/withdraw | relations:approve | request_id, project_id, graph_id, graph_epoch, relation_id |
 | /peer/v1/relations/status | relations:read | project_id, graph_id, graph_epoch, relation_id |
 
-status 中 relation_id=null 返回图身份/版本、成员、各终端修订/摘要、图摘要及待确认数，不返回完整任务内容；指定 UUID 返回该申请状态。publish HTTP 上限为 4 MiB + 4096 字节，其余接口为 8 KiB；所有对象拒绝未知字段。握手能力名为 project-relations-v1。
+status 中 relation_id=null 返回图身份/版本、成员、各终端修订/摘要、图摘要及待确认数，不返回完整任务内容；指定 UUID 返回该申请状态。publish HTTP 上限为 4 MiB + 4096 字节，complete/cancel 为 32 KiB，其余接口为 8 KiB；所有对象拒绝未知字段。握手能力名为 project-relations-v1。
 
 本机管理员可读取自己的登记图，即使本机不是成员；发布/审批仍须列为成员。远程身份不能冒充本机管理员。该本地管理边界依赖数据库文件权限，不防御已经拥有本机数据库写权限的攻击者。
 
@@ -70,4 +70,4 @@ node cli/relations.mjs preview --db <所有者DB绝对路径> --project demo --g
 
 验证覆盖独立进程相反边竞争、混合路径循环、无环双向协作、HTTP 丢失回执后重发、上传期间撤销、凭据轮换、过期申请撤回重提、事务故障、队列恢复、正文限额、本地隐私字段排除及实际备份激活。测试使用临时数据库、合成任务和回环网络，没有使用真实模型、生产数据或其他电脑。
 
-剩余关键项：本地图冻结/版本提交和后续结构变更协议、端点本地合同核验、确认后按本机权限放行、取消与结果/证据传输、已确认关系退役、MCP 发现入口、物理多机分区和独立阶段验收。执行层不能直接信任历史 relation_confirmed。
+取消退役见 [双端取消结算](cancellation-closure.md)：登记双方当前凭据对同一停止证明投票，保留历史边，活动图排除已取消关系；它与正常完成互斥。物理多机分区、自动投递和独立阶段验收仍未完成，执行层不能直接信任历史 relation_confirmed。

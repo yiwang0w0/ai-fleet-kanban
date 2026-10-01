@@ -4,7 +4,7 @@
 
 ## 准备候选
 
-接收端 coordinate 以固定 result_id、relation_id 和当前任务版本准备交付。关系必须已确认，项目结构已提交。根任务必须 waiting 或 done，保留实际 run_id；本机子任务必须完成，子树都属于同一登记项目。根运行须由当前节点/epoch 的 broker 启动并结算，下游来源委派须完成后才能向上交付。
+接收端 coordinate 以固定 result_id、relation_id 和当前任务版本准备交付。关系须已确认，或已按原停止证明取消退役并仅保留历史交付；项目结构已提交。根任务必须 waiting 或 done，保留实际 run_id；本机子任务必须完成，子树都属于同一登记项目。根运行须由当前节点/epoch 的 broker 启动并结算，下游来源委派须完成后才能向上交付。
 
 每个范围内的历史运行都要具有停止证明。共享核验器接受未启动并已放弃、明确标识的 fixture 终态，或实际观察的 not_started / Windows Job 清空。仅报告完成、租约到期、数据库状态或 POSIX group_signalled 不足以证明停止。根候选须有已启动许可和结果，不能用未运行任务造交付。
 
@@ -22,7 +22,7 @@
 4. 执行端轮询，保存匹配 ACK 与拒绝决定后，通过原生 resolve 原子返回返工队列。执行端此前本机 done 也能按此链路重新打开，原生审计保留原状态。任何回执或审计失败会回滚整次变更；不会直接启动 agent。
 5. 如果来源先拒绝、执行端随后收到取消，再收到该拒绝，则只保存拒绝历史，不重新启动或放行工作。新运行结束后才可产生下一轮候选。
 
-网络/存储失败、408、429、5xx 返回 retry_pending，授权或合同错误返回 blocked；使用同一交付 ID 重试。此批只有显式单次 send/poll，后台重试服务仍待完成。收到 ACK 不等于通过验收；取消后的晚到报告保留为待裁定历史。review_state=cancel_pending 表示业务取消尚待最终裁定，即便已有物理停止证明也不表示业务结案。
+网络/存储失败、408、429、5xx 返回 retry_pending，授权或合同错误返回 blocked；使用同一交付 ID 重试。此批只有显式单次 send/poll，后台重试服务仍待完成。收到 ACK 不等于通过验收；取消后的晚到报告保留为待裁定历史。review_state=cancel_pending 表示该候选被取消流程隔离，不允许验收或返工；退役是否完成另看 get_cancellation.closure_phase。即便已有物理停止证明，也须通过 [取消结算](cancellation-closure.md) 关闭绑定。
 
 execution_mode=provider 表示受控进程路径，不能单独证明真实供应商调用。real_model_call_confirmed 在此合同中固定 false，合成 Node 进程测试也保留该值。fixture 不计入真实供应商验收。
 

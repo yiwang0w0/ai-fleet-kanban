@@ -10,7 +10,7 @@ export const EXECUTION_CAPABILITIES=Object.freeze(["board-tools","workspace-file
 export const ROLE_KINDS=["coordinate","implement","review","observe"];
 export const READ_TOOLS=["get_board_overview","list_tasks","get_task_context","get_task_evidence","get_repository","list_repositories","list_nodes","list_roles","get_task","get_sync_status","get_delegation","list_bindings","get_binding","get_binding_proposal","get_cancellation","list_cancellations","get_result","list_results"];
 export const ROLE_TOOLS=Object.freeze({
- coordinate:[...READ_TOOLS,"create_task","split_task","request_assignment","create_delegation","decide_delegation","prepare_topology","prepare_binding","release_delegation","decline_binding_proposal","request_cancellation","progress_cancellation","prepare_result","reject_result"],
+ coordinate:[...READ_TOOLS,"create_task","split_task","request_assignment","create_delegation","decide_delegation","prepare_topology","prepare_binding","release_delegation","decline_binding_proposal","request_cancellation","progress_cancellation","settle_cancellation","prepare_result","reject_result"],
  implement:["get_task","list_roles","report_result","heartbeat","split_task"],
  review:["get_task","list_roles","report_result","heartbeat"],
  observe:READ_TOOLS

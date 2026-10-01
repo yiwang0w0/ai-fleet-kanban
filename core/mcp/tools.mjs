@@ -1,3 +1,4 @@
+import {migrateCancellationClosure,cancellationClosureState,settleCancellation} from "../federation/cancellation-closure.mjs";
 import {evidenceSections} from "../fleet-evidence.mjs";
 import {boardOverview,taskList,taskContext,taskEvidence} from "./context.mjs";
 import {workspaceFileInfo,listWorkspaceFiles,readWorkspaceFile,editWorkspaceFile,deleteWorkspaceFile} from "../artifacts/workspace-session.mjs";
@@ -44,6 +45,7 @@ const defs=[
  ["list_cancellations","列出授权项目的持久取消记录",object({project_id:name,limit:{...positive,maximum:100}})],
  ["request_cancellation","请求取消已确认的来源委派；不把未送达当成已停止",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive,reason_code:{enum:["operator_cancelled","deadline_exceeded"]}})],
  ["progress_cancellation","处理本机未启动分派和下游取消意向，核对实际停止证明",object({request_id:uuidSchema,relation_id:uuidSchema})],
+ ["settle_cancellation","消费双端登记取消回执，来源保持未放行；不验收业务结果",object({request_id:uuidSchema,relation_id:uuidSchema,expected_version:positive})],
  ["list_bindings","列出授权项目的端点绑定和待处理提案",object({project_id:name,limit:{...positive,maximum:100}})],
  ["get_binding","读取授权项目的端点确认与放行条件",object({relation_id:uuidSchema})],
  ["get_binding_proposal","读取授权项目的认证提案及其本方决定",object({relation_id:uuidSchema})],
@@ -193,10 +195,12 @@ function execute(db,p,name,args,presentation){
  case "list_cancellations":scoped(p,args.project_id);return db.prepare("SELECT 1 FROM sqlite_master WHERE name='delegation_cancellations'").get()?listCancellations(db,{projectId:args.project_id,limit:args.limit}):{cancellations:[]};
  case "get_cancellation":
  case "request_cancellation":
- case "progress_cancellation":{
+ case "progress_cancellation":
+ case "settle_cancellation":{
   const b=db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'delegation_bindings\'").get()?db.prepare("SELECT project_id FROM delegation_bindings WHERE relation_id=?").get(args.relation_id):null;
   if(!b||!p.projects.includes(b.project_id))fail("NOT_FOUND","授权范围内未找到委派绑定",404);
-  if(name==="get_cancellation"){if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'delegation_cancellations\'").get())fail("NOT_FOUND","未找到取消记录",404);return cancellationState(db,args.relation_id);}
+  if(name==="get_cancellation"){if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'delegation_cancellations\'").get())fail("NOT_FOUND","未找到取消记录",404);return cancellationClosureState(db,args.relation_id);}
+  if(name==="settle_cancellation"){migrateCancellationClosure(db);return settleCancellation(db,{relationId:args.relation_id,expectedTaskVersion:args.expected_version});}
   migrateCancellations(db);
   return name==="request_cancellation"?prepareCancellation(db,{relationId:args.relation_id,cancelId:args.request_id,expectedTaskVersion:args.expected_version,reasonCode:args.reason_code}):progressCancellation(db,args.relation_id);
  }

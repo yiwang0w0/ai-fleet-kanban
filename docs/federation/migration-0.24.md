@@ -53,6 +53,10 @@ done 与 wait 是两个备选结局，不是顺序执行步骤。done 进入待�
 
 线路 `fleet.config.json: lines[].role.kind` 仍只有 implement/review；broker 策略 `broker_roles.policy_json.kind` 是 coordinate/implement/review/observe。它们是不同对象的字段域，不自动转换。broker 的执行能力配置只能使用 board-tools 或 workspace-files，执行角色恰选一种；旧未知策略会拒绝认证或启动，管理员通过 `mcp-admin roles` 查看原版本并显式修复，不把旧标签静默升级成权限。
 
+## 取消退役组件迁移
+
+H4a 修复将 binding_schema 从 3 升到 4、relation_schema 从 2 升到 3，并添加 cancellation_closure_schema 1；原关系、确认回执和停止记录保留。升级在各组件事务内完成，不修改原任务状态来伪装结案。登记节点和参与端点均需支持 delegation-cancellation-closure-v1；旧版本拒绝参与新闭环。绑定、登记及本机 operator 服务应使用一致的新代码，不能让旧写入者重新安装旧触发器。执行顺序见 [取消结算](cancellation-closure.md)。
+
 ## 恢复与回滚
 
 旧服务不能直接写新 schema。回滚前先停新版全部写入者，保留升级后的库、证据及配置，核对新增任务/结果如何保留，再恢复迁移前备份与匹配的旧代码。不得用覆盖备份来静默丢弃升级后工作。恢复副本入网还需显式激活、epoch/凭据轮换和对端接纳，见 [source-recovery.md](source-recovery.md)；回滚代码不代表可以重用旧凭据或重新启动已消费的模型许可。

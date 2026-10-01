@@ -1,3 +1,9 @@
+import {migrateCancellationClosure,cancellationClosureState,startCancellationRetirement,recordCancellationRetirement,settleCancellation} from "../core/federation/cancellation-closure.mjs";
+import {submitCancellationRetirement} from "../core/federation/cancellation-closure-client.mjs";
+import {cancelRelation,completeRelation,localRegistrarPeer} from "../core/federation/relations.mjs";
+import {migrateResults,prepareResult,receiveResult,resultState,rejectResult} from "../core/federation/results.mjs";
+import {completionContract,completionReady} from "../core/federation/completion-contract.mjs";
+import {readFleetTask} from "../core/fleet-view.mjs";
 import {migrateCancellations,listCancellations,prepareCancellation,receiveCancellation,cancellationState,recordCancellationReceipt,confirmCancellationStopped,cancellationWork} from "../core/federation/cancellation.mjs";
 import {progressCancellation} from "../core/federation/cancellation-service.mjs";
 import {deliverCancellation} from "../core/federation/cancellation-client.mjs";
@@ -37,8 +43,8 @@ function node(){const dir=join(TMP,"n"+serial++);mkdirSync(dir);const path=join(
 function grant(a,b,scopes=["peer:handshake","delegation:offer","delegation:status","delegation:binding","delegation:control"],projects=["demo"]){const file=join(TMP,"grant"+serial+++".json");issueCredential(b.db,{peerNodeId:a.node.node_id,peerEpoch:a.node.sync_epoch,scopes,projects,credentialFile:file,expectedVersion:b.db.prepare("SELECT credential_version FROM federation_peers WHERE peer_node_id=?").get(a.node.node_id)?.credential_version});const c=JSON.parse(readFileSync(file,"utf8"));return {file,auth:"Bearer "+c.token,peer:authenticate(b.db,"Bearer "+c.token)};}
 function card(f,extra={}){const id=store.add(f.db,{subject:"work "+serial++,description:"requested work",acceptance:"review evidence",treeMode:"hierarchical",route:"mcp",released:1,...extra}),t=store.get(f.db,id);enrollTask(f.db,{id,projectId:"demo",workKind:"implement",capabilities:["board-tools"],expectedVersion:t.aggregate_version});return store.get(f.db,id);}
 function register(f,owner,g){bindTopology(owner.db,{projectId:"demo",graphId:f.g.graph_id,graphEpoch:f.g.graph_epoch,registrarNodeId:f.r.node.node_id,registrarEpoch:f.r.node.sync_epoch});const op=prepareTopology(owner.db,{projectId:"demo",operationId:randomUUID(),expectedRevision:0}),args=startTopologyAttempt(owner.db,{operationId:op.operation_id,expectedVersion:f.r.db.prepare("SELECT version FROM relation_graphs").get().version}),receipt=publishTopology(f.r.db,g.peer,args);acceptTopologyReceipt(owner.db,{operationId:op.operation_id,requestId:args.request_id,receipt});}
-function fixture({withThird=false}={}){
- const a=node(),b=node(),r=node(),source=card(a),ab=grant(a,b),ar=grant(a,r,["peer:handshake","relations:read","relations:approve","relations:publish"]),br=grant(b,r,["peer:handshake","relations:read","relations:approve","relations:publish"]);
+function fixture({withThird=false,localRegistrar=false}={}){
+ const a=node(),b=node(),r=localRegistrar?a:node(),source=card(a),ab=grant(a,b),ar=localRegistrar?{peer:localRegistrarPeer(a.db,"demo")}:grant(a,r,["peer:handshake","relations:read","relations:approve","relations:publish"]),br=grant(b,r,["peer:handshake","relations:read","relations:approve","relations:publish"]);
  const out=createIntent(a.db,{delegationId:randomUUID(),taskUid:source.task_uid,expectedVersion:source.aggregate_version,targetNodeId:b.node.node_id,targetEpoch:b.node.sync_epoch});receiveOffer(b.db,ab.peer,out.offer);
  const accepted=decideIncoming(b.db,{delegationId:out.delegation_id,decisionId:randomUUID(),expectedVersion:1,decision:"accept",note:"fixture"});
  recordReceipt(a.db,out.delegation_id,accepted);
@@ -195,6 +201,10 @@ test("confirmed downstream delegation keeps upstream cancellation pending until 
  received(f);const waiting=progressCancellation(f.b.db,f.d.relation_id);assert.equal(waiting.receipt.stopped,false);assert.ok(waiting.blockers.some(b=>b.relation_id===q.d.relation_id));
  const childCancel=cancellationState(f.b.db,q.d.relation_id);assert.equal(childCancel.request.reason_code,"upstream_cancelled");receiveCancellation(c.db,bc.peer,childCancel.request);const done=progressCancellation(c.db,q.d.relation_id).receipt;
  recordCancellationReceipt(f.b.db,{relationId:q.d.relation_id,receipt:done});assert.equal(progressCancellation(f.b.db,f.d.relation_id).receipt.downstream_count,1);
+ closureGrants(f);assert.throws(()=>startCancellationRetirement(f.b.db,{relationId:f.d.relation_id,expectedVersion:graphVersion(f)}),{code:"DOWNSTREAM_PENDING"});
+ retirePair(q);settlePair(q);recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:progressCancellation(f.b.db,f.d.relation_id).receipt});retirePair(f);settlePair(f);
+ assert.equal(relationStatus(f.r.db,f.ar.peer,{project_id:"demo",graph_id:f.g.graph_id,graph_epoch:f.g.graph_epoch,relation_id:null}).edges,0);assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"middle-stays-held"}).ok,false);
+
 });
 test("reopened databases and repeated migrations retain cancellation fences and terminal proof",()=>{
  const f=fullyBound();received(f);progressCancellation(f.b.db,f.d.relation_id);const db=new DatabaseSync(f.b.path);
@@ -351,4 +361,92 @@ test("an interrupted but never-launched prepared run can be abandoned without a 
  const f=fullyBound(),{w,q}=worker(f);store.report(f.b.db,{id:f.target.id,worker:w.worker,runId:w.run_id,outcome:"wait",evidence:"stopped before execution"});
  assert.equal(dispatchStatus(f.b.db,w.dispatch_id).phase,"interrupted");received(f);
  assert.equal(progressCancellation(f.b.db,f.d.relation_id).receipt.stopped,true);assert.equal(dispatchStatus(f.b.db,w.dispatch_id).phase,"abandoned");assert.equal(quotaStatus(f.b.db,q.quota_id).used,0);
+});
+
+test("CLI cancellation closure retires the edge bilaterally and returns the paused source to its owner",async()=>{
+ const f=fullyBound();received(f);recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:progressCancellation(f.b.db,f.d.relation_id).receipt});
+ const scopes=["peer:handshake","relations:read","relations:approve","relations:publish","relations:complete"],ar=grant(f.a,f.r,scopes),br=grant(f.b,f.r,scopes),url=await network(f.r),args=(n,g)=>["--db",n.path,"--relation",f.d.relation_id,"--url",url,"--credential",g.file];
+ assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"before-retirement"}).ok,false);
+ const first=await cliAsync("retire",...args(f.a,ar));assert.equal(first.status,2,first.stderr);assert.equal(JSON.parse(first.stdout).closure_phase,"voting");
+ const second=await cliAsync("retire",...args(f.b,br));assert.equal(second.status,0,second.stderr);assert.equal(JSON.parse(second.stdout).closure_phase,"retired");
+ const polled=await cliAsync("retire-poll",...args(f.a,ar));assert.equal(polled.status,0,polled.stderr);
+ for(const [n,id] of [[f.a,f.source.id],[f.b,f.target.id]]){const r=cli("settle","--db",n.path,"--relation",f.d.relation_id,"--version",String(store.get(n.db,id).aggregate_version));assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).closure_phase,"settled");assert.equal(bindingState(n.db,f.d.relation_id).state,"cancelled");assert.equal(n.db.prepare("SELECT closed FROM delegation_bindings WHERE relation_id=?").get(f.d.relation_id).closed,1);}
+ assert.equal(store.get(f.a.db,f.source.id).released,false);assert.equal(store.get(f.a.db,f.source.id).status,"not_started");assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"cancelled-target"}).ok,false);
+ assert.equal(relationStatus(f.r.db,ar.peer,{project_id:"demo",graph_id:f.g.graph_id,graph_epoch:f.g.graph_epoch,relation_id:null}).edges,0);assert.equal(f.r.db.prepare("SELECT count(*) n FROM relation_edges").get().n,1);
+ store.setReleased(f.a.db,{id:f.source.id,released:true,expectedVersion:store.get(f.a.db,f.source.id).aggregate_version});assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"owner-resumed"}).ok,true);
+});
+
+const retirementScopes=["peer:handshake","relations:read","relations:approve","relations:publish","relations:complete"];
+const graphVersion=f=>f.r.db.prepare("SELECT version FROM relation_graphs").get().version;
+function closureGrants(f){for(const side of ["a","b"]){migrateCancellationClosure(f[side].db);f[side+"r"]=f[side]===f.r?{peer:localRegistrarPeer(f.r.db,"demo")}:grant(f[side],f.r,retirementScopes);}}
+function stopped(f){received(f);const r=progressCancellation(f.b.db,f.d.relation_id).receipt;recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:r});return r;}
+function retirePair(f){closureGrants(f);let receipt;for(const side of ["a","b"]){const args=startCancellationRetirement(f[side].db,{relationId:f.d.relation_id,expectedVersion:graphVersion(f)});receipt=cancelRelation(f.r.db,f[side+"r"].peer,args);recordCancellationRetirement(f[side].db,{relationId:f.d.relation_id,requestId:args.request_id,receipt});}assert.equal(receipt.cancelled,true);recordCancellationRetirement(f.a.db,{relationId:f.d.relation_id,receipt});return receipt;}
+function settlePair(f){for(const [n,t] of [[f.a,f.source],[f.b,f.target]])settleCancellation(n.db,{relationId:f.d.relation_id,expectedTaskVersion:store.get(n.db,t.id).aggregate_version});}
+function databaseRows(db,{mcp=false}={}){return canonical(Object.fromEntries(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().filter(({name})=>!mcp||!["broker_audit","broker_rate"].includes(name)).map(({name})=>[name,digest(db.prepare('SELECT * FROM "'+name.replaceAll('"','""')+'" ORDER BY rowid').all())])));}
+
+test("cancellation closure requires stop evidence, matching receipts and task CAS before unlocking",()=>{
+ const f=fullyBound();received(f);closureGrants(f);assert.throws(()=>startCancellationRetirement(f.a.db,{relationId:f.d.relation_id,expectedVersion:graphVersion(f)}),{code:"STOP_UNCONFIRMED"});
+ assert.throws(()=>f.a.db.exec("UPDATE delegation_bindings SET state='cancelled',closed=1"),/binding/);assert.throws(()=>settleCancellation(f.a.db,{relationId:f.d.relation_id,expectedTaskVersion:f.source.aggregate_version}),{code:"CANCELLATION_NOT_RETIRED"});
+ recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:progressCancellation(f.b.db,f.d.relation_id).receipt});const final=retirePair(f),before=databaseRows(f.a.db);
+ const changed=structuredClone(final.cancellation);changed.stopped.proof_digest="0".repeat(64);assert.throws(()=>cancelRelation(f.r.db,f.br.peer,{request_id:randomUUID(),expected_version:graphVersion(f),cancellation:changed}),{code:"REQUEST_CONFLICT"});
+ for(const bad of [{...final,registrar_node_id:randomUUID()},{...final,cancellation_digest:"0".repeat(64)},{...final,approved_by:[final.approved_by[0],final.approved_by[0]]}])assert.throws(()=>recordCancellationRetirement(f.a.db,{relationId:f.d.relation_id,receipt:bad}),{code:"BAD_CANCELLATION_CLOSURE"});
+ assert.throws(()=>settleCancellation(f.a.db,{relationId:f.d.relation_id,expectedTaskVersion:999}),{code:"CONFLICT"});assert.equal(databaseRows(f.a.db),before);assert.equal(store.claimById(f.a.db,{id:f.source.id,worker:"not-settled"}).ok,false);
+});
+
+test("cancellation closure retries lost HTTP ACK and local persistence using one durable retirement",async()=>{
+ const f=fullyBound();stopped(f);closureGrants(f);const url=await network(f.r),args=side=>({relationId:f.d.relation_id,url,credentialFile:f[side+"r"].file}),before=graphVersion(f);
+ assert.equal((await submitCancellationRetirement(f.a.db,args("a"))).delivery_state,"waiting_peer");let lost=true;
+ const unknown=await submitCancellationRetirement(f.b.db,{...args("b"),fetchImpl:async(u,o)=>{const r=await fetch(u,o);if(u.endsWith("/relations/cancel")&&lost){lost=false;await r.arrayBuffer();throw Error("lost cancellation retirement ACK");}return r;}});assert.equal(unknown.delivery_state,"retry_pending");assert.equal(graphVersion(f),before+1);
+ const requestId=unknown.attempts.find(a=>a.state==="pending").request_id;f.b.db.exec("CREATE TRIGGER fault BEFORE INSERT ON cancellation_retirements BEGIN SELECT RAISE(ABORT,'retirement persistence fault'); END");assert.equal((await submitCancellationRetirement(f.b.db,args("b"))).error_code,"STORAGE_ERROR");f.b.db.exec("DROP TRIGGER fault");
+ const reopened=new DatabaseSync(f.b.path);dbs.push(reopened);migrateCancellationClosure(reopened);const recovered=await submitCancellationRetirement(reopened,args("b"));assert.equal(recovered.closure_phase,"retired");assert.equal(recovered.attempts[0].request_id,requestId);assert.equal(graphVersion(f),before+1);
+ assert.equal((await submitCancellationRetirement(f.a.db,{...args("a"),mode:"poll"})).closure_phase,"retired");assert.equal(f.r.db.prepare("SELECT count(*) n FROM relation_cancellations").get().n,1);assert.equal(f.r.db.prepare("SELECT count(*) n FROM relation_edges").get().n,1);
+});
+
+test("cancellation closure rejects stale graph votes and ignores revoked credential generations",async()=>{
+ const f=fullyBound();stopped(f);closureGrants(f);const url=await network(f.r),args=side=>({relationId:f.d.relation_id,url,credentialFile:f[side+"r"].file});let bump=true;
+ const conflict=await submitCancellationRetirement(f.a.db,{...args("a"),fetchImpl:async(u,o)=>{if(u.endsWith("/relations/cancel")&&bump){bump=false;f.r.db.exec("UPDATE relation_graphs SET version=version+1");}return fetch(u,o);}});assert.equal(conflict.delivery_state,"rejected");assert.equal(conflict.error_code,"GRAPH_VERSION_CONFLICT");
+ assert.equal((await submitCancellationRetirement(f.a.db,args("a"))).delivery_state,"waiting_peer");const old=f.ar;f.ar=grant(f.a,f.r,retirementScopes);
+ assert.equal((await submitCancellationRetirement(f.b.db,args("b"))).delivery_state,"waiting_peer");assert.equal(f.r.db.prepare("SELECT count(*) n FROM relation_cancellations").get().n,0);assert.throws(()=>cancelRelation(f.r.db,old.peer,{...startCancellationRetirement(f.a.db,{relationId:f.d.relation_id,expectedVersion:graphVersion(f)})}),{code:"AUTHORIZATION_CHANGED"});
+ const current=await submitCancellationRetirement(f.a.db,args("a"));assert.equal(current.closure_phase,"retired");assert.equal(current.retirement.approved_by.find(a=>a.node_id===f.a.node.node_id).credential_version,f.ar.peer.credential_version);
+});
+
+test("cancellation closure refuses unsupported registrars and rechecks authority after network response",async()=>{
+ const f=fullyBound();stopped(f);closureGrants(f);const url=await network(f.r);let writes=0;
+ const blocked=await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id,url,credentialFile:f.ar.file,fetchImpl:async(u,o)=>{if(u.endsWith("/relations/cancel"))writes++;const r=await fetch(u,o);if(u.endsWith("/hello")){const body=await r.json();body.capabilities=[];return new Response(JSON.stringify(body),{status:200,headers:{"content-type":"application/json"}});}return r;}});assert.equal(blocked.error_code,"REQUIRED_FEATURE_UNSUPPORTED");assert.equal(writes,0);assert.equal(blocked.attempts.length,0);
+ let valid=true;const revoked=await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id,url,credentialFile:f.ar.file,authorize:()=>{if(!valid){const e=Error("operator revoked");e.code="AUTHORIZATION_CHANGED";throw e;}},fetchImpl:async(u,o)=>{const r=await fetch(u,o);if(u.endsWith("/relations/cancel"))valid=false;return r;}});assert.equal(revoked.delivery_state,"retry_pending");assert.equal(revoked.closure_phase,"voting");assert.equal(revoked.attempts[0].state,"pending");assert.equal(f.a.db.prepare("SELECT count(*) n FROM cancellation_retirements").get().n,0);
+});
+
+test("cancellation closure settlement rolls back task, binding and MCP response and preserves replay",()=>{
+ const f=fullyBound();stopped(f);retirePair(f);const auth=principal(f.a),observe=principal(f.a,"observe"),other=principal(f.a,"coordinate",["other"]),args={request_id:randomUUID(),relation_id:f.d.relation_id,expected_version:store.get(f.a.db,f.source.id).aggregate_version};
+ assert.throws(()=>callTool(f.a.db,observe,"settle_cancellation",args),{code:"FORBIDDEN"});assert.throws(()=>callTool(f.a.db,other,"settle_cancellation",args),{code:"NOT_FOUND"});
+ for(const table of ["cancellation_settlements","cancellation_events","broker_requests"]){const before=databaseRows(f.a.db,{mcp:true}),audit=f.a.db.prepare("SELECT count(*) n FROM broker_audit").get().n,rate=f.a.db.prepare("SELECT sum(count) n FROM broker_rate").get().n;f.a.db.exec("CREATE TRIGGER fault BEFORE INSERT ON "+table+" BEGIN SELECT RAISE(ABORT,'cancel settlement persistence fault'); END");assert.throws(()=>callTool(f.a.db,auth,"settle_cancellation",args),/cancel settlement persistence fault/);assert.equal(databaseRows(f.a.db,{mcp:true}),before);assert.equal(f.a.db.prepare("SELECT count(*) n FROM broker_audit").get().n,audit+1);assert.equal(f.a.db.prepare("SELECT sum(count) n FROM broker_rate").get().n,rate+1);assert.equal(f.a.db.prepare("SELECT outcome FROM broker_audit ORDER BY id DESC LIMIT 1").get().outcome,"ERR_SQLITE_ERROR");f.a.db.exec("DROP TRIGGER fault");}
+ const done=callTool(f.a.db,auth,"settle_cancellation",args),before=databaseRows(f.a.db,{mcp:true});assert.equal(done.closure_phase,"settled");assert.equal(done.accepted,false);assert.deepEqual(callTool(f.a.db,auth,"settle_cancellation",args),done);assert.equal(databaseRows(f.a.db,{mcp:true}),before);assert.equal(f.a.db.prepare("SELECT outcome FROM broker_audit ORDER BY id DESC LIMIT 1").get().outcome,"replayed");assert.equal(callTool(f.a.db,observe,"get_cancellation",{relation_id:f.d.relation_id}).closure_phase,"settled");
+ const oldReady=JSON.parse(f.a.db.prepare("SELECT body_json FROM binding_outbox WHERE kind='source_ready'").get().body_json),targetVersion=store.get(f.b.db,f.target.id).aggregate_version;settleCancellation(f.b.db,{relationId:f.d.relation_id,expectedTaskVersion:targetVersion});migrateBindings(f.b.db);assert.throws(()=>receiveBindingMessage(f.b.db,f.ab.peer,oldReady),{code:"CONTRACT_MISMATCH"});assert.equal(bindingState(f.b.db,f.d.relation_id).execution_authorized,false);
+ const prior=f.a.db.prepare("SELECT * FROM delegation_cancellations WHERE relation_id=?").get(f.d.relation_id),request=JSON.parse(prior.request_json);assert.equal(prepareCancellation(f.a.db,{relationId:f.d.relation_id,cancelId:prior.cancel_id,expectedTaskVersion:prior.expected_task_version,reasonCode:request.reason_code}).stopped,true);assert.deepEqual(receiveCancellation(f.b.db,f.ab.peer,request),JSON.parse(prior.stopped_json));
+});
+
+test("cancellation closure handles a prepared target with lost original confirmation without reviving it",()=>{
+ const f=fixture();begin(f);const a=startBindingAttempt(f.b.db,{relationId:f.d.relation_id,expectedVersion:graphVersion(f)}),r=approveRelation(f.r.db,f.br.peer,a);acceptBindingReceipt(f.a.db,{relationId:f.d.relation_id,receipt:r});stopped(f);assert.equal(bindingState(f.b.db,f.d.relation_id).state,"prepared");retirePair(f);settlePair(f);
+ assert.equal(bindingState(f.b.db,f.d.relation_id).state,"cancelled");assert.throws(()=>acceptBindingReceipt(f.b.db,{relationId:f.d.relation_id,requestId:a.request_id,receipt:r}),{code:"CONFLICT"});assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"late-confirmation"}).ok,false);
+});
+
+function syntheticCompletion(f){const p={schema_version:1,kind:"source_acceptance",completion_id:randomUUID(),relation:f.d,result_id:randomUUID(),body_digest:"a".repeat(64),source_task_version:store.get(f.a.db,f.source.id).aggregate_version,target_task_version:store.get(f.b.db,f.target.id).aggregate_version,verification_receipt_digest:"b".repeat(64),integration_receipt_digest:"c".repeat(64),artifact_manifest_digest:"d".repeat(64),source_merge_commit:"e".repeat(40),source_tree:"f".repeat(40),scope_digest:"1".repeat(64),fixture_runs:1,decision:{kind:"operator",note:"synthetic registrar contract only",allow_fixture:true}};return completionContract(p,completionReady(p));}
+test("cancellation closure and successful completion cannot both win the registrar lifecycle",()=>{
+ for(const cancellationFirst of [true,false]){const f=fullyBound();stopped(f);closureGrants(f);const a=startCancellationRetirement(f.a.db,{relationId:f.d.relation_id,expectedVersion:graphVersion(f)}),done={request_id:randomUUID(),expected_version:graphVersion(f),completion:syntheticCompletion(f)};
+  if(cancellationFirst){cancelRelation(f.r.db,f.ar.peer,a);assert.throws(()=>completeRelation(f.r.db,f.ar.peer,done),{code:"CANCELLATION_COMMITTED"});}
+  else{completeRelation(f.r.db,f.ar.peer,done);assert.throws(()=>cancelRelation(f.r.db,f.ar.peer,a),{code:"COMPLETION_COMMITTED"});}
+  assert.equal(f.r.db.prepare("SELECT count(*) n FROM relation_cancellations").get().n,0);assert.equal(f.r.db.prepare("SELECT count(*) n FROM relation_completions").get().n,0);
+ }
+});
+
+test("cancellation closure retains late candidate data after both bindings close without accepting or restarting",()=>{
+ const f=fullyBound(),{w}=worker(f);migrateResults(f.a.db);migrateResults(f.b.db);authorizeLaunch(f.b.db,{dispatchId:w.dispatch_id,sourceGate});received(f);finishDispatch(f.b.db,{dispatchId:w.dispatch_id,result:{status:"success",evidence:"late cancelled fixture evidence",usage:null}});recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:progressCancellation(f.b.db,f.d.relation_id).receipt});retirePair(f);settlePair(f);
+ const result=prepareResult(f.b.db,{resultId:randomUUID(),relationId:f.d.relation_id,expectedTaskVersion:store.get(f.b.db,f.target.id).aggregate_version}),ba=grant(f.b,f.a,["peer:handshake","delegation:result"]),sourceBefore=store.get(f.a.db,f.source.id);
+ const receipt=receiveResult(f.a.db,ba.peer,result.body);assert.deepEqual(receiveResult(f.a.db,ba.peer,result.body),receipt);assert.equal(resultState(f.a.db,result.result_id).accepted,false);assert.deepEqual(store.get(f.a.db,f.source.id),sourceBefore);assert.throws(()=>rejectResult(f.a.db,{resultId:result.result_id,decisionId:randomUUID(),expectedSourceVersion:sourceBefore.aggregate_version,note:"cannot rework cancelled work"}),{code:"CANCELLATION_PENDING"});assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"late-result-restart"}).ok,false);
+});
+
+test("cancellation closure works with registrar on source in a two-node layout and exposes cancelled history",async()=>{
+ const f=fullyBound({localRegistrar:true});stopped(f);closureGrants(f);const url=await network(f.a);
+ assert.equal((await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id})).delivery_state,"waiting_peer");assert.equal((await submitCancellationRetirement(f.b.db,{relationId:f.d.relation_id,url,credentialFile:f.br.file})).closure_phase,"retired");assert.equal((await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id,mode:"poll"})).closure_phase,"retired");settlePair(f);
+ const view=readFleetTask(f.a.db,f.source.task_uid).evidence.relations;assert.equal(view.modules.binding,"available");assert.equal(view.modules.registration,"available");const edge=view.items.find(r=>r.relation_id===f.d.relation_id);assert.equal(edge.binding_state,"cancelled");assert.equal(edge.registration_state,"cancelled");assert.equal(edge.closed,true);
 });
