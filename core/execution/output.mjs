@@ -246,11 +246,11 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
  }
  function finish({exitCode=null,signal=null,stopReason=null,spawnError=false}={}){
   if(cached)return structuredClone(cached);
-  if(stopReason!==null&&!["timeout","cancelled","output_limit","invalid_output","heartbeat_failed","transport_error"].includes(stopReason))fail("BAD_STOP_REASON");
+  if(stopReason!==null&&!["timeout","idle_timeout","cancelled","output_limit","invalid_output","heartbeat_failed","transport_error"].includes(stopReason))fail("BAD_STOP_REASON");
   if(exitCode!==null&&(!Number.isSafeInteger(exitCode)||exitCode<0)||signal!==null&&typeof signal!=="string"||typeof spawnError!=="boolean")fail("BAD_EXIT");
   closed=true;if(pending&&!failure)line(Buffer.concat(chunks,pending));chunks=[];pending=0;
   let code=failure,status="failed",evidence,usage=terminal?.usage??null;
-  if(stopReason==="timeout"||stopReason==="cancelled"){status=stopReason;code=stopReason.toUpperCase();}
+  if(stopReason==="timeout"||stopReason==="idle_timeout"||stopReason==="cancelled"){status=stopReason==="idle_timeout"?"timeout":stopReason;code=stopReason.toUpperCase();}
   else if(stopReason)code=stopReason.toUpperCase();
   else if(spawnError)code="SPAWN_FAILED";
   else if(signal||exitCode!==0)code="PROCESS_FAILED";
@@ -261,5 +261,5 @@ export function createOutputDecoder(runtime,{expectedSessionId=null,expectedInpu
   cached={status,evidence,usage,diagnostic:code,observed:{runtime,...(providerError?{provider_error:providerError}:{}),session_id:session,turn_id:turn,model,terminal_status:terminal?.status??null,protocol_error:failure,bytes,events,stdout_sha256:hash.digest("hex")},real_model_call_confirmed:false};
   return structuredClone(cached);
  }
- return Object.freeze({push,finish,get failure(){return failure;}});
+ return Object.freeze({push,finish,get activity(){return Object.freeze({bytes,events});},get failure(){return failure;}});
 }

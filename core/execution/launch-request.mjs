@@ -7,7 +7,7 @@ const record=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const FAILURE_CODES=new Set([
  "ABSOLUTE_PATH_REQUIRED","FILE_REQUIRED","BAD_PIN","PIN_CHANGED","WINDOWS_REQUIRED",
  "PROVIDER_ISOLATION_UNSUPPORTED","BAD_ISOLATION","BAD_ARGS","BAD_CWD","BAD_ENV","BAD_INPUT",
- "BAD_TIMEOUT","BAD_HEARTBEAT","BAD_LIMITS","BAD_PINS","BAD_SIGNAL","REQUEST_LIMIT",
+ "BAD_TIMEOUT","BAD_IDLE_TIMEOUT","BAD_HEARTBEAT","BAD_LIMITS","BAD_PINS","BAD_SIGNAL","REQUEST_LIMIT",
  "BAD_RUNTIME","BAD_BINDING","BAD_TRANSPORT","UNSUPPORTED_BINDING","BAD_TOOL_BINDING",
  "UNSUPPORTED_TOOL_BINDING"
 ]);
@@ -31,7 +31,7 @@ function pinShape(pin){
  * The supervisor repeats it after independently rechecking all filesystem pins.
  */
 export function buildLaunchRequest({python,command,args,cwd,env,input,pins,runtime,decoder={},commandOutput=false,stdoutLimit=65536,
- timeoutMs=60000,isolation=null,signal=null,heartbeat=null,heartbeatMs=10000,stderrLimit=1048576}){
+ timeoutMs=60000,idleTimeoutMs=null,isolation=null,signal=null,heartbeat=null,heartbeatMs=10000,stderrLimit=1048576}){
  isolation=commandIsolation(isolation);if(isolation&&!commandOutput)fail("PROVIDER_ISOLATION_UNSUPPORTED");
  pinShape(python);const exe=pinShape(command);
  if(!Array.isArray(args)||args.length>200||args.some(x=>typeof x!=="string"||x.includes("\0")))fail("BAD_ARGS");
@@ -39,6 +39,7 @@ export function buildLaunchRequest({python,command,args,cwd,env,input,pins,runti
  if(!record(env)||Object.entries(env).some(([k,v])=>!k||/[=\0]/.test(k)||typeof v!=="string"||v.includes("\0")))fail("BAD_ENV");
  if(typeof input!=="string"||Buffer.byteLength(input)>131072)fail("BAD_INPUT");
  if(!Number.isSafeInteger(timeoutMs)||timeoutMs<50||timeoutMs>86400000)fail("BAD_TIMEOUT");
+ if(idleTimeoutMs!==null&&(commandOutput||!Number.isSafeInteger(idleTimeoutMs)||idleTimeoutMs<50||idleTimeoutMs>86400000))fail("BAD_IDLE_TIMEOUT");
  if(!Number.isSafeInteger(heartbeatMs)||heartbeatMs<50||heartbeatMs>60000||heartbeat!==null&&typeof heartbeat!=="function")fail("BAD_HEARTBEAT");
  if(!Number.isSafeInteger(stderrLimit)||stderrLimit<1||stderrLimit>1048576)fail("BAD_LIMITS");
  if(signal!==null&&!(signal instanceof AbortSignal))fail("BAD_SIGNAL");

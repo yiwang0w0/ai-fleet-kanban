@@ -1,3 +1,4 @@
+import {DEFAULT_PROVIDER_IDLE_MS} from "./activity.mjs";
 import {buildLaunchRequest,launchFailureCode} from "./launch-request.mjs";
 import {watchDelegationCancellation} from "./control.mjs";
 import {createRequire} from "node:module";
@@ -15,7 +16,7 @@ const require=createRequire(import.meta.url),store=require("../store.js");
 
 /** This entry point launches a provider. It never polls queues or restarts a committed dispatch. */
 export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared,python,privateDirectory,
- timeoutMs=60000,heartbeatMs=10000,stderrLimit=1048576,signal=null}){
+ timeoutMs=60000,idleTimeoutMs=DEFAULT_PROVIDER_IDLE_MS,heartbeatMs=10000,stderrLimit=1048576,signal=null}){
  if(process.platform!=="win32")fail("WINDOWS_REQUIRED","执行器仅支持 Windows；未领取启动许可");
  validatePreparedAdapter(prepared);
  const plan=prepared.plan,d=dispatchStatus(db,dispatchId);
@@ -35,11 +36,11 @@ export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared
  const execution=launchReceipt({format:plan.workspaceBinding?"ai-fleet-process/v2":"ai-fleet-process/v1",...(plan.workspaceBinding?{workspace:plan.workspaceBinding}:{}),adapter_contract:plan.contract,adapter_digest:prepared.manifestDigest,
   runtime:plan.runtime,model:plan.model,effort:plan.effort,run_id:plan.runId,agent_instance_id:plan.agentInstanceId,principal_id:plan.principalId,
   command_sha256:plan.command.sha256,python_sha256:python.sha256,files_digest:digest(plan.pins),prompt_sha256:plan.promptHash,
-  environment_sha256:prepared.manifest.environment_sha256,timeout_ms:timeoutMs,heartbeat_ms:heartbeatMs,stderr_limit:stderrLimit});
+  environment_sha256:prepared.manifest.environment_sha256,idle_timeout_ms:idleTimeoutMs,timeout_ms:timeoutMs,heartbeat_ms:heartbeatMs,stderr_limit:stderrLimit});
  // Validate the complete serialized payload and all deterministic supervisor
  // settings before spending the single-use budget; prompt length alone is not enough.
  const launchOptions={python,command:plan.command,args:plan.args,cwd:plan.cwd,env:plan.env,input:plan.input,
-  pins:plan.pins,runtime:plan.runtime,decoder:plan.decoder,timeoutMs,heartbeatMs,stderrLimit};
+  pins:plan.pins,runtime:plan.runtime,decoder:plan.decoder,timeoutMs,idleTimeoutMs,heartbeatMs,stderrLimit};
  buildLaunchRequest(launchOptions);
  // No await between final validation and the transactional, single-use permit.
  validatePreparedAdapter(prepared);

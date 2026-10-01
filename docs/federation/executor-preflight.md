@@ -1,6 +1,6 @@
 # 执行器请求预检与许可后错误
 
-本页对应 seven-module/H6(a)。无输出检测 H6(b) 和 stderr 白名单分类 H6(c) 仍待完成；本页不将它们标为已修复。测试使用 Windows 本机合成进程，没有真实模型调用。
+本页对应 seven-module/H6(a)。无输出检测 H6(b) 和 stderr 白名单分类 H6(c) 的后续实现见 [运行观察](executor-observation.md)。测试使用 Windows 本机合成进程，没有真实模型调用。
 
 ## 为什么需要完整请求预检
 

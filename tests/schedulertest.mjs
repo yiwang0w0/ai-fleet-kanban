@@ -276,3 +276,20 @@ test('production scheduler read-only control already tolerates a transient write
  });
  assert.equal(fileHash(f.dbPath),before);assert.equal(used(f),0);assert.equal(launches(f),0);
 });
+
+test('scheduler profile idle timeout reaches the real runner and cannot restart its spent assignment',async()=>{
+ const f=fixture({limit:1,wait:5000});f.config.profiles[0].idle_timeout_ms=600;card(f);
+ const s=open(f),r=await s.tick();assert.equal(r.results[0].phase,'settled');
+ const record=f.db.prepare('SELECT launch_json,observation_json FROM broker_execution_records').get(),launch=JSON.parse(record.launch_json),o=JSON.parse(record.observation_json);
+ assert.equal(launch.idle_timeout_ms,600);assert.equal(o.diagnostic,'IDLE_TIMEOUT');
+ assert.equal(o.status,'timeout');assert.equal(o.process.cleanup,'job_empty');assert.ok(o.process.activity.events>=2);
+ assert.equal(used(f),1);await s.tick();assert.equal(launches(f),1);s.close();
+});
+test('invalid scheduler idle profiles are refused before private root creation or quota spend',()=>{
+ const f=fixture();
+ for(const idle of [null,0,86400001]){
+  const config=structuredClone(f.config);config.profiles[0].idle_timeout_ms=idle;
+  assert.throws(()=>open(f,{config}),{code:'BAD_INPUT'});assert.equal(existsSync(config.root),false);
+  assert.equal(used(f),0);assert.equal(launches(f),0);
+ }
+});

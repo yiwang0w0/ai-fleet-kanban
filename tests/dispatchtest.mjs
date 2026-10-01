@@ -440,6 +440,8 @@ test("trusted runner seals the launch, supervises an actual option-error fixture
  const receipt=await executePreparedDispatch(f.db,options);
  assert.equal(receipt.phase,"settled");assert.equal(receipt.result.status,"failed");
  assert.equal(receipt.execution.observation.process.started,true);assert.ok(existsSync(receipt.journal_file));
+ assert.equal(receipt.execution.launch.idle_timeout_ms,300000);
+ assert.equal(receipt.execution.observation.process.activity.idle_timeout_ms,300000);
  assert.equal(receipt.execution.observation.real_model_call_confirmed,false);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
  assert.equal(reconcileExecutionJournal(f.db,receipt.journal_file).phase,"settled");
  await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
@@ -478,6 +480,7 @@ function zcodeDispatchFixture(mode="success"){
  const bundle=join(dirs.install,"fixture.cjs"),builtin=join(dirs.install,"builtin.json");
  writeFileSync(bundle,`if(${JSON.stringify(mode)}==='collision')require('node:fs').writeFileSync(${JSON.stringify(join(dirs.private,"execution-observation.json"))},'untrusted precreation');
 if(${JSON.stringify(mode)}==='fail')process.exit(7);
+if(${JSON.stringify(mode)}==='idle'){process.stderr.write(JSON.stringify({error:{code:'invalid_api_key',message:'fixture-private-idle-auth'}})+'\\n');setInterval(()=>process.stderr.write('.'),30);}
 const input=process.argv[process.argv.indexOf('--prompt')+1],out=e=>process.stdout.write(JSON.stringify(e)+String.fromCharCode(10));
 const e=(type,seq,payload)=>({type,seq,eventId:'event'+seq,sessionId:'fixture',turnId:'turn',traceId:'trace',timestamp:seq,payload});
 out(e('turn.started',1,{input}));out(e('session.updated',2,{providerId:'account:bigmodel-individual-coding-plan',modelId:'GLM-5.3',messageCount:1,toolCount:5,iteration:0}));out(e('turn.completed',3,{resultType:'success',response:'local Zcode launch fixture'}));
@@ -685,4 +688,37 @@ test("runner keeps unknown post-permit filesystem exceptions private and uncerta
  assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
  assert.equal(reconcileExecutionJournal(f.db,receipt.journal_file).phase,"settled");
  assert.throws(()=>authorizeLaunch(f.db,{dispatchId:w.receipt.dispatch_id,sourceGate:gate}),{code:"LAUNCH_NOT_AVAILABLE"});
+});
+
+test("idle runner settles a completed-but-still-running vendor as timeout and retains safe diagnostics",async()=>{
+ const {f,w,options}=zcodeDispatchFixture("idle");
+ options.idleTimeoutMs=300;options.heartbeatMs=50;
+ const r=await executePreparedDispatch(f.db,options),o=r.execution.observation;
+ assert.equal(r.phase,"settled");assert.equal(r.result.status,"timeout");assert.equal(o.diagnostic,"IDLE_TIMEOUT");
+ assert.equal(o.observed.terminal_status,"success");assert.equal(o.process.cleanup,"job_empty");
+ assert.ok(o.process.activity.idle_timeout_observed_ms>=300);assert.ok(o.process.activity.events>=4);
+ assert.equal(o.process.stderr_diagnostic.provider_error.category,"authentication");
+ assert.equal(JSON.stringify(o).includes("fixture-private-idle-auth"),false);
+ assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+ assert.throws(()=>authenticatePrincipal(f.db,w.auth),{code:"UNAUTHENTICATED"});
+ assert.equal(reconcileExecutionJournal(f.db,r.journal_file).execution.observation.diagnostic,"IDLE_TIMEOUT");
+ await assert.rejects(executePreparedDispatch(f.db,options),{code:"LAUNCH_NOT_AVAILABLE"});
+ for(const mutate of [
+  x=>x.process.activity.idle_timeout_ms=301,
+  x=>x.process.activity.idle_timeout_observed_ms=null,
+  x=>x.process.activity.stdout_bytes=0,
+  x=>x.process.stderr_diagnostic.provider_error.message="private",
+  x=>x.process.stderr_diagnostic.provider_error.category="invented"
+ ]){
+  const bad=structuredClone(o);mutate(bad);
+  assert.throws(()=>executionJournal(f.db,{dispatchId:w.receipt.dispatch_id,observation:bad}));
+ }
+});
+test("invalid idle policy is refused before the runner consumes a launch permit",async()=>{
+ for(const idleTimeoutMs of [null,0,86400001]){
+  const {f,w,options}=adapterFixture();options.idleTimeoutMs=idleTimeoutMs;
+  await assert.rejects(executePreparedDispatch(f.db,options));
+  assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).phase,"prepared");
+  assert.equal(quotaStatus(f.db,f.quota.quota_id).used,0);assert.equal(count(f,"broker_execution_records"),0);
+ }
 });

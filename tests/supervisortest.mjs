@@ -203,3 +203,77 @@ test("non-Windows execution entry points fail before configuration, quota or pro
  const output=execFileSync(pythonPath,["-I","-S","-X","utf8","-c",probe,host],{encoding:"utf8",windowsHide:true});
  assert.equal(JSON.parse(output).code,"WINDOWS_REQUIRED");
 });
+
+test("idle output timeout stops a silent provider despite successful broker heartbeats",async()=>{
+ let beats=0;
+ const out=await run({args:[script,"hang"],idleTimeoutMs:200,timeoutMs:3000,heartbeatMs:50,heartbeat:()=>{beats++;return true;}});
+ assert.equal(out.diagnostic,"IDLE_TIMEOUT");assert.equal(out.status,"timeout");assert.ok(beats>0);
+ assert.equal(out.process.cleanup,"job_empty");assert.equal(await stopped(out.process.pid),true);
+ assert.equal(out.process.activity.idle_timeout_ms,200);assert.ok(out.process.activity.idle_ms>=200);
+ assert.equal(out.process.activity.events,0);assert.equal(out.process.activity.last_output_at,null);
+});
+
+test("failed provider stderr retains only a bounded whitelist diagnostic and hashes",async()=>{
+ const source=join(TMP,"stderr-category.mjs"),secret="fixture-private-secret-path";
+ const line=JSON.stringify({error:{type:"authentication_error",message:secret}});
+ writeFileSync(source,"process.stderr.write("+JSON.stringify(line+"\n")+");process.exitCode=7;");
+ const out=await run({args:[source],pins:[pinFile(source)]});
+ assert.equal(out.status,"failed");
+ assert.equal(out.process.stderr_diagnostic?.provider_error.category,"authentication");
+ assert.equal(out.process.stderr_diagnostic.provider_error.basis,"known_code");
+ assert.equal(out.process.stderr_diagnostic.provider_error.message_sha256,createHash("sha256").update(secret).digest("hex"));
+ assert.equal(JSON.stringify(out).includes(secret),false);
+ assert.equal(out.process.stderr_sha256,createHash("sha256").update(line+"\n").digest("hex"));
+});
+
+
+function activityFixture(mode){
+ const source=join(TMP,"activity-"+mode+".mjs");
+ writeFileSync(source,[
+  "let input='';for await(const b of process.stdin)input+=b;",
+  "const emit=x=>process.stdout.write(JSON.stringify(x)+'\\n');",
+  "const mode="+JSON.stringify(mode)+";",
+  "if(mode==='stderr')setInterval(()=>process.stderr.write('fixture-private-noise\\n'),30);",
+  "else if(mode==='partial')setInterval(()=>process.stdout.write(' '),30);",
+  "else{emit({type:'system',subtype:'init',session_id:'fixture-session',model:'fixture-model'});let i=0;",
+  "const timer=setInterval(()=>{if(++i<=6)emit({type:'assistant',session_id:'fixture-session',message:{content:[]}});",
+  "else{clearInterval(timer);emit({type:'result',subtype:'success',is_error:false,session_id:'fixture-session',result:'activity fixture'});}},60);}"
+ ].join("\n"));
+ return {args:[source],pins:[pinFile(source)]};
+}
+test("decoded output activity resets idle time and heartbeats receive immutable safe counters",async()=>{
+ const samples=[],out=await run({...activityFixture("active"),idleTimeoutMs:250,heartbeatMs:50,heartbeat:a=>{samples.push(a);assert.equal(Object.isFrozen(a),true);return true;}});
+ assert.equal(out.status,"success",JSON.stringify(out));assert.equal(out.process.activity.events,8);
+ assert.equal(out.process.activity.stdout_bytes,out.observed.bytes);assert.ok(out.process.activity.last_event_at);
+ assert.equal(out.process.activity.idle_timeout_observed_ms,null);
+ assert.ok(samples.some(a=>a.events>0));assert.ok(samples.every(a=>a.idle_ms<250));
+});
+test("stderr chatter and undecoded stdout cannot keep a provider lease alive",async()=>{
+ for(const mode of ["stderr","partial"]){
+  const out=await run({...activityFixture(mode),idleTimeoutMs:200,timeoutMs:3000});
+  assert.equal(out.diagnostic,"IDLE_TIMEOUT",mode);assert.equal(out.process.cleanup,"job_empty");
+  assert.equal(await stopped(out.process.pid),true);assert.equal(out.process.activity.events,0);
+  assert.ok(out.process.activity.last_output_at);assert.ok(out.process.activity.idle_timeout_observed_ms>=200);
+  assert.equal(JSON.stringify(out).includes("fixture-private-noise"),false);
+ }
+});
+test("successful provider stderr never adds a failure classification",async()=>{
+ const source=join(TMP,"successful-stderr.mjs");
+ writeFileSync(source,"process.stderr.write('Your authentication token has expired. Please try signing in again.\\n');"+
+  "process.stdout.write("+JSON.stringify(JSON.stringify({type:"system",subtype:"init",session_id:"fixture-session",model:"fixture-model"})+"\n"+
+  JSON.stringify({type:"result",subtype:"success",is_error:false,session_id:"fixture-session",result:"okay"})+"\n")+");");
+ const out=await run({args:[source],pins:[pinFile(source)]});
+ assert.equal(out.status,"success");assert.equal(out.process.stderr_diagnostic,undefined);assert.ok(out.process.stderr_bytes>0);
+});
+
+test("stderr limit preserves an exact hashed prefix and reports incomplete classification",async()=>{
+ const source=join(TMP,"stderr-prefix.mjs"),payload="fixture-private-noise".repeat(300);
+ writeFileSync(source,"process.stderr.write("+JSON.stringify(payload)+");");
+ const out=await run({args:[source],pins:[pinFile(source)],stderrLimit:32});
+ assert.equal(out.diagnostic,"OUTPUT_LIMIT");assert.equal(out.process.cleanup,"job_empty");
+ assert.equal(out.process.stderr_hashed_bytes,32);
+ assert.equal(out.process.stderr_sha256,createHash("sha256").update(Buffer.from(payload).subarray(0,32)).digest("hex"));
+ assert.equal(out.process.stderr_diagnostic.scanned_bytes,32);assert.equal(out.process.stderr_diagnostic.truncated,true);
+ assert.equal(out.process.stderr_diagnostic.provider_error.category,"unclassified");
+ assert.equal(JSON.stringify(out).includes("fixture-private-noise"),false);
+});

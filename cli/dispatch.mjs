@@ -51,14 +51,14 @@ try{
   else if(command==="record-uncertain")result=recordUncertainResolution(db,{plan:readRecoveryJSON(opts["plan-file"]),expectedPlanDigest:opts["plan-digest"],attestation:readRecoveryJSON(opts["attestation-file"])});
   else if(command==="execute"){
    const config=readRecoveryJSON(opts["config-file"]);
-   exact(config,["installation","python","node","workspace","private_directory","mcp_url","credential_file","timeout_ms"],"executor_config");
+   exact(config,[...(Object.hasOwn(config??{},"idle_timeout_ms")?["idle_timeout_ms"]:[]),"installation","python","node","workspace","private_directory","mcp_url","credential_file","timeout_ms"],"executor_config");
    if(!opts["prompt-file"]||statSync(opts["prompt-file"]).size>131072)throw Error("需要 128 KiB 内的提示文件");
    const dispatch=dispatchStatus(db,opts.dispatch),role=getRole(db,dispatch.role_id);
    if(!role)throw Error("执行角色不存在");
    const prepared=prepareAdapter({workspaceBinding:role.policy.capabilities.includes("workspace-files")?workspaceLaunchDescriptor(db,opts.dispatch):null,installation:config.installation,role:role.policy,dispatch,codeRoot,workspace:config.workspace,privateDirectory:config.private_directory,
     mcp:{node:config.node,bridge:pinFile(join(codeRoot,"cli/mcp.mjs")),url:config.mcp_url,credentialFile:config.credential_file},prompt:readFileSync(opts["prompt-file"],"utf8")});
    const cancel=new AbortController(),stop=()=>cancel.abort();process.once("SIGINT",stop);process.once("SIGTERM",stop);
-   try{result=await executePreparedDispatch(db,{dispatchId:opts.dispatch,sourceGate,prepared,python:config.python,privateDirectory:prepared.plan.privateDirectory,timeoutMs:config.timeout_ms,signal:cancel.signal});}
+   try{result=await executePreparedDispatch(db,{dispatchId:opts.dispatch,sourceGate,prepared,python:config.python,privateDirectory:prepared.plan.privateDirectory,timeoutMs:config.timeout_ms,idleTimeoutMs:config.idle_timeout_ms,signal:cancel.signal});}
    finally{process.removeListener("SIGINT",stop);process.removeListener("SIGTERM",stop);}
   }
   else result=prepareDispatch(db,{assignmentId:opts.assignment,quotaId:opts.quota,executionMode:opts.mode,credentialFile:opts["credential-file"],sourceGate});

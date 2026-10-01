@@ -109,3 +109,7 @@ node cli/scheduler.mjs reconcile --db C:/board-data/board.db --config-file C:/bo
 本机管理回归与故障记录见 [调度实例控制证据](scheduler-lifecycle-evidence.json)。控制记录新增 scheduler_lifecycle_schema v1、scheduler_instances 和 scheduler_control_requests；只由新调度器注册时创建，不改既有分派/schema或启动许可。
 
 CI #135 的启动测试已通过，调度器套件随后在状态读取时遇到真实写锁。独立进程实验确认旧测试连接没有锁等待，而既有生产控制入口已能有界等待。测试现复用实际控制连接；生产只读行为、5秒等待上限、实例身份与停止判据保持。29项调度器回归通过，见 [控制连接证据](scheduler-control-evidence.json)。这不表示一般数据库争用或异常实例锁恢复已经解决。
+
+## 执行器活动时限
+
+每个 profile 可选 idle_timeout_ms，省略时为 300000 毫秒。它按可解码 stdout 事件计时，stderr 不续期；与 timeout_ms 以先到者为准。无输出超时按原单次许可结算为 timeout，不自动退款或重新领取。可选范围、回执字段与诊断边界见 [执行器运行观察](executor-observation.md)。

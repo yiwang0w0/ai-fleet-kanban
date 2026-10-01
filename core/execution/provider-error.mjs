@@ -33,3 +33,64 @@ export function isProviderErrorMetadata(value){
  if(basis==="known_message")return ["model_unavailable","authentication"].includes(category)&&bytes>0&&bytes<=4096;
  return basis==="unclassified"&&category==="unclassified";
 }
+
+
+/** Retain only metadata from a bounded stderr prefix; never return provider prose. */
+export function createStderrClassifier({limit=65536}={}){
+ const lineLimit=4096;
+ if(!Number.isInteger(limit)||limit<1||limit>65536)throw new Error("BAD_STDERR_SCAN_LIMIT");
+ let total=0,scanned=0,pending=[],pendingBytes=0,dropping=false,discarded=0,selected=null,cached=null;
+ function line(){
+  const bytes=Buffer.concat(pending,pendingBytes);pending=[];pendingBytes=0;
+  if(!bytes.length||selected)return;
+  let text;try{text=new TextDecoder("utf-8",{fatal:true}).decode(bytes).trim();}catch{discarded++;return;}
+  if(!text)return;
+  let value;
+  try{
+   const parsed=JSON.parse(text);
+   const r=parsed?.error&&typeof parsed.error==="object"?parsed.error:parsed;
+   value=r&&typeof r==="object"&&!Array.isArray(r)?{code:r.code??r.type,message:r.message,status:r.status??parsed.status}:{};
+  }catch{value={message:text};}
+  const metadata=providerErrorMetadata(value);
+  if(metadata.category!=="unclassified")selected=metadata;
+ }
+ return {
+  push(chunk){
+   if(cached)throw new Error("STDERR_SCAN_CLOSED");
+   const b=Buffer.from(chunk),keep=Math.min(b.length,Math.max(0,limit-scanned));
+   total+=b.length;scanned+=keep;
+   let offset=0;
+   while(offset<keep){
+    const end=b.indexOf(10,offset),last=end<0||end>=keep?keep:end;
+    const piece=b.subarray(offset,last);
+    if(!dropping){
+     if(pendingBytes+piece.length>lineLimit){pending=[];pendingBytes=0;dropping=true;discarded++;}
+     else{pending.push(piece);pendingBytes+=piece.length;}
+    }
+    if(last===keep)break;
+    if(!dropping)line();else{pending=[];pendingBytes=0;}
+    dropping=false;offset=last+1;
+   }
+  },
+  finish(){
+   if(cached)return structuredClone(cached);
+   if(total<=limit&&!dropping)line();
+   pending=[];pendingBytes=0;
+   cached={format:"ai-fleet-stderr/v1",coverage:"bounded_prefix",scanned_bytes:scanned,
+    scan_limit_bytes:limit,line_limit_bytes:lineLimit,discarded_lines:discarded,
+    truncated:total>limit||discarded>0,provider_error:selected??providerErrorMetadata({})};
+   return structuredClone(cached);
+  }
+ };
+}
+export function isStderrDiagnostic(value){
+ if(!value||typeof value!=="object"||Array.isArray(value))return false;
+ const keys=["format","coverage","scanned_bytes","scan_limit_bytes","line_limit_bytes","discarded_lines","truncated","provider_error"];
+ if(Object.keys(value).length!==keys.length||keys.some(k=>!Object.hasOwn(value,k)))return false;
+ return value.format==="ai-fleet-stderr/v1"&&value.coverage==="bounded_prefix"&&
+  Number.isInteger(value.scan_limit_bytes)&&value.scan_limit_bytes>=1&&value.scan_limit_bytes<=65536&&value.line_limit_bytes===4096&&
+  Number.isInteger(value.scanned_bytes)&&value.scanned_bytes>=0&&value.scanned_bytes<=value.scan_limit_bytes&&
+  Number.isInteger(value.discarded_lines)&&value.discarded_lines>=0&&value.discarded_lines<=value.scanned_bytes&&
+  typeof value.truncated==="boolean"&&(!value.discarded_lines||value.truncated)&&isProviderErrorMetadata(value.provider_error)&&
+  (value.provider_error.message_bytes===null||value.provider_error.message_bytes<=4096);
+}

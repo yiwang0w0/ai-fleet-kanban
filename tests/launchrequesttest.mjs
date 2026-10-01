@@ -26,7 +26,7 @@ test("serialized request bound includes environment, argv, escaping, UTF-8 and n
 test("pure preflight rejects invalid decoder and control configuration",()=>{
  for(const [extra,code] of [
   [{heartbeatMs:0},"BAD_HEARTBEAT"],[{heartbeat:"unsafe"},"BAD_HEARTBEAT"],[{stderrLimit:0},"BAD_LIMITS"],
-  [{timeoutMs:1},"BAD_TIMEOUT"],[{signal:{aborted:false}},"BAD_SIGNAL"],
+  [{timeoutMs:1},"BAD_TIMEOUT"],[{idleTimeoutMs:0},"BAD_IDLE_TIMEOUT"],[{idleTimeoutMs:86400001},"BAD_IDLE_TIMEOUT"],[{signal:{aborted:false}},"BAD_SIGNAL"],
   [{runtime:"other"},"BAD_RUNTIME"],[{decoder:{limits:{line:0}}},"BAD_LIMITS"],
   [{decoder:null},"BAD_BINDING"],[{cwd:undefined},"BAD_CWD"],[{pins:null},"BAD_PINS"],
   [{env:{BAD:"\0"}},"BAD_ENV"],[{args:["\0"]},"BAD_ARGS"],

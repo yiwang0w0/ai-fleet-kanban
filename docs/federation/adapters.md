@@ -26,7 +26,7 @@ CLI 管理策略及本机文件权限仍可能影响运行；夹具测试不会�
 
 先完成角色、任务、路由请求、provider 额度以及 dispatch prepare。准备阶段只保留额度，MCP 执行凭据尚不可用。治理树须干净、已提交、与该进程加载树和外部验收记录一致；execute 不写验收文件、不自动放行任务。
 
-本机配置 JSON 的必填字段如下：
+本机配置 JSON 如下；idle_timeout_ms 为可选字段，省略时采用 300000 毫秒，其余所列字段必填：
 
 ~~~json
 {
@@ -42,7 +42,8 @@ CLI 管理策略及本机文件权限仍可能影响运行；夹具测试不会�
   "private_directory": "<本次独立私有目录绝对路径>",
   "mcp_url": "http://127.0.0.1:43111/",
   "credential_file": "<prepare创建的凭据绝对路径>",
-  "timeout_ms": 60000
+  "timeout_ms": 60000,
+  "idle_timeout_ms": 300000
 }
 ~~~
 
@@ -96,4 +97,4 @@ Claude 2.1.284 的 6 次空账号 / 本机假 Messages 接口探针中，基线�
 
 ## 完整请求预检
 
-启动许可前会检查实际 UTF-8 JSON 请求（含参数、环境和换行）的 512 KiB 上限。失败保留 prepared 与未消费额度；许可后固定错误码用于诊断，不退款或重启。见 [执行器预检](executor-preflight.md)。H6 的无输出检测和 stderr 分类仍待补齐。
+启动许可前会检查实际 UTF-8 JSON 请求（含参数、环境和换行）的 512 KiB 上限。失败保留 prepared 与未消费额度；许可后固定错误码用于诊断，不退款或重启。见 [执行器预检](executor-preflight.md)。无输出时限、活动计数和有界 stderr 类别见 [运行观察](executor-observation.md)。
