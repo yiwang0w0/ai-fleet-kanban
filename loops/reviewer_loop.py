@@ -121,7 +121,7 @@ def call(method, path, body=None):
 #   ② 门只会把 approve 降成 escalate,**永远不会**把什么降成 reject。判据不足 ≠ 活做错了,
 #      而打回会把卡退回同一个没有执行权的 worker(体检里反复出现的空转)。
 #   ③ 机器产出的可信度按**来源**分层: 循环代跑的(run_verify / 并进证据的验证块)无条件采信;
-#      worker 散文里的 PASS/rc 数字,若同一份证据里自陈「一条都没跑」,则**不采信**
+#      worker 散文里的 PASS/rc 数字只保留 Codex 执行族的既有路径；其他/未知身份或自陈未跑不采信。
 #      —— 那是预期值或抄来的,不是这一轮产出的。
 
 # 把验收切成「条」的记号。①〜⑳ / 1) 1） 1. 1、 —— 行头与文中都认。
@@ -187,15 +187,17 @@ def machine_evidence(t, vr=None):
     hits, muted = [], []
     if vr and vr.get("ok"):
         hits.append(f"循环代跑 {vr.get('key')} → rc={vr.get('rc')} 通过")
-    if re.search(_EV_LOOP, r):
-        hits.append("证据里有循环并进的验证块")
     no_run = bool(re.search(_NO_RUN, r))
+    executable = t.get("last_runtime") == "codex"
+    if re.search(_EV_LOOP, r):
+        # A textual marker is not proof that a nonexecuting seat ran a command.
+        (hits if executable and not no_run else muted).append("证据中的循环验证文本标记")
     for name, pat in _EV_PROSE:
         m = re.search(pat, r)
         if not m:
             continue
-        (muted if no_run else hits).append(f"{name}({m.group(0)[:24].strip()})")
-    return {"ok": bool(hits), "hits": hits, "muted": muted, "no_run": no_run}
+        (muted if no_run or not executable else hits).append(f"{name}({m.group(0)[:24].strip()})")
+    return {"ok": bool(hits), "hits": hits, "muted": muted, "no_run": no_run, "executable": executable}
 
 
 def suggest_verify_key(t):
@@ -226,7 +228,7 @@ def coverage_block(t, vr=None):
     L.append("卡上机械可见的机器产出: " + ("、".join(ev["hits"]) if ev["hits"] else "**一条也没有**"))
     if ev["muted"]:
         L.append("⚠证据里出现过数字(" + "、".join(ev["muted"]) +
-                 "),但同一份证据自陈「本轮一条都没跑」⇒ 那是预期值/抄来的,不算本轮产出。")
+                 "),但未执行声明或交付身份不允许把这些文本当作实测；需循环实际验证或人工核对。")
     if n_dem and not ev["ok"]:
         L.append("⛔ 机器产出闸判据: 有要机器验证的条目而卡上零机器产出 ⇒ **你不能 approve**,只能 escalate。")
     return chr(10).join(L)
@@ -298,7 +300,7 @@ def _gate_core(t, d, vr=None):
         % (len(demand), nos, orig[:200] or "(没写理由)"))
     if ev["muted"]:
         d["summary"] += "\n⚠证据里是有数字的(" + "、".join(ev["muted"]) + \
-                        "),但同一份证据自陈本轮一条都没跑 ⇒ 那不是这轮产出的。"
+                        "),但未执行声明或非执行交付身份使这些文本不能作为本轮机器产出。"
     opts = []
     if key:
         opts.append({"key": "A", "title": "给本卡挂 verify_cmd=%s,让循环代跑" % key,
@@ -468,7 +470,8 @@ PROMPT = """你是任务看板的**自动审阅**。判断这张「等待中」�
   重做时该注意什么(这条会原样交给 worker)。
 * `escalate` —— 需要人来定。**拿不准就选这个。**
 * ⭐**机器产出闸**: 验收里凡是要「跑 / 输出 / 全绿 / 实测」的条目,卡上必须有**对应的机器产出**
-  (循环代跑的验证块、PASS 计数、rc、报错原文)。一条都没有 ⇒ **不许 approve**,只能 escalate,
+  (本轮循环实际验证；Codex 执行族可沿用 PASS/rc 输出)。其他或未知身份写下的数字及验证块标记
+  不能替代执行。一条可信产出都没有 ⇒ **不许 approve**,只能 escalate,
   并在 options 里写清**谁去跑**。
   「我核实不了,但静态看下来没问题」——这句话配 approve,正是全量体检里反复出现的形。
   ⚠上面【验收逐条】是**机械拆的**,不是我的意见。你可以在 reason 里指出它拆错了(比如把

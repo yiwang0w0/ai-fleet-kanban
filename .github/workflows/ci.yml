@@ -165,6 +165,8 @@ jobs:
         run: bash hrun.sh node --test tests/panelauth.test.mjs tests/panelclient.test.mjs
       - name: "reviewtest (auto-reviewer, end to end with a stub CLI)"
         run: bash hrun.sh node tests/reviewtest.mjs
+      - name: "legacy verification and evidence boundaries"
+        run: bash hrun.sh node --test tests/legacy-boundariestest.mjs
         env:
           PYTHON: python
       - name: "sentrytest (SSE sentry re-runs itself once, old connection closed first)"

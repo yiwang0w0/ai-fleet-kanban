@@ -1,0 +1,85 @@
+{
+  "format": "ai-fleet-legacy-boundaries-evidence/v1",
+  "batch": 85,
+  "base_commit": "9a09432711c238fd8ee06702957c75ca30ba41ae",
+  "checked_at": "2026-10-01T14:14:27.837128+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "python_version": "3.12",
+  "review_items": [
+    "seven-module/H9a",
+    "seven-module/H9b",
+    "seven-module/H9c"
+  ],
+  "red": {
+    "private_log": ".data/review85-red.log",
+    "tests": 3,
+    "failed": 3,
+    "sha256": "89c7de4cfbd39997f9b8da36da2552a317bed5d2e22d7ad027a786984e7781a6",
+    "note": "registry substitution executed and nonexecuting prose accepted; CLI observation module absent"
+  },
+  "green": [
+    {
+      "private_log": ".data/review85-integration.log",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "sha256": "ffeebbe35cd47603668ec488f3f68964b31a540e0d2c3e0a86f9a8ef5656705d"
+    },
+    {
+      "private_log": ".data/review85-worker.log",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "sha256": "db4246a6a79d0ffbf996af06f3a9953655bca294cf9eabcb34a4ba87484f8d77"
+    }
+  ],
+  "total_distinct_passed": 6,
+  "overlap_note": "worker import is a strengthened repeat of the registry substitution case, not an additional unique test",
+  "contracts": [
+    "startup immutable argv snapshot, exact original file digest rechecked before verification",
+    "changed/unreadable/unavailable registry cannot grant new commands",
+    "nonexecuting and unknown delivery prose cannot satisfy machine evidence, actual loop receipt remains usable",
+    "doctor emits observed native CLI version/hash and warns unless measured platform/version/hash all match"
+  ],
+  "limitations": [
+    "argv pin does not pin referenced scripts or interpreter bytes",
+    "Codex prose evidence retains existing policy",
+    "CLI observation tests use the native Node executable fixture; no model or actual deny-rule behavior measured",
+    "formal and physical acceptance pending"
+  ],
+  "sources": [
+    {
+      "path": "loops/verify_lib.py",
+      "sha256": "e54e3be386e612f500267af99d1f2edd1e2375fc591682ff2caf7969da47cea6"
+    },
+    {
+      "path": "loops/reviewer_loop.py",
+      "sha256": "b605f4af02595ef6e752e5a0e4f15d264a09cea873ad03ae9fad0b4d7006fcec"
+    },
+    {
+      "path": "cli/doctor.mjs",
+      "sha256": "734683533e153c9ca5ae00e822ee5755380e16d6326ea2b44bfe5ac82deb6863"
+    },
+    {
+      "path": "core/seat-cli-evidence.mjs",
+      "sha256": "85e2169e062b821a602c83b9c5a71637b836799727403c5aed35083f0ff7f2c6"
+    },
+    {
+      "path": "tests/legacy-boundariestest.mjs",
+      "sha256": "4b16907be97b9cf3ee21a336abe2b3321516ed7b3fc5c19ab909abf57e61176e"
+    },
+    {
+      "path": "package.json",
+      "sha256": "6e264eac6fbd97a3b5253bfcc47f54e3927f8a9f29113e4cda830e98266244f0"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "13f4e29c4eb0bc3347ad3815f3747102dec1429cbc51d8e3b4cd97fbb1c80dc6"
+    },
+    {
+      "path": "docs/federation/legacy-boundaries.md",
+      "sha256": "9f722c274ff8c906b356e559b011a2612393c051b1f079b64c346b1f376d018a"
+    }
+  ]
+}
