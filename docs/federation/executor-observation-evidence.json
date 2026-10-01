@@ -1,0 +1,200 @@
+{
+  "format": "ai-fleet-executor-observation-evidence/v1",
+  "batch": 82,
+  "base_commit": "14c96d733941a5984403105e883e40203f31381c",
+  "recorded_at": "2026-10-01T13:16:39.563369+00:00",
+  "review_items": [
+    "seven-module/H6b",
+    "seven-module/H6c"
+  ],
+  "status": "implemented_with_local_windows_evidence_not_formally_accepted",
+  "idle_policy": {
+    "default_runner_timeout_ms": 300000,
+    "min_ms": 50,
+    "max_ms": 86400000,
+    "configured_at": [
+      "local dispatch execute config",
+      "scheduler profile"
+    ],
+    "signed_launch_field": "idle_timeout_ms",
+    "clock": "monotonic",
+    "basis": "decoder-accepted complete stdout events",
+    "stderr_extends_deadline": false,
+    "partial_stdout_extends_deadline": false,
+    "status": "timeout",
+    "diagnostic": "IDLE_TIMEOUT",
+    "late_output_erases_trigger": false,
+    "refund": false,
+    "automatic_retry": false,
+    "old_receipts_supported": true
+  },
+  "activity": {
+    "immutable_heartbeat_snapshot": true,
+    "final_observation_persisted": true,
+    "per_chunk_database_writes": false,
+    "remote_live_telemetry": false,
+    "not_proof_of_useful_progress": true,
+    "stop_proof": "actual Windows Job cleanup recorded separately"
+  },
+  "stderr": {
+    "only_unsuccessful_runs": true,
+    "scan_limit_bytes": 65536,
+    "also_bounded_by_stderr_limit": true,
+    "line_limit_bytes": 4096,
+    "classifier": "fixed code and anchored message allowlist",
+    "raw_text_in_receipt": false,
+    "arbitrary_codes_in_receipt": false,
+    "exact_hashed_prefix": true,
+    "diagnostic_does_not_authorize_actions": true
+  },
+  "node_runs": [
+    {
+      "log": "review82-red.log",
+      "sha256": "f68e159f0c59ef1127d5c0a072b4de855b62d1e61a60a1662cc7f85da788c4be",
+      "tests": 2,
+      "pass": 0,
+      "fail": 2,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 3675.6253
+    },
+    {
+      "log": "review82-focused.log",
+      "sha256": "21119a37916c88aa1e4c4586797f16753475730d0bd96516b12e2800f6c1fb9c",
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 1020.97
+    },
+    {
+      "log": "review82-scheduler-red.log",
+      "sha256": "8eca513bea897e621a3c36d52876ef59a4516925e9165ab70747a092682773f2",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 1987.7954
+    },
+    {
+      "log": "review82-regression.log",
+      "sha256": "dba37a77f780614d6c3b8e42a0c52d156923722c3c3a161a575e373cdbc179a5",
+      "tests": 139,
+      "pass": 139,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 100055.7734
+    },
+    {
+      "log": "review82-integration.log",
+      "sha256": "ce0ef2f1789be50830b64e4a75157b81c43907ea7b7deffd110eebbaeacea999",
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 22175.0198
+    },
+    {
+      "log": "review82-command.log",
+      "sha256": "cfb1d557019a1ae39d9dbae1032eb9ff1a7440fa303cb3d811b02c97453184b4",
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 3251.9865
+    }
+  ],
+  "distinct_passing_node_cases": 154,
+  "counting": "139 full affected executor cases, 7 additional scheduler/prefix cases and 8 ordinary-command cases are distinct. The focused 2 overlap the 139 and are not added again.",
+  "source_hash_encoding": "UTF-8 LF normalized",
+  "source_hashes": [
+    {
+      "path": "core/execution/activity.mjs",
+      "sha256": "fc7505b604df68ef013dceb12c189dd3d647696295f2e7cc42abd28d9eed50c4"
+    },
+    {
+      "path": "core/execution/launch-request.mjs",
+      "sha256": "5f85dacd4a71f5bfd97d5d015dfb2b7ca2437c48e1a21e83b07f5f83a9c6045f"
+    },
+    {
+      "path": "core/execution/output.mjs",
+      "sha256": "d26b15752eb8a89f8b9ce21c8d837e1a2f30f23b9d30080b6551cbcd1b9e59eb"
+    },
+    {
+      "path": "core/execution/provider-error.mjs",
+      "sha256": "82829e2b5e82ebe3f18812d874190df0b046686a4e4a77552ac52e0e9c86fb5a"
+    },
+    {
+      "path": "core/execution/receipts.mjs",
+      "sha256": "2a85c25302c9abf0f771c7cd1dcf4e33f5a2c784dc924ee096bc27da83558ded"
+    },
+    {
+      "path": "core/execution/runner.mjs",
+      "sha256": "e429493fbc05ce00b0738ee2f78582b61e57e602fa44e1ed375a400d3c94a7da"
+    },
+    {
+      "path": "core/execution/scheduler.mjs",
+      "sha256": "83022d6a758f1d444b7843d07177cd433d5ea36802cebb12cd7f3422abb2a072"
+    },
+    {
+      "path": "core/execution/supervisor.mjs",
+      "sha256": "edb71768bda386f106814a0d6dbc4d951e93caa66fa270824bc8054a3e2f0bb1"
+    },
+    {
+      "path": "cli/dispatch.mjs",
+      "sha256": "82d506a31df79f4dd2df62f2d24da2760a8155d38b6248118970a5f9cb7aa158"
+    },
+    {
+      "path": "tests/executoractivitytest.mjs",
+      "sha256": "8ef4f84339a6400a670b30e40ce90cb6833036fbf33b1afa535c58c006fe53ea"
+    },
+    {
+      "path": "tests/launchrequesttest.mjs",
+      "sha256": "edee7acbf90d7cbb30bd069c7d204be3570c1ee9e36bac4c1d22f36344fa5b12"
+    },
+    {
+      "path": "tests/supervisortest.mjs",
+      "sha256": "3592acf4187dea37d90d853cc502534357acca67e6fb76fde130a487d9af08eb"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "5ac2392af2601700242eaaa20712156a5879e76e31bd76dd891a4ea8ca03b1a0"
+    },
+    {
+      "path": "tests/schedulertest.mjs",
+      "sha256": "fe415793155c112d38a6e485db3ebce23e988268209474c6c095c98606f463ce"
+    },
+    {
+      "path": "package.json",
+      "sha256": "e54339504892cc4dee28372d46868a6cd552cb61dcf73baeab588fc706a1540a"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "5d8bf54159303f567acac20c56f04df2a6deeb6088d02d1f7d5e979684891550"
+    }
+  ],
+  "plan_source_sha256": "23f8649cad6f74701d5c7ec3e801a85ad897195057acddfbe3a8bf87c0f18d34",
+  "limitations": [
+    "Windows synthetic processes and temporary databases; no live provider or physical multi-PC acceptance",
+    "Silence is not proof of model deadlock and decoded events are not proof of useful progress",
+    "Runtime snapshots are in-process; final observation is persisted, not live remote progress",
+    "Bounded stderr categories are advisory and may remain unclassified",
+    "Older readers may reject new receipt fields"
+  ],
+  "production_changed": false,
+  "models_called": false,
+  "tailscale_changed": false,
+  "real_peers_enabled": false,
+  "scheduled_tasks_changed": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

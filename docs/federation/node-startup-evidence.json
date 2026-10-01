@@ -1,0 +1,175 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-65-windows-startup",
+  "date": "2026-10-01",
+  "base_commit": "d4a0c2516743ca65a9d1aff26d2b896829755f73",
+  "platform": "Windows",
+  "scope": "Reviewable current-user logon startup bundle, explicit Task Scheduler administration and actual hidden launcher. No actual task registration or physical machine activation.",
+  "source_files": [
+    {
+      "path": "core/node-runtime.mjs",
+      "sha256": "a9ca5d166c0acd255d4096b7e5cb62843bf69ba5584ad9bbc0c7c3bfab923d6a"
+    },
+    {
+      "path": "core/node-startup.mjs",
+      "sha256": "0e134bf20b0cd9ab22dc0d065df20376040d97016036594fdfc2a9eaa1986a2a"
+    },
+    {
+      "path": "cli/node-startup.mjs",
+      "sha256": "4e15bb1cd3bbd11a3020c634cc1fc0a4a6686b16aba1e2ec7d1c895de8ed3217"
+    },
+    {
+      "path": "packaging/windows/node-startup.ps1",
+      "sha256": "a3271462ea1b47a143abe57416a277c69f54324ac3b416604b89a2dcc94c5cb1"
+    },
+    {
+      "path": "tests/nodestartuptest.mjs",
+      "sha256": "d6bf3d0098cf4c4721c95290e8b8591f719a415e37f8ccc0a4eda59668da4c58"
+    },
+    {
+      "path": "package.json",
+      "sha256": "8b4fb198f3e1fb4ef384c17ca669cc76dff259fe9f62ae648682739e503b8757"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "b829421e5475cdfe0ab4390ed98d6427c74f503a3f476d62c9bc0b7959c6b77c"
+    }
+  ],
+  "contract": {
+    "format": "ai-fleet-node-startup/v1",
+    "node_commands": [
+      "prepare",
+      "inspect",
+      "check",
+      "run"
+    ],
+    "powershell_actions": [
+      "Validate",
+      "Install",
+      "Enable",
+      "Disable",
+      "Start",
+      "Status",
+      "Remove",
+      "Run"
+    ],
+    "trigger": "current user logon,10second delay",
+    "logon_type": "InteractiveToken",
+    "run_level": "LeastPrivilege",
+    "initially_enabled": false,
+    "install_flag": "TASK_CREATE only",
+    "validate_flag": "TASK_VALIDATE_ONLY",
+    "execution_time_limit": "PT0S",
+    "multiple_instances": "IgnoreNew",
+    "automatic_restart": false,
+    "automatic_lock_takeover": false,
+    "password_stored": false,
+    "review_digest_required": true,
+    "pinned": [
+      "user SID",
+      "node UUID/epoch",
+      "database canonical path",
+      "source Git tree",
+      "Node",
+      "PowerShell",
+      "wrapper",
+      "launcher",
+      "config",
+      "approval file"
+    ],
+    "registered_definition_check": "Full COM-normalized definition equality except Settings.Enabled",
+    "removal": "Exact unchanged definition, disabled, no Task Scheduler instances; retains all files and does not prove orphaned process stopped",
+    "startup_after_unclean_reboot": "Old lock is retained and startup refused until operator recovery verifies prior execution",
+    "logs": "New private run-UUID.jsonl per attempt; ~1MiB cap plus one marker; no automatic deletion or directory-wide quota"
+  },
+  "validation": {
+    "final_related": {
+      "command": "node --test tests/nodestartuptest.mjs tests/noderuntimetest.mjs",
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 50896.0379,
+      "log_file": ".data/review65-final.log",
+      "log_sha256": "8779e5a44168a24818cad0387eb0271ada149ee5706008ed1d591df9bae5d570"
+    },
+    "strengthened_actual_wrapper_exit": {
+      "command": "node --test --test-name-pattern=\"hidden PowerShell\" tests/nodestartuptest.mjs",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 13168.4372,
+      "log_file": ".data/review65-launch-exit.log",
+      "log_sha256": "299906987bd0a83339e1ef5f0c5e3da7430724036e028bd21252922a8f0540f9"
+    },
+    "unique_units": 16,
+    "new_units": 9,
+    "counts_note": "9 startup cases and7 unchanged host cases; later stronger assertion in one existing startup case re-ran independently, not counted twice. Product source unchanged after final16 pass."
+  },
+  "actual_observations": [
+    "Preparing startup bundle leaves node database bytes unchanged and creates no runtime instance.",
+    "Task Scheduler COM accepts XML with validation-only flag; actual status confirms that exact task was not registered.",
+    "Hidden PowerShell launches actual Node/MCP on literal Unicode, ampersand, parentheses and dollar paths; unauthenticated MCP request is401.",
+    "Second actual PowerShell launcher returns failure while existing host remains live; NODE_RUNTIME_BUSY recorded, no second lifecycle instance.",
+    "Durable drain ends exact host and wrapper with success, closes MCP and leaves no provider task_runs.",
+    "Changed reviewed digest/XML/config/Node pin/user SID/dirty source rejected; inspect/status still available after config changes.",
+    "New output requirement preserves existing bundle and rejects percent expansion paths."
+  ],
+  "simulated_observations": [
+    "In-memory Task Scheduler registry verifies initial disabled TASK_CREATE, enable/start/disable/remove sequence. Real COM normalizes definitions, but no mutating call reaches the Windows registry.",
+    "Altered registered definition, duplicate registration and active removal rejected."
+  ],
+  "initial_failures": [
+    {
+      "log_file": ".data/review65-startup-initial.log",
+      "log_sha256": "474ac40b01918f462226bd7d1c88ed2eab6ebd70334ad5815cbbe750ebc9fe21",
+      "passed": 4,
+      "failed": 3,
+      "cause": "PowerShell wrapper failed; later isolated diagnostics identified unavailable Get-FileHash. Use .NET SHA256 instead."
+    },
+    {
+      "log_file": ".data/review65-startup-native-fix.log",
+      "log_sha256": "ef8746f462343cddd2b7b7cc07926c51ae8818b50c7eb563296c9992e24c805e",
+      "passed": 0,
+      "failed": 3,
+      "cause": "Native-stderr handling alone did not fix original failure; not counted as success."
+    },
+    {
+      "log_file": ".data/review65-diagnostic2.log",
+      "log_sha256": "d76f7844b913b4365fadc5caf6e75a14ab772aa7f5635cb1b415f4f73ab94451",
+      "passed": 1,
+      "failed": 2,
+      "cause": "COM XML declaration encoded as UTF-8 conflicted with Unicode BSTR; removed encoding attribute, retaining XML content and settings."
+    },
+    {
+      "log_file": ".data/review65-management-initial.log",
+      "log_sha256": "b965e24afc7d625e79f2a08ec837dda1def4c9a0cb7cb3b200184ca6938a1be3",
+      "passed": 0,
+      "failed": 2,
+      "cause": "Mock missing-task ScriptMethod exception differed from native COM. Fixture changed to null missing entry and explicit exit handling; production ownership checks retained."
+    }
+  ],
+  "references": [
+    "https://learn.microsoft.com/en-us/windows/win32/taskschd/taskfolder-registertask",
+    "https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-logontype",
+    "https://learn.microsoft.com/en-us/windows/win32/taskschd/tasksettings-executiontimelimit"
+  ],
+  "remaining": [
+    "Actual reviewed installation and login/reboot acceptance on each physical node",
+    "Operation before interactive login if required, with compatible provider identity and service account design",
+    "Unclean-shutdown recovery with verified execution/boot evidence",
+    "Log directory retention/capacity and UI/alert supervision",
+    "Native providers, real two-PC Tailscale and72hour observation",
+    "Current-commit full Windows CI after push"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "windows_services_changed": false,
+  "scheduled_tasks_changed": false,
+  "models_called": false,
+  "physical_two_pc": false
+}

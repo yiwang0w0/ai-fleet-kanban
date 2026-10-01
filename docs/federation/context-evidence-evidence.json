@@ -1,0 +1,138 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-48-context-evidence",
+  "date": "2026-09-30",
+  "base_commit": "65ba5ac5cc73f18b5550b398c679c1c7f93d20e9",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "files": [
+    {
+      "path": "core/context-evidence.mjs",
+      "sha256": "ab94852edf7bfc7edca4ded7c09f160d449a187524fc5d38b61f1f6a5370e6cd"
+    },
+    {
+      "path": "core/context-handoff.mjs",
+      "sha256": "c8a95295c841d4670d4bdb348c1605a725cac69ecc73618a060ef345aaf164d7"
+    },
+    {
+      "path": "core/context-retention.mjs",
+      "sha256": "d18ae7393e1c7faf3c641facc68f2885fd78b516e4e316e95fd86574891f02d4"
+    },
+    {
+      "path": "core/desktop-context.mjs",
+      "sha256": "d3d2fb0d7bc437ecace949047333d11bedaf295dfbaf5876a3ac396af104b8ca"
+    },
+    {
+      "path": "core/fleet-evidence.mjs",
+      "sha256": "27bb63187272d40b198e5e205b5ab3cca4690a472d9e648de176499cc73dc2aa"
+    },
+    {
+      "path": "core/fleet-view.mjs",
+      "sha256": "5c7c41750c7d80cbc3799e7238353ffd19f00fcbc59d7b413e56ddf3c36ee3eb"
+    },
+    {
+      "path": "core/mcp/context.mjs",
+      "sha256": "b1b52d1597ed9c0f49305a12ef894b2b0d63c93cdac2390b82228f392a32457d"
+    },
+    {
+      "path": "cli/context-handoff.mjs",
+      "sha256": "28d9760a7c96a7520e65c9537e4564a91694d4aee1820504a7501b171f800d8d"
+    },
+    {
+      "path": "tests/contextevidencetest.mjs",
+      "sha256": "0e49a65f22a9a66eab89e2722f5d23697bd8b5e45986e71b96881645010661f1"
+    },
+    {
+      "path": "tests/desktopcontexttest.mjs",
+      "sha256": "118d8a9ff7373d818b65cfc4001c5cb087518379fdde4fc7e35cb5f69562b522"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "30fd32036884eec07b3a77a9d02ba57002972f77a216e7afbcfd38245aef2c54"
+    },
+    {
+      "path": "package.json",
+      "sha256": "cf57cf5f8cb74492cc852460786d879d9bfcb7e049d43a227d58c58a46c5e19e"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "b7830667242649856c79eac4128b649fa011f3eab33473cf237eec2adcdba4e4"
+    },
+    {
+      "path": "docs/federation/context-evidence.md",
+      "sha256": "d73a6af34a73c6f4d7e57a9991b2bb12620c264bbc5fcd5480d15f26fb7882a7"
+    },
+    {
+      "path": "docs/federation/desktop-context.md",
+      "sha256": "928fad97c797e505a0c68e9b289c01c2f6a84e352ae60094754835f56a4908c7"
+    },
+    {
+      "path": "docs/federation/fleet-evidence.md",
+      "sha256": "83278bbceecee559b7318de851494bf0836a41b849d61312e4068df0773163f2"
+    },
+    {
+      "path": "docs/federation/PROGRESS.md",
+      "sha256": "030fc1e459a69986570747a85675efb9026407cc578a696e27b041807106a3e0"
+    },
+    {
+      "path": "docs/多终端共享看板-任务清单.json",
+      "sha256": "d31f1f257c92474c6ff6380126d09ef5e3b65444d8adab5bbceb7fd1e053d55d"
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/contextevidencetest.mjs tests/desktopcontexttest.mjs tests/fleetevidencetest.mjs tests/fleetviewtest.mjs",
+      "pass": 70,
+      "fail": 0,
+      "skip": 0,
+      "duration_ms": 132836.8771,
+      "log": ".data/review48-regression.log",
+      "scope": "18 initial context-evidence plus26desktop12evidence14view; before serialized handoff bound adjustment"
+    },
+    {
+      "command": "node --test tests/contextevidencetest.mjs",
+      "pass": 19,
+      "fail": 0,
+      "skip": 0,
+      "duration_ms": 17228.587,
+      "log": ".data/review48-handoff-final.log",
+      "scope": "Final full new suite including 64KiB summary escaping expansion; overlaps prior18"
+    },
+    {
+      "command": "node --test --test-name-pattern=\"actual source integration\" tests/completiontest.mjs",
+      "pass": 1,
+      "fail": 0,
+      "skip": 0,
+      "duration_ms": 24207.2554,
+      "log": ".data/review48-git-trace.log",
+      "scope": "Actual temporary Git delivery/verification/integration/bilateral fixture acceptance is traceable in Markdown"
+    }
+  ],
+  "demo": {
+    "scope": "independent synthetic database and explicitly saved synthetic note",
+    "generated_files": 7,
+    "local_links_verified": 16,
+    "file_hashes": "passed",
+    "open_in_codex": "queued, user visibility unconfirmed",
+    "shared_folder_deployed": false
+  },
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "gates": 0,
+    "total_gates": 12,
+    "real_provider_calls": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 0
+    }
+  },
+  "limitations": [
+    "Data is scoped locally recorded history, not fresh remote execution authority",
+    "No automatic conversation extraction or cross-node handoff-note synchronization",
+    "Raw notes need explicit archival; generation retention never deletes them",
+    "Intermediate file-state recovery tested; no forced-process-kill or power-failure proof",
+    "Actual desktop clients/native sidebar/two-PC deployment/offline and72h acceptance pending",
+    "Historical-table scan latency and large payload memory unmeasured"
+  ]
+}

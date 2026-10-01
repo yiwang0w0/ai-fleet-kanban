@@ -9,24 +9,33 @@ they clear is the same one the codebase already holds itself to.
 
 1. **Machine assertions over prose.** A change to behavior comes with a harness
    assertion that goes red without it. "I tested it manually" does not survive
-   the next contributor. Seven harnesses live in `tests/`; two more run as Python
-   selftests — nine in all:
+   the next contributor. `npm test` is the authoritative list of the Node
+   harnesses. Windows CI also runs four Python selftests and one Node page
+   verifier selftest:
 
-   ```
-   node tests/selftest.mjs && node tests/decisiontest.mjs && node tests/gatetest.mjs
-   node tests/decomposetest.mjs && node tests/looptest.mjs && node tests/servertest.mjs
-   node tests/reviewtest.mjs
-   python gates/gates_lib.py && python loops/worker_loop.py --codex-selftest
+   ```powershell
+   $env:PYTHONUTF8 = "1"
+   npm test
+   python gates/gates_lib.py
+   python loops/worker_loop.py --codex-selftest
+   python loops/worker_loop.py --prompt-selftest
+   python watchers/board_health_watch.py --selftest
+   node examples/verify_page.mjs --selftest
    ```
 
-   CI runs them on **Linux and Windows, both blocking** — a change that is green
-   only on your platform is not done.
+   **Windows regression and secret scanning are both blocking.** Future work,
+   deployment and acceptance target Windows only. Older Linux measurements
+   remain historical evidence, not current release requirements. CI uses Node
+   24 and Python 3.12; local command examples assume PowerShell. A local pass
+   is not evidence that the exact pushed commit passed CI.
 
 2. **The GLOSSARY is frozen.** `docs/GLOSSARY.md`: renaming any `machine`-layer
    term (wire values, JSON keys, env names, exit codes, event kinds) is a
    breaking change and needs a migration story, not just a rename. Display
-   wordings may evolve, but each keeps its referent — and several label tables
-   are deliberate dual copies (panel + CLI); change both.
+   wordings may evolve, but each keeps its referent. Status/waiting labels have
+   one source in `core/store.js`, exposed by `/api/meta`; neither panel nor CLI
+   should add another copy. Qualify a term by its owning object: line roles and
+   broker policies are different domains, as the glossary records.
 
 3. **Comments carry the WHY, and the why is usually a scar.** When you touch
    code whose comment cites a measured failure, the comment is load-bearing:
@@ -66,6 +75,13 @@ patch = fixes, docs, bundled skills; minor = new features, or **any**
 machine-contract change (see the GLOSSARY rule above — those also need the
 migration story). The tag and the README must never disagree about what
 version you are looking at.
+
+The package version is `0.24.0` on this unreleased review branch. Do not
+create a release tag merely to satisfy a version check. Before an authorized
+0.24.0 release, align package/README/tag on the release commit, finish the
+[Windows migration checklist](docs/federation/migration-0.24.md), and attach
+that commit's required CI and acceptance evidence. The package version
+does not claim that physical fleet/provider validation or deployment is done.
 
 ## Scope guidance
 

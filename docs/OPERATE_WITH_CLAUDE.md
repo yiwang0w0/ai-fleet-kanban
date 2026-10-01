@@ -42,7 +42,9 @@
 
 **时机:首批真实卡上板之前。**内置的 `alpha`/`coord` 是演示词汇;把会话考古
 或待办清单整理成真实卡之前先定线,否则它们会默默堆进演示线(实测发生过;
-事后可用 `board.py edit` 移线,`prev_line` 留审计,但越早定越省)。
+事后先用 `python cli/board.py show <id>` 核对卡片与 aggregate_version，再用
+`python cli/board.py edit <id> --version <所见版本> --file move-line.json` 移线
+（JSON 如 `{"line":"alpha"}`），`prev_line` 留审计；运行中卡不能这样移线)。
 
 你不用手写 `fleet.config.json`。把你实际的活告诉你的 Claude:
 
@@ -86,7 +88,13 @@ worker 家规(范围闸门四问=防过度工程化、pathspec 提交、密钥�
 与全部客户端(CLI/两哨/两 loop/doctor/seed)同读,不再有「两个 shell 各设
 一遍」的编排。
 
+## 0.24 开发版的协议迁移
+
+先按 [Windows 升级清单](federation/migration-0.24.md) 停旧写入者、核验备份，统一升级服务、面板、CLI、worker/审阅循环和哨兵，再重载浏览器。旧 worker 不能与新服务混写。worker 领取需协议 2 和每进程 agent_instance_id，回写保留原 run_id；人工 done/wait 使用原领取回执的 `--run`。编辑、指定领取、裁定、放行等控制命令需 `--version`，发生 409 后重新核对意图，不能自动换成最新版本重试。本开发分支尚未部署。
+
 ## 二点零、升级(v0.8 · v0.18 起一键)
+
+下述为普通版本更新机制；不能代替上面的 0.24 协议迁移确认。
 
 `git pull` 改的是文件,不是在跑的进程。**面板会自己发现**:顶部出现横幅,写明
 「跑着的是哪一版、磁盘上已经是哪一版」,旁边就一个按钮:**「更新到新代码」**。按下去先弹

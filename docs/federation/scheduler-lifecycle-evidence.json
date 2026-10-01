@@ -1,0 +1,127 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-63-scheduler-lifecycle",
+  "date": "2026-10-01",
+  "base_commit": "729d60b200336ead330bc24094c26546828fd7fc",
+  "platform": "Windows",
+  "scope": "Durable local lifecycle administration for the existing Windows scheduler, using actual CLI processes and synthetic no-account executors; not Windows service installation or physical acceptance.",
+  "source_files": [
+    {
+      "path": "core/execution/lifecycle.mjs",
+      "sha256": "12be0b1f06dedfe68977217e20d80ddda927e918fc2104a8a60531ff5e612361"
+    },
+    {
+      "path": "core/execution/scheduler.mjs",
+      "sha256": "8c5629b5df188d3bdea0fe288baaec33d0d24a92aaf6803b65976cb60bc73b1d"
+    },
+    {
+      "path": "cli/scheduler.mjs",
+      "sha256": "b01f3cdfb75a1118654ad9f59146c1850be425bff3852cb49d9f5f51b4429c2a"
+    },
+    {
+      "path": "tests/schedulertest.mjs",
+      "sha256": "3a4ff1785fd1bd13b3035f0564cd4539d530062ba4859937f3055b53c03f459d"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "3a9ba3713d7cbba32ba992a6b162c2a381c516878084ebefcce548c280ad0d35"
+    }
+  ],
+  "contract": {
+    "storage_schema": "scheduler_lifecycle_schema v1",
+    "tables": [
+      "scheduler_instances",
+      "scheduler_control_requests"
+    ],
+    "commands": [
+      "status",
+      "drain",
+      "cancel"
+    ],
+    "permissions": "Local administrator with direct OS/database access; no new MCP, peer or HTTP control surface",
+    "request_binding": [
+      "instance UUID",
+      "node UUID and epoch",
+      "expected control revision",
+      "unique idempotency request UUID"
+    ],
+    "request_is_stop_proof": false,
+    "control_modes": [
+      "run",
+      "drain",
+      "cancel"
+    ],
+    "cancel_can_downgrade": false,
+    "resume_existing_instance": false,
+    "automatic_lock_takeover": false,
+    "pid_based_termination": false,
+    "process_liveness": "not_checked",
+    "heartbeat_interval_ms": 1000,
+    "stale_after_ms": 10000,
+    "heartbeat_limits": "Synchronous preparation can delay event loop; freshness is not process liveness or death proof",
+    "terminal_requires": [
+      "scheduler has no busy batch",
+      "current node identity checked",
+      "all existing provider run stop records checked",
+      "no unconfirmed provider run or lifecycle error for stopped state",
+      "durable terminal record before lock removal"
+    ],
+    "executor_stop_confirmed": "Historical confirmation at instance ended_at; does not prove current host-process liveness or task acceptance"
+  },
+  "validation": {
+    "scheduler_suite": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 67723.4976,
+      "command": "node --test tests/schedulertest.mjs",
+      "log_sha256": "36b87a94498d35a79382d10f081e9247d69c8910c0bdf87db288803a313c8b58"
+    },
+    "additional_recovery": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 2318.3984,
+      "command": "node --test --test-name-pattern=\"actual backup recovery preserves\" tests/schedulertest.mjs",
+      "log_sha256": "2ce48debda080804ce0fdc7554358dd3c084ecdf2040d71a41239dfe6f20743d"
+    },
+    "unique_units": 24,
+    "new_units": 8,
+    "counts_note": "23-unit suite plus one later added recovery test, with no overlap. The final test file contains24 cases."
+  },
+  "initial_finding": {
+    "result": "recovery fixture refused",
+    "reason": "Backup destination was inside the source database directory. Corrected to a sibling under the isolated test root, preserving the existing backup boundary.",
+    "production_guard_changed": false,
+    "log_sha256": "e04474a3d11dca1eadda984399fb942a25fba8307b0e0cda7cbf2def07c3a574"
+  },
+  "observed": [
+    "Status CLI uses query-only connection and does not create lifecycle tables or launch work",
+    "Requested drain is pending until observed, retries preserve its immutable receipt, stale versions/content conflicts rejected",
+    "Separate actual scheduler CLI and drain CLI with60-second queue polling finish one in-flight synthetic task and leave next assignment pending",
+    "Cancel CLI escalates drain, actual Windows Job reaches job_empty, used quota remains1 and real_model_call_confirmed remainsfalse",
+    "Hard-killed actual scheduler child leaves ended_at null and executor_stop_confirmed false; pending old command does not affect a fresh instance after fixture-only manual lock recovery based on the terminal child handle",
+    "Missing execution settlement closes as attention with unconfirmed_runs1, not stopped",
+    "Failed control observation stops new claiming, records attention/error and consumes no quota",
+    "Actual backup/restore/recovery APIs retain instance/control rows; old-epoch retry rejected after activation",
+    "Existing16 scheduler scenarios retain task, quota, source-gate, scope, singleton-lock, workspace and signed receipt behavior"
+  ],
+  "remaining": [
+    "Windows service or scheduled startup installation and whole-node component supervision",
+    "Operator panel administration and monitoring integration",
+    "Control/history retention policy and sustained-load heartbeat latency",
+    "Actual native subscription providers, two-PC offline/reconnect and72hour acceptance",
+    "Current-commit full Windows CI after push"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "windows_services_changed": false,
+  "scheduled_tasks_changed": false,
+  "models_called": false,
+  "physical_two_pc": false
+}

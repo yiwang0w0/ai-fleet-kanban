@@ -32,7 +32,7 @@ console.log(NL + "[① package.json]");
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
   ok("no dependencies of any kind (zero-dependency is a deployment property)",
      !pkg.dependencies && !pkg.devDependencies && !pkg.peerDependencies);
-  ok("engines.node is declared", typeof pkg.engines?.node === "string" && /22/.test(pkg.engines.node), pkg.engines?.node);
+  ok("engines.node is declared", pkg.engines?.node === ">=24.0.0", pkg.engines?.node);
   ok("no \"type\":\"module\" (core/store.js is CommonJS; .mjs files are explicit)", pkg.type === undefined);
   const missing = [];
   for (const [name, cmd] of Object.entries(pkg.scripts || {}))
@@ -48,7 +48,10 @@ console.log(NL + "[② nodeTooOld — the one failure a newcomer could not read]
 {
   ok("v20.0.0 is too old", nodeTooOld("v20.0.0") === true);
   ok("v22.4.9 is too old (node:sqlite arrived in 22.5)", nodeTooOld("v22.4.9") === true);
-  ok("v22.5.0 is fine", nodeTooOld("v22.5.0") === false);
+  ok("v22.5.0 is too old (no SQLite transaction state)", nodeTooOld("v22.5.0") === true);
+  ok("v22.16.0 is outside the supported Node 24 floor", nodeTooOld("v22.16.0") === true);
+  ok("v23.11.0 is too old", nodeTooOld("v23.11.0") === true);
+  ok("v24.0.0 meets the supported floor", nodeTooOld("v24.0.0") === false);
   ok("v24.16.0 is fine", nodeTooOld("v24.16.0") === false);
   ok("garbage does not block startup (availability check, not a safety gate)", nodeTooOld("weird") === false);
   ok("the running node passes its own check", nodeTooOld() === false, process.version);

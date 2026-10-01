@@ -1,0 +1,171 @@
+{
+  "format": "ai-fleet-startup-path-evidence/v1",
+  "recorded_at": "2026-10-01T09:38:27.284374+00:00",
+  "base_commit": "effce3fd4e6aa24c6cb7e7fecb9759c1617d94db",
+  "batch": 72,
+  "status": "implemented_and_locally_verified_not_deployed",
+  "cause": {
+    "observed_ci_error": "STARTUP_BINDING_CHANGED",
+    "ci_runs_with_same_failure": [
+      36836430926,
+      36838953392
+    ],
+    "ci_temp_uses_8dot3_alias": true,
+    "local_same_failure_reproduced": true,
+    "observed_difference": "Node realpathSync preserves 8.3 spelling; Windows PowerShell expands PSCommandPath to the long path. A source loaded through an alias generated a differently spelled wrapper pin.",
+    "remote_confirmation_after_fix": "pending_new_commit_ci"
+  },
+  "change": {
+    "native_realpath_for_source_and_file_pins": true,
+    "native_realpath_for_source_node_identity_and_database": true,
+    "canonical_existing_parent_for_new_bundle_separation": true,
+    "bundle_argument_and_review_digest_contract_unchanged": true,
+    "wrapper_path_hash_sid_acl_source_gate_xml_checks_preserved": true,
+    "identical_wrapper_copy_rejected": true,
+    "existing_bundle_rewritten": false,
+    "automatic_task_registration": false
+  },
+  "negative_controls": [
+    {
+      "case": "prepare through actual 8.3 source alias then validate in Windows PowerShell",
+      "baseline": "effce3fd4e6aa24c6cb7e7fecb9759c1617d94db",
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "duration_ms": 2796.4849,
+      "code": "STARTUP_BINDING_CHANGED"
+    },
+    {
+      "case": "short-path output inside governance source must be rejected",
+      "baseline": "intermediate native-pin change before canonical-parent separation",
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "duration_ms": 2368.7195,
+      "observed": "incorrect success exit 0"
+    }
+  ],
+  "tests": {
+    "startup_and_node_runtime_after_native_pin_fix": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 55994.1162,
+      "command": "node --test --test-concurrency=1 tests/nodestartuptest.mjs tests/noderuntimetest.mjs"
+    },
+    "final_strengthened_short_path_case_after_separation_fix": {
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 7694.0586,
+      "command": "node --test --test-name-pattern=\"short-path source preparation\" tests/nodestartuptest.mjs"
+    },
+    "unique_cases_with_passing_record": 17,
+    "final_change_only_reran_affected_case": false,
+    "whole_repository_suite_repeated": false,
+    "actual_8dot3_exercised": true,
+    "platform": "Windows",
+    "node": "24.16.0",
+    "task_scheduler_xml_validation": "actual COM TASK_VALIDATE_ONLY",
+    "task_management_mutations": "in-memory adapter only",
+    "hidden_node_and_powershell_runtime": "actual isolated fixture processes",
+    "final_actual_short_temp_preparation_and_hidden_runtime": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 18828.287,
+      "process_scoped_temp_and_tmp": "existing real 8.3 alias",
+      "command": "node --test --test-name-pattern=\"prepare is read-only|short-path source preparation|hidden PowerShell\" tests/nodestartuptest.mjs"
+    },
+    "final_changes_reran_only_affected_cases": true
+  },
+  "earlier_failures_retained": [
+    {
+      "log": "review72-startup-before.log",
+      "passed": 0,
+      "failed": 1,
+      "reason": "Initial fixture incorrectly assumed ordinary realpath expands the short alias; fixed test to reproduce short-path source preparation."
+    },
+    {
+      "log": "review72-unmodified-regression.log",
+      "passed": 15,
+      "failed": 2,
+      "duration_ms": 39671.2137,
+      "reason": "A guarded editing script stopped before modifying production code, but the shell continued to run the old code. Expected alias failure plus one database-is-locked failure in fixture status polling.",
+      "database_lock_root_cause_resolved": false,
+      "database_lock_followup": "seven-module/H8; subsequent serial related run passed, which does not prove the contention issue fixed."
+    }
+  ],
+  "source_hashes": [
+    {
+      "path": "core/node-startup.mjs",
+      "sha256": "e54ec2cf6556d2251e321c7cefe4908c86e935cbb08ebcc8f0b4d64005e24c74"
+    },
+    {
+      "path": "packaging/windows/node-startup.ps1",
+      "sha256": "a3271462ea1b47a143abe57416a277c69f54324ac3b416604b89a2dcc94c5cb1"
+    },
+    {
+      "path": "tests/nodestartuptest.mjs",
+      "sha256": "2754b10d8b33c79708293d15713f88c96ff1b1d67d7d101e402ad756e5b879f3"
+    },
+    {
+      "path": "tests/noderuntimetest.mjs",
+      "sha256": "09789ca2d141e1bfd1f8b2366b8f7c56214261bca04fa517d460a3dee1fa5c29"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review72-startup-before.log",
+      "sha256": "d0a9277445f8ea417a9df6c64f507c81ae5a89d9982cf1a7412be6a3dfcc797e"
+    },
+    {
+      "name": "review72-startup-before-actual.log",
+      "sha256": "0d43a4831d1152a8bd5084a8f21097dd8874d8bf8e56888d1b0f3e0cc88de8a2"
+    },
+    {
+      "name": "review72-unmodified-regression.log",
+      "sha256": "b95f64086413e47b157b7f6cd952aa13bca85fd3efa7082f54ee9231aae07b5f"
+    },
+    {
+      "name": "review72-startup-after.log",
+      "sha256": "f89a7da455cd26362719e552ae20c7de2bf8b1ef3f098ccfd286750f351631e1"
+    },
+    {
+      "name": "review72-path-separation-before.log",
+      "sha256": "4bc157fc3af790f30d5e701c33266104651366b1cf58fcbb00731a8f0c5ca8f9"
+    },
+    {
+      "name": "review72-path-separation-final.log",
+      "sha256": "cc1fd91705f63d1f175028cf374379c9661abd2abeaa8a2667e4b9f6733011f5"
+    },
+    {
+      "name": "review72-short-temp-final.log",
+      "sha256": "0a420cb2607d80e1a851b7a27d343d3c5973445fabe7291b4b5f8b09b81bdadd"
+    }
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "scheduled_tasks_changed": false,
+  "tailscale_changed": false,
+  "models_called": false,
+  "physical_two_pc_acceptance": false,
+  "prior_ci_snapshot": {
+    "checked_at": "2026-10-01T09:39:33.177Z",
+    "code_sha": "effce3fd4e6aa24c6cb7e7fecb9759c1617d94db",
+    "runs": [
+      {
+        "id": 36842367609,
+        "number": 131,
+        "status": "in_progress",
+        "conclusion": null,
+        "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36842367609"
+      }
+    ]
+  }
+}

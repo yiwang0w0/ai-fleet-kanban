@@ -1,0 +1,202 @@
+{
+  "format": "ai-fleet-source-lineage-evidence/v1",
+  "batch": 76,
+  "recorded_at": "2026-10-01T11:10:59.261688+00:00",
+  "base_commit": "c91174f23fca6bedbafdac8b9696134385c06022",
+  "review_baseline": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "review_item": "seven-module/H5b",
+  "status": "implemented_and_locally_verified",
+  "reproduction": {
+    "actual_restores": 2,
+    "receiver_remains_at_original_epoch": true,
+    "before_fix_error": "RECOVERY_MISMATCH",
+    "new_assertion_failed_before_product_change": true
+  },
+  "contract": {
+    "capability": "source-epoch-lineage-v1",
+    "endpoint": "POST /peer/v1/recovery/lineage",
+    "scope": "sync:pull",
+    "authenticate_before_body_and_recheck_after_body": true,
+    "maximum_hops": 64,
+    "source_walks_retained_recovery_receipts": true,
+    "chain_is_not_broadcast_in_hello": true,
+    "minimal_marker_fields": [
+      "format",
+      "node_id",
+      "recovery_id",
+      "retired_epoch",
+      "backup_epoch",
+      "new_epoch",
+      "activated_at",
+      "receipt_digest"
+    ],
+    "chain_digest_is_signature": false,
+    "physical_retirement": "operator_attested_at_source_not_verified_here",
+    "single_transition_plan_and_receipt": "v1",
+    "skipped_epoch_plan_and_receipt": "v2",
+    "reviewed_chain_reobserved_at_accept": true,
+    "all_intermediate_epochs_retired_atomically": true,
+    "existing_sync_schema": 4,
+    "schema_increment": false,
+    "missing_history_automatically_reconstructed": false
+  },
+  "coverage": [
+    "Actual two and three source restores with the receiver offline; preserved visible old results until verified snapshot cutover",
+    "Paged snapshots, narrower project scope, pending projects, missing-task history and unclaimable replicas",
+    "Missing historical receipt after restoring an older backup; backup_epoch cannot shortcut retired_epoch provenance",
+    "Truncation, reordering, repeated recovery ID, cycles, wrong node, wrong tip, wrong end, empty chain, digest tampering and unknown fields",
+    "Plan mutation, source history mutation, all-epoch retirement rollback and reverse-credential rollback/revocation",
+    "Real loopback HTTP unauthorized and insufficient-scope rejection, credential revocation while request body is incomplete",
+    "Legacy one-hop v1 compatibility without the new capability or chain RPC",
+    "Duplicate stored epoch receipts and source-side cycles refused",
+    "64-hop validator and source walker accepted; 65 rejected using synthetic retained history, not 64 physical restores",
+    "Independent CLI prepare, accept and history preserve v2 chain and exact plan digest",
+    "Null plan rejected by normal validation after the final optional-property guard"
+  ],
+  "windows_tests": [
+    {
+      "log": "review76-h5b-red.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 1316.9199
+    },
+    {
+      "log": "review76-h5b-first.log",
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 1379.2101
+    },
+    {
+      "log": "review76-h5b-boundaries.log",
+      "tests": 9,
+      "pass": 8,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 9833.1197
+    },
+    {
+      "log": "review76-regression.log",
+      "tests": 126,
+      "pass": 126,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 71482.7821
+    },
+    {
+      "log": "review76-final-boundaries.log",
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 1107.8234
+    }
+  ],
+  "regression_command": "node --test --test-concurrency=1 tests/epochrecoverytest.mjs tests/recoverytest.mjs tests/synctest.mjs tests/snapshottest.mjs tests/peertest.mjs",
+  "final_targeted_command": "node --test --test-name-pattern 'edited, miscounted|H5b bounded lineage' tests/epochrecoverytest.mjs",
+  "test_accounting": "Five related suites passed 126/126 once serially. Then a null-plan guard and source-side 64/65 bound assertions were added; the two affected tests passed. These two are already included among the 126 unique cases; this is incremental verification, not one full final-source run or 128 unique cases.",
+  "intermediate_failure": {
+    "log": "review76-h5b-boundaries.log",
+    "reason": "Test fixture granted reverse credentials to the current epoch, so the product correctly revoked zero; corrected fixture binds the intermediate old epoch.",
+    "product_fix_for_this_fixture_error": false,
+    "raw_failure_retained": true
+  },
+  "source_hash_encoding": "UTF-8, LF normalized, as committed",
+  "source_hashes": [
+    {
+      "path": "core/federation/recovery-lineage.mjs",
+      "sha256": "3cd326f9ed162fda8bf05dbb1c5ce42612cf4106d4902fe1bd0e10fb8295a951"
+    },
+    {
+      "path": "core/federation/epoch-state.mjs",
+      "sha256": "1e478f1499626b5223649fbc75764ebf02e37b7d66b53d4456ee8c5745a00b46"
+    },
+    {
+      "path": "core/federation/epoch-recovery.mjs",
+      "sha256": "f2afe9fdaf7674a983186da6d058e6bbaa08feadfdeb6e218e27bab0a0896ca1"
+    },
+    {
+      "path": "core/federation/gateway.mjs",
+      "sha256": "93af5bfe09454a4d7e177fdedf25fda8f1e20af9ed96c9a1bf248024fdf32e9f"
+    },
+    {
+      "path": "core/federation/protocol.mjs",
+      "sha256": "32d9184d1ea942de56624b3ac6bfda3670f77e21189c7b5a942c23cf5e57bfcf"
+    },
+    {
+      "path": "tests/epochrecoverytest.mjs",
+      "sha256": "153e86314b09d58c40b3c8b1835a163ca655c207f0b0554a55375d42dfd8d2f7"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review76-h5b-red.log",
+      "sha256": "d04c3dd2980a8253c1e3730ea646ca1f40c40fd0ff70cb7b2327d971898f54e9"
+    },
+    {
+      "name": "review76-h5b-first.log",
+      "sha256": "2021a92ec16193dd5038a8a32225e7d80414eca8fdd0558f46c67e05e6dee01e"
+    },
+    {
+      "name": "review76-h5b-boundaries.log",
+      "sha256": "b0ba0e599515b1764ff5534f3e9f852e3145f4441b5911e9f9c1dd5a9f10d290"
+    },
+    {
+      "name": "review76-regression.log",
+      "sha256": "407f4ef382b239805406db3c37cd7bb5cce9ed56e8e55bdcf179c5396d6ee9a2"
+    },
+    {
+      "name": "review76-final-boundaries.log",
+      "sha256": "e6759897390fc9e4ddc323582bd66e733deecc1985801c1ecdb1f57e1157eb68"
+    },
+    {
+      "name": "review76-ci134-jobs.json",
+      "sha256": "b1f39bc141731fe5b08dddcf790e618309a8952cc91425fba075933f80367baf"
+    },
+    {
+      "name": "review76-ci134-job-110330155718.log",
+      "sha256": "7abe61257b96af142c5f2d99b6405683a1a321db471a2f7ccf459435529ed226"
+    }
+  ],
+  "prior_ci": {
+    "134": {
+      "code_sha": "223cb5c81d8c54608c3ef6b68a63ba6514c86f91",
+      "run_id": 36850316839,
+      "conclusion": "failure",
+      "gitleaks": "success",
+      "errors": [
+        "nodestartuptest database is locked",
+        "after-hook EPERM"
+      ],
+      "predates_startup_fixture_fix": true
+    },
+    "135": {
+      "code_sha": "c91174f23fca6bedbafdac8b9696134385c06022",
+      "run_id": 36851466211,
+      "checked_at": "2026-10-01T11:08:32.162Z",
+      "status": "in_progress",
+      "conclusion": null
+    }
+  },
+  "limitations": [
+    "Missing recovery history still requires independent operator reconciliation; no import/bypass workflow added",
+    "Authenticated provenance and hashes do not prove physical retirement",
+    "Does not recover topology or abandoned runtime instance locks",
+    "Does not satisfy physical two-PC, Tailscale or independent phase acceptance"
+  ],
+  "production_changed": false,
+  "tailscale_changed": false,
+  "scheduled_tasks_changed": false,
+  "models_called": false,
+  "real_peers_enabled": false,
+  "physical_two_pc_acceptance": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

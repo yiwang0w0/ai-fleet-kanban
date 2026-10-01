@@ -1,0 +1,170 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-58-fleet-progress",
+  "date": "2026-10-01",
+  "base_commit": "e2a33c624da0b5d69fe4e39ae51c69ae0205af14",
+  "code_commit": "845e1154effa4d29eac3e14ac7a98876f25b5bee",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF without BOM",
+  "scope": "Read-only accepted-only phase progress from administrator-enrolled external confirmations, scoped contract/input invalidation, operator API and panel.",
+  "tests": [
+    {
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/fleetprogresstest.mjs tests/fleetviewtest.mjs tests/servertest.mjs",
+      "node_runner_units": 27,
+      "new_progress_tests": 12,
+      "fleet_view_tests": 14,
+      "server_wrapper_units": 1,
+      "server_internal_assertions": 195,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 93265.4073,
+      "log": ".data/review58-related.log",
+      "log_sha256": "89937f18f110729c42a8959de6989469d0e6f593e02ec720cbf1f283394c3b32"
+    }
+  ],
+  "counts_note": "Server assertions are inside one Node runner unit and are not added again. Earlier 11/12 round overlaps with the final suite.",
+  "initial_failure": {
+    "result": "11/12",
+    "reason": "Actual manifest uses implemented_pending_acceptance; parser now recognizes it and displays pending acceptance.",
+    "log": ".data/review58-progress.log",
+    "log_sha256": "5b5271d1b8d905bb94459f090d684fd46d4edf802ca3f74046ca03ade29e3329"
+  },
+  "checks": [
+    "Manifest accepted/test-pass declarations alone yield no accepted progress",
+    "Partial receipts count only prerequisite-satisfied accepted tasks; stage needs every task",
+    "Missing independent role/OP or declared implementer self-confirmation refuses acceptance",
+    "Changed task contracts invalidate affected gates and dependent stages; unrelated gates remain valid",
+    "Registered code and authority inputs invalidate original receipts; routine status evidence does not",
+    "Changed receipt bytes and later pending decisions never fall back to old passed records",
+    "Current blockers prevent accepted counts and show release/responsibility/review details",
+    "Project filters avoid opening unrelated project files; public response excludes configured paths",
+    "Malformed partitions, dependency cycles, statuses and oversized files reject",
+    "Real 72-task manifest and old unsigned G01 draft remain at zero accepted",
+    "CLI generates only pending digest-bound drafts without writing",
+    "Actual HTTP rejects missing/worker/review tokens and foreign origin"
+  ],
+  "browser": {
+    "passed": true,
+    "format": "ai-fleet-progress-browser/v1",
+    "browser": "Existing Chrome headless via bundled Playwright",
+    "before": {
+      "tasks": "4/4",
+      "phases": "3/3"
+    },
+    "after": {
+      "accepted_tasks": 1,
+      "total_tasks": 4,
+      "task_percent": 25,
+      "accepted_phases": 1,
+      "total_phases": 3,
+      "phase_percent": 33.33,
+      "blocked_tasks": 1,
+      "pending_acceptance_tasks": 2,
+      "with_implementation_evidence": 4,
+      "with_verification_records": 4
+    },
+    "states": [
+      {
+        "phase": "S0",
+        "state": "stale",
+        "accepted": false
+      },
+      {
+        "phase": "S1",
+        "state": "stale",
+        "accepted": false
+      },
+      {
+        "phase": "S2",
+        "state": "accepted",
+        "accepted": true
+      }
+    ],
+    "keyboard_details_passed": true,
+    "narrow": {
+      "width": 390,
+      "scroll": 390
+    },
+    "page_errors": [],
+    "real_models": false,
+    "physical_two_pc": false,
+    "formal_acceptance": false,
+    "receipt_bytes_preserved": true,
+    "screenshot_files": [
+      {
+        "path": ".data/review58-progress-wide.png",
+        "sha256": "6b336ca4d884df52a2f4e17c84f96d6532f992e5da0e5a92690e71d72c7b9ff4",
+        "committed": false
+      },
+      {
+        "path": ".data/review58-progress-narrow.png",
+        "sha256": "16d9e93edd60773e2c9ebbd2125617c636d6e7527774dc8fc0e6429d4f8e9393",
+        "committed": false
+      }
+    ],
+    "cleanup": "Separate headless browser and temporary localhost board exited successfully.",
+    "last_changes_after_browser": "Only progress-bar color switched to existing ok variable and source BOMs normalized; inline script parses."
+  },
+  "prior_ci": {
+    "commit": "e2a33c624da0b5d69fe4e39ae51c69ae0205af14",
+    "run_id": 36814663250,
+    "status": "in_progress",
+    "windows_job": 110217002117,
+    "windows_active_step_at_observation": "verificationworkspacetest",
+    "gitleaks_job": 110217002342,
+    "gitleaks_conclusion": "success"
+  },
+  "current_batch_ci": "Pending push; prior full CI is not claimed as current success",
+  "trust_boundary": [
+    "Administrator must verify external review sources before enrolling receipt byte hashes. Display names and references are records, not cryptographic signatures.",
+    "Registered code/config/evidence input scope must be complete and independently reviewed. Changes outside declared inputs cannot be detected.",
+    "Administrator files must be protected from executor writes by deployment permissions; this batch does not establish Windows ACL isolation.",
+    "Local projection does not automatically distribute confirmation files across computers."
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "new_real_provider_calls": 0,
+  "production_changed": false,
+  "source_files": [
+    {
+      "path": "core/fleet-progress.mjs",
+      "sha256": "3e2d5eb2afd5fdcf6a800fd79cc85af5334c2d8f63e66e9254eea439d5f67f8c"
+    },
+    {
+      "path": "cli/progress.mjs",
+      "sha256": "ad00af4c83ad0dd7d6e90d7b2caae8d0dd7e344679423e7f7cdf446f89d18210"
+    },
+    {
+      "path": "core/server.mjs",
+      "sha256": "65c035189b0c255e01c1b15568ddfcd646ae4c97def21f57d1093e192602557e"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "92f240828c6dc0712125395ce8358cc94632cdc4f9b7a477c3e4287bb7027e65"
+    },
+    {
+      "path": "tests/fleetprogresstest.mjs",
+      "sha256": "a10e9b4834d472c6dec6b5c33d8c1d90ade4769743868abd2041ddf01ada788c"
+    },
+    {
+      "path": "docs/federation/fleet-progress.md",
+      "sha256": "f3d1d1a4fb0eedfa53c9b3439fc5883a9093fa3639f8aec528522c644cbd3d72"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "56a190052a2646aab1bc1bdbc4fd7d4a9d52ca8224c601b2c5e9e36d40517627"
+    },
+    {
+      "path": "docs/federation/PROGRESS.md",
+      "sha256": "7296f5885bd4bfaf63df37e556529625649cab2fcb200f28bbb12435291140c3"
+    },
+    {
+      "path": "docs/多终端共享看板-任务清单.json",
+      "sha256": "d3c90300d924007aec6151ddc1f833cfdab0dd930ec38f5865ff44ec1ad0faae"
+    }
+  ]
+}

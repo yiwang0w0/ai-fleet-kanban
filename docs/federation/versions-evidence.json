@@ -1,0 +1,88 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-04-versions",
+  "date": "2026-09-29",
+  "base_commit": "7cc5939643e66801a431b59df1baed8b46acc42f",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/store.js": "90e6d733d7978d0bfa3750139352ade66e2f4e8a083f8885597e8a8ad5a3f124",
+    "core/server.mjs": "8958d5fe2b0cb1a200e2a82daf41cf709d7872a06c61137183ced0f51beafa1e",
+    "core/panel.html": "cef7ed87565cdc45fdd687a407c93b772ae4c6d82b9daf21d2d2e332d7d031e5",
+    "cli/board.py": "cabc2c527a5ccacf36ba564841cf4ec265be781ac785ae9103a9a65e4b8050a3",
+    "loops/reviewer_loop.py": "569ee2ed1bdad98f5603918ba0247434cbad08659075d73a5c24c0cef3aad1ab",
+    "tests/versiontest.mjs": "cff07ca7ad5d5c3adcaeb5bcbae8c5c4d119447328eda289a3f77f6b474e81bb",
+    "tests/http-version-fixture.mjs": "5278b2e399bd531e96c7056057ac64fa63be5b012a672aade3391cd86b4e0af8",
+    "tests/servertest.mjs": "ab50638598939a9cb6350bab27412f4b7f25254506462e0556203b707ba30f5b",
+    "tests/looptest.mjs": "091a26598af58f1f97f9a2168e31caf1ffae34b989f7f415d1cf8dee528457e9",
+    "tests/reviewtest.mjs": "f0eab5afec83191d3587cf08a2ed3f25befc36439fbb3cca773598305549e2ef",
+    "tests/runfencetest.mjs": "547e0400af0ad4ae3262e1f8111ea2658106bde3b497f27b6fdd98360e0814d2",
+    "package.json": "ccb46ce0536dd4e36e05492b3fc20efac95bed80b41c8e06688fe1aa1980cc67",
+    ".github/workflows/ci.yml": "7db1cc912cd863ca12f3c9d920d2efb1b6fd8cb0868334ba29005ae36b721373"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "result": "passed",
+      "total_passed": 898,
+      "failed": 0,
+      "skipped": 0,
+      "version_tests_at_full_run": 16
+    },
+    "followup": {
+      "command": "node --test tests/versiontest.mjs",
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "changes": "Added line-picker error handling and stale decision-draft regression, CLI missing/stale/fresh assertions, and browser-visible popup placement. Targeted suite rerun after final changes."
+    },
+    "expected_full_suite_count_after_followup": 900,
+    "diff_check": "passed"
+  },
+  "browser": {
+    "scope": "isolated localhost fixture; synthetic task; no workers",
+    "line_picker_conflict_visible": true,
+    "edit_conflict_visible": true,
+    "final_line": "alpha",
+    "final_max_attempts": 3,
+    "final_aggregate_version": 8,
+    "server_stopped": true,
+    "screenshot": "local untracked task-version-conflict.png",
+    "screenshot_sha256": "0eb13e1e88545e4cbd93f78aa03b2e0f03109d9defb64fce878d6775c1fe22c3"
+  },
+  "ci": {
+    "run_id": 36536293454,
+    "result": "passed",
+    "windows_main_passed": 900,
+    "linux_main_passed": 897,
+    "jobs": {
+      "ubuntu": 109301003537,
+      "windows": 109301003986,
+      "gitleaks": 109301003856
+    }
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "real_multi_node_acceptance": false,
+  "phase_gates_passed": 0,
+  "limitations": [
+    "eight local task control endpoints only",
+    "no node authentication, event authority or replica protocol yet",
+    "version and run identifiers are not credentials",
+    "filesystem archive is not a SQLite transaction"
+  ],
+  "ci_history": [
+    {
+      "commit": "7149e2276abb394dfb2a0761325835b590f03547",
+      "run_id": 36535843417,
+      "gitleaks": "passed",
+      "ubuntu": "passed",
+      "windows": "failed",
+      "failure": "Concurrency fixture child exited during startup before commands; original stderr was missing. Thirty local repetitions did not reproduce.",
+      "followup": "Use WAL before spawning; IPC barrier proves both processes observed version 1 before writing; retain stderr, wait for both exits and bound readiness. All 18 targeted tests passed."
+    }
+  ],
+  "tested_commit": "939cbd49a2131a59f022ca3e74f6c1dd4a4e95b7"
+}

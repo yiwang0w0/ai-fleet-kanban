@@ -1,0 +1,454 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-41-claude-native",
+  "date": "2026-09-30",
+  "base_commit": "e32191801095f84806288693eae3b0e85b74e584",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "code_and_document_files": [
+    {
+      "path": "core/execution/adapters.mjs",
+      "sha256": "09b9e2b15af6963a5694e8d2d54f4260ace9b09d53df79876bdf121abe4d071b",
+      "git_blob": "f9b246d7d82e3ea7cefbae824ec210a7d4204963"
+    },
+    {
+      "path": "tests/adaptertest.mjs",
+      "sha256": "b15a43bf9870b8a7ffdd92a94b60af22cc22e65ac66bd1b95457e12f7d2bfa82",
+      "git_blob": "1a3d309e8b0901976af8fe4ae78adffa01e353c2"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "d2cb8f63efd0b04f4683fe10559763452cc71b92a7b8fc8fa70da36ebd93c658",
+      "git_blob": "e9500fda2af55d36ae9c61f695f77eb8311c4c3b"
+    },
+    {
+      "path": "tests/workspacefiletest.mjs",
+      "sha256": "b5fdf1244696aa8110306bbb4c86e11b34017c2f8bf4e50bbc1327c0a6a53277",
+      "git_blob": "b044ec48951f6f19c64dfd0ba1567430e90f68e2"
+    },
+    {
+      "path": "docs/federation/adapters.md",
+      "sha256": "df2dd7001ea59906331c6d54a226e8fff6d1860f4859119df6f5b3b52e20d800",
+      "git_blob": "2ae220224dd47142abea035f58b17ccd81a5f143"
+    }
+  ],
+  "local_validation": {
+    "pass": 129,
+    "failed": 0,
+    "skipped": 0,
+    "new_cases": 0,
+    "node_version": "24.16.0",
+    "suites": [
+      "adaptertest",
+      "dispatchtest",
+      "workspacefiletest",
+      "outputtest"
+    ],
+    "log": ".data/review41-regression.log",
+    "duration_ms": 138566.4459
+  },
+  "native_cli": {
+    "version": "2.1.284",
+    "sha256": "0416631e846f743110da5282409776fa1313e65f33a588aae066eaf8db0fda7d",
+    "authentication": "empty isolated home and dummy local API key",
+    "provider": "loopback fake Messages server",
+    "real_provider_calls": 0
+  },
+  "managed_policy_observation": {
+    "default_system_managed_settings": "not found",
+    "machine_policy_registry": "not found",
+    "user_policy_registry": "not found",
+    "limitations": "This local observation does not establish policy absence on other hosts or with real account server-managed policy."
+  },
+  "native_probes": [
+    {
+      "profile": "baseline",
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false
+        }
+      ],
+      "initialization": {
+        "tools": [
+          "mcp__fleet__get_task"
+        ],
+        "mcp_servers": [
+          {
+            "name": "fleet",
+            "status": "connected",
+            "source": "dynamic"
+          }
+        ],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan",
+          "statusline-setup"
+        ],
+        "plugins": [
+          {
+            "name": "agents-md",
+            "path": "builtin",
+            "source": "agents-md@builtin"
+          }
+        ]
+      },
+      "terminal": [
+        {
+          "subtype": "success",
+          "is_error": false
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "profile": "safe-mode",
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [],
+          "ambient_marker": false
+        }
+      ],
+      "initialization": {
+        "tools": [],
+        "mcp_servers": [],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan"
+        ],
+        "plugins": [
+          {
+            "name": "agents-md",
+            "path": "builtin",
+            "source": "agents-md@builtin"
+          }
+        ]
+      },
+      "terminal": [
+        {
+          "subtype": "success",
+          "is_error": false
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "profile": "explicit-memory-off",
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false
+        }
+      ],
+      "initialization": {
+        "tools": [
+          "mcp__fleet__get_task"
+        ],
+        "mcp_servers": [
+          {
+            "name": "fleet",
+            "status": "connected",
+            "source": "dynamic"
+          }
+        ],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan",
+          "statusline-setup"
+        ],
+        "plugins": [
+          {
+            "name": "agents-md",
+            "path": "builtin",
+            "source": "agents-md@builtin"
+          }
+        ]
+      },
+      "terminal": [
+        {
+          "subtype": "success",
+          "is_error": false
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "profile": "baseline",
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false,
+          "memory_marker": true,
+          "tool_result_seen": false
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false,
+          "memory_marker": true,
+          "tool_result_seen": true
+        }
+      ],
+      "initialization": {
+        "tools": [
+          "mcp__fleet__get_task"
+        ],
+        "mcp_servers": [
+          {
+            "name": "fleet",
+            "status": "connected",
+            "source": "dynamic"
+          }
+        ],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan",
+          "statusline-setup"
+        ],
+        "plugins": [
+          {
+            "name": "agents-md",
+            "path": "builtin",
+            "source": "agents-md@builtin"
+          }
+        ]
+      },
+      "terminal": [
+        {
+          "subtype": "success",
+          "is_error": false
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "profile": "explicit-memory-off",
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false,
+          "memory_marker": false,
+          "tool_result_seen": false
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false,
+          "memory_marker": false,
+          "tool_result_seen": true
+        }
+      ],
+      "initialization": {
+        "tools": [
+          "mcp__fleet__get_task"
+        ],
+        "mcp_servers": [
+          {
+            "name": "fleet",
+            "status": "connected",
+            "source": "dynamic"
+          }
+        ],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan",
+          "statusline-setup"
+        ],
+        "plugins": [
+          {
+            "name": "agents-md",
+            "path": "builtin",
+            "source": "agents-md@builtin"
+          }
+        ]
+      },
+      "terminal": [
+        {
+          "subtype": "success",
+          "is_error": false
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "decoded": {
+        "status": "success",
+        "evidence": "fixture only",
+        "usage": {
+          "input_tokens": 2,
+          "output_tokens": 2
+        },
+        "diagnostic": "SUCCESS",
+        "observed": {
+          "runtime": "claude",
+          "session_id": "020a2398-fe75-4915-ab39-3a0d7b1cb46e",
+          "turn_id": null,
+          "model": "claude-sonnet-4-6",
+          "terminal_status": "success",
+          "protocol_error": null,
+          "bytes": 4370,
+          "events": 6,
+          "stdout_sha256": "21eec9e8842d90ebd63261341838ba811cc4ef587038fd9d8ec916e3a2c2b8f3"
+        },
+        "real_model_call_confirmed": false
+      },
+      "profile": "explicit-memory-off",
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false,
+          "memory_marker": false,
+          "tool_result_seen": false
+        },
+        {
+          "method": "POST",
+          "path": "/v1/messages?beta=true",
+          "model": "claude-sonnet-4-6",
+          "tools": [
+            "mcp__fleet__get_task"
+          ],
+          "ambient_marker": false,
+          "memory_marker": false,
+          "tool_result_seen": true
+        }
+      ],
+      "initialization": {
+        "tools": [
+          "mcp__fleet__get_task"
+        ],
+        "mcp_servers": [
+          {
+            "name": "fleet",
+            "status": "connected",
+            "source": "dynamic"
+          }
+        ],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan",
+          "statusline-setup"
+        ],
+        "plugins": [
+          {
+            "name": "agents-md",
+            "path": "builtin",
+            "source": "agents-md@builtin"
+          }
+        ]
+      },
+      "terminal": [
+        {
+          "subtype": "success",
+          "is_error": false
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "probe_source_receipts": [
+    {
+      "path": ".data/probe-claude-native.mjs",
+      "sha256": "2c26dde9d016d5311e832ac56565437f1639d978338a50263a72fc646f2a0c7e"
+    },
+    {
+      "path": ".data/probe-claude-memory.mjs",
+      "sha256": "7ee791abbbd6e3c8c92b9b33832b4dca7376816548e89fe28a1efac25a92ffd6"
+    },
+    {
+      "path": ".data/probe-claude-decoder.mjs",
+      "sha256": "26121a02f3342a62992e827bc2a67f2c521e24714b54c98cd2116a7b540ab3de"
+    }
+  ],
+  "new_commit_ci": "pending",
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false,
+  "limitations": [
+    "Fake provider and a one-tool fixture MCP do not establish real subscriptions, all broker role schemas or complete OS isolation.",
+    "Managed settings remain higher-level host policy; built-in plugin/agent names remain present.",
+    "Output scope rejection occurs after initialization and is not a preventative sandbox.",
+    "Other ancestor context layouts and policy-bearing environments remain to be checked."
+  ],
+  "references": [
+    "https://code.claude.com/docs/en/memory",
+    "https://code.claude.com/docs/en/settings"
+  ]
+}

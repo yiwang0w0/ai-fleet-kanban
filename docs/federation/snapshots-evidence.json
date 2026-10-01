@@ -1,0 +1,77 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-07-authorized-snapshot-recovery",
+  "date": "2026-09-29",
+  "base_commit": "855d1dedf2fc35cd09aada154382b3e41cc0aa2b",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/sync-store.mjs": "fce54be497a43f5e1ee3bf8147ef407e98187acbaea55ee71c213452512ec25c",
+    "core/federation/sync-client.mjs": "8924f76404d00c585fbe9e8443621d0684d189de6c2da194dcf745e57f70ab9f",
+    "core/federation/snapshots.mjs": "55f1f67ee6976ac43c8e35de4eb1cf2c7aed8d823dd53739ae782e6eee70967f",
+    "core/federation/gateway.mjs": "5f20ef0047b0bee93567defb85052bd7975d2732999851678abacc18c6896229",
+    "core/federation/protocol.mjs": "593ff87a70372be74aef54fdf53d93e7744dfdd45226363fcb667cdf93ac173e",
+    "cli/sync.mjs": "8073530653c6b9e98c8727c672b9fdf2e55aac6c1fcc4c62a61335e16fa67753",
+    "tests/snapshottest.mjs": "bbbd55db7b535a0e822ea8f83aab3d81cb0a344b8f68fa2b5201287d88f6c339",
+    "docs/federation/snapshot.schema.json": "b1ebfcae4ca39cfa95dac9227958d5ce5c2a0a8d6a59c429c9b94647aa6d17bc",
+    "package.json": "c8a8fd505c06aa0442de1dbc6fd19ab771d67269f9763ce0f2f5304ce4b86947",
+    ".github/workflows/ci.yml": "14b30ff90fd77ada7c0f0e285f6c26e7dbca54490b3709616e80ce658a84db0d"
+  },
+  "local_validation": {
+    "full_command": "npm test",
+    "full_result": "passed",
+    "main_suite_before_last_concurrency_test": 964,
+    "latest_command": "node tests/snapshottest.mjs",
+    "latest_snapshot_tests": 20,
+    "failed": 0,
+    "skipped": 0,
+    "expected_final_windows_main_suite": 965,
+    "coverage": [
+      "v1 to v2 atomic migration and published-state backfill",
+      "frozen pages plus concurrent owner updates and deltas",
+      "durable staging after real child process exit",
+      "atomic replacement, final digest and stream-boundary integrity",
+      "duplicate pages/events, gaps, forged owner/project/epoch and rollback refusal",
+      "byte/record limits and withdrawal state",
+      "explicit ACK-gated retention with snapshot and rollback",
+      "HTTP new-node join, partial resume, expiry restart and lost ACK after install",
+      "obsolete staging discarded when another receiver advances",
+      "authenticated project-scoped pages and credential revocation",
+      "independent prune CLI and immutable outside-transaction delete guard"
+    ]
+  },
+  "ci": {
+    "run_id": 36544730710,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36544730710",
+    "result": "passed",
+    "windows_main_passed": 965,
+    "linux_main_passed": 962,
+    "snapshot_tests_per_platform": 20,
+    "gitleaks": "passed",
+    "extra_checks": "passed"
+  },
+  "schema_validation": {
+    "json_syntax": "passed",
+    "runtime_semantics": "20 snapshot tests passed",
+    "external_schema_validator": "not run; bundled Python has no jsonschema"
+  },
+  "network": {
+    "scope": "temporary localhost only",
+    "real_tailscale_acceptance": false,
+    "configuration_changed": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "same-epoch projection rebuild only; restore activation and original-node retirement remain pending",
+    "snapshot is coalesced state, not full audit history, relationships or evidence files",
+    "automatic retention is disabled; explicit allow-lagging compacts unacknowledged projections, not a claim of historical delivery",
+    "32 MiB/10000 record snapshot limit; larger projects require future partitioning or limit design",
+    "physical device/Windows ACL and real multi-node disaster acceptance pending",
+    "global UI, MCP/three adapters and delegation still pending"
+  ],
+  "tested_commit": "cf78b11570172bfe24c28a1c041558834871ffe1"
+}

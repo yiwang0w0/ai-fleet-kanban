@@ -1,7 +1,5 @@
-# CI is a release gate on BOTH platforms (operator ruling R3, 2026-09-02):
-# ubuntu-latest is blocking, not advisory. The project was authored on Windows, so
-# Linux is exactly where the untested halves of every process.platform branch live —
-# an advisory Linux lane would rot into "always red, always ignored".
+# Supported release environment: Windows only (user decision, 2026-09-30).
+# Both regression tests and secret scanning remain blocking delivery checks.
 name: ci
 
 on:
@@ -12,19 +10,20 @@ on:
 jobs:
   harness:
     strategy:
-      fail-fast: false            # one platform's red must not hide the other's
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    # CI #138 reached the former 35-minute budget before the remaining suites.
+    # Keep every check and each harness timeout; allow the complete Windows job to finish.
+    timeout-minutes: 60
     env:
       # windows-latest pipes default to cp1252; the harnesses print CJK. Without
       # this, codex-selftest dies of UnicodeEncodeError before its first assertion.
       PYTHONUTF8: "1"
     defaults:
       run:
-        # One shell on both platforms, and one failure contract: every harness
-        # step runs through `hrun`, which on red surfaces the FAIL lines as
+        # Git Bash on the Windows runner; no WSL or Linux runner is required.
+        # Every harness runs through `hrun`, which surfaces FAIL lines as
         # ::error:: ANNOTATIONS. Annotations are visible on the run page even
         # logged out — raw logs are not, and a maintainer diagnosing a
         # platform-only red from outside a browser session gets nothing else.
@@ -44,7 +43,7 @@ jobs:
           "$@" 2>&1 | tee harness.log
           rc=$?
           if [ $rc -ne 0 ]; then
-            grep -a "FAIL" harness.log | head -10 | while IFS= read -r l; do
+            grep -a -E "FAIL|^not ok|^✖" harness.log | head -10 | while IFS= read -r l; do
               printf '::error::%s\n' "$l"
             done
           fi
@@ -54,6 +53,92 @@ jobs:
       # Pure layers first: store, rulings, gates, prompt library.
       - name: selftest (store)
         run: bash hrun.sh node tests/selftest.mjs
+      - name: progressdiagnostictest (local blockers and audited parent rearm)
+        run: bash hrun.sh node tests/progressdiagnostictest.mjs
+      - name: identitytest (node ownership and atomic migration)
+        run: bash hrun.sh node tests/identitytest.mjs
+      - name: backuptest (WAL snapshots and quarantined restore)
+        run: bash hrun.sh node tests/backuptest.mjs
+      - name: runfencetest (stale dispatch rejection and worker protocol)
+        run: bash hrun.sh node tests/runfencetest.mjs
+      - name: versiontest (stale task commands and concurrent edits)
+        run: bash hrun.sh node tests/versiontest.mjs
+      - name: peertest (credential binding, revocation and protocol negotiation)
+        run: bash hrun.sh node tests/peertest.mjs
+      - name: peer endpoints (pre-send address binding and persisted source origin)
+        run: bash hrun.sh node --test tests/peer-endpointtest.mjs
+      - name: synctest (durable projections, replay, lost ACK and offline resume)
+        run: bash hrun.sh node tests/synctest.mjs
+      - name: snapshottest (frozen pages, crash resume and retained-history recovery)
+        run: bash hrun.sh node tests/snapshottest.mjs
+      - name: recoverytest (retirement, reviewed activation and crash rollback)
+        run: bash hrun.sh node tests/recoverytest.mjs
+      - name: epochrecoverytest (reviewed source epochs, missing results and atomic cutover)
+        run: bash hrun.sh node tests/epochrecoverytest.mjs
+      - name: treetest (deep ancestry, subtree moves and concurrent cycles)
+        run: bash hrun.sh node tests/treetest.mjs
+      - name: delegationtest (bilateral intents, scoped decisions and offline retries)
+        run: bash hrun.sh node tests/delegationtest.mjs
+      - name: relationstest (serialized project graphs, bilateral approvals and mixed cycles)
+        run: bash hrun.sh node tests/relationstest.mjs
+      - name: topologytest (local graph commitments, offline transitions and MCP placement)
+        run: bash hrun.sh node tests/topologytest.mjs
+      - name: graph recovery (append-only generations, member attestations and held tasks)
+        run: bash hrun.sh node --test tests/graphrecoverytest.mjs
+      - name: bindingtest (endpoint contracts, bilateral readiness and scoped release)
+        run: bash hrun.sh node tests/bindingtest.mjs
+      - name: cancellationtest (durable cancel, subtree fences and observed stop receipts)
+        run: bash hrun.sh node tests/cancellationtest.mjs
+      - name: resulttest (sealed candidates, owner rejection and durable rework)
+        run: bash hrun.sh node tests/resulttest.mjs
+      - name: repositorytest (local repo mapping, verified committed bytes and portable paths)
+        run: bash hrun.sh node tests/repositorytest.mjs
+      - name: workspacetest (independent task repos, declared conflicts and retained files)
+        run: bash hrun.sh node tests/workspacetest.mjs
+      - name: workspacefiletest (transactional MCP edits, bound launches and actual Git commits)
+        run: bash hrun.sh node tests/workspacefiletest.mjs
+      - name: gitpackagetest (actual Git objects, byte identity and complete delivery trees)
+        run: bash hrun.sh node tests/gitpackagetest.mjs
+      - name: artifacttransfertest (durable chunks, lost ACK, restart and local verification)
+        run: bash hrun.sh node tests/artifacttransfertest.mjs
+      - name: appcontainertest (Windows token, file/network boundaries and resource limits)
+        run: bash hrun.sh node tests/appcontainertest.mjs
+      - name: commandsupervisortest (bounded test output and Windows process receipts)
+        run: bash hrun.sh node tests/commandsupervisortest.mjs
+      - name: verificationworkspacetest (independent source checks, one-use launch and recovery)
+        run: bash hrun.sh node tests/verificationworkspacetest.mjs
+      - name: integrationtest (source ref CAS, bound commits and crash reconciliation)
+        run: bash hrun.sh node tests/integrationtest.mjs
+      - name: completiontest (bilateral acceptance, retirement, parent review and recovery)
+        run: bash hrun.sh node tests/completiontest.mjs
+      - name: mcptest (scoped tools, replay, revocation and stdio)
+        run: bash hrun.sh node tests/mcptest.mjs
+      - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)
+        run: bash hrun.sh node tests/dispatchtest.mjs
+      - name: inspectiontest (read-only pending inventories, scoped cursors and sanitized errors)
+        run: bash hrun.sh node tests/inspectiontest.mjs
+      - name: fleet health and conflict diagnostics (read-only observations and retry guidance)
+        run: bash hrun.sh node --test tests/fleethealthtest.mjs tests/conflicttest.mjs
+      - name: outputtest (provider terminals, UTF-8, identity and bounds)
+        run: bash hrun.sh node tests/outputtest.mjs
+      - name: executoractivitytest (monotonic idle clock and bounded stderr categories)
+        run: bash hrun.sh node tests/executoractivitytest.mjs
+      - name: launchrequesttest (complete pre-permit request bounds and safe diagnostics)
+        run: bash hrun.sh node tests/launchrequesttest.mjs
+      - name: supervisortest (pinned processes, timeout, cancellation and descendants)
+        run: bash hrun.sh node tests/supervisortest.mjs
+      - name: adaptertest (explicit provider profiles, scoped tools and sealed configuration)
+        run: bash hrun.sh node tests/adaptertest.mjs
+      - name: nodestartuptest (reviewed logon bundle, Task Scheduler validation and hidden launch)
+        run: bash hrun.sh node tests/nodestartuptest.mjs
+      - name: noderuntimetest (owned loopback gateways, scoped sync and restart)
+        run: bash hrun.sh node tests/noderuntimetest.mjs
+      - name: runtime lock recovery (reviewed plan, stopped host and preserved history)
+        run: bash hrun.sh node --test tests/runtimelocktest.mjs
+      - name: schedulertest (continuous queue, durable lifecycle controls and native stop receipts)
+        run: bash hrun.sh node tests/schedulertest.mjs
+        env:
+          PYTHON: python
       - name: decisiontest (rulings + handoff)
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)
@@ -70,6 +155,8 @@ jobs:
         run: bash hrun.sh python loops/worker_loop.py --prompt-selftest
       - name: board_health_watch selftest (alarm criteria + throttle)
         run: bash hrun.sh python watchers/board_health_watch.py --selftest
+      - name: healthwatchtest (fleet alarm backoff, recovery and unavailable observations)
+        run: bash hrun.sh python tests/healthwatchtest.py
       - name: verify_page selftest (assertion builder + host allowlist, no browser needed)
         run: bash hrun.sh node examples/verify_page.mjs --selftest
 
@@ -80,24 +167,68 @@ jobs:
           PYTHON: python
       - name: "servertest (supervisor: stop reasons, backoff, refusal)"
         run: bash hrun.sh node tests/servertest.mjs
+      - name: "panel authentication (anonymous boundary, local pairing and authenticated events)"
+        run: bash hrun.sh node --test tests/panelauth.test.mjs tests/panelclient.test.mjs
       - name: "reviewtest (auto-reviewer, end to end with a stub CLI)"
         run: bash hrun.sh node tests/reviewtest.mjs
+      - name: "legacy verification and evidence boundaries"
+        run: bash hrun.sh node --test tests/legacy-boundariestest.mjs
         env:
           PYTHON: python
       - name: "sentrytest (SSE sentry re-runs itself once, old connection closed first)"
         run: bash hrun.sh node tests/sentrytest.mjs
         env:
           PYTHON: python
+      - name: "fleetviewtest (operator reads, ownership and offline freshness)"
+        run: bash hrun.sh node tests/fleetviewtest.mjs
+      - name: "fleetprogresstest (scoped contracts, external confirmations and invalidation)"
+        run: bash hrun.sh node tests/fleetprogresstest.mjs
+      - name: "fleetactionstest (operator outbox, receipts and idempotent remote commands)"
+        run: bash hrun.sh node tests/fleetactionstest.mjs
+      - name: "fleetevidencetest (scoped relationships and task history)"
+        run: bash hrun.sh node tests/fleetevidencetest.mjs
+      - name: "mcpevidencetest (scoped history pages and independent stdio continuation)"
+        run: bash hrun.sh node tests/mcpevidencetest.mjs
+      - name: "desktopcontexttest (scoped reads, private Markdown and refresh)"
+        run: bash hrun.sh node tests/desktopcontexttest.mjs
+      - name: "contextevidencetest (scoped Markdown evidence and durable handoffs)"
+        run: bash hrun.sh node tests/contextevidencetest.mjs
+      - name: "desktop-packagetest (portable MCPB, independent extraction and Windows preflight)"
+        run: bash hrun.sh node tests/desktop-packagetest.mjs
+        env:
+          PYTHON: python
+      - name: "desktop-archivetest (ZIP writer: Python cross-decode, determinism, bounds, no subprocess)"
+        run: bash hrun.sh node tests/desktop-archivetest.mjs
+        env:
+          PYTHON: python
+      - name: "review-contracttest (version, qualified terms and safe upgrade instructions)"
+        run: bash hrun.sh node tests/review-contracttest.mjs
+        env:
+          PYTHON: python
       - name: "tltest (timeline drawing primitives + source shape)"
         run: bash hrun.sh node tests/tltest.mjs
 
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0          # scan the whole history, not just the tip
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: scan Git history with pinned Windows gitleaks
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Same release as the previous scan; checksum from its official assets:
+          # https://github.com/gitleaks/gitleaks/releases/tag/v8.24.3
+          $scanDir = Join-Path $env:RUNNER_TEMP 'gitleaks-8.24.3'
+          New-Item -ItemType Directory -Path $scanDir -Force | Out-Null
+          $archive = Join-Path $scanDir 'gitleaks.zip'
+          Invoke-WebRequest -Uri 'https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_windows_x64.zip' -OutFile $archive
+          $expected = '3f1a35578631dbfe633cc5b49e6c906e55ff14a4bfd7336a10fb27fe33b6dcd2'
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'gitleaks archive SHA256 mismatch'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $scanDir -Force
+          & (Join-Path $scanDir 'gitleaks.exe') git --log-opts=--all --redact --no-banner --exit-code 1 .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

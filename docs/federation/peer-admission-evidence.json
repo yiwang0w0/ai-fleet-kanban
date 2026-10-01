@@ -1,0 +1,92 @@
+{
+  "format": "ai-fleet-peer-admission-evidence/v1",
+  "batch": 84,
+  "base_commit": "67f3c7f44aa3a72f5d9fadc144cacb3c782db236",
+  "checked_at": "2026-10-01T13:57:35.231078+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "review_items": [
+    "seven-module/H8",
+    "seven-module/H7b reconnect follow-up"
+  ],
+  "red": [
+    {
+      "private_log": ".data/review84-red.log",
+      "failed": 4,
+      "sha256": "30d4981d1e56efc176f2d044c138efc080fcc0d026de7681aa9ba945f26cff19"
+    },
+    {
+      "private_log": ".data/review84-reconnect-red.log",
+      "failed": 1,
+      "sha256": "68d1f58f78d675e2b293e5d0a6530db828aa1e71c92c38b88e7bd8808e6e18c3"
+    }
+  ],
+  "green": [
+    {
+      "private_log": ".data/review84-regression.log",
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "sha256": "6dadf8c44c8cc8b6765f83ae7c6c7e88854b72f7c6ab044de436245ba3007edd"
+    },
+    {
+      "private_log": ".data/review84-reconnect-green.log",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "sha256": "fb07a2a8ad6514c83eea64c190a9b188cde67280b25b1efb00a1a6cabe68d546"
+    }
+  ],
+  "total_distinct_passed_this_batch": 18,
+  "contracts": [
+    "one in-flight request per authenticated peer node per gateway, released on response finish/close",
+    "WAL writer can coexist with authenticated health, hello, lineage and status reads",
+    "snapshot parsing and digest construction precede write reservation; moved head refuses publication",
+    "nonterminal pages remain readable under a separate writer; terminal page retains durable delivery",
+    "MCP reconnect initialization grants no tools; exact report receipt remains retrievable"
+  ],
+  "limitations": [
+    "in-flight map is local to one gateway process",
+    "pull, ACK, mutations, snapshot insertion and final delivery receipts still require write transactions",
+    "local explicit prune retains its atomic write transaction",
+    "no physical multi-PC load or long-running acceptance"
+  ],
+  "sources": [
+    {
+      "path": "core/federation/peers.mjs",
+      "sha256": "8e51449fa89c4ee8e5671ccecf45d8704210242046a1140116718cda40c3b6e0"
+    },
+    {
+      "path": "core/federation/gateway.mjs",
+      "sha256": "95adf860c4f9eac5f5475ca80eff0803fba4252be662ade0248c55f7801e9c86"
+    },
+    {
+      "path": "core/federation/snapshots.mjs",
+      "sha256": "8206de72b569b30a2ee2d64d8c1ac78ea2cb67676ae7848284d6bc4559d0c35a"
+    },
+    {
+      "path": "core/mcp/stdio.mjs",
+      "sha256": "7220142ebea5a2367a550081af591c0ce647c5152627d6460cc2376b1199a0ff"
+    },
+    {
+      "path": "tests/peertest.mjs",
+      "sha256": "b9f6e03d12885ff4c4f2a2e66c56b9f8b259301a6611856439bc02d622e2fa2f"
+    },
+    {
+      "path": "tests/snapshottest.mjs",
+      "sha256": "c4a4c88697e8f65d35ac6a0710c4638c21f18da35db4be450d454eeee2176c83"
+    },
+    {
+      "path": "tests/mcptest.mjs",
+      "sha256": "dacc45fca489096419abfdffc7e899eeef3feda982cb7a96c022c2d97364d823"
+    },
+    {
+      "path": "docs/federation/peers.md",
+      "sha256": "a43f4a60fc7ee494b121443cf6858701d9a37057e6c6d0c91da5def3ddf2da7b"
+    },
+    {
+      "path": "docs/federation/snapshots.md",
+      "sha256": "793b8cc9ea9f90ce2f7d9ca78889bbd4d7865cfa83221090bd7c84c12e5fc828"
+    }
+  ]
+}

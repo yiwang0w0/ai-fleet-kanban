@@ -1,0 +1,171 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-23-task-workspaces",
+  "date": "2026-09-30",
+  "base_commit": "4360abbe766af5e29a9d3ce0d741ad719a89aae2",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/artifacts/git-reader.mjs": "975cfb06a2a3ab4f695b4c62bb37cb3fae2314d4d5a0cdad65ab0044dd397969",
+    "core/artifacts/repositories.mjs": "ad93c578c6b6bc93a4aaecd02347e7f9cdd51f58bc6653e12c95a746a718b296",
+    "core/artifacts/git-workspace.mjs": "05d9a214271fc7d64133b45d3c9fc1ddf841a8b472d3750e598898196b92190c",
+    "core/artifacts/workspaces.mjs": "f54dfda22f2e6e9a273c7948fb087d9d0baa1929aee03dbd512c2e731273b6f4",
+    "core/execution/dispatch.mjs": "2b51cfae1f9ba3542a34b60e4357813412fe7a4f022d3b67c65ed72cf53f732b",
+    "cli/workspace.mjs": "bff0f532beb32143478f3e2f801e146bae6960e5fa45f7a6c2349736d131f53f",
+    "tests/workspacetest.mjs": "0292df26aba3754bf5138478d79d4874eab3cf8e3dc763a44628f538ba846c17",
+    "package.json": "2fdbf2ac6d91cd7e4e5fe6bf8fcc0e0b4e9700074d503e25a9b282c0ef2e7f90",
+    ".github/workflows/ci.yml": "2677abc26bbfaa0f6680a9729d3b3f558b52231427f521be2a3b484d0af319f3",
+    "tests/versiontest.mjs": "9e79f6e2438b12e97d4b786d99884e892363a4c9682ab0bbeceb92eb639fd864"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1351,
+      "classic_pass": 841,
+      "native_pass": 510,
+      "failed": 0,
+      "workspace_tests": 21,
+      "repository_tests": 22,
+      "log": ".data/workspace-full-suite.log",
+      "source_status": "10 source LF digests verified unchanged for their test execution"
+    },
+    "boundary_tests": {
+      "command": "node --test --test-name-pattern=\"baseline files|full-tree expansion\" tests/workspacetest.mjs",
+      "passed": 2,
+      "failed": 0,
+      "log": ".data/workspace-boundary-targeted.log"
+    },
+    "coverage": [
+      "explicit separate permission for full local Git history copy, immutable pool IDs and disjoint roots",
+      "actual original commit and CRLF/Unicode bytes preserved in independent SHA1/SHA256 repositories",
+      "source dirty/untracked files excluded; no object hardlinks or alternate shared object stores",
+      "two native task/run-specific directories isolate filesystem writes and report declared write overlap",
+      "current project/run/version/base/write scope checks, exact replay and one workspace per real dispatch",
+      "existing paths, partial-copy failures and commit failures preserve files without automatic retry",
+      "Git filter/hook/attribute conversion is not invoked during raw baseline materialization",
+      "reserved paths, path case collisions, links, submodules, LFS pointers and object/file/count bounds",
+      "pool/checkout directory replacement detection and refusal to retroactively bind started or ended runs",
+      "API and SQL prevent old board-only launch from consuming quota for a task workspace",
+      "observed stop required for retention; dirty/untracked files, immutable history and transactional audit",
+      "actual CLI checkout creation/inspection/retention and independent-process reservation race",
+      "actual backup retirement and activation invalidate old epoch bindings while preserving checkout files",
+      "schema compatibility and immutable bindings/baseline receipts"
+    ],
+    "fixture_repairs": [
+      "normalized previously registered but missing directory as WORKSPACE_DIRECTORY_CHANGED",
+      "Windows Git correctly rejected reserved NUL in test index; rebuilt fixture via raw mktree/commit-tree without changing production path rules"
+    ],
+    "http_idle_probe": {
+      "kind": "actual loopback HTTP child process with synchronous client event-loop pause",
+      "server_keep_alive_timeout_ms": 5000,
+      "client_pause_ms": 6500,
+      "requests": "4 warm POST requests then 1 POST after pause",
+      "keep_alive_result": {
+        "result": "failure",
+        "cause": "ECONNRESET"
+      },
+      "connection_close_result": {
+        "result": "success"
+      },
+      "ci_cause_status": "mechanism reproduced locally; original CI did not identify which request failed",
+      "test_fix": "version API fixture uses Connection: close; assertions and product behavior unchanged",
+      "full_suite_test_file_change": "versiontest fixture patched before its Node process began in current full suite"
+    }
+  },
+  "ci": {
+    "tested_commit": "4d87e28531756d0e2b9bd688e13ba89d2adcccc2",
+    "run_id": 36614986810,
+    "run_number": 82,
+    "status": "completed",
+    "conclusion": "success",
+    "windows": {
+      "id": 109565591545,
+      "name": "harness (windows-latest)",
+      "classic": 931,
+      "native": 510,
+      "main_suite_passed": 1351,
+      "failed": 0,
+      "skipped": 0,
+      "extra_classic_checks": 90
+    },
+    "linux": {
+      "id": 109565591468,
+      "name": "harness (ubuntu-latest)",
+      "classic": 928,
+      "native": 509,
+      "main_suite_passed": 1347,
+      "failed": 0,
+      "skipped": 1,
+      "extra_classic_checks": 90
+    },
+    "gitleaks": {
+      "id": 109565591310,
+      "conclusion": "success"
+    }
+  },
+  "prior_ci": {
+    "tested_commit": "4360abbe766af5e29a9d3ce0d741ad719a89aae2",
+    "run_id": 36612117994,
+    "conclusion": "failure",
+    "jobs": [
+      {
+        "id": 109555887552,
+        "name": "gitleaks",
+        "conclusion": "success",
+        "failed_steps": []
+      },
+      {
+        "id": 109555888053,
+        "name": "harness (ubuntu-latest)",
+        "conclusion": "success",
+        "failed_steps": []
+      },
+      {
+        "id": 109555888054,
+        "name": "harness (windows-latest)",
+        "conclusion": "failure",
+        "failed_steps": [
+          "versiontest (stale task commands and concurrent edits)"
+        ]
+      }
+    ],
+    "linux": {
+      "classic": 928,
+      "native": 488,
+      "extra_classic_checks": 90,
+      "main_suite_passed": 1326,
+      "failed": 0
+    },
+    "windows": {
+      "failed_step": "versiontest",
+      "passed": 17,
+      "failed": 1,
+      "code": "ECONNRESET",
+      "cause": "Unresolved connection reset in existing HTTP version integration; repository alias test not reached"
+    }
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "real_operations": {
+    "deployment_changed": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false,
+    "actual_user_repository_registered": false,
+    "actual_user_workspace_created": false
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "prepared files are bound to a native run, but no verified code-execution adapter yet uses them; executor_bound remains false",
+    "independent checkout and declarative write scope are not OS filesystem sandboxing",
+    "all-history copy requires explicit separate local authority and may include historical files outside artifact allowlists",
+    "copy/content admission bounds are not OS disk quotas against concurrently growing inputs",
+    "retention preserves files and releases active capacity; it does not delete/move directories or attest unknown third-party process termination",
+    "crashed provisioning remains durable and non-retriable pending explicit recovery tooling",
+    "task/run/result-bound delivered artifacts, authenticated resumable transport and independent merge checks are pending",
+    "source acceptance, graph retirement, parent advancement, scheduling, UI and two-PC/provider acceptance remain pending"
+  ]
+}

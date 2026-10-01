@@ -1,0 +1,84 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-19-proposal-decisions",
+  "date": "2026-09-30",
+  "base_commit": "23f4acee14c7239f6180aa71c0cca510eca36282",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/bindings.mjs": "497298304183f4bf74241b8f5e5c8632ed0dd11d33217b88ad2fc13997d12cd3",
+    "core/federation/binding-client.mjs": "5b7c0d95e307bcde9c4310422c6d0966064deefc8980ff412c33f3862af3586f",
+    "core/mcp/policy.mjs": "3169d633791a12485d9d7fa2087bf6c9002e82adb0c42d436e15740687b3cb73",
+    "core/mcp/tools.mjs": "aee7221bc4f7fbe9a8af532172731ddfe5125eb3231dc2fa73f1c3c7da165d3a",
+    "cli/binding.mjs": "37a7d3f65af69d67f03588e1466e93401d2a712eaae7489ae95a38091f97b529",
+    "tests/bindingtest.mjs": "96bef11af6a08cfa49897870227b417d63b8ac3320bfb5b99d3ab79d5f1203ca"
+  },
+  "local_validation": {
+    "targeted_before_final_two_tests": {
+      "passed": 38,
+      "failed": 0,
+      "log": ".data/proposal-targeted.log"
+    },
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1266,
+      "classic_pass": 841,
+      "native_pass": 425,
+      "failed": 0,
+      "binding_tests": 40,
+      "log": ".data/proposal-full-suite.log"
+    },
+    "coverage": [
+      "explicit digest-bound proposal decline, immutable history and no automatic source release",
+      "actual 1000-entry queue saturation, one-slot recovery and oldest pending item discovery",
+      "MCP role/project authorization and atomic decision/audit/response rollback",
+      "current rejection on an authenticated retry with unchanged historical ACK and lost-response recovery",
+      "schema v1 read compatibility, transactional upgrade failure, restart and schema v2",
+      "local decline after stale topology or source grant revocation",
+      "actual explicit-database CLI and backup restore epoch quarantine",
+      "independent-process target preparation versus decline race",
+      "new relation completes bilateral release after old attempt withdrawal",
+      "decline committed during actual HTTP upload is checked before receipt"
+    ]
+  },
+  "ci": {
+    "run_id": 36593578615,
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109492633455,
+      "passed": 1266,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109492633608,
+      "passed": 1262,
+      "failed": 0,
+      "skipped": 1
+    },
+    "gitleaks": {
+      "job_id": 109492633105,
+      "conclusion": "success"
+    },
+    "extra_checks": "passed",
+    "receipt": ".data/proposal-ci.json"
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "real_operations": {
+    "deployment_changed": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "automatic rejection notification and retry scheduling remain pending; source explicitly resends to observe the current decline",
+    "confirmed execution cancellation, late outcomes, graph retirement, evidence transfer and source acceptance remain pending",
+    "immutable history remains retained; no automatic historical data deletion",
+    "physical Tailscale multi-computer and subscription executor acceptance remain pending"
+  ],
+  "tested_commit": "acbf94c979f534913d34101ead136ede891ebcc5"
+}

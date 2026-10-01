@@ -1,0 +1,221 @@
+{
+  "format": "ai-fleet-progress-diagnostics-evidence/v1",
+  "batch": 77,
+  "recorded_at": "2026-10-01T11:37:27.860968+00:00",
+  "base_commit": "f1394aec8a087cf9526d302a7aebb09765334a5b",
+  "review_baseline": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "review_items": [
+    "seven-module/H3a partial",
+    "seven-module/M1"
+  ],
+  "status": "implemented_and_locally_verified",
+  "full_H3_complete": false,
+  "contract": {
+    "entrypoint": "store.stuckWhy(db, task)",
+    "output_field": "progress_blockers",
+    "reason_fields": [
+      "code",
+      "action",
+      "message",
+      "next_action",
+      "related_task_ids when applicable"
+    ],
+    "reads_current_task_not_caller_snapshot": true,
+    "read_only": true,
+    "shared_gate_callers": [
+      "claim",
+      "claimById",
+      "pendingReview",
+      "rearmDone",
+      "completeGoals"
+    ],
+    "shared_gate_scope": "Existing task-tree, topology and delegation guards; human gate for claim/review/rearm, existing goal aggregation semantics retained",
+    "other_local_reasons": [
+      "unreleased task or ancestor",
+      "broken/unfinished dependencies",
+      "execution lock",
+      "lifetime attempt and root WIP limit",
+      "unfinished children",
+      "missing or no new rearm child result",
+      "unchanged reviewed delivery",
+      "goal without descendants or unfinished descendants including archived tasks"
+    ],
+    "empty_reasons_is_execution_permission": false,
+    "in_progress_or_terminal_tasks_diagnosed_as_stale": false,
+    "new_database_schema": false
+  },
+  "rearm": {
+    "human_gate_preserved": true,
+    "blocked_task_version_and_attempts_preserved": true,
+    "blocked_event": "review.rearm_blocked",
+    "success_event": "review.rearmed",
+    "dedup_key": "parent review markers, child identities/content versions, current hold codes; wall clock alone excluded",
+    "explicit_unlock_required_for_human_gate": true,
+    "other_holds_remain_effective_after_human_unlock": true,
+    "review_markers_cleared_only_on_success": true,
+    "audit_failure_rolls_back_sweep": true,
+    "outer_transaction_preserved_via_savepoint": true,
+    "operator_requests_created": false,
+    "child_deliverable_text_in_blocked_event": false
+  },
+  "ui_and_http": {
+    "authenticated_task_list_and_detail": true,
+    "no_new_anonymous_access": true,
+    "blocked_rearm_label": "重审受阻",
+    "human_hold_label": "待人工 · 不会自动送回",
+    "reason_and_next_action_html_escaped": true,
+    "actual_loopback_http_test": true,
+    "panel_render_functions_executed_in_vm": true,
+    "physical_desktop_visual_acceptance": false
+  },
+  "windows_tests": [
+    {
+      "log": "review77-m1-red.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 133.6747
+    },
+    {
+      "log": "review77-m1-first.log",
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 136.0271
+    },
+    {
+      "log": "review77-boundaries.log",
+      "tests": 10,
+      "pass": 9,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 2449.765
+    },
+    {
+      "log": "review77-regression.log",
+      "tests": 168,
+      "pass": 168,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 580571.2438
+    }
+  ],
+  "store_tests": {
+    "log": "review77-store.log",
+    "pass": 402,
+    "fail": 0
+  },
+  "counting": "Store selftest and seven related Node test files each ran once. The ten preliminary cases are included in the final related suites, not added again. After launch only the existing rearm JSDoc was relocated; runtime statements remained unchanged.",
+  "regression_command": "node --test --test-concurrency=1 tests/progressdiagnostictest.mjs tests/versiontest.mjs tests/treetest.mjs tests/topologytest.mjs tests/bindingtest.mjs tests/completiontest.mjs tests/panelauth.test.mjs",
+  "intermediate_failure": {
+    "log": "review77-boundaries.log",
+    "reason": "A no-op topology edit correctly created no finish hold. The fixture was corrected to make an actual registered dependency change; no product change was needed for this failure.",
+    "raw_log_retained": true
+  },
+  "source_hash_encoding": "UTF-8 LF normalized",
+  "source_hashes": [
+    {
+      "path": "core/store.js",
+      "sha256": "ab9b1ec98dfe074812485c0a4e72a325b0fbbb69f740980d62072065894837c3"
+    },
+    {
+      "path": "core/server.mjs",
+      "sha256": "6e204f4e1919c0dbb8bbe39701f616cc38204a060b9de81cef60df7218ab8fa9"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "9d878f02eb8d9ee0d649ccab47ced969b8d7e1538ee831bab54f15826303b548"
+    },
+    {
+      "path": "tests/progressdiagnostictest.mjs",
+      "sha256": "7a11326790949cc58c3b73c8f113a8a90e7649346c09462c6532b11ee7a77d37"
+    },
+    {
+      "path": "tests/topologytest.mjs",
+      "sha256": "f3b7d6d6a2fb59be85b0f054c1ba3b06caf30aaf573db3ba002abb883f44770c"
+    },
+    {
+      "path": "tests/bindingtest.mjs",
+      "sha256": "0d0007e06f537952af9b371e45bcd3ee7fb915bc013c840b95c3b874d6213d16"
+    },
+    {
+      "path": "tests/panelauth.test.mjs",
+      "sha256": "746779b14e2489c875bc917fadaa164f8016410ccb2e01b53eb8aa59f7cdd2bb"
+    },
+    {
+      "path": "package.json",
+      "sha256": "e2ea687615d23cefec51a4c74358ca39aa1e65ccd7f0a23ff3d48bce710c84b7"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "1491e21d7c0989d17385ac9c219926882ff4ea19bd5b37e094e7f0cfb38880f4"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review77-m1-red.log",
+      "sha256": "dfbfbcd7f8fc9317267317a99300a03422c0989390f2dc8ad6219917eb60a503"
+    },
+    {
+      "name": "review77-m1-first.log",
+      "sha256": "e693bdcc991ae8dd663fa21da2521c73c7c7a2f7181456bbe24991852eab681a"
+    },
+    {
+      "name": "review77-boundaries.log",
+      "sha256": "19d552af4e021875c72a22706ea56f8881931b563715b2229d6cddfce418374a"
+    },
+    {
+      "name": "review77-regression.log",
+      "sha256": "ec6af9bae750b008a32d95d62cb8e205fb782349c844cb05068e563d9f958512"
+    },
+    {
+      "name": "review77-store.log",
+      "sha256": "4e60a2afef34fd5549999d53e9390320e2e2d22d74ded2c734eb5de5ba881209"
+    },
+    {
+      "name": "review77-ci135-jobs.json",
+      "sha256": "7825e24b67f1739b668500f9299335a4a1ec0d9c3c3bf3c80dbbc27db2579033"
+    },
+    {
+      "name": "review77-ci135-job-110333858774.log",
+      "sha256": "4e399fd643509f886108df0a70b8f9bc31cd5e3acf27cdff17e6908068f05454"
+    }
+  ],
+  "prior_ci": {
+    "run_id": 36851466211,
+    "number": 135,
+    "code_sha": "c91174f23fca6bedbafdac8b9696134385c06022",
+    "conclusion": "failure",
+    "gitleaks": "success",
+    "startup_test": {
+      "pass": 13,
+      "fail": 0
+    },
+    "remaining_failure": {
+      "step": "schedulertest",
+      "case": "hard-stopped scheduler remains unconfirmed and its stale control cannot stop a replacement instance",
+      "error": "database is locked",
+      "location": "fixture status read through lifecycle.status/localIdentity"
+    },
+    "remaining_failure_fixed_by_this_batch": false
+  },
+  "remaining_H3": [
+    "Unified task version, run CAS and remote conflict explanation",
+    "Cross-module federation stuck inventory",
+    "Dispatch stale inventory",
+    "Health watcher broker/delivery/orphan-instance probes and throttled alarms"
+  ],
+  "production_changed": false,
+  "models_called": false,
+  "real_peers_enabled": false,
+  "tailscale_changed": false,
+  "physical_two_pc_acceptance": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

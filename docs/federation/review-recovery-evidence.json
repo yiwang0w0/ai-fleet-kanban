@@ -1,0 +1,196 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-32-review-recovery-and-transactions",
+  "date": "2026-09-30",
+  "platform": "Windows",
+  "node_version": "24.16.0",
+  "code_base_commit": "1eb105650eb7fde221427eccc92542b4feacbcfd",
+  "review_baseline": "601890a",
+  "normalization": "UTF-8 LF",
+  "code_sha256": {
+    "cli/backup.mjs": "799ed67a0b0e825c1a7bc3fd5efa0992f69e2f50592f1c05d6ec211b5b3c048f",
+    "core/backup.mjs": "1855c8d1de764d7a3c61204d43d4dd1500864945bc4d41786aa9213b0c034c7f",
+    "core/recovery.mjs": "1b2283423655932da989e444c9032095df6d9c033c9d4a925da3986101394fd3",
+    "core/server.mjs": "c671166ef56d54e6a7c29c44699fa104b4e91f9b728b0cf1adef4812a7640f72",
+    "core/store.js": "ac79d062584b08d18ae780427370bb02a6b84ad484c797554dd0371441cd4003",
+    "tests/identitytest.mjs": "0f9f94814c820e4cdb0dfe9e355c5f1fc5c56d03abfa1eccfcf95b255c2c5443",
+    "tests/recoverytest.mjs": "1d7fbd1f7ace913fe240a6bb646e0dbab35f733cbd4b1ac4a936b7a13124e24c",
+    "tests/runfencetest.mjs": "04127fd0bb613113631889e9e43a0e0587fcaca77349dd06226530498ea3fecd",
+    "tests/versiontest.mjs": "2135a03c6a027a9f838894ea8e54c1d2bd3a94874918b17397b710b2d5be853c",
+    "tests/backuptest.mjs": "a557104bb5b8c04b2a3fb9a10343d1dec2759f039003538122927e711c48fe19",
+    "tests/epochrecoverytest.mjs": "d0bca66ec30a5d33dc71950d1ec8a4ad639a75f5b4d550723fecb4002062d139",
+    "tests/completiontest.mjs": "9b837a47ca38025000417d15b1b4bdcb8bad4fcebfb9e056472a66c2954eb0a0",
+    "tests/resulttest.mjs": "243475ebce2d04bfbe869cdf0d0731abb166153090ac9727cb9ccd22a6b274a1",
+    "tests/servertest.mjs": "ab50638598939a9cb6350bab27412f4b7f25254506462e0556203b707ba30f5b",
+    "tests/selftest.mjs": "13d0884d7fb8e5168f2c9fff45108d3f7c8d51808fab145de8ea1b97ebf91516",
+    "tests/decisiontest.mjs": "8688e2292cef38b46f7253f243c0b96411debfb2b565ad5c73fd1ac821063098"
+  },
+  "code_git_blobs": {
+    "cli/backup.mjs": "a47964de5bb12208cba7aa44cb9cc7af60ba6502",
+    "core/backup.mjs": "0fd99068d50492d24f68c3d800a6e23d1d996831",
+    "core/recovery.mjs": "6a5c0deca7e12066a5d7cee58d1d076798e42211",
+    "core/server.mjs": "2a4b96d9b9636baa4a4fe434b280f22153b5de8b",
+    "core/store.js": "a48cb53047292fe42c9262997decafe983d1fe68",
+    "tests/identitytest.mjs": "d6c4d0000c8a358644b81fc0aa8fe778e914c804",
+    "tests/recoverytest.mjs": "e7586dcf1d841a1e1eec7906314c463e8d01e680",
+    "tests/runfencetest.mjs": "deea7792891a8ce48722c4dfbc9ec565da08c2d6",
+    "tests/versiontest.mjs": "eca8dfaf7fcee311bb7fae77479ee9eb49b81408",
+    "tests/backuptest.mjs": "d6e84f1d944beb2b9d6ce53be629d97d25a6873e",
+    "tests/epochrecoverytest.mjs": "c0e59ba6e3aea54fe6ff973825ef9db6146cd258",
+    "tests/completiontest.mjs": "2b8a31f7e2d24183ef1511318a93ce4cd3ad2be2",
+    "tests/resulttest.mjs": "7db7ba22a3a67064f66a3f5ee1d9db2008697c6c",
+    "tests/servertest.mjs": "2e9e4e7a63c2826d569c16ea4d4845ea1cb1546a",
+    "tests/selftest.mjs": "fe69d3c7b749b3c18060f3e86bdd2c58a24f561f",
+    "tests/decisiontest.mjs": "ef8e59fcc46ffaa8ee1fbc4c3b2aed9020d1a5b7"
+  },
+  "local_validation": {
+    "native_unique_pass": 142,
+    "classic_pass": {
+      "store": 402,
+      "server": 195,
+      "decision": 25
+    },
+    "total_unique_pass": 764,
+    "new_cases": 13,
+    "unresolved_local_failures": 0,
+    "skipped": 0,
+    "coverage": [
+      "Legacy backup upgrade, held restore, source preservation, rollback and reviewed activation",
+      "Source epoch recovery, bilateral completion and candidate results",
+      "Nested store migration and task version savepoints preserve caller transactions",
+      "File preparation outside writer lock with original-version recheck",
+      "Canonical worker UUID and configuration-bound charter hash"
+    ],
+    "runs": [
+      {
+        "log": ".data/review32-core.log",
+        "pass": 123,
+        "fail": 1,
+        "note": "124 native cases. Archive fixture was waiting, correctly refused; fixed prerequisite and passed in final server/version run. Remaining 98 non-version cases unchanged except exporting existing UUID constant."
+      },
+      {
+        "log": ".data/review32-server-final.log",
+        "native_pass": 44,
+        "native_fail": 0,
+        "server_assertions_pass": 195,
+        "note": "Node reports 45 including one classic harness wrapper; wrapper excluded from unique assertion total."
+      },
+      {
+        "log": ".data/review32-selftest.log",
+        "pass": 402,
+        "fail": 0
+      },
+      {
+        "log": ".data/review32-decision.log",
+        "pass": 25,
+        "fail": 0
+      }
+    ],
+    "corrected_intermediate_failures": [
+      "Legacy tests first expected boolean imported flag, actual persisted value is integer 1.",
+      "Archive transaction fixture required approved status before archive.",
+      "Shared UUID constant was initially not exported; HTTP and behavior tests detected this, export added and complete affected harnesses passed."
+    ],
+    "logs_sha256": {
+      ".data/review32-core.log": "48f9aa063d3673e1e09fff0f2d7fc79003580c8bf96d2fd11abc8d4b722ef8da",
+      ".data/review32-server-final.log": "50b07406fe492c2e24049b5ec71877a44ec37baac4a12de2eeb9afef3a84a122",
+      ".data/review32-selftest.log": "907a4b7531554dab4e049c681ac94ac2851a664d2804d0d13c0f3a3cbf0f69bd",
+      ".data/review32-decision.log": "f904d0a449935df9b97ae4d0c5b2a539aff0f63434789c268a6119e9cb265480"
+    }
+  },
+  "new_commit_ci": "success",
+  "previous_commit_ci": {
+    "commit": "1eb105650eb7fde221427eccc92542b4feacbcfd",
+    "run_id": 36690834566,
+    "conclusion": "failure",
+    "corrected_assertion": "Revoked credential returns UNAUTHENTICATED before NODE_RETIRED"
+  },
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false,
+  "limitations": [
+    "Review ledger still has unresolved issues; PR remains draft.",
+    "Local tests do not replace physical two-PC or provider acceptance.",
+    "Restore upgrade does not start services or prove physical single-writer termination.",
+    "Concurrent version conflict may leave prepared attachment copies without accepting a task.",
+    "Charter hashes describe loaded configuration, not OS containment."
+  ],
+  "secret_scan": {
+    "tool": "Windows gitleaks 8.24.3",
+    "scope": "staged diff",
+    "exit_code": 0,
+    "findings": 0
+  },
+  "exact_commit_ci": {
+    "commit": "73ca689d1dfeedef61931e1cb882fb8b1f246a9e",
+    "run_id": 36694177392,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36694177392",
+    "windows_job_id": 109818077647,
+    "windows": "success",
+    "gitleaks_job_id": 109818077962,
+    "gitleaks": "success",
+    "main_pass": 1483,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0,
+    "native_harness_pass_counts": [
+      15,
+      14,
+      18,
+      26,
+      20,
+      29,
+      21,
+      19,
+      18,
+      21,
+      26,
+      28,
+      35,
+      40,
+      24,
+      18,
+      22,
+      21,
+      19,
+      4,
+      8,
+      8,
+      10,
+      8,
+      14,
+      29,
+      43,
+      38,
+      22,
+      24
+    ],
+    "classic_pass_counts": [
+      402,
+      25,
+      29,
+      27,
+      41,
+      20,
+      57,
+      13,
+      72,
+      195,
+      22,
+      5,
+      23
+    ],
+    "additional_counts": {
+      "codex_selftest": 20,
+      "prompt_selftest": 57,
+      "verify_page": 13
+    },
+    "other_required_checks": "gates_lib and board_health_watch completed successfully"
+  }
+}

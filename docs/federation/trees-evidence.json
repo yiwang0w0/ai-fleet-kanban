@@ -1,0 +1,82 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-14-local-task-trees",
+  "date": "2026-09-29",
+  "base_commit": "2e520e99512d9968d70b296f78ecbab81cb76680",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/task_tree.js": "71440934c8722b8430e19f0e70c73e2c62876c19f0284544a968294e06da217f",
+    "core/store.js": "5addf5b3fa033809ce71186e458a42342603d6a50f49aea6a52377b2840b1365",
+    "core/mcp/tools.mjs": "cbc3aae29f83f0e516a34ce30dd6b5428c588a665babd140504cebed7b1ee4aa",
+    "tests/treetest.mjs": "049b1066c16ffa4805f37b72684a401fa4fe7fcebfcc005673a5e9880ac0d6fa",
+    "tests/mcptest.mjs": "40a3a75c99a1de63c76233d0e400ce3e1b59d93f93791d016695cb73e1810374",
+    "tests/identitytest.mjs": "67f21eb2146af1b9ddd4408e94b43164d1b8aa20234a0b0cadaa9aad504cffb6",
+    "tests/selftest.mjs": "5fbf804f66ff8533d4bed8a2674e8c58ae8b08a54f547107e5188a0d67a6fcec",
+    "package.json": "ddf752fac2ab9cef2494ba77cce412d090fbabe2360dbe86784ea37b2f3ee1d9",
+    ".github/workflows/ci.yml": "11aacd7127cfcd6e798e7e713cae7815be9a2369616ab74487d41240e88e51cc"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1137,
+      "classic_pass": 841,
+      "native_pass": 296,
+      "failed": 0,
+      "tree_tests": 18,
+      "mcp_tests": 28
+    },
+    "final_store": {
+      "passed": 402,
+      "failed": 0
+    },
+    "note": "The all-parent index was added while the full pipeline was running; the final 402 store tests and 18 tree tests passed afterward. Final exact-commit CI is pending.",
+    "coverage": [
+      "32-edge hierarchical MCP creation, parent preservation and atomic depth refusal",
+      "historical legacy migration and immutable policy with read-only pre-migration ancestry",
+      "deep root release and WIP, closed ancestors, corrupted chains and unchanged run budgets",
+      "whole-subtree height, archived descendants, active work and expected-version rejection",
+      "two independent processes race opposite parent moves; one succeeds and one receives BAD_INPUT",
+      "ordinary leaf report remains waiting; per-level acceptance gates parent execution",
+      "10000-node scan boundary and rejection beyond it"
+    ]
+  },
+  "ci": {
+    "commit": "9adf2342873379b651066ec4d2b398ca5533f252",
+    "run_id": 36569910179,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36569910179",
+    "windows": {
+      "job_id": 109411033048,
+      "passed": 1137,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109411032865,
+      "passed": 1133,
+      "failed": 0,
+      "skipped_windows_only_test": 1
+    },
+    "gitleaks": "success",
+    "additional_checks": "passed"
+  },
+  "real_operations": {
+    "deployment_changed": false,
+    "real_executor_started": false,
+    "global_config_changed": false,
+    "source_approval_changed": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "local task trees only; cross-node relation registrar and delegation pending",
+    "terminal-level display root and global tree UI pending",
+    "legacy conversion is not implemented; explicit native linked-closure semantics remain unchanged",
+    "tree_mode is not in strict remote projection schema; remote parent_uid remains read-only",
+    "real multiple-computer tests and independent phase acceptance pending"
+  ],
+  "tested_commit": "9adf2342873379b651066ec4d2b398ca5533f252"
+}

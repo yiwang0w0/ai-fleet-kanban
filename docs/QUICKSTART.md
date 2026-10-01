@@ -12,11 +12,24 @@ measured live, so it also walks BACKWARD: break something and the guide reopens
 at that step. The page below is the same walk, spelled out, for when you want to
 read ahead or work without the panel.
 
+## Existing deployment: read before upgrading
+
+This branch is `0.24.0-dev.1`, an unreleased Windows development version. The
+[0.24 migration guide](federation/migration-0.24.md) is required for an existing
+board: stop old writers, verify a backup, and upgrade server, panel, CLI and
+loops together. Worker protocol 2 requires a per-process `agent_instance_id`;
+callbacks keep their original `run_id`. Task control commands need the
+observed `expected_version` (CLI `--version`). Reload old browser pages.
+Do not replace a rejected old command with the newest version or run ID.
+
+The steps below are for a fresh local mock cycle, not a two-PC deployment or
+permission to consume a real-model allowance.
+
 ## 0 · What you need
 
-- **node ≥ 22.5** (24+ recommended — the store runs on `node:sqlite`)
+- **Node ≥ 24.0.0** (use Node 24 LTS; the store requires `node:sqlite` and `DatabaseSync.isTransaction`)
 - **python 3** (the worker loop)
-- **git** (the revision gate anchors on it)
+- **Git for Windows >= 2.45.0** (revision checks and federation artifacts require `--no-lazy-fetch`; `npm run doctor` checks both the version and the flag)
 - optional but the point: **a local agent CLI** (e.g. Claude Code) for the real run
 - Windows PowerShell users: set `$env:PYTHONUTF8 = "1"` in each shell — pipes
   default to a legacy codepage and the harnesses print CJK
@@ -100,13 +113,6 @@ Either way it is you looking, then you accepting.
 (No config? Same act, spelled by hand — and the gate subtree must then be
 exported in EVERY shell that runs a loop:)
 
-```bash
-# bash / CI
-export BOARD_GATED_SUBTREE=.
-mkdir -p core/.data
-git rev-parse "HEAD:" > core/.data/accepted_rev
-```
-
 ```powershell
 # PowerShell
 $env:BOARD_GATED_SUBTREE = "."
@@ -129,8 +135,8 @@ npm start                # = node cli/start.mjs — restarts the board in place 
                          # bare `node core/server.mjs` works too; an update then respawns detached and logs to <data>/board.log
 ```
 
-On a Node older than 22.5 this now stops with one readable sentence (the store
-runs on `node:sqlite`) instead of a module-resolution trace.
+On a Node older than 24 this stops with one readable sentence before loading the store.
+Doctor also checks real SQLite transaction state before, during and after a rollback.
 
 Open http://127.0.0.1:47824 — the panel is for your eyes; agents use the API.
 The tab title carries the waiting-card count, so a delivered card is visible
@@ -149,12 +155,6 @@ somebody else's live board.)
 (`npm run demo` does this section and the previous one for you; what follows is
 the same, by hand.) In a second shell. With the step-1 config, the new shell needs **no exports** —
 port and gate subtree come from the config:
-
-```bash
-node examples/seed_demo.mjs
-WORKER_CLI_ARGV='["python","examples/mock_worker_cli.py"]' \
-  python loops/worker_loop.py --as alpha --once
-```
 
 ```powershell
 $env:PYTHONUTF8 = "1"               # Windows pipes default to a legacy codepage
@@ -216,19 +216,25 @@ cards itself. Four moves, one page: `docs/OPERATE_WITH_CLAUDE.md`.
 
 ## Kick the tires
 
-The README's "500+ machine assertions" are not a brochure number — run them
-(`npm test` runs the eight Node harnesses; the Python self-tests are the last line):
+The current `npm test` script runs 40 Node harnesses. CI's additional selftests
+are listed below; all run in the supported Windows environment:
 
-```
-node tests/selftest.mjs && node tests/servertest.mjs && node tests/looptest.mjs && node tests/reviewtest.mjs
-node tests/decisiontest.mjs && node tests/gatetest.mjs && node tests/decomposetest.mjs && node tests/clitest.mjs
-python gates/gates_lib.py && python loops/worker_loop.py --codex-selftest
+```powershell
+$env:PYTHONUTF8 = "1"
+npm test
+python gates/gates_lib.py
+python loops/worker_loop.py --codex-selftest
+python loops/worker_loop.py --prompt-selftest
+python watchers/board_health_watch.py --selftest
+node examples/verify_page.mjs --selftest
 ```
 
 Each spins up its own isolated board on a temp port with a temp data dir — they
 never touch a live board.
 
 ## Upgrading (after `git pull`)
+
+For the 0.23 → 0.24 protocol change, complete the [migration checklist](federation/migration-0.24.md) first. The ordinary restart button described below does not replace stopping old writers, backing up, or upgrading external clients.
 
 `git pull` changes files; it does not change what is already running. Three
 things keep executing the old code — the gate's record, the board process and

@@ -1,3 +1,4 @@
+import { fixtureVersion } from "./http-version-fixture.mjs";
 // reviewtest — the auto-reviewer measured END TO END: a real board, the real
 // loops/reviewer_loop.py, a stub CLI whose verdict the harness controls.
 //
@@ -100,10 +101,19 @@ try {
 
   const tok = (f) => { try { return readFileSync(join(TMP, f), "utf8").trim(); } catch { return ""; } };
   const OP = tok("board_token"), WK = tok("worker_token"), RV = tok("review_token");
-  const api = (m, p, b, t = OP) => fetch(BASE + p, { method: m,
+  const receipts = new Map();
+  const api = async (m, p, b, t = OP) => {
+    b=await fixtureVersion(BASE,t,m,p,b);
+    if (p === "/api/claim") b={worker_protocol_version:2,agent_instance_id:"11111111-1111-4111-8111-111111111111",...b};
+    const mutation=p.match(/^\/api\/tasks\/(\d+)\/(report|heartbeat|attempt)$/);
+    if (mutation) b={run_id:receipts.get(Number(mutation[1])),...b};
+    const result=await fetch(BASE + p, { method: m,
     headers: { "Content-Type": "application/json", "X-Board-Token": t },
     body: m === "GET" ? undefined : JSON.stringify(b ?? {}) })
     .then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+    if (result.status<400 && /\/claim$/.test(p) && result.body?.task) receipts.set(result.body.task.id,result.body.task.run_id);
+    return result;
+  };
 
   console.log(NL + "[§1 三令牌铸造]");
   ok("R1 三个令牌文件都在且互不相同",

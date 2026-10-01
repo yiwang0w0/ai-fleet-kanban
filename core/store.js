@@ -1,3 +1,6 @@
+const delegationGuard = require("./delegation_guard.js");
+const taskTree = require("./task_tree.js");
+const topologyGuard = require("./topology_guard.js");
 // Pull-based task queue — storage and state machine.
 //
 // Why pull, not push: a push queue's lifetime is the few milliseconds of fan-out,
@@ -36,6 +39,7 @@ const { DatabaseSync } = require("node:sqlite");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const os = require("os");
 
 const DATA_DIR = process.env.BOARD_DATA_DIR || path.join(__dirname, ".data");
 const DB_PATH = process.env.BOARD_DB || path.join(DATA_DIR, "board.db");
@@ -194,6 +198,10 @@ const STATUS_REMAP = {
 // Columns added on top of the original 13. ALTER TABLE ADD COLUMN must be idempotent,
 // so existence is checked via PRAGMA first.
 const ADDED_COLUMNS = [
+  ["task_uid", "TEXT"],
+  ["owner_node_id", "TEXT"],
+  ["run_id", "TEXT"],
+  ["aggregate_version", "INTEGER NOT NULL DEFAULT 1 CHECK(typeof(aggregate_version)='integer' AND aggregate_version BETWEEN 1 AND 9007199254740991)"],
   ["route", `TEXT NOT NULL DEFAULT '${DEFAULT_ROUTE.replace(/'/g, "''")}'`],
   ["line", "TEXT"],
   ["heartbeat_at", "INTEGER"],
@@ -226,6 +234,7 @@ const ADDED_COLUMNS = [
   //   claim" (ruling).
   ["prev_line", "TEXT"],
   ["pinned_at", "TEXT"],                      // goal pin time; its children get claim priority
+  ["tree_mode", "TEXT NOT NULL DEFAULT 'legacy' CHECK(tree_mode IN ('legacy','hierarchical'))"],
   ["parent_id", "INTEGER"],                   // the goal (or card) this child belongs to
   ["resolved_by", "TEXT"],        // human / auto / cascade — how the done pile is sorted
   // ── Linked closure (ruling: "one path through means the rest are no longer needed").
@@ -406,19 +415,264 @@ function assertMaxAttempts(v) {
   return n;
 }
 
+
+const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const UUID_RE = new RegExp("^" + UUID_PATTERN + "$");
+
+function nodeName(value) {
+  if (typeof value !== "string" || /[\u0000-\u001f\u007f-\u009f]/u.test(value))
+    throw err(ERR.BAD_INPUT, "终端名必须是不含控制字符的文本");
+  const name = value.trim().normalize("NFC");
+  if (!name || name.length > 80)
+    throw err(ERR.BAD_INPUT, "终端名长度必须在 1 到 80 之间");
+  return name;
+}
+
+/** This is identity metadata, not proof of authentication. Peer trust is separate. */
+function localNode(db) {
+  const node = db.prepare("SELECT node_id, display_name, sync_epoch, protocol_version, created_at, updated_at FROM board_node WHERE singleton=1").get();
+  if (!node) throw err(ERR.INTERNAL, "缺少本机节点身份，请先迁移数据库");
+  return { ...node };
+}
+
+function renameNode(db, displayName) {
+  const name = nodeName(displayName);
+  db.prepare("UPDATE board_node SET display_name=?, updated_at=? WHERE singleton=1").run(name, now());
+  return localNode(db);
+}
+
+/** Only the owner store mints identity. Copies will live outside the local queue. */
+function assertLocalIdentityInput(fields) {
+  for (const key of ["task_uid", "taskUid", "owner_node_id", "ownerNodeId", "run_id", "runId", "aggregate_version", "aggregateVersion"]) {
+    if (Object.hasOwn(fields, key))
+      throw err(ERR.BAD_INPUT, key + " 由本机生成且不可编辑");
+  }
+}
+
+function migrateNodeIdentity(db) {
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS board_node (",
+    "singleton INTEGER PRIMARY KEY CHECK(singleton=1),",
+    "node_id TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL,",
+    "sync_epoch TEXT NOT NULL,",
+    "protocol_version INTEGER NOT NULL DEFAULT 1 CHECK(protocol_version=1),",
+    "created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+  ].join("\n"));
+  let node = db.prepare("SELECT * FROM board_node WHERE singleton=1").get();
+  if (!node) {
+    if (db.prepare("SELECT 1 FROM tasks WHERE task_uid IS NOT NULL OR owner_node_id IS NOT NULL LIMIT 1").get())
+      throw err(ERR.CONFLICT, "已有任务身份但本机身份缺失；拒绝重新生成所有者");
+    const name = nodeName(process.env.BOARD_NODE_NAME ?? os.hostname());
+    const at = now();
+    db.prepare("INSERT INTO board_node VALUES (1,?,?,?,?,?,?)")
+      .run(crypto.randomUUID(), name, crypto.randomUUID(), 1, at, at);
+    node = localNode(db);
+  }
+  if (!UUID_RE.test(node.node_id) || !UUID_RE.test(node.sync_epoch) || node.protocol_version !== 1)
+    throw err(ERR.CONFLICT, "本机节点身份或协议版本无效；拒绝自动修复");
+  nodeName(node.display_name);
+  const uidRE = new RegExp("^" + node.node_id + "/" + UUID_PATTERN + "$");
+  const stamp = db.prepare("UPDATE tasks SET task_uid=?, owner_node_id=? WHERE id=?");
+  for (const task of db.prepare("SELECT id, task_uid, owner_node_id FROM tasks").all()) {
+    if (task.task_uid === null && task.owner_node_id === null) {
+      stamp.run(node.node_id + "/" + crypto.randomUUID(), node.node_id, task.id);
+    } else if (task.owner_node_id !== node.node_id || !uidRE.test(task.task_uid)) {
+      throw err(ERR.CONFLICT, "任务 #" + task.id + " 身份不完整或属于其他终端；拒绝覆写");
+    }
+  }
+  db.exec([
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_task_uid ON tasks(task_uid);",
+    "CREATE TRIGGER IF NOT EXISTS task_tree_mode_immutable BEFORE UPDATE OF tree_mode ON tasks WHEN NEW.tree_mode IS NOT OLD.tree_mode BEGIN SELECT RAISE(ABORT,'task tree mode is immutable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS task_identity_immutable",
+    "BEFORE UPDATE OF task_uid, owner_node_id ON tasks",
+    "WHEN NEW.task_uid IS NOT OLD.task_uid OR NEW.owner_node_id IS NOT OLD.owner_node_id",
+    "BEGIN SELECT RAISE(ABORT, 'task identity is immutable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS task_identity_local_insert BEFORE INSERT ON tasks",
+    "WHEN NEW.owner_node_id IS NOT (SELECT node_id FROM board_node WHERE singleton=1)",
+    "OR NEW.task_uid IS NULL OR length(NEW.task_uid) <> 73",
+    "OR substr(NEW.task_uid,1,37) IS NOT ((SELECT node_id FROM board_node WHERE singleton=1) || '/')",
+    "BEGIN SELECT RAISE(ABORT, 'task identity must belong to this node'); END;",
+    "CREATE TRIGGER IF NOT EXISTS node_identity_immutable BEFORE UPDATE OF node_id, sync_epoch ON board_node",
+    "WHEN NEW.node_id IS NOT OLD.node_id OR NEW.sync_epoch IS NOT OLD.sync_epoch",
+    "BEGIN SELECT RAISE(ABORT, 'node identity is immutable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS node_identity_no_delete BEFORE DELETE ON board_node",
+    "BEGIN SELECT RAISE(ABORT, 'node identity cannot be deleted'); END;"
+  ].join("\n"));
+}
+
+
+/** A run is one claimed dispatch. Its retries use the existing attempt counter.
+ * A fresh claim always creates a fresh run and a fresh authorization snapshot. */
+function startRun(db, taskId, worker, { runtime = null, agentInstanceId = null, runContext = null, runContextForTask = null, imported = false } = {}) {
+  if (agentInstanceId != null && !UUID_RE.test(String(agentInstanceId)))
+    throw err(ERR.BAD_INPUT, "agent_instance_id 必须是 UUID");
+  if (runContext != null && (typeof runContext !== "object" || Array.isArray(runContext)))
+    throw err(ERR.BAD_INPUT, "执行策略快照必须是对象");
+  const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(taskId));
+  const node = localNode(db);
+  const context = (runContextForTask ? runContextForTask(t) : runContext) || { role_id: String(t.line || worker), role_kind: "unattested", tools: "unattested" };
+  const snapshot = JSON.stringify({
+    version: 1, context,
+    task_limits: {max_attempts:t.max_attempts, needs_bash:t.needs_bash, verify_cmd:t.verify_cmd, weight:t.weight}
+  });
+  if (Buffer.byteLength(snapshot) > 16384) throw err(ERR.BAD_INPUT, "执行策略快照超过 16 KiB");
+  const runId = crypto.randomUUID(), at = now();
+  db.prepare("INSERT INTO task_runs (run_id,task_id,task_uid,owner_node_id,executor_node_id,worker,role_id,runtime,agent_instance_id,policy_json,policy_sha256,started_at,first_attempt,last_attempt,imported) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(runId, Number(taskId), t.task_uid, t.owner_node_id, node.node_id, String(worker),
+      String(context.role_id || t.line || worker), runtime ? String(runtime) : null,
+      agentInstanceId == null ? null : String(agentInstanceId), snapshot,
+      crypto.createHash("sha256").update(snapshot).digest("hex"), at, t.attempts, t.attempts, imported ? 1 : 0);
+  db.prepare("UPDATE tasks SET run_id=? WHERE id=?").run(runId, Number(taskId));
+  return runId;
+}
+
+function requireRun(t, runId) {
+  if (typeof runId !== "string" || !UUID_RE.test(runId))
+    throw err(ERR.BAD_INPUT, "必须携带领取回执中的 run_id，禁止自动查找并替换为当前执行 ID");
+  if (t.run_id !== runId) throw Object.assign(err(ERR.CONFLICT, "执行实例已失效，本次心跳、重试或结果不属于当前 run"), {conflict_kind:"run_identity"});
+  return runId;
+}
+
+function runs(db, taskId) {
+  return db.prepare("SELECT * FROM task_runs WHERE task_id=? ORDER BY started_at, rowid")
+    .all(Number(taskId)).map(r => ({...r, policy:JSON.parse(r.policy_json)}));
+}
+
+function migrateRuns(db) {
+  db.exec([
+    "CREATE TABLE IF NOT EXISTS task_runs (",
+    "run_id TEXT PRIMARY KEY, task_id INTEGER NOT NULL, task_uid TEXT NOT NULL,",
+    "owner_node_id TEXT NOT NULL, executor_node_id TEXT NOT NULL, worker TEXT NOT NULL,",
+    "role_id TEXT NOT NULL, runtime TEXT, agent_instance_id TEXT,",
+    "policy_json TEXT NOT NULL, policy_sha256 TEXT NOT NULL, started_at TEXT NOT NULL,",
+    "first_attempt INTEGER NOT NULL, last_attempt INTEGER NOT NULL, imported INTEGER NOT NULL DEFAULT 0,",
+    "state TEXT NOT NULL DEFAULT 'running' CHECK(state IN ('running','ended')), ended_at TEXT, terminal_task_status TEXT);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_task_runs_active ON task_runs(task_id) WHERE state='running';",
+    "CREATE INDEX IF NOT EXISTS ix_task_runs_task ON task_runs(task_id,started_at);",
+    "CREATE TRIGGER IF NOT EXISTS run_metadata_immutable BEFORE UPDATE OF",
+    "run_id,task_id,task_uid,owner_node_id,executor_node_id,worker,role_id,runtime,agent_instance_id,policy_json,policy_sha256,started_at,first_attempt,imported ON task_runs",
+    "BEGIN SELECT RAISE(ABORT,'run identity and policy are immutable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS run_no_delete BEFORE DELETE ON task_runs",
+    "BEGIN SELECT RAISE(ABORT,'run history is append-only'); END;",
+    "CREATE TRIGGER IF NOT EXISTS run_end_with_task AFTER UPDATE ON tasks",
+    "WHEN OLD.status='in_progress' AND (NEW.status<>'in_progress' OR NEW.worker IS NOT OLD.worker OR NEW.run_id IS NOT OLD.run_id OR NEW.archived_at IS NOT NULL)",
+    "BEGIN UPDATE task_runs SET state='ended',ended_at=NEW.updated_at,terminal_task_status=NEW.status",
+    "WHERE run_id=OLD.run_id AND state='running'; END;",
+    "CREATE TRIGGER IF NOT EXISTS run_attempt_with_task AFTER UPDATE OF attempts ON tasks",
+    "BEGIN UPDATE task_runs SET last_attempt=NEW.attempts WHERE run_id=NEW.run_id AND state='running'; END;"
+  ].join("\n"));
+  // Existing workers cannot know these imported IDs. Upgrade with workers stopped;
+  // the records preserve in-flight history without inventing an observed agent.
+  for (const t of db.prepare("SELECT * FROM tasks WHERE status='in_progress' AND archived_at IS NULL AND run_id IS NULL").all())
+    startRun(db, t.id, t.worker || "migration", { runtime:t.last_runtime, imported:true });
+  const invalid = db.prepare("SELECT t.id FROM tasks t LEFT JOIN task_runs r ON r.run_id=t.run_id WHERE t.run_id IS NOT NULL AND (r.run_id IS NULL OR r.task_id<>t.id OR r.task_uid<>t.task_uid OR r.owner_node_id<>t.owner_node_id OR (t.status='in_progress' AND t.archived_at IS NULL AND (r.state<>'running' OR r.worker IS NOT t.worker))) LIMIT 1").get();
+  if (invalid) throw err(ERR.CONFLICT, "执行历史与任务身份不一致，拒绝启动: #" + invalid.id);
+}
+
+/** Content versions do not move on heartbeat/lease/time-only writes. Multiple
+ * semantic SQL updates may advance a version more than once within one command. */
+function migrateLifecycle(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS board_lifecycle(singleton INTEGER PRIMARY KEY CHECK(singleton=1),state TEXT NOT NULL CHECK(state IN ('active','retired')),updated_at TEXT NOT NULL)");
+  db.prepare("INSERT OR IGNORE INTO board_lifecycle VALUES(1,'active',?)").run(now());
+  for (const table of ["tasks", "task_events", "task_runs"]) for (const action of ["INSERT", "UPDATE", "DELETE"]) {
+    db.exec("CREATE TRIGGER IF NOT EXISTS retired_" + table + "_" + action.toLowerCase() + " BEFORE " + action + " ON " + table +
+      " WHEN (SELECT state FROM board_lifecycle WHERE singleton=1)='retired' BEGIN SELECT RAISE(ABORT,'NODE_RETIRED: task writes are disabled'); END");
+  }
+}
+function migrateTaskVersions(db) {
+  const ignored = new Set(["aggregate_version","heartbeat_at","lease_until","updated_at","work_spans"]);
+  const columns = db.prepare("PRAGMA table_info(tasks)").all().map(c=>c.name).filter(c=>!ignored.has(c));
+  const changed = columns.map(c=>'OLD."' + c + '" IS NOT NEW."' + c + '"').join(" OR ");
+  // Rebuild inside the migration transaction: upgrades may add semantic columns.
+  db.exec("DROP TRIGGER IF EXISTS task_content_version");
+  db.exec("CREATE TRIGGER task_content_version AFTER UPDATE ON tasks WHEN " + changed +
+    " BEGIN UPDATE tasks SET aggregate_version=aggregate_version+1 WHERE id=NEW.id; END;");
+  const bad=db.prepare("SELECT id FROM tasks WHERE typeof(aggregate_version)<>'integer' OR aggregate_version<1 OR aggregate_version>9007199254740991 LIMIT 1").get();
+  if(bad) throw err(ERR.CONFLICT,"任务版本损坏，拒绝启动: #" + bad.id);
+}
+function requireExpectedVersion(value) {
+  if(!Number.isSafeInteger(value) || value<1) throw err(ERR.BAD_INPUT,"expected_version 必须是所见任务的正整数版本；请刷新并核对内容");
+  return value;
+}
+function assertExpectedVersion(db,id,value) {
+  if(value === undefined) return; // Internal transitions may already hold a stronger run/transaction guard.
+  requireExpectedVersion(value);
+  const t=db.prepare("SELECT aggregate_version FROM tasks WHERE id=?").get(Number(id));
+  if(!t) throw err(ERR.NOT_FOUND,"任务不存在");
+  if(t.aggregate_version !== value) {
+    const e=err(ERR.CONFLICT,"任务已发生变化，请刷新并核对后重新提交；不会自动重试旧修改");
+    e.expected_version=value; e.current_version=t.aggregate_version; throw e;
+  }
+}
+function withTaskVersion(db,args,fn) {
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_task_version");
+  try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
+    const result=fn();db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_task_version");return result;
+  } catch(e) {try {db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_task_version; RELEASE store_task_version");} catch {} throw e;}
+}
+
+/** WAL bootstrap may report SQLITE_BUSY immediately while another opener changes
+ * journal mode. Retry only this idempotent setup, within one five-second budget.
+ * Business writes and migration transactions are never replayed here. */
+function enableWAL(db) {
+  const deadline = performance.now() + 5000;
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  db.exec("PRAGMA busy_timeout=0");
+  try {
+    for (;;) {
+      try {
+        const mode = db.prepare("PRAGMA journal_mode=WAL").get().journal_mode;
+        if (mode !== "wal") throw err(ERR.INTERNAL, "数据库未能进入 WAL 模式，拒绝继续初始化");
+        return;
+      } catch (e) {
+        const remaining = deadline - performance.now();
+        if (e.code !== "ERR_SQLITE_ERROR" || (e.errcode & 255) !== 5 || remaining <= 0) throw e;
+        Atomics.wait(sleeper, 0, 0, Math.min(25, remaining));
+      }
+    }
+  } finally { db.exec("PRAGMA busy_timeout=5000"); }
+}
+
 function open(readOnly = false) {
+  if (!readOnly && fs.existsSync(path.join(path.dirname(DB_PATH), ".incomplete")))
+    throw err(ERR.CONFLICT, "备份或恢复目录尚未完成，禁止写入或启动执行器");
   if (!readOnly && !fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH, { readOnly });
-  db.exec("PRAGMA busy_timeout=5000");
-  if (!readOnly) {
-    db.exec("PRAGMA journal_mode=WAL");
-    migrate(db);
+  try {
+    db.exec("PRAGMA busy_timeout=5000");
+    if (!readOnly) {
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_restore_hold'").get())
+        throw err(ERR.CONFLICT, "恢复副本处于隔离状态，禁止写入或启动执行器；先完成恢复核验与身份恢复流程");
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='board_lifecycle'").get() && db.prepare("SELECT state FROM board_lifecycle WHERE singleton=1").get()?.state === "retired")
+        throw err(ERR.CONFLICT, "节点已退役，禁止重新启动写入者");
+      enableWAL(db);
+      migrate(db);
+    }
+    return db;
+  } catch (e) { db.close(); throw e; }
+}
+/** Serialize schema inspection, identity generation and backfill across processes.
+ * An invalid identity or failed DDL rolls back the whole migration. */
+function migrate(db) {
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE TRANSACTION" : "SAVEPOINT store_migrate");
+  try {
+    migrateInner(db);
+    migrateNodeIdentity(db);
+    migrateRuns(db);
+    migrateTaskVersions(db);
+    migrateLifecycle(db);
+    db.exec(ownsTransaction ? "COMMIT TRANSACTION" : "RELEASE store_migrate");
+  } catch (e) {
+    try { db.exec(ownsTransaction ? "ROLLBACK TRANSACTION" : "ROLLBACK TO store_migrate; RELEASE store_migrate"); } catch {}
+    throw e;
   }
-  return db;
 }
 
 /** Idempotent. Runs on an empty DB and on an existing one; N runs, same end state. */
-function migrate(db) {
+function migrateInner(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     subject TEXT NOT NULL,
@@ -470,6 +724,8 @@ function migrate(db) {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_lock_inflight
              ON tasks(lock_key) WHERE lock_key IS NOT NULL AND status='in_progress'`);
   db.exec("CREATE INDEX IF NOT EXISTS ix_status_released ON tasks(status, released)");
+  // Structural moves include archived descendants; the active-child unique index is insufficient.
+  db.exec("CREATE INDEX IF NOT EXISTS ix_tasks_parent_all ON tasks(parent_id)");
   // ⭐ The lineage graph's SOURCE OF TRUTH. Append-only: the sole write path is
   //   appendEvent()'s INSERT — events are never corrected and never deleted.
   //   `detail` holds a SNAPSHOT of the moment (line / parent_id / status / kind /
@@ -645,20 +901,12 @@ const WIP_PER_ROOT = (() => {
   return Math.max(1, n);
 })();
 
-/** Walk parent_id to the chain root. ⚠ Depth cutoff 32: measured deepest chain is 7,
- *  32 is anti-cycle insurance (cycles are prevented by placeInChain; on hitting the
- *  ceiling return the current node, don't throw — an unwalkable chain simply counts
- *  under that root at the claim site). */
+/** Structural ancestry has one bounded implementation; invalid chains have no
+ * usable root and cannot be claimed. Read-only callers can still inspect rows. */
 function rootOf(db, id) {
-  let cur = Number(id), hops = 0;
-  while (hops++ < 32) {
-    const r = db.prepare("SELECT parent_id FROM tasks WHERE id=?").get(cur);
-    if (!r || r.parent_id == null) return cur;
-    cur = Number(r.parent_id);
-  }
-  return cur;
+  const chain=taskTree.ancestry(db,id);
+  return chain.valid?Number(chain.root.id):null;
 }
-
 /** ⭐ THE single dependency judgment (dep-judgment consolidation). **Fail-closed.**
  *
  *  ⚠ Before the fix, three call sites each did `try { deps = JSON.parse(...) } catch {}`
@@ -715,11 +963,11 @@ function normalizeDeps(db, selfId, raw) {
     const cap = db.prepare("SELECT COUNT(*) c FROM tasks").get().c + 1;
     let steps = 0;
     while (stack.length) {
-      if (++steps > cap) throw err(ERR.BAD_INPUT, "依赖图遍历超出表行数 —— 拒绝(fail-closed)");
       const cur = Number(stack.pop());
       if (cur === Number(selfId))
         throw err(ERR.BAD_INPUT, `会形成循环:#${selfId} 已经在 #${ids.join("/#")} 的依赖链上,拒绝`);
       if (seen.has(cur)) continue;
+      if (++steps > cap) throw err(ERR.BAD_INPUT, "依赖图遍历超出表行数 —— 拒绝(fail-closed)");
       seen.add(cur);
       const r = db.prepare("SELECT blocked_by FROM tasks WHERE id=?").get(cur);
       // ⭐ "Could not finish checking" is NOT "safe" — same polarity as the parent-side
@@ -829,7 +1077,7 @@ function spanClose(db, id) {
 }
 
 /**
- * Chain-depth ruling ("goal → execution card → necessary follow-up, TWO layers max")
+ * Legacy chain-depth ruling ("goal → execution card → necessary follow-up, TWO layers max")
  * — **the single implementation point in the whole repo**.
  *
  * ⚠ Measured: the gate used to exist only at the worker loop's harvest site, seeing
@@ -842,50 +1090,48 @@ function spanClose(db, id) {
  *   the POST result (with two copies, only one gets fixed, and "the loop blocks
  *   depth 3 but the CLI lets it through" comes back).
  */
-const MAX_CHAIN_DEPTH = 2;          // goal(0) → execution card(1) → follow-up(2). No third layer.
+const MAX_CHAIN_DEPTH = 2; // Legacy worker policy. New MCP trees use the persisted hierarchical profile.
 
 /**
  * Hop count to the chain root, plus the root row. The root itself = 0.
  * ⚠ On hitting the 32-level cutoff, set `exhausted: true` and LET THE CALLER REFUSE —
  *   "could not finish checking" must not turn into "safe" (same ruling as the cycle
  *   guard on update).
- * ⚠ A parent id pointing at a vanished row (ghost parent) is treated as the root:
- *   legacy data can contain it, and throwing here would drag read-only callers down
- *   and freeze the whole board.
+ * Broken ancestry returns a null root and exhausted=true without changing data.
+ * Read-only callers can inspect the row; claim and placement reject that chain.
  */
 function chainDepth(db, id) {
-  const q = db.prepare("SELECT id, kind, parent_id, archived_at FROM tasks WHERE id=?");
-  let cur = q.get(Number(id));
-  if (!cur) return { depth: 0, root: null, exhausted: false };
-  let depth = 0, guard = 0;
-  while (cur.parent_id != null) {
-    if (++guard > 32) return { depth, root: cur, exhausted: true };
-    const p = q.get(Number(cur.parent_id));
-    if (!p) break;
-    cur = p; depth++;
-  }
-  return { depth, root: cur, exhausted: false };
+  const chain=taskTree.ancestry(db,id);
+  return {depth:chain.depth,root:chain.root,exhausted:!chain.valid,reason:chain.reason};
 }
-
 /**
  * Decide where a new card goes. Returns the VALUES TO WRITE
- * ({ parentId, released, description, uplifted }). Judgment and write are separated
+ * ({ parentId, released, description, treeMode, uplifted }). Judgment and write are separated
  * so the same rule can be fired from tests and audits alike.
  */
-function placeInChain(db, { kind, parentId, released, description }) {
+function placeInChain(db, { kind, parentId, released, description, treeMode }) {
+  const parentMode=parentId==null?null:db.prepare("SELECT tree_mode FROM tasks WHERE id=?").get(Number(parentId))?.tree_mode;
+  const mode=treeMode??parentMode??"legacy";
+  if(!taskTree.TREE_MODES.includes(mode)||parentMode&&mode!==parentMode)throw err(ERR.BAD_INPUT,"任务树模式无效或与父任务不一致");
   // Goals are chain roots. Hanging a goal under anything breaks the board-wide
   // premise "root = goal" (family highlight, completion checks and orphan detection
   // all read it).
   if (kind === "goal" && parentId != null)
     throw err(ERR.BAD_INPUT, `目标卡必须是链根 —— 不能把 kind='goal' 挂到 #${parentId} 下面`);
-  if (parentId == null) return { parentId: null, released, description, uplifted: null };
+  if (parentId == null) return { parentId: null, released, description, treeMode:mode, uplifted: null };
 
-  const { depth: pdepth, root, exhausted } = chainDepth(db, parentId);
+  const checked=taskTree.ancestry(db,parentId);
+  const { depth: pdepth, root }=checked,exhausted=!checked.valid;
+  if(mode==="hierarchical"&&checked.closed?.length)throw err(ERR.BAD_INPUT,"已完成或归档的祖先不能继续新增子任务，请先明确重开");
   if (exhausted)
-    throw err(ERR.BAD_INPUT, `#${parentId} 的先祖链超过 32 层,无法判定链深 —— 拒绝(fail-closed)`);
+    throw err(ERR.BAD_INPUT, `#${parentId} 的先祖链无法通过结构检查 (${checked.reason})`);
   const newDepth = pdepth + 1;
+  if(mode==="hierarchical"){
+    if(newDepth>taskTree.HIERARCHICAL_MAX_DEPTH)throw err(ERR.BAD_INPUT,"多层任务树不能超过 "+taskTree.HIERARCHICAL_MAX_DEPTH+" 层");
+    return {parentId,released,description,treeMode:mode,uplifted:null};
+  }
   if (newDepth <= MAX_CHAIN_DEPTH)
-    return { parentId, released, description, uplifted: null };
+    return { parentId, released, description, treeMode:mode, uplifted: null };
 
   // The uplift target is the chain-root goal. If the root is not a goal / is
   // archived, place it rootless (layer 1) — hanging it under an archived card would
@@ -896,7 +1142,7 @@ function placeInChain(db, { kind, parentId, released, description }) {
     `按裁定『目标→执行卡→必要后续 两层为限』,` +
     (toRoot ? `改挂到链根目标 #${toRoot} 直下` : `改为无父卡(链根)`) + `且**未放行**。`;
   return {
-    parentId: toRoot, released: 0,
+    parentId: toRoot, released: 0, treeMode:mode,
     description: note + "\n\n" + String(description || ""),
     uplifted: { from: Number(parentId), to: toRoot, wouldBeDepth: newDepth },
   };
@@ -909,24 +1155,33 @@ function placeInChain(db, { kind, parentId, released, description }) {
  * interruption in between leaves "the state moved but the record never says so".
  */
 function add(db, args) {
-  db.exec("BEGIN IMMEDIATE");
+  assertLocalIdentityInput(args);
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_add");
   try {
+    if (args.parentRunId !== undefined || args.parentWorker !== undefined) {
+      const parent = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(args.parentId));
+      if (!parent) throw err(ERR.NOT_FOUND, "父卡不存在");
+      if (parent.status !== "in_progress" || parent.archived_at || parent.worker !== args.parentWorker)
+        throw err(ERR.CONFLICT, "父卡已不属于本执行器");
+      requireRun(parent, args.parentRunId);
+    }
     const id = addInner(db, args);
     const t = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(id);
     appendEvent(db, {
       taskId: id, kind: "add", actor: args.actor || "system", detail: eventState(t),
     });
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_add");
     return id;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_add; RELEASE store_add"); } catch {} throw e; }
 }
 
 function addInner(db, {
   subject, description = "", acceptance = "", blockedBy = [],
   route = DEFAULT_ROUTE, line = null, lockKey = null, needsBash = 0,
   released = 1, maxAttempts = 3, evidencePath = null,
-  kind = "task", parentId = null, verifyCmd = null, weight = "standard",
+  kind = "task", parentId = null, treeMode, verifyCmd = null, weight = "standard",
   oneofKey = null, provesParent = false, humanGate = null,
 }) {
   if (!["goal", "task"].includes(kind)) throw err(ERR.BAD_INPUT, "kind 必须是 goal 或 task");
@@ -953,16 +1208,18 @@ function addInner(db, {
   }
   // Chain depth is ruled HERE. Every creation path (worker loop / CLI / panel / any
   // future automation) goes through add(), so placing the rule here cannot regress
-  // to "plugged one entrance". ⭐ Uplift, not refusal, is the ruling itself — the
-  // discovery is kept, the queue is not hijacked.
-  ({ parentId, released, description } = placeInChain(db, { kind, parentId, released, description }));
+  // to "plugged one entrance". Legacy trees keep the historical uplift rule;
+  // hierarchical trees preserve the requested parent or reject the creation.
+  ({ parentId, released, description, treeMode } = placeInChain(db, { kind, parentId, released, description, treeMode }));
   const vk = assertVerify(verifyCmd);
+  const ownerNodeId = localNode(db).node_id;
+  const taskUid = ownerNodeId + "/" + crypto.randomUUID();
   const r = db.prepare(
     `INSERT INTO tasks (subject, description, acceptance, blocked_by, created_at, updated_at,
                         route, line, lock_key, needs_bash, released, max_attempts, evidence_path,
-                        kind, parent_id, verify_cmd, weight, oneof_key, proves_parent,
-                        human_gate, human_gate_src)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+                        kind, parent_id, tree_mode, verify_cmd, weight, oneof_key, proves_parent,
+                        human_gate, human_gate_src, task_uid, owner_node_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(String(subject), String(description), String(acceptance),
         // Dep edges go through the SAME single validator as update (plugging only
         // one entrance is the classic hole — goal decomposition pours model-emitted
@@ -977,7 +1234,7 @@ function addInner(db, {
         String(route || DEFAULT_ROUTE), line ? String(line) : null, lockKey ? String(lockKey) : null,
         needsBash ? 1 : 0, released ? 1 : 0, assertMaxAttempts(maxAttempts),
         evidencePath ? String(evidencePath) : null,
-        String(kind), parentId == null ? null : Number(parentId), vk,
+        String(kind), parentId == null ? null : Number(parentId), treeMode, vk,
         // Same expression as route (`String(weight)` would let weight:null enter as
         // the string "null", never reaching NOT NULL DEFAULT — same trap shape).
         // Value-set gate is server-side.
@@ -987,7 +1244,7 @@ function addInner(db, {
         oneofKey ? String(oneofKey) : null, provesParent ? 1 : 0,
         // The lock and its source (sniffed = machine lock / explicit = deliberate
         // lock). Unknown values landed on explicit = human-only unlock.
-        hg, hg ? (humanGate == null ? "detect" : "explicit") : null);
+        hg, hg ? (humanGate == null ? "detect" : "explicit") : null, taskUid, ownerNodeId);
   return Number(r.lastInsertRowid);
 }
 
@@ -1218,6 +1475,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
                    || a.id - b.id);
 
     const pick = cands.find((t) => {
+      if(progressHolds(db,t,"claim").length)return false;
       if (t.lock_key && heldLocks.has(t.lock_key)) return false;  // lock held -> skip to next candidate
       if (unfinishedKids.has(Number(t.id))) return false;         // parent gate: children unfinished
       if (unreleasedAncestor(db, t.parent_id) != null) return false;  // ⭐ ancestor-release invariant
@@ -1257,6 +1515,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
                         last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
     ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
           opts.runtime ? String(opts.runtime) : null, now(), pick.id);
+    const runId = startRun(db, pick.id, worker, opts);
     spanOpen(db, pick.id, worker);
     {
       const claimed = db.prepare(
@@ -1267,6 +1526,7 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
           // A line-less card is claimed BY a line; record which one actually took it,
           // or the history shows a card that belonged to nobody being worked on.
           line: claimed.line == null ? String(line) : String(claimed.line),
+          run_id: runId,
           runtime: opts.runtime ? String(opts.runtime) : null,
           // Which fingerprint components differ from the previous dispatch. Absent on
           // a first dispatch — "nothing to compare" and "nothing changed" must not
@@ -1344,18 +1604,22 @@ function reapExpiredInner(db) {
  * a bare "couldn't take it" hides whether it was release, deps, or a lock.
  */
 function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null,
-                         force = false, treeRev = null, extra = null }) {
+                         force = false, treeRev = null, extra = null, agentInstanceId = null, runContext = null, runContextForTask = null, expectedVersion }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
   leaseMin = clampLease(leaseMin);   // see claim()
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_claim_by_id");
   try {
+    assertExpectedVersion(db,id,expectedVersion);
     const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
     // ⭐ Refusal reasons carry a TYPE too. claimById declines via return value, not
     //   throw, so without a code here the server could only blanket-409 (it did:
     //   claiming a missing id was the one 409 while GET gave 404 and other write
     //   endpoints 400).
-    const no = (why, code = ERR.CONFLICT) => { db.exec("COMMIT"); return { ok: false, why, code }; };
+    const no = (why, code = ERR.CONFLICT) => { db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_claim_by_id"); return { ok: false, why, code }; };
     if (!t) return no(`卡 #${id} 不存在`, ERR.NOT_FOUND);
+    const structuralHold=progressHolds(db,t,"claim").find(x=>x.code!=="HUMAN_GATE");
+    if(structuralHold)return no(structuralHold.message,structuralHold.code==="TASK_TREE_HELD"?ERR.BAD_INPUT:ERR.CONFLICT);
     if (t.kind === "goal") return no(`#${id} 是目标,目标不能被认领`);
     if (t.archived_at) return no(`#${id} 已归档`);
     if (t.status !== "not_started") return no(`#${id} 现在是 ${t.status}(持有者 ${t.worker || "-"}),不是未开始`);
@@ -1424,6 +1688,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
                         last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
     ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
           runtime ? String(runtime) : null, now(), Number(id));
+    const runId = startRun(db, Number(id), worker, {runtime, agentInstanceId, runContext, runContextForTask});
     spanOpen(db, Number(id), worker);
     {
       const claimed = db.prepare(
@@ -1432,6 +1697,7 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
         taskId: Number(id), kind: "claim", actor: worker,
         detail: eventState(claimed, {
           line: claimed.line == null ? String(worker) : String(claimed.line),
+          run_id: runId,
           runtime: runtime ? String(runtime) : null,
           // Same record as the queue door, plus the one thing only this door can
           // say: that a person overrode the brake. "Ran anyway, on purpose" has to
@@ -1440,10 +1706,10 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
         }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_claim_by_id");
     return { ok: true, task: get(db, Number(id)) };
   } catch (e) {
-    try { db.exec("ROLLBACK"); } catch {}
+    try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_claim_by_id; RELEASE store_claim_by_id"); } catch {}
     throw e;
   }
 }
@@ -1482,11 +1748,12 @@ function releaseHeldBy(db, worker) {
 
 /** Heartbeat = liveness report + lease renewal. Without it the panel cannot tell
  *  "working" from "dead but lease not yet expired". */
-function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
+function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runId }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress`);
   if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  requireRun(t, runId);
   // ⭐ Leases only move FORWARD. Default parameters only kick in on `undefined`, so a
   //   raw `lease_minutes: 0` (or negative, or NaN) passing through would set
   //   `lease_until = now` — and the next reaper sweep takes the card away from a
@@ -1502,8 +1769,8 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
   //   this card between the SELECT and here must not get a not_started row stamped with
   //   a fresh heartbeat and a live lease.
   const r = db.prepare(
-    "UPDATE tasks SET heartbeat_at=?, lease_until=?, updated_at=? WHERE id=? AND status='in_progress' AND worker=?")
-    .run(ts, ts + mins * 60000, now(), Number(id), String(worker));
+    "UPDATE tasks SET heartbeat_at=?, lease_until=?, updated_at=? WHERE id=? AND status='in_progress' AND worker=? AND run_id=?")
+    .run(ts, ts + mins * 60000, now(), Number(id), String(worker), runId);
   if (!r.changes) throw err(ERR.CONFLICT, `卡 #${id} 在续租期间被回收或改手,未续租`);
   // ⭐ Return the card itself. Of the five write endpoints this was the only
   //   projection, with neither `status` nor `lease_until` ⇒ callers had to re-GET
@@ -1521,16 +1788,18 @@ function heartbeat(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN }) {
  *   outcome='wait' -> waiting/decision (own attempts exhausted; the reason goes in
  *                                       evidence)
  */
-function report(db, { id, worker, outcome, evidence = "" }) {
+function report(db, { id, worker, outcome, evidence = "", runId }) {
   if (!["done", "wait"].includes(outcome)) throw err(ERR.BAD_INPUT, "outcome 必须是 done 或 wait");
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress,不能交付`);
   if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  requireRun(t, runId);
   // ⭐ Span close and state transition share ONE transaction (measured concern: split
   //   in two, a crash in between leaves "in_progress but span closed" — a torn state).
   const waitingFor = outcome === "done" ? "review" : "decision";
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_report");
   try {
     spanClose(db, Number(id));
     // ⭐ The UPDATE carries its own gate (archive() pattern): the SELECT above provides
@@ -1543,18 +1812,18 @@ function report(db, { id, worker, outcome, evidence = "" }) {
     //   here so the invariant stops depending on that topology.
     const r = db.prepare(
       `UPDATE tasks SET status='waiting', waiting_for=?, result=?, lease_until=NULL, updated_at=?
-        WHERE id=? AND status='in_progress' AND worker=?`
-    ).run(waitingFor, String(evidence), now(), Number(id), String(worker));
+        WHERE id=? AND status='in_progress' AND worker=? AND run_id=?`
+    ).run(waitingFor, String(evidence), now(), Number(id), String(worker), runId);
     if (!r.changes)
       throw err(ERR.CONFLICT, `卡 #${id} 在交付期间被回收或改手,本次交付未落盘`);
     appendEvent(db, {
       taskId: Number(id), kind: "report", actor: worker,
       detail: eventState({ ...t, status: "waiting" }, {
-        outcome: String(outcome), waiting_for: waitingFor,
+        run_id: runId, outcome: String(outcome), waiting_for: waitingFor,
       }),
     });
-    db.exec("COMMIT");
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_report");
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_report; RELEASE store_report"); } catch {} throw e; }
   return { id: Number(id), status: "waiting", waiting_for: waitingFor };
 }
 
@@ -1636,12 +1905,26 @@ function cascadeClose(db, t, proofNote) {
  * attempts was already counted at claim; not touched here. Ruling records are
  * APPENDED, never overwritten.
  */
+/** File preparation must not hold SQLite's writer lock. Both version checks are
+ * required: reject known-stale commands before I/O, then reject a race after I/O.
+ * DB-only preparation callbacks in resolve remain inside its transaction. */
+function resolveWithPreparation(db,args,prepare) {
+  if(db.isTransaction)throw err(ERR.CONFLICT,"文件准备必须在数据库写事务之外进行");
+  requireExpectedVersion(args.expectedVersion);
+  assertExpectedVersion(db,args.id,args.expectedVersion);
+  if(typeof prepare!=="function")throw err(ERR.BAD_INPUT,"缺少裁定文件准备函数");
+  const prepared=prepare();
+  return resolve(db,{...args,...prepared,id:args.id,expectedVersion:args.expectedVersion});
+}
+
 function resolve(db, args) {
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_resolve");
   try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
-    const out = resolveInner(db, args);
+    const out = resolveInner(db, {...args,...(args.prepareResolution ? args.prepareResolution() : {})});
     const t = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
     appendEvent(db, {
@@ -1663,14 +1946,14 @@ function resolve(db, args) {
         detail: eventState(ct, { from_status: null, verdict: "approve", cause_task_id: Number(args.id) }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_resolve");
     return out;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_resolve; RELEASE store_resolve"); } catch {} throw e; }
 }
 
 function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verifyOk = undefined,
                        selectedOption = null, sqlArchive = null,
-                       disposition = null, sqlReceipt = null }) {
+                       disposition = null, sqlReceipt = null, cascadeVerified = true }) {
   if (!["approve", "reject"].includes(verdict)) throw err(ERR.BAD_INPUT, "verdict 必须是 approve 或 reject");
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
@@ -1801,7 +2084,7 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
   }
 
   let cascade = null;
-  if (next === "done" && vok) {
+  if (next === "done" && vok && cascadeVerified) {
     const fresh = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
     cascade = cascadeClose(db, fresh,
       `依据: 本卡的机器验证(${fresh.verify_cmd || "verify"})通过,裁定者=${resolvedBy}。`);
@@ -1841,17 +2124,18 @@ function resolveInner(db, { id, verdict, note = "", resolvedBy = "human", verify
  *      consumes them today so no red would ever show — until someone wires one in
  *      and ① happens.
  */
-function bumpAttempt(db, { id, worker }) {
+function bumpAttempt(db, { id, worker, runId }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.status !== "in_progress") throw err(ERR.CONFLICT, `卡 #${id} 状态是 ${t.status},不是 in_progress`);
   if (t.worker !== String(worker)) throw err(ERR.CONFLICT, `卡 #${id} 的持有者是 ${t.worker},不是 ${worker}`);
+  requireRun(t, runId);
   // ⭐ Gate folded into the UPDATE and the new value read back from the row (RETURNING),
   //   instead of a bare WHERE id=? plus `t.attempts + 1` computed from the pre-read — the
   //   one attempts write path that still trusted a stale row (two reviews flagged it).
   const row = db.prepare(`UPDATE tasks SET attempts=attempts+1, updated_at=?
-                            WHERE id=? AND status='in_progress' AND worker=? RETURNING attempts`)
-    .get(now(), Number(id), String(worker));
+                            WHERE id=? AND status='in_progress' AND worker=? AND run_id=? RETURNING attempts`)
+    .get(now(), Number(id), String(worker), runId);
   if (!row) throw err(ERR.CONFLICT, `卡 #${id} 在累加尝试时被回收或改手,未累加`);
   const n = Number(row.attempts);
   // The anchor (attempts_base) does NOT move — this is round 2 or 3 of the SAME
@@ -1866,10 +2150,13 @@ function bumpAttempt(db, { id, worker }) {
 /**
  * Record that auto-review "looked but does not decide". Without this mark the same
  * card gets judged every cycle, burning money.
- * auto_review_at < updated_at ⇒ review AGAIN — if the card moved, the evidence
- * changed too.
+ * pendingReview compares delivery fingerprints to avoid paying for unchanged work.
+ * External commands also check the original aggregate version under the write lock.
  */
-function markAutoReviewed(db, { id, note = "", decisionPackage = null, expectUpdatedAt = null }) {
+function markAutoReviewed(db,args) {
+  return withTaskVersion(db,args,()=>markAutoReviewedInner(db,args));
+}
+function markAutoReviewedInner(db, { id, note = "", decisionPackage = null, expectUpdatedAt = null }) {
   const t = db.prepare("SELECT * FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   // ⭐ Status gate + CAS (v0.16.0). Auto-review is asynchronous by nature — fetch the
@@ -1880,10 +2167,8 @@ function markAutoReviewed(db, { id, note = "", decisionPackage = null, expectUpd
   //   back to confirm (external audit 2026-09-07). Two conditions, both also folded into
   //   the UPDATE below: the card must still be a reviewable waiting card, and — when the
   //   reviewer says which row it judged (expect_updated_at) — that row must be unchanged.
-  //   ⚠ updated_at has millisecond resolution: an edit landing in the SAME millisecond as
-  //   the reviewer's fetch is invisible to this comparison. The status gate above still
-  //   holds for state changes, and a real review spans minutes, so this is documented,
-  //   not fixed — a monotonic row version would be the fix if it ever matters.
+  //   The timestamp is only an additional guard. withTaskVersion checks the monotonic
+  //   version under the write lock, including edits within the same millisecond.
   const stale = t.status !== "waiting" || (t.waiting_for || "") === "rearm"
     ? `卡 #${id} 已不在待审状态(${t.status}${t.waiting_for ? "/" + t.waiting_for : ""})—— 迟到的审阅不落盘`
     : (expectUpdatedAt != null && String(expectUpdatedAt) !== String(t.updated_at))
@@ -1934,7 +2219,7 @@ function markAutoReviewed(db, { id, note = "", decisionPackage = null, expectUpd
 function deferToRearm(db) {
   const NLJ = String.fromCharCode(10);
   const rows = db.prepare(
-    `SELECT p.id FROM tasks p
+    `SELECT p.id,p.human_gate FROM tasks p
       WHERE p.status='waiting' AND p.waiting_for='confirm' AND p.archived_at IS NULL
         AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id
                       AND c.archived_at IS NULL AND c.status<>'done')`).all();
@@ -1953,7 +2238,7 @@ function deferToRearm(db) {
           AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=tasks.id
                         AND c.archived_at IS NULL AND c.status<>'done')`
     ).run(NLJ + NLJ + "—— 子任务卡 #" + kids.join(" #") +
-          " 未完 → 自动转入等待重审(子卡齐了会自动送回重审,人不用在确认队列里等它)——",
+          (r.human_gate ? " 未完 → 等待子卡完成；人工闸仍生效，完成后需人工处理——" : " 未完 → 自动转入等待重审(子卡齐了会自动送回重审,人不用在确认队列里等它)——"),
           now(), Number(r.id));
     if (ch.changes) moved.push(Number(r.id));
   }
@@ -2039,6 +2324,7 @@ function completeGoals(db) {
   };
   for (const g of db.prepare(
       "SELECT id FROM tasks WHERE kind='goal' AND status<>'done' AND archived_at IS NULL").all()) {
+    if(progressHolds(db,g,"complete_goal").length)continue;
     const ids = subtree(g.id);
     // Zero children = NO GROUNDS for completion (not "all complete"). `every` is
     // vacuously true on an empty array; without this line a childless goal silently
@@ -2069,6 +2355,7 @@ function completeGoals(db) {
       "SELECT id, result FROM tasks WHERE kind='goal' AND status='done' AND resolved_by='auto' AND archived_at IS NULL").all()) {
     // ⭐ This subtree also includes archived cards ⇒ "archive the unfinished child to
     //   keep the goal closed" stops working.
+    if(progressHolds(db,g,"complete_goal").length)continue;
     const open = subtree(g.id).map((i) => rowOf.get(i)).filter((r) => r.status !== "done");
     if (!open.length) continue;
     // Goal reopen is also a "back into the flow" road ⇒ drop verdict (same invariant
@@ -2081,6 +2368,65 @@ function completeGoals(db) {
     changed.push(-Number(g.id));
   }
   return changed;
+}
+
+// Shared local gates for queue selection and diagnostics. No writes or remote probes.
+function progressHolds(db,t,action) {
+  const out=[],push=(code,message,next_action)=>out.push({code,action,message,next_action});
+  if(action==="claim"){
+    if(!taskTree.claimable(db,t.id))push("TASK_TREE_HELD","任务祖先链损坏、关闭或超过深度上限","核对本机任务树及祖先状态");
+    if(!topologyGuard.claimable(db,t.id))push("TOPOLOGY_NOT_READY","本地任务结构尚未完成登记或身份已换代","核对项目拓扑登记及恢复回执");
+    if(!delegationGuard.claimable(db,t.id))push("DELEGATION_NOT_READY","委派端点尚未授权执行或被协议持有","核对双端绑定、取消和结果回执");
+  } else {
+    if(topologyGuard.finishHeld(db,t.id))push("TOPOLOGY_FINISH_HELD","拓扑操作正在持有此任务的完成入口","推进或明确撤回已有拓扑操作");
+    if(delegationGuard.sourceHeld(db,t.id))push("DELEGATION_FINISH_HELD","委派、取消或候选结果正在持有此任务","按对应协议完成结算或人工恢复");
+  }
+  // Goal completion is the existing mechanical descendant summary, not model review.
+  if(action!=="complete_goal"&&Number(t.human_gate))push("HUMAN_GATE","待人工裁定，不会自动领取或送回重审","由操作者裁定或显式解除人工闸");
+  return out;
+}
+
+/** Current local reasons only; absence is not a grant to run a provider or a remote action. */
+function stuckWhy(db,task) {
+  const id=typeof task==="object"&&task!==null?task.id:task;
+  if(!Number.isSafeInteger(id)||id<1)throw err(ERR.BAD_INPUT,"task id invalid");
+  const t=db.prepare("SELECT * FROM tasks WHERE id=?").get(id);
+  if(!t)throw err(ERR.NOT_FOUND,"任务不存在");
+  if(t.archived_at||t.status==="done"||t.status==="in_progress")return [];
+  const action=t.kind==="goal"?"complete_goal":t.status==="not_started"?"claim":t.waiting_for==="rearm"?"rearm":"review";
+  const out=progressHolds(db,t,action);
+  const push=(code,message,next_action,extra={})=>out.push({code,action,message,next_action,...extra});
+  if(action==="claim"){
+    if(!t.released)push("NOT_RELEASED","任务尚未放行","核对任务后显式放行");
+    const ds=depsSatisfied(db,t);
+    if(!ds.ok)push(ds.broken?"BROKEN_DEPENDENCIES":"DEPENDENCIES_UNFINISHED",ds.broken?"依赖字段损坏，拒绝按零依赖处理":"依赖任务尚未完成","核对依赖任务与定义",{related_task_ids:ds.pending??[]});
+    const ua=unreleasedAncestor(db,t.parent_id);
+    if(ua!==null)push("ANCESTOR_NOT_RELEASED","祖先任务尚未放行","先核对并放行祖先",{related_task_ids:[ua]});
+    if(t.attempts>=lifetimeCap(t))push("ATTEMPT_LIMIT","累计派发次数已达到上限","人工核对失败原因并补充输入或调整任务");
+    if(t.lock_key){
+      const held=db.prepare("SELECT id FROM tasks WHERE status='in_progress' AND lock_key=? AND id<>? ORDER BY id").all(t.lock_key,id);
+      if(held.length)push("LOCK_HELD","执行锁被其他在途任务持有","等待在途执行结清",{related_task_ids:held.map(x=>Number(x.id))});
+    }
+    const rt=rootOf(db,id),wip=db.prepare("SELECT id FROM tasks WHERE status='in_progress'").all().filter(x=>rootOf(db,x.id)===rt);
+    if(wip.length>=WIP_PER_ROOT)push("ROOT_WIP_LIMIT","同一根树的在途任务已达上限","等待已有执行结清",{related_task_ids:wip.map(x=>Number(x.id))});
+  }
+  if(action==="rearm"||action==="claim"){
+    const children=db.prepare("SELECT id,status FROM tasks WHERE parent_id=? AND archived_at IS NULL ORDER BY id").all(id),open=children.filter(x=>x.status!=="done");
+    if(open.length)push("CHILDREN_UNFINISHED","子任务尚未全部完成","先推进未完成子任务",{related_task_ids:open.map(x=>Number(x.id))});
+    else if(action==="rearm"&&!children.length)push("NO_REARM_CHILDREN","没有可用于重新送审的未归档子任务","核对派生关系与归档状态");
+    else if(action==="rearm"){
+      const newest=db.prepare("SELECT MAX(updated_at) at FROM tasks WHERE parent_id=? AND archived_at IS NULL").get(id).at;
+      if(!t.auto_review_at||t.auto_review_at>=newest)push("NO_NEW_CHILD_RESULT","未观察到上次审阅之后的新子任务结果","核对审阅记录及子任务结果");
+    }
+  }
+  if(action==="review"&&t.review_fp&&t.review_fp===reviewFingerprint(t))push("DELIVERY_ALREADY_REVIEWED","此交付已审阅，当前没有新的交付内容","按既有审阅意见处理或补充新证据");
+  if(action==="complete_goal"){
+    const descendants=db.prepare("WITH RECURSIVE children(id) AS (SELECT id FROM tasks WHERE parent_id=? UNION SELECT t.id FROM tasks t JOIN children c ON t.parent_id=c.id) SELECT t.id,t.status FROM tasks t JOIN children c ON t.id=c.id WHERE t.id<>? ORDER BY t.id").all(id,id);
+    const open=descendants.filter(x=>x.status!=="done");
+    if(!descendants.length)push("GOAL_WITHOUT_CHILDREN","目标没有子任务，不能据空集合宣布完成","补齐目标任务分解");
+    else if(open.length)push("DESCENDANTS_UNFINISHED","目标下仍有未完成任务，包含已归档任务","核对并完成或明确调整任务归属",{related_task_ids:open.map(x=>Number(x.id))});
+  }
+  return out;
 }
 
 /**
@@ -2106,30 +2452,38 @@ function completeGoals(db) {
  * A periodic sweep, not a hook on resolve: one road, and anything a crash missed is
  * picked up next cycle.
  */
-function rearmDone(db) {
-  const rows = db.prepare(
-    `SELECT p.id FROM tasks p
-      WHERE p.status='waiting' AND p.archived_at IS NULL
-        AND p.auto_review_at IS NOT NULL
-        AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id
-                          AND c.archived_at IS NULL AND c.status<>'done')
-        AND p.auto_review_at < (SELECT MAX(c.updated_at) FROM tasks c
-                                  WHERE c.parent_id=p.id AND c.archived_at IS NULL)`).all();
-  for (const r of rows) {
-    const kids = db.prepare(
-      "SELECT id FROM tasks WHERE parent_id=? AND archived_at IS NULL").all(r.id).map((x) => Number(x.id));
-    db.prepare(
-      // review_fp cleared alongside auto_review_at: the children finishing IS the new
-      // information, even though the parent's own deliverable text did not change.
-      // Every path that deliberately sends a card back for review has to clear both,
-      // or the dedup filter quietly undoes the send-back.
-      `UPDATE tasks SET waiting_for='review', auto_review_at=NULL, review_fp=NULL,
-                        verdict_note=COALESCE(verdict_note,'') || ?, updated_at=? WHERE id=?`
-    ).run(`${"\n\n"}—— 子任务卡 #${kids.join(" #")} 已全部完成 → 自动送回重审(不再等待人工)——`,
-          now(), Number(r.id));
-  }
-  return rows.map((r) => Number(r.id));
+function rearmDone(db, {parentId=null}={}) {
+  if(parentId!==null&&(!Number.isSafeInteger(parentId)||parentId<1))throw err(ERR.BAD_INPUT,"parentId invalid");
+  const ownsTransaction=!db.isTransaction;
+  db.exec(ownsTransaction?"BEGIN IMMEDIATE":"SAVEPOINT store_rearm");
+  try {
+    const rows=db.prepare(
+      "SELECT p.* FROM tasks p WHERE p.status='waiting' AND p.archived_at IS NULL "+
+      "AND (? IS NULL OR p.id=?) AND p.auto_review_at IS NOT NULL "+
+      "AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL) "+
+      "AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL AND c.status<>'done') "+
+      "AND p.auto_review_at < (SELECT MAX(c.updated_at) FROM tasks c WHERE c.parent_id=p.id AND c.archived_at IS NULL)"
+    ).all(parentId,parentId),moved=[];
+    for(const r of rows){
+      const kids=db.prepare("SELECT id,aggregate_version FROM tasks WHERE parent_id=? AND archived_at IS NULL ORDER BY id").all(r.id);
+      const reasons=progressHolds(db,r,"rearm");
+      if(reasons.length){
+        // Dedup by the reviewed child result and blockers, not by the polling clock.
+        const fingerprint=JSON.stringify({review_at:r.auto_review_at,review_fp:r.review_fp,children:kids.map(c=>[c.id,c.aggregate_version]),reasons:reasons.map(x=>x.code)});
+        const last=db.prepare("SELECT kind,detail FROM task_events WHERE task_id=? AND kind IN('review.rearm_blocked','review.rearmed') ORDER BY id DESC LIMIT 1").get(r.id);
+        if(last?.kind!=="review.rearm_blocked"||JSON.parse(last.detail).fingerprint!==fingerprint)
+          appendEvent(db,{taskId:r.id,kind:"review.rearm_blocked",detail:eventState(r,{fingerprint,reasons,child_ids:kids.map(c=>Number(c.id))})});
+        continue;
+      }
+      db.prepare(
+        "UPDATE tasks SET waiting_for='review',auto_review_at=NULL,review_fp=NULL,"+
+        "verdict_note=COALESCE(verdict_note,'') || ?,updated_at=? WHERE id=?"
+      ).run("\n\n—— 子任务卡 #"+kids.map(c=>c.id).join(" #")+" 已全部完成 → 自动送回重审(不再等待人工)——",now(),r.id);
+      appendEvent(db,{taskId:r.id,kind:"review.rearmed",detail:eventState(r,{waiting_for:"review",child_ids:kids.map(c=>Number(c.id))})});
+      moved.push(Number(r.id));
+    }
+    db.exec(ownsTransaction?"COMMIT":"RELEASE store_rearm");return moved;
+  } catch(e){db.exec(ownsTransaction?"ROLLBACK":"ROLLBACK TO store_rearm; RELEASE store_rearm");throw e;}
 }
 
 /** Waiting cards auto-review has not seen yet (or that moved after it looked). */
@@ -2171,6 +2525,7 @@ function pendingReview(db) {
    //   criterion cost: one edited line marched the whole pile back into re-review.
    //   ⚠ A card never reviewed (review_fp NULL) always passes — this filter narrows
    //   an existing queue, it must never be the reason a card is never looked at.
+   .filter((t) => !progressHolds(db,t,"review").length)
    .filter((t) => !t.review_fp || t.review_fp !== reviewFingerprint(t))
    .map((t) => ({ ...t, pin: pinnedAncestor(db, t.parent_id) }))
    .sort((a, b) => (a.pin == null) - (b.pin == null)
@@ -2210,8 +2565,12 @@ function prevLineStamp(oldLine, newLine) {
 /** Card edit: line/route/caps/lock/permissions reassignment. Status NEVER moves here
  *  (state transitions are report/resolve's sole responsibility). */
 function update(db, args) {
-  db.exec("BEGIN IMMEDIATE");
+  assertLocalIdentityInput(args);
+  if(Object.hasOwn(args,"treeMode")||Object.hasOwn(args,"tree_mode"))throw err(ERR.BAD_INPUT,"任务树模式创建后不可更改");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_update");
   try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
     const out = updateInner(db, args);
@@ -2236,9 +2595,9 @@ function update(db, args) {
         }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_update");
     return out;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_update; RELEASE store_update"); } catch {} throw e; }
 }
 
 function updateInner(db, fields) {
@@ -2261,7 +2620,7 @@ function updateInner(db, fields) {
   //   adds an editable field and forgets that array, "description + the new field"
   //   smuggles an edit into a running card. Deriving it means an unknown key — new,
   //   misspelled, or hostile — falls on the refusing side by construction.
-  const NOT_A_FIELD = new Set(["id", "actor"]);   // routing/attribution, not card content
+  const NOT_A_FIELD = new Set(["id", "actor", "expected_version", "expectedVersion"]); // command metadata, not card content
   const oldDescription = String(t.description || "");
   const descriptionOnly = description !== undefined &&
     Object.keys(fields).every((k) => k === "description" || NOT_A_FIELD.has(k)
@@ -2322,31 +2681,23 @@ function updateInner(db, fields) {
   //   had eliminated. ⇒ typed now, same mapping as add() (missing=NOT_FOUND /
   //   archived=BAD_INPUT).
   if (parentId !== undefined) {
-    if (parentId === null) { sets.push("parent_id=?"); args.push(null); }
-    else {
-      const pid = Number(parentId);
-      if (pid === Number(id)) throw err(ERR.BAD_INPUT, "不能把卡挂到它自己下面");
-      const tgt = db.prepare("SELECT id, archived_at FROM tasks WHERE id=?").get(pid);
-      if (!tgt) throw err(ERR.NOT_FOUND, `父卡 ${pid} 不存在`);
-      // Never hang under an archived card — the whole family drops out of the
-      // default view; the card silently disappears.
-      if (tgt.archived_at) throw err(ERR.BAD_INPUT, `#${pid} 已归档,不能把卡挂到它下面`);
-      // Cycle guard. ⚠ Past 32 levels: NOT "stop searching and allow" but REFUSE
-      //   (fail-closed). "Could not finish checking" is not "safe" (ruling).
-      let cur = pid, g = 0, cycled = false, exhausted = true;
-      while (cur != null) {
-        if (++g > 32) { exhausted = false; break; }
-        const r = db.prepare("SELECT parent_id FROM tasks WHERE id=?").get(cur);
-        if (r && Number(r.parent_id) === Number(id)) { cycled = true; break; }
-        cur = r ? r.parent_id : null;
-      }
-      if (cycled) throw err(ERR.BAD_INPUT, `会形成循环(#${cur} 的先祖里有 #${id}),拒绝`);
-      // The fail-closed refusal is also BAD_INPUT (not 500): nothing of OURS is
-      // broken; the request "point at that parent" just cannot be honored — point at
-      // another parent and it passes ⇒ the ball is in the caller's hands.
-      if (!exhausted) throw err(ERR.BAD_INPUT, `先祖链超过 32 层,无法证明无循环 —— 拒绝(fail-closed)`);
-      sets.push("parent_id=?"); args.push(pid);
+    const pid=parentId===null?null:Number(parentId);
+    if(pid!==null&&(!Number.isSafeInteger(pid)||pid<1))throw err(ERR.BAD_INPUT,"父任务 ID 无效");
+    if(t.kind==="goal"&&pid!==null)throw err(ERR.BAD_INPUT,"目标卡必须保持为树根");
+    if(pid===Number(id))throw err(ERR.BAD_INPUT,"不能把卡挂到它自己下面");
+    if(pid!==null){
+      const target=db.prepare("SELECT archived_at FROM tasks WHERE id=?").get(pid);
+      if(!target)throw err(ERR.NOT_FOUND,"父卡 "+pid+" 不存在");
+      if(target.archived_at)throw err(ERR.BAD_INPUT,"父卡已归档");
     }
+    if(pid!==t.parent_id){
+      const move=taskTree.placement(db,{id:Number(id),parentId:pid});
+      if(!move.valid){
+        const reason=move.reason.includes("depth")?"超过 32 层深度上限":move.reason==="cycle"?"会形成循环":move.reason;
+        throw err(move.reason==="active_subtree"?ERR.CONFLICT:ERR.BAD_INPUT,"无法重新挂接任务子树: "+reason);
+      }
+    }
+    sets.push("parent_id=?");args.push(pid);
   }
   if (!sets.length) return { id: Number(id), changed: 0 };
   // ★ The "columns changed" count is FIXED here. The provenance stamp and updated_at
@@ -2370,7 +2721,10 @@ function updateInner(db, fields) {
 }
 
 /** Pin a goal. Its child tasks come out of claim first. Unpin with pinned=false. */
-function setPinned(db, { id, pinned }) {
+function setPinned(db,args) {
+  return withTaskVersion(db,args,()=>setPinnedInner(db,args));
+}
+function setPinnedInner(db, { id, pinned }) {
   const t = db.prepare("SELECT kind FROM tasks WHERE id=?").get(Number(id));
   if (!t) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
   if (t.kind !== "goal") throw err(ERR.BAD_INPUT, `#${id} 不是目标,只有目标能置顶`);
@@ -2381,9 +2735,11 @@ function setPinned(db, { id, pinned }) {
 
 /** Release / hold (the old "backlog"). What moves is a COLUMN, not a status — no
  *  fifth state. */
-function setReleased(db, { id, released, actor = "human" }) {
-  db.exec("BEGIN IMMEDIATE");
+function setReleased(db, { id, released, actor = "human", expectedVersion }) {
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_set_released");
   try {
+    assertExpectedVersion(db,id,expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(id));
     if (!before) throw err(ERR.NOT_FOUND, `卡 #${id} 不存在`);
@@ -2397,17 +2753,19 @@ function setReleased(db, { id, released, actor = "human" }) {
         action: value ? "release" : "hold", from: Boolean(before.released), to: Boolean(value),
       }),
     });
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_set_released");
     return { id: Number(id), released: value };
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_set_released; RELEASE store_set_released"); } catch {} throw e; }
 }
 
 /** Return a card to not_started. Works from done too — "closed, but a follow-up is
  *  needed after all" happens routinely. Attempts and ruling records are NEVER
  *  erased (history; a redo does not unhappen it). */
 function reopen(db, args) {
-  db.exec("BEGIN IMMEDIATE");
+  const ownsTransaction = !db.isTransaction;
+  db.exec(ownsTransaction ? "BEGIN IMMEDIATE" : "SAVEPOINT store_reopen");
   try {
+    assertExpectedVersion(db,args.id,args.expectedVersion);
     const before = db.prepare(
       "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE id=?").get(Number(args.id));
     const out = reopenInner(db, args);
@@ -2420,9 +2778,9 @@ function reopen(db, args) {
         detail: eventState(after, { from_status: before?.status ?? null }),
       });
     }
-    db.exec("COMMIT");
+    db.exec(ownsTransaction ? "COMMIT" : "RELEASE store_reopen");
     return out;
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
+  } catch (e) { try { db.exec(ownsTransaction ? "ROLLBACK" : "ROLLBACK TO store_reopen; RELEASE store_reopen"); } catch {} throw e; }
 }
 
 function reopenInner(db, { id, line }) {
@@ -2451,7 +2809,10 @@ function reopenInner(db, { id, line }) {
   return { id: Number(id), status: "not_started", changed: true, from: t.status };
 }
 
-function archive(db, { id, restore = false, force = false }) {
+function archive(db,args) {
+  return withTaskVersion(db,args,()=>archiveInner(db,args));
+}
+function archiveInner(db, { id, restore = false, force = false }) {
   // ⭐ Ruling: "a completed goal must not be archived" — done goals stay on the board
   //   as the canon of what was achieved. Scope is the ruling's letter: **kind=goal
   //   AND status=done** only (done TASK cards archive as before; un-done goals are
@@ -2515,7 +2876,8 @@ function row(r) {
     } catch { return { list: [], broken: true }; }
   })();
   return {
-    id: Number(r.id), subject: r.subject, description: r.description,
+    id: Number(r.id), aggregate_version: Number(r.aggregate_version), task_uid: r.task_uid, owner_node_id: r.owner_node_id, run_id: r.run_id,
+    subject: r.subject, description: r.description,
     status: r.status, waiting_for: r.waiting_for,
     worker: r.worker, line: r.line, prev_line: r.prev_line || null, route: r.route,
     // ⚠ row() is an explicit projection, not a spread — a new column does NOT ride
@@ -2563,6 +2925,7 @@ function row(r) {
     verify_ok: r.verify_ok == null ? null : Number(r.verify_ok) === 1,
     verify_at: r.verify_at || null,
     kind: r.kind || "task", parent_id: r.parent_id == null ? null : Number(r.parent_id),
+    tree_mode: r.tree_mode || "legacy",
     pinned_at: r.pinned_at || null,
     resolved_by: r.resolved_by, auto_review_at: r.auto_review_at,
     decision_package: (() => {
@@ -2714,11 +3077,13 @@ function openChildrenOnLines(db, parentId, lines) {
 }
 
 module.exports = {
+  UUID_RE, migrateLifecycle, resolveWithPreparation,
+  localNode, renameNode, assertLocalIdentityInput, requireRun, runs, requireExpectedVersion, assertExpectedVersion,
   open, migrate, add, claim, heartbeat, bumpAttempt, report, resolve, update, setReleased, archive,
   addRequest, getRequest, listRequests, ackRequest, doneRequest, REQUEST_KINDS, REQUEST_STATUS,
   markAutoReviewed, pendingReview, relatedIds, setPinned, reapExpired, claimById, releaseHeldBy,
   noProgressHold, stateFingerprint, fpDiff, heldByNoProgress, openChildrenOnLines,
-  reopen, rearmDone, deferToRearm, completeGoals,
+  reopen, rearmDone, deferToRearm, completeGoals, stuckWhy,
   list, get, counts, events, DB_PATH, DATA_DIR, STATUS, WAITING_FOR, VALID_STATUS, STATUS_LABEL, WF_LABEL, DEFAULT_LEASE_MIN, MAX_LEASE_MIN, defuseRulingHeads,
   DEFAULT_ROUTE,
   verifyRegistry, assertVerify,
@@ -2727,7 +3092,7 @@ module.exports = {
   legacyDisposition, DISPOSITIONS, confirmDestination,
   // Chain depth: **judgment is these three only**. Counting depth anywhere else is a
   // second implementation the moment it is written.
-  chainDepth, placeInChain, MAX_CHAIN_DEPTH,
+  chainDepth, placeInChain, MAX_CHAIN_DEPTH, HIERARCHICAL_MAX_DEPTH:taskTree.HIERARCHICAL_MAX_DEPTH,
   // Budget calibers: the lifetime-ceiling constant and the one-shot catch-up (tests
   // fire it directly).
   LIFETIME_DISPATCH_CAP, backfillAttemptsBase,

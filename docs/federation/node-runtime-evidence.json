@@ -1,0 +1,153 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-64-node-runtime",
+  "date": "2026-10-01",
+  "base_commit": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "platform": "Windows",
+  "scope": "Owned loopback peer/MCP listeners, persistent per-source sync loops and opt-in scheduler in one local host; no installed service, physical network activation or native model calls.",
+  "source_files": [
+    {
+      "path": "core/execution/lifecycle.mjs",
+      "sha256": "42df43ce94214bd909b1d337ea1bd716a0bd1a7498f2a758697de6ed11ad930f"
+    },
+    {
+      "path": "core/node-runtime.mjs",
+      "sha256": "2abc7cb1f4976102ea46f6be85dd6bc1ad0aecf9ac89cfa66d8ae0a693c6a181"
+    },
+    {
+      "path": "cli/node-runtime.mjs",
+      "sha256": "cd7a169b5d06b6c6851849f9682b1c941da1512c0c7e32866f90a7cb46dbb2c6"
+    },
+    {
+      "path": "tests/noderuntimetest.mjs",
+      "sha256": "908dbc403ce2761305b40295a907850be4e19b498c711611866fa8cd2b70f510"
+    },
+    {
+      "path": "tests/schedulertest.mjs",
+      "sha256": "ccad8f6b4612d90a76f1dc61e01ff5408e7b24a5e0f63892ebe4b9a71c0143f0"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "dee0dd24d2f766068725ce87db5c596b41719ffff69d01902d164e7492cb8bbe"
+    },
+    {
+      "path": "package.json",
+      "sha256": "c0b4a68d9c572323465623d4a106d1e819332215e99b342d9e5e2abcabcd4630"
+    }
+  ],
+  "contract": {
+    "config_format": "ai-fleet-node-runtime/v1",
+    "commands": [
+      "watch",
+      "status",
+      "drain",
+      "cancel"
+    ],
+    "tables": [
+      "node_runtime_lifecycle_schema",
+      "node_runtime_instances",
+      "node_runtime_control_requests",
+      "node_runtime_components"
+    ],
+    "scheduler_namespace_preserved": true,
+    "first_control_observation": "Before first scheduler watch/claim, then normally every second",
+    "drain_order": [
+      "stop new claims",
+      "wait owned scheduler while MCP, peer and sync stay available",
+      "verify scheduler stop evidence",
+      "abort sync loops",
+      "close owned listeners",
+      "check own lock identity",
+      "persist terminal record",
+      "release own lock"
+    ],
+    "sync_outage": "Component error/backoff; does not cancel local in-flight task",
+    "lock_takeover": false,
+    "pid_termination": false,
+    "remote_management_surface": false,
+    "process_liveness": "not_checked"
+  },
+  "validation": {
+    "related_before_boundary_fixes": {
+      "command": "node --test tests/noderuntimetest.mjs tests/schedulertest.mjs",
+      "log_file": ".data/review64-related.log",
+      "log_sha256": "059a5bb496f9c31af6087c1590d45730e8250285484d1a5a71134886f204d6b5",
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 79993.0859
+    },
+    "red_boundary_reproduction": {
+      "command": "node --test --test-name-pattern=\"replaced runtime lock|durable startup drain\" tests/noderuntimetest.mjs tests/schedulertest.mjs",
+      "log_file": ".data/review64-start-stop-red.log",
+      "log_sha256": "ea890ed1cbedbeccda3642b249d91ad168c7212af8dc3981a43dddba18235db8",
+      "passed": 0,
+      "failed": 2,
+      "skipped": 0,
+      "duration_ms": 4599.4671
+    },
+    "final_node_host": {
+      "command": "node --test tests/noderuntimetest.mjs",
+      "log_file": ".data/review64-node-runtime-final.log",
+      "log_sha256": "70b522e1eca5bd53e833d1fa8eba558fb7a00147692867aa8b74f40cfbb438ea",
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 8847.6238
+    },
+    "final_composition": {
+      "command": "node --test --test-name-pattern=\"node host\" tests/schedulertest.mjs",
+      "log_file": ".data/review64-composition-final.log",
+      "log_sha256": "461e61aa22af2cfef2058270879eb3f1c0c6265454313e0b577ae9c15b4a56e9",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 16049.5314
+    },
+    "unique_units": 34,
+    "new_units": 10,
+    "counts_note": "Final 7 node tests + 3 composition tests + 24 unchanged scheduler regression cases from the earlier 32-unit pass. Repeated cases are not added. Shared lifecycle factory was unchanged after that full pass."
+  },
+  "regressions": [
+    {
+      "name": "durable startup drain",
+      "before": "Used synthetic quota 1 instead of expected 0 because first control observation waited for the timer.",
+      "after": "Immediate observation before watch; zero launches and used quota 0, observed_revision 2."
+    },
+    {
+      "name": "replaced runtime lock",
+      "before": "NODE_RUNTIME_LOCK_CHANGED thrown and foreign lock retained, but ended_at was already written.",
+      "after": "Verify lock before finish; foreign bytes retained, ended_at null, executor_stop_confirmed false."
+    }
+  ],
+  "observed": [
+    "Separate actual CLI and scoped MCP bridge read local overview; durable drain is idempotent and host closes normally.",
+    "Two real loopback hosts synchronize both directions; source shutdown leaves receiver MCP available; restart catches up without receiver restart or replica duplication.",
+    "Occupied external MCP port remains active after partial host startup failure; only owned peer listener closes.",
+    "Offline peer while synthetic Windows Job runs: host drain keeps MCP alive, completes one permit, leaves next assignment waiting and then closes components.",
+    "Host cancel reaches actual Windows Job and records separate node and scheduler stopped instances without refunding consumed permit.",
+    "Public bind, mismatched credential source and second host startup are rejected."
+  ],
+  "engineering_notes": [
+    "Initial CI edit anchor did not match the unquoted YAML step; package and CI edits were subsequently applied using the observed file. No product guard was weakened."
+  ],
+  "remaining": [
+    "Windows service or Task Scheduler installation/autostart",
+    "UI/context-export and alert supervision",
+    "Control/history retention and sustained-load timing",
+    "Native providers and physical two-PC offline/reconnect",
+    "72-hour operations and independent stage acceptance",
+    "Current-commit full Windows CI after push"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "windows_services_changed": false,
+  "scheduled_tasks_changed": false,
+  "models_called": false,
+  "physical_two_pc": false
+}

@@ -1,0 +1,151 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-60-task-history-pagination",
+  "date": "2026-10-01",
+  "base_commit": "fb9ffdee3dc8abf1f0063e32d54294f1d2d68e4b",
+  "platform": "Windows",
+  "scope": "Complete visible relationship index for downstream evidence and read-only task detail pagination through the operator panel/API.",
+  "source_files": [
+    {
+      "path": "core/fleet-evidence.mjs",
+      "sha256": "dac61b7eba7bd983f8a7429f0202aef378ecb44923c1f6245e7f1d10bad9f765"
+    },
+    {
+      "path": "core/fleet-view.mjs",
+      "sha256": "72346c29f69322159e48041ce0771bb53d601559bcaf86cef764e9008461ab63"
+    },
+    {
+      "path": "core/server.mjs",
+      "sha256": "3ec14a81163024f04be2bc18c35d7e89bdb21a3c0e14ebd693700b11074bd7cf"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "583452ca8c43f5d2e7a9ed628bb2a4e56d4b0c9055f9c59d0cbb3a19cac91cc9"
+    },
+    {
+      "path": "tests/fleetevidencetest.mjs",
+      "sha256": "ad8c0ce19185db94596bdd655d32bf7f8e6e0e10f3dccc8f960ce07500de29a2"
+    },
+    {
+      "path": "tests/fleetviewtest.mjs",
+      "sha256": "74ebf5284d823390558483973aea74c90e46401c0d36df749e806fe46955d2c0"
+    },
+    {
+      "path": "tests/recoverytest.mjs",
+      "sha256": "e56a22e6bb7b8b1aada2b467f81c637f11a9c0bd5d09c40070fa6f2430ce3f8f"
+    },
+    {
+      "path": "tests/helpers/fleet-evidence-fixture.mjs",
+      "sha256": "b935b6ffde09909708c1b8fdd02010266768610ca36227e20394604aeb1781a1"
+    }
+  ],
+  "regression": {
+    "command": "node --test --test-name-pattern=\"results beyond the first\" tests/fleetevidencetest.mjs",
+    "old_code_expected_results": 205,
+    "old_code_actual_results": 99,
+    "log_sha256": "6a08234b112eb653e04d403c66574b60227a8d85f09d2556cbd159d6a3192648"
+  },
+  "tests": [
+    {
+      "command": "node --test tests/fleetevidencetest.mjs tests/fleetviewtest.mjs tests/contextevidencetest.mjs tests/desktopcontexttest.mjs",
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 130667.4256,
+      "log_sha256": "087b5fb3ef7cafcbdc169046e2736b3f40471f8db77035925ce3b8400ff71453"
+    },
+    {
+      "command": "node --test --test-name-pattern=\"recovered board rejects an evidence cursor\" tests/recoverytest.mjs",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "log_sha256": "a02bcb7b5a58a4014f7c4d18a66503d67f5508ce66e10dffb66e3b9c20df2b5e"
+    }
+  ],
+  "unique_passed_units": 77,
+  "new_units": 6,
+  "counts_note": "Repeated focused/browser runs are not added again. Scope cap was restored to its prior 1000 after the suite; final focused suite is recorded separately.",
+  "initial_failures": [
+    "Historical fixture first hit active binding and run uniqueness; corrected to cancelled bindings and ended runs before recording the actual omission regression.",
+    "Directly updating node identity was rejected by its immutable trigger; replaced with the actual backup/restore/activateRecovery API regression."
+  ],
+  "checks": [
+    "206 relationships and 205 runs/results with tied timestamps are paged without omissions or duplicate IDs",
+    "Reads preserve SQLite state; no schema initialization or execution",
+    "Cursor bound to task, section, size and current visible record digest",
+    "Changed history/version/visibility and restored epoch reject stale pages",
+    "Missing or non-operator credentials and foreign Origin denied by actual HTTP",
+    "Invalid or oversized cursor/limit rejected",
+    "Markdown evidence catalog, limits and handoff behavior preserved"
+  ],
+  "browser": {
+    "passed": true,
+    "format": "ai-fleet-history-browser/v1",
+    "browser": "Existing Chrome headless via bundled Playwright",
+    "run_pages": [
+      100,
+      100,
+      5
+    ],
+    "result_pages": [
+      100,
+      100,
+      5
+    ],
+    "previous_page": true,
+    "keyboard_next": true,
+    "stale_page_cleared": true,
+    "latest_reset": true,
+    "narrow": {
+      "width": 390,
+      "scroll": 390,
+      "dialogWidth": 372,
+      "dialogScroll": 372
+    },
+    "page_errors": [],
+    "real_models": false,
+    "physical_two_pc": false,
+    "formal_acceptance": false,
+    "screenshots": [
+      {
+        "size": "wide",
+        "sha256": "28c22f8ce864626fef7ea4098ed21bc3fac099033c0f45fcb4dcb594b4f02f00"
+      },
+      {
+        "size": "narrow",
+        "sha256": "4ee8e0b6219ff6782e301aa830caec8f3cf517db8f9063640dac97e08ccb0271"
+      }
+    ]
+  },
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "limitations": [
+    "Only local synthetic historical data and isolated browser/HTTP/restore fixtures were used; no physical two-PC or desktop/provider acceptance",
+    "MCP get_task_context still returns the first history page; no new MCP tool or authority",
+    "Task subtree remains bounded to 1000, Markdown catalog to 10000 per category, ordinary global relation view to 500",
+    "Queries still project stored history in memory; 100000-event performance has not been measured",
+    "Action queue history pagination/retention remains separate",
+    "B initialization receipt remains pending; pilot network has not been enabled"
+  ],
+  "ci": {
+    "current_commit": "pending_push",
+    "previous_commit": "fb9ffdee3dc8abf1f0063e32d54294f1d2d68e4b",
+    "previous_run_id": 36817310882,
+    "previous_status": "in_progress",
+    "previous_gitleaks": "success"
+  },
+  "real_models_called": false,
+  "production_changed": false,
+  "final_focused": {
+    "command": "node --test tests/fleetevidencetest.mjs",
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 799.6761,
+    "log_sha256": "ea565273f41645ce173bf800f30d4fa461dddaee35f8b88b1afdc4aaa4c6368d"
+  }
+}

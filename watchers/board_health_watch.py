@@ -23,17 +23,21 @@ Env:
   BOARD_WATCH_IGNORE_LINES  comma-separated lines deliberately stopped (their
                         claimable cards don't count toward the full-stop alarm)
   BOARD_WATCH_INTERVAL  seconds between rounds (default 600)
+  --once                perform one sample and exit (1 problems, 0 no problems)
+  Fleet health          authenticated /api/fleet/health; no peer calls or automatic recovery
 """
 import glob
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 import urllib.request
 
-sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 HERE = os.path.dirname(os.path.abspath(__file__))
 # fleet.config.json 部署键回填 env 缺省(v0.3;env 已设者优先)——含 gated_subtree,
 # 让本哨的受闸子树检查与 server/loop 读同一处真相。
@@ -131,6 +135,75 @@ def idle_but_wanted(rows, claimable):
     return claimable > 0 and not any(w.get("desired_running") for w in rows)
 
 
+# Codes and text are a local allowlist: no server-supplied free text enters a persistent monitor.
+FLEET_MESSAGES = {
+    "BROKER_PREPARED_STALE": ("notice", "分派准备后等待较久；用 dispatch stale 核对执行或放弃"),
+    "BROKER_INTERRUPTED": ("problem", "分派中断尚未结清；核对 journal 或人工停止证据"),
+    "DELIVERY_RETRY_PENDING": ("notice", "投递仍待重试；对端可能离线，保留原操作等待重连"),
+    "DELIVERY_BLOCKED": ("problem", "投递受阻；核对原操作、凭据与协议条件"),
+    "STALE_EPOCH_RECORD": ("problem", "存在旧代次未处理记录；核对节点恢复"),
+    "CLOCK_UNKNOWN": ("notice", "记录时间不可判断；核对本机时钟，不据此判超时"),
+    "SCHEDULER_ATTENTION": ("problem", "调度留下 attention；核对执行器停止与未结清回执"),
+    "SCHEDULER_HEARTBEAT_STALE": ("problem", "调度心跳陈旧；核对实例，不能认定执行器已停止"),
+    "SCHEDULER_LOCK_MISSING": ("problem", "未结实例缺少调度锁；核对当前所有者"),
+    "SCHEDULER_LOCK_UNREADABLE": ("problem", "调度锁不可核对；保留文件并检查"),
+    "SCHEDULER_LOCK_ORPHAN": ("problem", "锁记录的进程当前未观察到；先核对停止事实，不自动删锁"),
+    "SCHEDULER_LOCK_MISMATCH": ("problem", "调度锁与实例记录不一致；核对原实例和恢复过程"),
+    "SCHEDULER_OWNER_UNKNOWN": ("notice", "调度进程可见性不明；检查本机权限，不能认定停止"),
+}
+
+
+def fleet_health_signals(value):
+    """Validate one complete observation; a broken/unknown response can never clear alarms."""
+    if (not isinstance(value, dict) or value.get("format") != "ai-fleet-health/v1"
+            or value.get("state_changes") is not False
+            or value.get("remote_state") != "not_queried"
+            or value.get("executor_stop_confirmed") is not False):
+        raise ValueError("invalid fleet health observation")
+    modules = value.get("modules")
+    if (not isinstance(modules, dict) or set(modules) != {"broker", "delivery", "scheduler"}
+            or any(v not in {"available", "not_configured"} for v in modules.values())):
+        raise ValueError("incomplete fleet health coverage")
+    issues = value.get("issues")
+    if not isinstance(issues, list) or len(issues) > 32:
+        raise ValueError("invalid fleet health issues")
+    problems, notes, problem_keys, note_keys = [], [], [], []
+    seen = set()
+    for item in issues:
+        if not isinstance(item, dict):
+            raise ValueError("invalid fleet health item")
+        code, level = item.get("code"), item.get("level")
+        fp, count, ids = item.get("fingerprint"), item.get("count"), item.get("sample_ids")
+        if (code not in FLEET_MESSAGES or FLEET_MESSAGES[code][0] != level
+                or not isinstance(fp, str) or not re.fullmatch(r"[0-9a-f]{64}", fp)
+                or type(count) is not int or count < 1 or count > 10001
+                or not isinstance(ids, list) or len(ids) > 3
+                or any(not isinstance(x, str) or not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", x) for x in ids)
+                or (code, fp) in seen):
+            raise ValueError("invalid fleet health item")
+        seen.add((code, fp))
+        message = "联邦: " + FLEET_MESSAGES[code][1] + "（" + str(count) + " 项"
+        if ids:
+            message += "；ID " + ",".join(x[:8] for x in ids)
+        message += "）"
+        if level == "problem":
+            problems.append(message)
+            problem_keys.append(code + ":" + fp)
+        else:
+            notes.append(message)
+            note_keys.append(code + ":" + fp)
+    return problems, notes, sorted(problem_keys), sorted(note_keys)
+
+
+def probe_fleet_health(fetcher):
+    try:
+        return fleet_health_signals(fetcher("/api/fleet/health"))
+    except Exception:
+        # Do not turn an unavailable sample into all-clear or echo paths/tokens/remote text.
+        return (["联邦体检不可读；核对本机权限、数据库与版本（不是恢复正常）"],
+                [], ["FLEET_HEALTH_UNAVAILABLE"], [])
+
+
 class AlarmThrottle:
     """同一个状态不刷屏,状态一变立刻说,恢复了告诉你。
 
@@ -211,129 +284,140 @@ if "--selftest" in sys.argv:
         print(("PASS " if o else "FAIL ") + name)
     sys.exit(0 if all(c[1] for c in cases) else 1)
 
-n = 0
-alarm = AlarmThrottle()      # problems: fires loud, backs off, reports recovery
-notice = AlarmThrottle()     # notes: same treatment, gentler wording
-last_problems = []
-while True:
-    n += 1
-    # ⭐ v0.19: after 「更新」 the board runs new code; so should this process. Ask once a round.
-    try:
-        _bv = str((get("/api/setup") or {}).get("version") or "")
-        _own = _code_rev()
-        _dec = stale_decision(_own, _bv, os.environ.get("BOARD_HEALTH_REEXECED"))
-        if _dec == "reexec":
-            print(f"{stamp()} ↻ 看板已是 {_bv},本哨跑的是 {_own} —— 以新代码重跑本哨(本进程留守转发输出)", flush=True)
-            rc = subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, BOARD_HEALTH_REEXECED=_bv))
-            sys.exit(rc)
-        if _dec == "warn" and n == 1:
-            print(f"{stamp()} ⚠ 本哨已按 {_bv} 重跑过一次,看板仍说版本不一致 —— 本哨和看板可能不在同一个检出", flush=True)
-    except Exception:
-        pass   # the health checks below say what is wrong with the board; this is not that
-    problems = []
-    notes = []
-    lines_up = claimable = inprog = waiting = -1
-    waiting_review = 0
-    review_oldest = 0
-    try:
-        d = get("/api/workers")
-        rows = d if isinstance(d, list) else d.get("workers") or []
-        lines_up = sum(1 for w in rows if w.get("running"))
-        # A gate REFUSAL is deterministic — it never restarts itself; surface it.
-        refused = [w.get("line") for w in rows
-                   for s in (w.get("slots") or [])
-                   if not s.get("running") and ("拒绝启动" in (s.get("tail") or "") or "refus" in (s.get("tail") or "").lower())]
-        t = get("/api/tasks?archived=false")
-        tasks = t.get("tasks") if isinstance(t, dict) else t
-        by_id = {x["id"]: x for x in tasks}
-
-        # Claimable mirrors the claim gates it can see from here (measured false
-        # alarms taught each clause): released, task-kind, no human gate, ignored
-        # lines excluded, dependencies done.
-        def _claimable(x):
-            if x.get("status") != "not_started" or not x.get("released"):
-                return False
-            if x.get("kind") != "task" or x.get("human_gate"):
-                return False
-            if (x.get("line") or "") in IGNORE_LINES:
-                return False
-            return all(by_id.get(dep, {}).get("status") == "done"
-                       for dep in (x.get("blocked_by") or []))
-
-        claimable = sum(1 for x in tasks if _claimable(x))
-        inprog = sum(1 for x in tasks if x.get("status") == "in_progress")
-        waiting = sum(1 for x in tasks if x.get("status") == "waiting")
-        # Stall detection watches ONLY waiting_for=review — confirm means "waiting
-        # on the human", where an idle reviewer is CORRECT, not dead (measured
-        # false alarm).
-        review_rows = [x for x in tasks if x.get("status") == "waiting"
-                       and x.get("waiting_for") == "review"]
-        waiting_review = len(review_rows)
-        review_oldest = min((t2 for t2 in (_ts(x.get("updated_at")) for x in review_rows)
-                             if t2), default=0)
-        if refused:
-            problems.append("门拒启动: " + ",".join(sorted(set(refused))))
-        dropped = stalled_lines(rows)
-        if dropped:
-            problems.append(f"线掉了(想跑却没在跑): {','.join(dropped)}")
-        elif idle_but_wanted(rows, claimable):
-            # Not a fault — nobody pressed start. Separate wording, and it rides
-            # the same throttle so it says this once, not every ten minutes.
-            notes.append(f"板闲着: 有 {claimable} 张可领的卡,但没有一条线开着(要跑就在面板按启动)")
-    except Exception as e:
-        code = getattr(e, "code", None)          # HTTPError carries one; a dead socket does not
-        problems.append(f"server 返回 HTTP {code}(不是不可达 —— 查令牌 / 权限)" if code
-                        else f"server 不可达: {type(e).__name__} {str(e)[:60]}")
-
-    # Review playing dead: cards sit in review while the newest verdict file has
-    # not moved for 45 minutes (measured: one card sat silent for 7 hours). The
-    # carrier is the review line's verdict files; absent dir = review not deployed
-    # = skip, never alarm. ⭐BOTH clocks must be stale (the verdict clock AND the
-    # oldest waiting card's clock) — the single-condition form fired a measured
-    # false alarm: 3h of idle made the newest verdict old, then a card entered
-    # review 3 seconds before the probe.
-    try:
-        if waiting_review > 0:
-            vs = glob.glob(os.path.join(DATA, "review", "verdict-*.json"))
-            newest = max((os.path.getmtime(v) for v in vs), default=0)
-            if review_stalled(time.time(), newest, review_oldest):
-                problems.append(f"审阅疑似装死: {waiting_review} 卡待审(最旧已等 "
-                                f"{int((time.time() - review_oldest) / 60)} 分)且 "
-                                f"{int((time.time() - newest) / 60)} 分钟无新判决")
-    except Exception:
-        pass
-
-    if SUBTREE:
+def main():
+    n = 0
+    alarm = AlarmThrottle()      # problems: fires loud, backs off, reports recovery
+    notice = AlarmThrottle()     # notes: same treatment, gentler wording
+    last_problems = []
+    while True:
+        n += 1
+        # ⭐ v0.19: after 「更新」 the board runs new code; so should this process. Ask once a round.
         try:
-            r = subprocess.run(["git", "status", "--short", "--", SUBTREE],
-                               cwd=CODE_ROOT, capture_output=True, text=True,
-                               encoding="utf-8", timeout=30)
-            dirty = [l for l in (r.stdout or "").splitlines() if l.strip()]
-            if dirty:
-                problems.append(f"受闸子树脏 {len(dirty)} 文件(claims 将被拒): "
-                                + dirty[0].strip()[:50])
+            _bv = str((get("/api/setup") or {}).get("version") or "")
+            _own = _code_rev()
+            _dec = stale_decision(_own, _bv, os.environ.get("BOARD_HEALTH_REEXECED"))
+            if _dec == "reexec":
+                print(f"{stamp()} ↻ 看板已是 {_bv},本哨跑的是 {_own} —— 以新代码重跑本哨(本进程留守转发输出)", flush=True)
+                rc = subprocess.call([sys.executable] + sys.argv, env=dict(os.environ, BOARD_HEALTH_REEXECED=_bv))
+                sys.exit(rc)
+            if _dec == "warn" and n == 1:
+                print(f"{stamp()} ⚠ 本哨已按 {_bv} 重跑过一次,看板仍说版本不一致 —— 本哨和看板可能不在同一个检出", flush=True)
+        except Exception:
+            pass   # the health checks below say what is wrong with the board; this is not that
+        problems = []
+        notes = []
+        lines_up = claimable = inprog = waiting = -1
+        waiting_review = 0
+        review_oldest = 0
+        try:
+            d = get("/api/workers")
+            rows = d if isinstance(d, list) else d.get("workers") or []
+            lines_up = sum(1 for w in rows if w.get("running"))
+            # A gate REFUSAL is deterministic — it never restarts itself; surface it.
+            refused = [w.get("line") for w in rows
+                       for s in (w.get("slots") or [])
+                       if not s.get("running") and ("拒绝启动" in (s.get("tail") or "") or "refus" in (s.get("tail") or "").lower())]
+            t = get("/api/tasks?archived=false")
+            tasks = t.get("tasks") if isinstance(t, dict) else t
+            by_id = {x["id"]: x for x in tasks}
+
+            # Claimable mirrors the claim gates it can see from here (measured false
+            # alarms taught each clause): released, task-kind, no human gate, ignored
+            # lines excluded, dependencies done.
+            def _claimable(x):
+                if x.get("status") != "not_started" or not x.get("released"):
+                    return False
+                if x.get("kind") != "task" or x.get("human_gate"):
+                    return False
+                if (x.get("line") or "") in IGNORE_LINES:
+                    return False
+                return all(by_id.get(dep, {}).get("status") == "done"
+                           for dep in (x.get("blocked_by") or []))
+
+            claimable = sum(1 for x in tasks if _claimable(x))
+            inprog = sum(1 for x in tasks if x.get("status") == "in_progress")
+            waiting = sum(1 for x in tasks if x.get("status") == "waiting")
+            # Stall detection watches ONLY waiting_for=review — confirm means "waiting
+            # on the human", where an idle reviewer is CORRECT, not dead (measured
+            # false alarm).
+            review_rows = [x for x in tasks if x.get("status") == "waiting"
+                           and x.get("waiting_for") == "review"]
+            waiting_review = len(review_rows)
+            review_oldest = min((t2 for t2 in (_ts(x.get("updated_at")) for x in review_rows)
+                                 if t2), default=0)
+            if refused:
+                problems.append("门拒启动: " + ",".join(sorted(set(refused))))
+            dropped = stalled_lines(rows)
+            if dropped:
+                problems.append(f"线掉了(想跑却没在跑): {','.join(dropped)}")
+            elif idle_but_wanted(rows, claimable):
+                # Not a fault — nobody pressed start. Separate wording, and it rides
+                # the same throttle so it says this once, not every ten minutes.
+                notes.append(f"板闲着: 有 {claimable} 张可领的卡,但没有一条线开着(要跑就在面板按启动)")
         except Exception as e:
-            problems.append(f"git 检查失败: {type(e).__name__}")
+            code = getattr(e, "code", None)          # HTTPError carries one; a dead socket does not
+            problems.append(f"server 返回 HTTP {code}(不是不可达 —— 查令牌 / 权限)" if code
+                            else f"server 不可达: {type(e).__name__} {str(e)[:60]}")
 
-    # ── Say it once, then back off; say it again when it CHANGES; say when it
-    #    is over. (A sentry that repeats itself every round trains its reader to
-    #    silence it — measured on a live deployment.)
-    held = lambda rounds: f"{int(rounds * INTERVAL / 60)} 分" if rounds > 1 else ""
-    act, k, rounds = alarm.tick(" / ".join(problems))
-    if act == "report":
-        tail = f"(持续 {held(rounds)},第 {k} 次报)" if k > 1 else ""
-        print(f"{stamp()} ⛔体检异常{tail}: " + " / ".join(problems))
-    elif act == "clear":
-        print(f"{stamp()} ✅体检恢复正常(之前: {' / '.join(last_problems)[:80]})")
-    if problems:
-        last_problems = problems
+        fleet_problems, fleet_notes, fleet_problem_keys, fleet_note_keys = probe_fleet_health(get)
+        problems.extend(fleet_problems)
+        notes.extend(fleet_notes)
 
-    nact, nk, nrounds = notice.tick(" / ".join(notes))
-    if nact == "report":
-        print(f"{stamp()} ℹ {' / '.join(notes)}" + (f"(持续 {held(nrounds)},第 {nk} 次)" if nk > 1 else ""))
-    elif nact == "clear":
-        print(f"{stamp()} ▶ 板不再闲着了")
+        # Review playing dead: cards sit in review while the newest verdict file has
+        # not moved for 45 minutes (measured: one card sat silent for 7 hours). The
+        # carrier is the review line's verdict files; absent dir = review not deployed
+        # = skip, never alarm. ⭐BOTH clocks must be stale (the verdict clock AND the
+        # oldest waiting card's clock) — the single-condition form fired a measured
+        # false alarm: 3h of idle made the newest verdict old, then a card entered
+        # review 3 seconds before the probe.
+        try:
+            if waiting_review > 0:
+                vs = glob.glob(os.path.join(DATA, "review", "verdict-*.json"))
+                newest = max((os.path.getmtime(v) for v in vs), default=0)
+                if review_stalled(time.time(), newest, review_oldest):
+                    problems.append(f"审阅疑似装死: {waiting_review} 卡待审(最旧已等 "
+                                    f"{int((time.time() - review_oldest) / 60)} 分)且 "
+                                    f"{int((time.time() - newest) / 60)} 分钟无新判决")
+        except Exception:
+            pass
 
-    if not problems and not notes and n % 6 == 1 and n > 1:
-        print(f"{stamp()} 体检平安(线 {lines_up} 在跑·进行中 {inprog}·在审 {waiting}·可领 {claimable})")
-    time.sleep(INTERVAL)
+        if SUBTREE:
+            try:
+                r = subprocess.run(["git", "status", "--short", "--", SUBTREE],
+                                   cwd=CODE_ROOT, capture_output=True, text=True,
+                                   encoding="utf-8", timeout=30)
+                dirty = [l for l in (r.stdout or "").splitlines() if l.strip()]
+                if dirty:
+                    problems.append(f"受闸子树脏 {len(dirty)} 文件(claims 将被拒): "
+                                    + dirty[0].strip()[:50])
+            except Exception as e:
+                problems.append(f"git 检查失败: {type(e).__name__}")
+
+        # ── Say it once, then back off; say it again when it CHANGES; say when it
+        #    is over. (A sentry that repeats itself every round trains its reader to
+        #    silence it — measured on a live deployment.)
+        held = lambda rounds: f"{int(rounds * INTERVAL / 60)} 分" if rounds > 1 else ""
+        act, k, rounds = alarm.tick(json.dumps([problems, fleet_problem_keys], ensure_ascii=True) if problems else "")
+        if act == "report":
+            tail = f"(持续 {held(rounds)},第 {k} 次报)" if k > 1 else ""
+            print(f"{stamp()} ⛔体检异常{tail}: " + " / ".join(problems))
+        elif act == "clear":
+            print(f"{stamp()} ✅体检恢复正常(之前: {' / '.join(last_problems)[:80]})")
+        if problems:
+            last_problems = problems
+
+        nact, nk, nrounds = notice.tick(json.dumps([notes, fleet_note_keys], ensure_ascii=True) if notes else "")
+        if nact == "report":
+            print(f"{stamp()} ℹ {' / '.join(notes)}" + (f"(持续 {held(nrounds)},第 {nk} 次)" if nk > 1 else ""))
+        elif nact == "clear":
+            print(f"{stamp()} ▶ 上轮提示已解除")
+
+        if not problems and not notes and n % 6 == 1 and n > 1:
+            print(f"{stamp()} 体检平安(线 {lines_up} 在跑·进行中 {inprog}·在审 {waiting}·可领 {claimable})")
+        if "--once" in sys.argv:
+            return 1 if problems else 0
+        time.sleep(INTERVAL)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

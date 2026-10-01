@@ -1,0 +1,3411 @@
+{
+  "schema_version": "1.0",
+  "artifact_type": "planning_manifest",
+  "plan_id": "AFK-FED-001",
+  "plan_version": "1.3",
+  "created_date": "2026-09-29",
+  "timezone": "Asia/Tokyo",
+  "source_document": "多终端共享看板-实施与验收计划.md",
+  "source_sha256": "23f8649cad6f74701d5c7ec3e801a85ad897195057acddfbe3a8bf87c0f18d34",
+  "repository_baseline": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
+  "status": "implementation_in_progress",
+  "execution_authorized": true,
+  "board_import_payload": false,
+  "import_note": "规划清单，须经合同冻结、实际 API/schema 映射和预览后才可导入；本文件未创建、放行或执行任何任务。",
+  "confirmed_requirements": [
+    {
+      "id": "R01",
+      "text": "使用 Tailscale 连接不同电脑的看板",
+      "phases": [
+        "S03",
+        "S05",
+        "S09"
+      ]
+    },
+    {
+      "id": "R02",
+      "text": "提供全局共享看板",
+      "phases": [
+        "S05",
+        "S08",
+        "S09"
+      ]
+    },
+    {
+      "id": "R03",
+      "text": "由终端名决定任务所有者",
+      "phases": [
+        "S02",
+        "S08"
+      ]
+    },
+    {
+      "id": "R04",
+      "text": "本机 MCP 向不同身份的 agent 分配任务",
+      "phases": [
+        "S04",
+        "S06"
+      ]
+    },
+    {
+      "id": "R05",
+      "text": "每终端一棵任务根树，自上而下分配",
+      "phases": [
+        "S02",
+        "S06"
+      ]
+    },
+    {
+      "id": "R06",
+      "text": "各终端的根相互连接",
+      "phases": [
+        "S03",
+        "S05",
+        "S06"
+      ]
+    },
+    {
+      "id": "R07",
+      "text": "断线继续处理已领取任务，重连同步结果",
+      "phases": [
+        "S05",
+        "S06",
+        "S09",
+        "S10"
+      ]
+    },
+    {
+      "id": "R08",
+      "text": "后续仅支持和验收 Windows；不再考虑 Linux 环境",
+      "phases": [
+        "S01",
+        "S03",
+        "S04",
+        "S09",
+        "S10",
+        "S11"
+      ]
+    },
+    {
+      "id": "R09",
+      "text": "在已接入的桌面端聊天中查询全局看板和任务，并可获取 Markdown 上下文与交接摘要",
+      "phases": [
+        "S04",
+        "S08"
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D01",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D02",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D03",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D04",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D05",
+      "status": "user_confirmed_scope_pending_device_acceptance",
+      "decision_record": {
+        "date": "2026-09-30",
+        "physical_node_count": 2,
+        "selection": "the two physical computers on Tailscale",
+        "both_windows_observed": true,
+        "both_online_observed": true,
+        "board_access_and_paths": "pending remote verification",
+        "extended_three_node_tests": "isolated protocol simulation, not physical acceptance"
+      }
+    },
+    {
+      "id": "D06",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D07",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D08",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D09",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D10",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D11",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    },
+    {
+      "id": "D12",
+      "status": "proposed_pending_G00",
+      "decision_record": null
+    }
+  ],
+  "progress": {
+    "accepted_tasks": 0,
+    "total_tasks": 72,
+    "accepted_phases": 0,
+    "total_phases": 12,
+    "task_completion_percent": 0,
+    "phase_completion_percent": 0
+  },
+  "estimated_engineering_days": {
+    "min": 35,
+    "max": 62,
+    "proposed": true,
+    "soak_hours_separate": 72
+  },
+  "roles": [
+    "OP",
+    "ARCH",
+    "ENG",
+    "TEST",
+    "REVIEW",
+    "OPS",
+    "UI"
+  ],
+  "phases": [
+    {
+      "id": "S00",
+      "title": "需求、协议边界与验收基线冻结",
+      "status": "in_progress",
+      "depends_on": [],
+      "gate_id": "G00",
+      "operator_confirmation_required": true,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 1,
+        "max": 2
+      },
+      "task_ids": [
+        "T00.01",
+        "T00.02",
+        "T00.03",
+        "T00.04",
+        "T00.05",
+        "T00.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S01",
+      "title": "单机运行基线与回归整备",
+      "status": "in_progress",
+      "depends_on": [
+        "S00"
+      ],
+      "gate_id": "G01",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 2,
+        "max": 4
+      },
+      "task_ids": [
+        "T01.01",
+        "T01.02",
+        "T01.03",
+        "T01.04",
+        "T01.05",
+        "T01.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S02",
+      "title": "终端身份、全局任务标识和状态模型",
+      "status": "in_progress",
+      "depends_on": [
+        "S01"
+      ],
+      "gate_id": "G02",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 3,
+        "max": 5
+      },
+      "task_ids": [
+        "T02.01",
+        "T02.02",
+        "T02.03",
+        "T02.04",
+        "T02.05",
+        "T02.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S03",
+      "title": "Tailscale 连通、节点认证与远端访问边界",
+      "status": "in_progress",
+      "depends_on": [
+        "S02"
+      ],
+      "gate_id": "G03",
+      "operator_confirmation_required": true,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 2,
+        "max": 4
+      },
+      "task_ids": [
+        "T03.01",
+        "T03.02",
+        "T03.03",
+        "T03.04",
+        "T03.05",
+        "T03.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S04",
+      "title": "本机 MCP、确定性调度与三执行器适配",
+      "status": "in_progress",
+      "depends_on": [
+        "S02",
+        "S03"
+      ],
+      "gate_id": "G04",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 4,
+        "max": 7
+      },
+      "task_ids": [
+        "T04.01",
+        "T04.02",
+        "T04.03",
+        "T04.04",
+        "T04.05",
+        "T04.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S05",
+      "title": "离线持久化、事件同步与状态副本",
+      "status": "in_progress",
+      "depends_on": [
+        "S02",
+        "S03"
+      ],
+      "gate_id": "G05",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 5,
+        "max": 8
+      },
+      "task_ids": [
+        "T05.01",
+        "T05.02",
+        "T05.03",
+        "T05.04",
+        "T05.05",
+        "T05.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S06",
+      "title": "跨终端委派、依赖图、取消与验收回传",
+      "status": "in_progress",
+      "depends_on": [
+        "S04",
+        "S05"
+      ],
+      "gate_id": "G06",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 5,
+        "max": 8
+      },
+      "task_ids": [
+        "T06.01",
+        "T06.02",
+        "T06.03",
+        "T06.04",
+        "T06.05",
+        "T06.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S07",
+      "title": "代码、文件与验证证据跨端交付",
+      "status": "in_progress",
+      "depends_on": [
+        "S02",
+        "S03",
+        "S05"
+      ],
+      "gate_id": "G07",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 3,
+        "max": 5
+      },
+      "task_ids": [
+        "T07.01",
+        "T07.02",
+        "T07.03",
+        "T07.04",
+        "T07.05",
+        "T07.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S08",
+      "title": "全局共享视图、阶段进度与审计",
+      "status": "in_progress",
+      "depends_on": [
+        "S05",
+        "S06"
+      ],
+      "gate_id": "G08",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 3,
+        "max": 5
+      },
+      "task_ids": [
+        "T08.01",
+        "T08.02",
+        "T08.03",
+        "T08.04",
+        "T08.05",
+        "T08.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S09",
+      "title": "多机集成、故障注入与负载验收",
+      "status": "planned",
+      "depends_on": [
+        "S06",
+        "S07",
+        "S08"
+      ],
+      "gate_id": "G09",
+      "operator_confirmation_required": false,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 4,
+        "max": 7
+      },
+      "task_ids": [
+        "T09.01",
+        "T09.02",
+        "T09.03",
+        "T09.04",
+        "T09.05",
+        "T09.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S10",
+      "title": "真实模型灰度与持续运行验收",
+      "status": "planned",
+      "depends_on": [
+        "S09"
+      ],
+      "gate_id": "G10",
+      "operator_confirmation_required": true,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 2,
+        "max": 4
+      },
+      "task_ids": [
+        "T10.01",
+        "T10.02",
+        "T10.03",
+        "T10.04",
+        "T10.05",
+        "T10.06"
+      ],
+      "gate_receipt": null
+    },
+    {
+      "id": "S11",
+      "title": "正式发布、运维交接与恢复值守",
+      "status": "planned",
+      "depends_on": [
+        "S10"
+      ],
+      "gate_id": "G11",
+      "operator_confirmation_required": true,
+      "estimates_are_proposed": true,
+      "effort_days": {
+        "min": 1,
+        "max": 3
+      },
+      "task_ids": [
+        "T11.01",
+        "T11.02",
+        "T11.03",
+        "T11.04",
+        "T11.05",
+        "T11.06"
+      ],
+      "gate_receipt": null
+    }
+  ],
+  "tasks": [
+    {
+      "id": "T00.01",
+      "phase_id": "S00",
+      "subject": "固定需求与 V1 范围",
+      "lead_role": "ARCH",
+      "depends_on": [],
+      "requires_gates": [],
+      "acceptance_criteria": [
+        "R01–R07 均有实现落点",
+        "明确离线仅继续已领取任务",
+        "扩展项单列"
+      ],
+      "evidence_required": [
+        "requirements.md",
+        "R 编号映射"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T00.02",
+      "phase_id": "S00",
+      "subject": "登记两台实体机终端",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T00.01"
+      ],
+      "requires_gates": [],
+      "acceptance_criteria": [
+        "A/B 的稳定身份、名称、系统、资源、工作仓、维护者代号完整",
+        "未知项明确标注；不依赖显示名大小写区分身份"
+      ],
+      "evidence_required": [
+        "node-inventory.json"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T00.03",
+      "phase_id": "S00",
+      "subject": "冻结设计决策与权限矩阵",
+      "lead_role": "ARCH",
+      "depends_on": [
+        "T00.01"
+      ],
+      "requires_gates": [],
+      "acceptance_criteria": [
+        "D01–D12 逐项有决定",
+        "确认关系登记节点、共享范围和角色权限"
+      ],
+      "evidence_required": [
+        "decisions.md",
+        "access-matrix.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T00.04",
+      "phase_id": "S00",
+      "subject": "确定预算与质量阈值",
+      "lead_role": "OP",
+      "depends_on": [
+        "T00.02",
+        "T00.03"
+      ],
+      "requires_gates": [],
+      "acceptance_criteria": [
+        "单任务及每日额度、并发、超时、性能测试条件和停机条件均已填写"
+      ],
+      "evidence_required": [
+        "acceptance-profile.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T00.05",
+      "phase_id": "S00",
+      "subject": "建立独立实现与验证基线",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T00.01"
+      ],
+      "requires_gates": [],
+      "acceptance_criteria": [
+        "固定 SHA、工作区、配置摘要、schema 版本",
+        "无其他在途改动混入"
+      ],
+      "evidence_required": [
+        "baseline.json 与工作区检查"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T00.06",
+      "phase_id": "S00",
+      "subject": "评审并冻结计划版本",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T00.02",
+        "T00.03",
+        "T00.04",
+        "T00.05"
+      ],
+      "requires_gates": [],
+      "acceptance_criteria": [
+        "每个必选场景有阶段和测试 ID",
+        "重要分歧有裁定",
+        "OP 确认范围"
+      ],
+      "evidence_required": [
+        "G00 回执与计划内容哈希"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T01.01",
+      "phase_id": "S01",
+      "subject": "固定依赖与 CLI 入口",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T00.06"
+      ],
+      "requires_gates": [
+        "G00"
+      ],
+      "acceptance_criteria": [
+        "Node、Python、Git、三类 CLI 实際路径和版本有记录",
+        "区分桌面与独立 CLI",
+        "无必需入口失效"
+      ],
+      "evidence_required": [
+        "environment-report.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T01.02",
+      "phase_id": "S01",
+      "subject": "校验部署目录与数据边界",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T01.01"
+      ],
+      "requires_gates": [
+        "G00"
+      ],
+      "acceptance_criteria": [
+        "工作仓、数据目录、验证登记簿、证据目录存在且权限符合合同",
+        "清除未采用的示例路径"
+      ],
+      "evidence_required": [
+        "doctor 日志与配置摘要"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null,
+      "preparation_evidence": [
+        "docs/federation/windows-pilot.md",
+        "docs/federation/windows-pilot-evidence.json"
+      ]
+    },
+    {
+      "id": "T01.03",
+      "phase_id": "S01",
+      "subject": "处理已有失败并重跑回归",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T01.02"
+      ],
+      "requires_gates": [
+        "G00"
+      ],
+      "acceptance_criteria": [
+        "冻结 SHA 上全部必选回归通过",
+        "Windows 路径断言有定位、修正或经核准的替代测试",
+        "不删测试凑绿"
+      ],
+      "evidence_required": [
+        "regression-report.json"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T01.04",
+      "phase_id": "S01",
+      "subject": "构建无模型的进程测试夹具",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T01.03"
+      ],
+      "requires_gates": [
+        "G00"
+      ],
+      "acceptance_criteria": [
+        "桩执行器覆盖领取、报告、租约、重启、失败",
+        "使用独立端口和临时数据",
+        "不触及真实任务"
+      ],
+      "evidence_required": [
+        "fixture 代码与隔离性测试"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T01.05",
+      "phase_id": "S01",
+      "subject": "建立备份及迁移恢复测试",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T01.02"
+      ],
+      "requires_gates": [
+        "G00"
+      ],
+      "acceptance_criteria": [
+        "运行中数据库使用一致性备份方式",
+        "恢复后任务、事件、证据索引可校验",
+        "恢复副本不连接生产 peers"
+      ],
+      "evidence_required": [
+        "restore-drill.json"
+      ],
+      "status": "implemented_pending_acceptance",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "passed",
+        "scope": "isolated local restore and dual-platform CI",
+        "tested_commit": "f97de7a9bd0c1fbb8428a46f20a156ed17662ff4",
+        "ci_run_id": 36530311581,
+        "whole_phase_accepted": false
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/backup.md",
+        "tests/backuptest.mjs",
+        "2026-09-29 live database read-only restore drill; private receipt in ignored worktree data"
+      ]
+    },
+    {
+      "id": "T01.06",
+      "phase_id": "S01",
+      "subject": "验收单机稳定基线",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T01.03",
+        "T01.04",
+        "T01.05"
+      ],
+      "requires_gates": [
+        "G00"
+      ],
+      "acceptance_criteria": [
+        "配置有效、回归全绿、一次恢复演练通过，风险未被隐藏为 WARN"
+      ],
+      "evidence_required": [
+        "G01 回执"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T02.01",
+      "phase_id": "S02",
+      "subject": "定义稳定终端身份与改名规则",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T01.06"
+      ],
+      "requires_gates": [
+        "G01"
+      ],
+      "acceptance_criteria": [
+        "重启/改名保持 node_id",
+        "重装按恢复规程处理",
+        "同名或复制身份被检测"
+      ],
+      "evidence_required": [
+        "node-identity 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T02.02",
+      "phase_id": "S02",
+      "subject": "为既有任务增加全局标识",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T02.01"
+      ],
+      "requires_gates": [
+        "G01"
+      ],
+      "acceptance_criteria": [
+        "三个节点各生成至少 10000 个 UID 无冲突",
+        "旧数字 ID 查询兼容",
+        "迁移重跑无重复"
+      ],
+      "evidence_required": [
+        "migration",
+        "UID 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T02.03",
+      "phase_id": "S02",
+      "subject": "定义角色、运行和权限快照",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T02.02"
+      ],
+      "requires_gates": [
+        "G01"
+      ],
+      "acceptance_criteria": [
+        "owner、executor、role、runtime、agent_instance、run_id 分开",
+        "新 run 不复用旧授权快照"
+      ],
+      "evidence_required": [
+        "schema 与角色映射样例"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_passed",
+        "scope": "local dispatch identities and immutable policy snapshots",
+        "pending": [
+          "cross-node executor identity binding",
+          "runtime authorization enforcement",
+          "phase acceptance"
+        ],
+        "tested_commit": "7cc5939643e66801a431b59df1baed8b46acc42f",
+        "ci_run_id": 36532817500
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/runs.md",
+        "docs/federation/runs-evidence.json",
+        "tests/runfencetest.mjs"
+      ]
+    },
+    {
+      "id": "T02.04",
+      "phase_id": "S02",
+      "subject": "建立权威写入与版本检查",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T02.03"
+      ],
+      "requires_gates": [
+        "G01"
+      ],
+      "acceptance_criteria": [
+        "远端副本不可直接领取或改写",
+        "旧 expected_version 返回冲突",
+        "非所有者不能伪造事件"
+      ],
+      "evidence_required": [
+        "权限与并发负向测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "local version gates plus authenticated owner projections and isolated non-executable replicas",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/versions.md",
+        "docs/federation/versions-evidence.json",
+        "tests/versiontest.mjs",
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
+    },
+    {
+      "id": "T02.05",
+      "phase_id": "S02",
+      "subject": "建立协议版本协商和迁移兼容",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T02.02",
+        "T02.04"
+      ],
+      "requires_gates": [
+        "G01"
+      ],
+      "acceptance_criteria": [
+        "支持范围有矩阵",
+        "未知必需字段/不兼容版本明确拒绝",
+        "可选扩展不破坏兼容"
+      ],
+      "evidence_required": [
+        "protocol-schema 与版本测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "hello v1 capability negotiation plus strict task-projection-sync-v1 batch syntax and semantics",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "cross-version real-node upgrade acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs",
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
+    },
+    {
+      "id": "T02.06",
+      "phase_id": "S02",
+      "subject": "审核数据模型与迁移回退",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T02.03",
+        "T02.04",
+        "T02.05"
+      ],
+      "requires_gates": [
+        "G01"
+      ],
+      "acceptance_criteria": [
+        "存量任务不丢失、ID 不漂移、数据备份可恢复",
+        "状态域没有混用"
+      ],
+      "evidence_required": [
+        "G02 回执"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T03.01",
+      "phase_id": "S03",
+      "subject": "配置试验 tailnet 端点",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T02.06"
+      ],
+      "requires_gates": [
+        "G02"
+      ],
+      "acceptance_criteria": [
+        "两台真实设备能访问健康接口",
+        "记录直连或中继路径",
+        "无需开放公网服务"
+      ],
+      "evidence_required": [
+        "连通与路径报告"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null,
+      "preparation_evidence": [
+        "docs/federation/windows-pilot.md",
+        "docs/federation/windows-pilot-evidence.json"
+      ]
+    },
+    {
+      "id": "T03.02",
+      "phase_id": "S03",
+      "subject": "实现节点身份与凭据绑定",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T03.01"
+      ],
+      "requires_gates": [
+        "G02"
+      ],
+      "acceptance_criteria": [
+        "node_name、IP、请求体 owner 字段均不能单独冒充身份",
+        "每个 peer 使用独立凭据与作用域"
+      ],
+      "evidence_required": [
+        "impersonation 负向测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "independent peer secrets bound to node ID and epoch",
+        "pending": [
+          "physical Tailscale device/credential binding",
+          "real-node trust provisioning"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs"
+      ]
+    },
+    {
+      "id": "T03.03",
+      "phase_id": "S03",
+      "subject": "隔离 UI、peer API 与本机工具权限",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T03.02"
+      ],
+      "requires_gates": [
+        "G02"
+      ],
+      "acceptance_criteria": [
+        "未授权 GET/写入被拒",
+        "worker/peer 不能读取操作员令牌",
+        "远程 UI 不注入共用全权令牌"
+      ],
+      "evidence_required": [
+        "HTTP 权限矩阵测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "separate authenticated hello/health listener; denies UI, task and token paths",
+        "pending": [
+          "project task data permissions",
+          "remote user UI authentication",
+          "real endpoint exposure matrix"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs"
+      ]
+    },
+    {
+      "id": "T03.04",
+      "phase_id": "S03",
+      "subject": "验证撤销、轮换和连接失效",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T03.03"
+      ],
+      "requires_gates": [
+        "G02"
+      ],
+      "acceptance_criteria": [
+        "新连接拒绝旧凭据",
+        "已有连接按冻结的重鉴权策略结束",
+        "离线撤销延迟有明确提示"
+      ],
+      "evidence_required": [
+        "key-rotation",
+        "revoke 日志"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "credential replace/revoke, persistent-connection and mid-upload reauthentication",
+        "pending": [
+          "real multi-node revocation drill",
+          "offline control-plane delay presentation"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/peers.md",
+        "docs/federation/peers-evidence.json",
+        "tests/peertest.mjs"
+      ]
+    },
+    {
+      "id": "T03.05",
+      "phase_id": "S03",
+      "subject": "完成首次发布的访问审查",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T03.03",
+        "T03.04"
+      ],
+      "requires_gates": [
+        "G02"
+      ],
+      "acceptance_criteria": [
+        "未列入矩阵的终端不能访问数据",
+        "允许的身份只见授权项目",
+        "入口无意外公网可达"
+      ],
+      "evidence_required": [
+        "exposure-report.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T03.06",
+      "phase_id": "S03",
+      "subject": "确认网络配置与恢复方案",
+      "lead_role": "OP",
+      "depends_on": [
+        "T03.05"
+      ],
+      "requires_gates": [
+        "G02"
+      ],
+      "acceptance_criteria": [
+        "OP 查看具体端点、权限差异和关闭路径后确认",
+        "授权范围记入回执"
+      ],
+      "evidence_required": [
+        "G03 回执与网络配置摘要"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null,
+      "preparation_evidence": [
+        "docs/federation/windows-pilot.md",
+        "docs/federation/windows-pilot-evidence.json"
+      ]
+    },
+    {
+      "id": "T04.01",
+      "phase_id": "S04",
+      "subject": "定义并实现受控本机 MCP 工具",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T02.06"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "schema 校验、角色作用域、重复请求和错误分类完整",
+        "不存在任意 shell 或全权 token 回传"
+      ],
+      "evidence_required": [
+        "MCP 合同与工具清单"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "scoped MCP stdio tools, bound principals, durable requests, transaction rollback and epoch revocation; hierarchical MCP splitting with depth bounds and legacy enrollment compatibility; scoped delegation proposal/read/decision tools; coordinator-only registered topology preparation and transactional managed-tree splitting with explicit pending placement; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
+        "pending": [
+          "actual subscription executor calls and OS isolation",
+          "complete user-facing orchestration and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/mcp.md",
+        "docs/federation/mcp-evidence.json",
+        "tests/mcptest.mjs",
+        "docs/federation/trees.md",
+        "docs/federation/trees-evidence.json",
+        "tests/treetest.mjs",
+        "docs/federation/delegation.md",
+        "docs/federation/delegation-evidence.json",
+        "tests/delegationtest.mjs",
+        "docs/federation/topology.md",
+        "docs/federation/topology-evidence.json",
+        "tests/topologytest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs"
+      ]
+    },
+    {
+      "id": "T04.02",
+      "phase_id": "S04",
+      "subject": "实现按声明进行身份路由",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T04.01"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "同一任务和策略快照得到相同路由",
+        "能力不足进入可见等待",
+        "不能静默越权降级"
+      ],
+      "evidence_required": [
+        "scheduler 单元与反例测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover. A composed Windows node host keeps its authenticated MCP and synchronization running while the owned scheduler drains or cancels; isolated real-loopback and synthetic Windows Job tests passed, including startup-stop and replaced-lock regressions. Reviewed per-user Windows logon startup bundles now pin source/config/runtime inputs and provide initially disabled Task Scheduler installation commands; actual XML validation and hidden launcher tested, registry mutations simulated and physical startup acceptance still pending.",
+        "pending": [
+          "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
+          "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
+          "Complete operator visibility, independent G04 acceptance and long-running operations"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/mcp.md",
+        "docs/federation/mcp-evidence.json",
+        "tests/mcptest.mjs",
+        "docs/federation/dispatch.md",
+        "docs/federation/dispatch-evidence.json",
+        "tests/dispatchtest.mjs",
+        "docs/federation/zcode.md",
+        "docs/federation/zcode-evidence.json",
+        "tests/adaptertest.mjs",
+        "tests/supervisortest.mjs",
+        "docs/federation/scheduler.md",
+        "docs/federation/scheduler-evidence.json",
+        "tests/schedulertest.mjs",
+        "docs/federation/scheduler-lifecycle-evidence.json",
+        "docs/federation/node-runtime.md",
+        "docs/federation/node-runtime-evidence.json",
+        "tests/noderuntimetest.mjs",
+        "docs/federation/node-startup.md",
+        "docs/federation/node-startup-evidence.json",
+        "tests/nodestartuptest.mjs"
+      ]
+    },
+    {
+      "id": "T04.03",
+      "phase_id": "S04",
+      "subject": "核验 Claude/Codex 适配合同",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T04.02"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "固定程序路径",
+        "stdin/编码、终态、退出码、用量、超时、取消匹配",
+        "登录与模型可用性分别记录"
+      ],
+      "evidence_required": [
+        "两种 adapter contract 报告"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation; actual Claude subscription board task succeeded; actual Codex dispatch failed before reading task, provider root cause unknown",
+        "pending": [
+          "Codex successful real task and exact failed-provider diagnosis; additional attempt requires new authorization",
+          "Windows filesystem containment, full code-work capability and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs",
+        "tests/dispatchtest.mjs",
+        "docs/federation/adapters.md",
+        "docs/federation/adapter-evidence.json",
+        "tests/adaptertest.mjs",
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
+      ]
+    },
+    {
+      "id": "T04.04",
+      "phase_id": "S04",
+      "subject": "实现 Zcode 适配器",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T04.02"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "显式权限模式",
+        "解析其真实输出合同",
+        "非交互运行不悬挂",
+        "失败/取消/用量缺失可区分"
+      ],
+      "evidence_required": [
+        "Zcode adapter 与桩测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "Zcode 0.16.9 headless stream decoder with prompt/provider/model/turn/summary binding; no-account native NDJSON and startup-failure probes; Windows job fixture cleanup; sealed Windows Zcode one-model subscription configuration and stdin launcher; actual installed bundle with local fake model/MCP; synthetic complete launch/settlement and cancellation tests",
+        "pending": [
+          "Correct China BigModel subscription login path; no provider call made under detected foreign account",
+          "Real subscription compatibility, Windows filesystem permissions and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs",
+        "tests/dispatchtest.mjs",
+        "docs/federation/zcode.md",
+        "docs/federation/zcode-evidence.json",
+        "tests/adaptertest.mjs",
+        "docs/federation/zcode-headless-evidence.json",
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
+      ]
+    },
+    {
+      "id": "T04.05",
+      "phase_id": "S04",
+      "subject": "验证权限、隔离和预算",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T04.03",
+        "T04.04"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "只读身份不能修改工作仓或治理文件",
+        "子进程按期结束",
+        "超过预算不再领取",
+        "不以提示词宣称隔离有效"
+      ],
+      "evidence_required": [
+        "capability/containment/budget 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "sealed Claude/Codex board-tools profiles, explicit one-use supervised runner, atomic process observations and no-relaunch journal reconciliation; sealed Windows Zcode one-model subscription configuration and stdin launcher; actual installed bundle with local fake model/MCP; synthetic complete launch/settlement and cancellation tests",
+        "pending": [
+          "real subscription compatibility and authorized minimal provider tasks",
+          "Windows filesystem permissions, complete orchestration and independent G04 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs",
+        "tests/dispatchtest.mjs",
+        "docs/federation/adapters.md",
+        "docs/federation/adapter-evidence.json",
+        "tests/adaptertest.mjs",
+        "docs/federation/zcode.md",
+        "docs/federation/zcode-evidence.json"
+      ]
+    },
+    {
+      "id": "T04.06",
+      "phase_id": "S04",
+      "subject": "验收单机 MCP 分派闭环",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T04.01",
+        "T04.05"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "三种适配器都通过桩测试",
+        "MCP 发起到任务/运行回执可追踪",
+        "真实模型调用留待 G10 授权"
+      ],
+      "evidence_required": [
+        "G04 回执"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "Continuous Windows queue service: per-project role profiles, fixed provider quota, bounded batches, private per-assignment paths, registered workspace provisioning, one-use launch, graceful drain/cancel and signed journal reconciliation. 16 scheduler + 44 dispatch + 25 adapter tests passed using no-account synthetic providers. Durable per-instance local administration adds read-only status and revision-bound drain/cancel with observed control and verified executor-stop receipts; crash and restored-epoch history are retained without automatic lock takeover. A composed Windows node host keeps its authenticated MCP and synchronization running while the owned scheduler drains or cancels; isolated real-loopback and synthetic Windows Job tests passed, including startup-stop and replaced-lock regressions. Reviewed per-user Windows logon startup bundles now pin source/config/runtime inputs and provide initially disabled Task Scheduler installation commands; actual XML validation and hidden launcher tested, registry mutations simulated and physical startup acceptance still pending.",
+        "pending": [
+          "Actual Claude/Codex/Zcode subscription tasks and two-PC offline/reconnect acceptance",
+          "Daily/token budget windows, OS filesystem isolation, deployment/startup and large-queue performance",
+          "Complete operator visibility, independent G04 acceptance and long-running operations"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/dispatch.md",
+        "docs/federation/dispatch-evidence.json",
+        "tests/dispatchtest.mjs",
+        "docs/federation/execution.md",
+        "docs/federation/execution-evidence.json",
+        "tests/outputtest.mjs",
+        "tests/supervisortest.mjs",
+        "docs/federation/adapters.md",
+        "docs/federation/adapter-evidence.json",
+        "tests/adaptertest.mjs",
+        "docs/federation/zcode.md",
+        "docs/federation/zcode-evidence.json",
+        "docs/federation/scheduler.md",
+        "docs/federation/scheduler-evidence.json",
+        "tests/schedulertest.mjs",
+        "docs/federation/scheduler-lifecycle-evidence.json",
+        "docs/federation/node-runtime.md",
+        "docs/federation/node-runtime-evidence.json",
+        "tests/noderuntimetest.mjs",
+        "docs/federation/node-startup.md",
+        "docs/federation/node-startup-evidence.json",
+        "tests/nodestartuptest.mjs"
+      ]
+    },
+    {
+      "id": "T05.01",
+      "phase_id": "S05",
+      "subject": "实现状态与事件原子持久化",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T02.06",
+        "T03.06"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "状态更新与 outbox 同事务",
+        "事务中断不出现“已完成但无事件”",
+        "本机重启后仍能发送"
+      ],
+      "evidence_required": [
+        "transaction-crash 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "transactional dirty outbox markers and atomic coalesced immutable projection materialization; process-crash tests",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "restore epoch activation and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
+    },
+    {
+      "id": "T05.02",
+      "phase_id": "S05",
+      "subject": "实现批量同步与持久确认",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T05.01"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "接收方落盘后确认",
+        "重复批次不重复应用",
+        "ACK 丢失后可重发",
+        "重试退避有上限"
+      ],
+      "evidence_required": [
+        "replay/ack-loss 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "durable inbox/cursor before ACK; bounded pagination, duplicate/lost ACK replay and persisted backoff",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "restore epoch activation and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
+    },
+    {
+      "id": "T05.03",
+      "phase_id": "S05",
+      "subject": "实现乱序、缺口及冲突处理",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T05.02"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "按节点 epoch/seq 检测缺口",
+        "同 ID 异内容隔离",
+        "时间倒退不覆盖新版本"
+      ],
+      "evidence_required": [
+        "reorder/conflict/clock 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "per-origin/epoch/project ordering, digest conflict quarantine, version and clock rollback refusal",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "restore epoch activation and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
+    },
+    {
+      "id": "T05.04",
+      "phase_id": "S05",
+      "subject": "实现断线运行与重连补发",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T05.03"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "已领取任务在隧道断线时继续",
+        "本机持久化进度",
+        "远端不重派",
+        "恢复后补齐结果"
+      ],
+      "evidence_required": [
+        "offline-resume 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "source execution while local HTTP gateway unavailable; result sync on reconnect without remote re-claim",
+        "pending": [
+          "real Tailscale multi-node acceptance",
+          "independent phase acceptance",
+          "restore epoch activation and complete audit/relationship events"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/sync.md",
+        "docs/federation/sync-evidence.json",
+        "tests/synctest.mjs"
+      ]
+    },
+    {
+      "id": "T05.05",
+      "phase_id": "S05",
+      "subject": "实现节点加入、快照重建与恢复 epoch",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T05.04"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "新节点从授权快照加增量恢复",
+        "落后超保留期可重建",
+        "备份恢复不复用事件身份"
+      ],
+      "evidence_required": [
+        "snapshot/restore/epoch 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "reviewed source activation and receiver epoch acceptance, atomic per-project snapshot cutover, prior/missing result retention and old-epoch credential fencing",
+        "pending": [
+          "real single-writer retirement, Tailscale reauthorization, multi-node disaster RPO/RTO and independent acceptance",
+          "owner-side reconciliation of preserved missing task results and final global UI"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/snapshots.md",
+        "docs/federation/snapshots-evidence.json",
+        "tests/snapshottest.mjs",
+        "docs/federation/recovery.md",
+        "docs/federation/recovery-evidence.json",
+        "tests/recoverytest.mjs",
+        "docs/federation/source-recovery.md",
+        "docs/federation/source-recovery-evidence.json",
+        "tests/epochrecoverytest.mjs"
+      ]
+    },
+    {
+      "id": "T05.06",
+      "phase_id": "S05",
+      "subject": "验收双向同步一致性",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T05.02",
+        "T05.03",
+        "T05.04",
+        "T05.05"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03"
+      ],
+      "acceptance_criteria": [
+        "重复、乱序、丢 ACK、断线、崩溃场景均通过",
+        "比较权威数据的授权投影哈希一致"
+      ],
+      "evidence_required": [
+        "G05 回执"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/node-runtime.md",
+        "docs/federation/node-runtime-evidence.json",
+        "tests/noderuntimetest.mjs"
+      ]
+    },
+    {
+      "id": "T06.01",
+      "phase_id": "S06",
+      "subject": "实现委派意向、接受与拒绝",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T04.06",
+        "T05.06"
+      ],
+      "requires_gates": [
+        "G04",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "来源和接收方均有记录",
+        "未接受不视为在途",
+        "同一键重发十次只建立一个接收任务"
+      ],
+      "evidence_required": [
+        "delegation-dedupe 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "durable bilateral intents, authenticated HTTP delivery/poll, explicit receiver decisions, atomic target-owned creation and lost-ACK retries; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release; explicit unprepared proposal decline with immutable history, scoped atomic MCP decisions and current-epoch bounded queue recovery",
+        "pending": [
+          "execution cancellation, late outcomes, evidence and source acceptance lifecycle",
+          "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
+          "physical multi-node Tailscale validation and independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/delegation.md",
+        "docs/federation/delegation-evidence.json",
+        "tests/delegationtest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs",
+        "docs/federation/proposal-decisions.md",
+        "docs/federation/proposal-evidence.json"
+      ]
+    },
+    {
+      "id": "T06.02",
+      "phase_id": "S06",
+      "subject": "实现关系登记和全局防环",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T06.01"
+      ],
+      "requires_gates": [
+        "G04",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "并发添加 A 等 B/B 等 A 至多接受一个",
+        "登记节点离线不放行未确认关系"
+      ],
+      "evidence_required": [
+        "cycle-race/registrar-offline 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "serialized project registrar, combined declared local/cross-node graph validation, independent authenticated approvals, stale-attempt withdrawal and durable receipts; SQL/native local topology coupling, remove-before-publish/receipt-before-add transitions, durable retries, guarded claims and pending metadata reservations; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
+        "pending": [
+          "execution cancellation, late outcomes, evidence and source acceptance lifecycle",
+          "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
+          "physical multi-node Tailscale validation and independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/trees.md",
+        "docs/federation/trees-evidence.json",
+        "tests/treetest.mjs",
+        "docs/federation/relations.md",
+        "docs/federation/relations-evidence.json",
+        "tests/relationstest.mjs",
+        "docs/federation/topology.md",
+        "docs/federation/topology-evidence.json",
+        "tests/topologytest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs"
+      ]
+    },
+    {
+      "id": "T06.03",
+      "phase_id": "S06",
+      "subject": "实现所有权和执行状态隔离",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T06.02"
+      ],
+      "requires_gates": [
+        "G04",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "本地副本不进领取队列",
+        "来源不能伪造目标执行结果",
+        "每个 run 只有一份有效执行身份"
+      ],
+      "evidence_required": [
+        "owner/run 负向测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "target-owned unconfirmed tasks, no remote task entering the source queue, epoch-bound decisions and database execution hold; bilateral actual endpoint/contract binding, durable registrar approval and independently verified source readiness, scoped explicit target release",
+        "pending": [
+          "source acceptance and cancellation completion lifecycle, result and evidence transfer",
+          "automatic delivery scheduling, graph retirement and coordinated epoch recovery",
+          "physical multi-node Tailscale validation and independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/delegation.md",
+        "docs/federation/delegation-evidence.json",
+        "tests/delegationtest.mjs",
+        "docs/federation/bindings.md",
+        "docs/federation/binding-evidence.json",
+        "tests/bindingtest.mjs"
+      ]
+    },
+    {
+      "id": "T06.04",
+      "phase_id": "S06",
+      "subject": "实现取消、超时与结果晚到裁定",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T06.03"
+      ],
+      "requires_gates": [
+        "G04",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "取消 ACK 前显示待送达",
+        "晚到结果保留但不覆盖新裁定",
+        "超时按业务规则处理且不擅自转主"
+      ],
+      "evidence_required": [
+        "cancel-race/late-result 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "durable source cancellation, target subtree fence, received versus stopped proof, controlled process cancellation and late outcome retention",
+        "pending": [
+          "automatic delivery/deadline scheduling",
+          "source final acceptance versus cancellation ordering and relation retirement",
+          "physical two-computer cancellation and independent G06 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/cancellation.md",
+        "docs/federation/cancellation-evidence.json",
+        "tests/cancellationtest.mjs"
+      ]
+    },
+    {
+      "id": "T06.05",
+      "phase_id": "S06",
+      "subject": "实现跨端交付、审阅与父任务推进",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T06.03",
+        "T06.04"
+      ],
+      "requires_gates": [
+        "G04",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "子任务完成只产生候选交付",
+        "授权验收后解除依赖",
+        "旧 run/旧证据的回执被拒"
+      ],
+      "evidence_required": [
+        "parent-cascade/receipt 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review",
+        "pending": [
+          "exact-commit Windows CI",
+          "Windows OS permission isolation and native provider adapters",
+          "physical two-node Windows integration and independent full-phase acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/trees.md",
+        "docs/federation/trees-evidence.json",
+        "tests/treetest.mjs",
+        "docs/federation/results.md",
+        "docs/federation/result-evidence.json",
+        "tests/resulttest.mjs",
+        "docs/federation/completion.md",
+        "docs/federation/completion-evidence.json",
+        "tests/completiontest.mjs"
+      ]
+    },
+    {
+      "id": "T06.06",
+      "phase_id": "S06",
+      "subject": "验收双机断线委派闭环",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T06.01",
+        "T06.02",
+        "T06.03",
+        "T06.04",
+        "T06.05"
+      ],
+      "requires_gates": [
+        "G04",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "A 委派 B，B 接受后断线完成，恢复后只记一次结果",
+        "A 按证据验收后推进"
+      ],
+      "evidence_required": [
+        "G06 回执与全链路时间线"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T07.01",
+      "phase_id": "S07",
+      "subject": "定义跨节点仓库与基础版本映射",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T02.06",
+        "T03.06"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "repo_id 在不同路径定位同一授权仓库",
+        "基础 commit 缺失明确拒绝",
+        "不执行传入的任意路径"
+      ],
+      "evidence_required": [
+        "repo-map 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "explicit local repository/base registration, same stable repo ID at different paths, verified committed bytes and current-epoch authorization",
+        "pending": [
+          "execution adapter binding and real use of the prepared task workspace",
+          "physical two-node repository registration and independent G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/repositories.md",
+        "docs/federation/repository-evidence.json",
+        "tests/repositorytest.mjs"
+      ]
+    },
+    {
+      "id": "T07.02",
+      "phase_id": "S07",
+      "subject": "实现任务工作区和冲突边界",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T07.01"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "并发任务隔离",
+        "共享目标文件冲突可见",
+        "工作区回收有范围检查且保留未交付改动"
+      ],
+      "evidence_required": [
+        "workspace-isolation 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_partial_passed",
+        "scope": "independent local Git copies bound to actual prepared task/run, declared write conflicts, durable preparation and stopped-run retention without file deletion",
+        "pending": [
+          "verified code execution adapter and actual workspace use by executor",
+          "crashed provisioning recovery and reviewed physical reclamation",
+          "bound deliverables, independent merge verification and two-PC G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/workspaces.md",
+        "docs/federation/workspace-evidence.json",
+        "tests/workspacetest.mjs"
+      ]
+    },
+    {
+      "id": "T07.03",
+      "phase_id": "S07",
+      "subject": "实现证据清单与受限文件传输",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T07.02"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "清单绑定 task/run/commit/hash",
+        "大小和类型受控",
+        "路径穿越、符号链接越界被拒"
+      ],
+      "evidence_required": [
+        "artifact-admission 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
+        "pending": [
+          "independent verification runner and source acceptance",
+          "two physical artifact delivery and G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/repositories.md",
+        "docs/federation/repository-evidence.json",
+        "tests/repositorytest.mjs",
+        "docs/federation/artifact-transfer.md",
+        "docs/federation/artifact-transfer-evidence.json",
+        "tests/gitpackagetest.mjs",
+        "tests/artifacttransfertest.mjs"
+      ]
+    },
+    {
+      "id": "T07.04",
+      "phase_id": "S07",
+      "subject": "实现断点传输和内容复核",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T07.03"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "中断后续传",
+        "最终字节数与 SHA-256 匹配",
+        "中途换文件或篡改被拒",
+        "重复上传不重复计费入账"
+      ],
+      "evidence_required": [
+        "interrupted-transfer/hash 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Windows actual run-bound Git packages, authenticated chunk storage, durable resume and local baseline/content verification",
+        "pending": [
+          "independent verification runner and source acceptance",
+          "two physical artifact delivery and G07 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/artifact-transfer.md",
+        "docs/federation/artifact-transfer-evidence.json",
+        "tests/gitpackagetest.mjs",
+        "tests/artifacttransfertest.mjs"
+      ]
+    },
+    {
+      "id": "T07.05",
+      "phase_id": "S07",
+      "subject": "实现独立验证回执与合并边界",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T07.04"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "在隔离环境验证实际产物",
+        "回执绑定内容",
+        "工作节点不能自授最终通过",
+        "合并冲突不强推覆盖"
+      ],
+      "evidence_required": [
+        "verify-receipt/merge 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review; opt-in offline Windows AppContainer source checks with actual token, scoped file access, Job memory/process limits and cleanup-bound receipts",
+        "pending": [
+          "Exact-commit Windows CI and physical source-check profiles/dependencies",
+          "Native model provider OS isolation and disk capacity limits",
+          "Physical two-node Windows integration and independent full-phase acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/verification.md",
+        "tests/commandsupervisortest.mjs",
+        "tests/verificationworkspacetest.mjs",
+        "docs/federation/verification-evidence.json",
+        "docs/federation/integration.md",
+        "docs/federation/integration-evidence.json",
+        "tests/integrationtest.mjs",
+        "docs/federation/completion.md",
+        "docs/federation/completion-evidence.json",
+        "tests/completiontest.mjs",
+        "tests/appcontainertest.mjs",
+        "docs/federation/windows-appcontainer-evidence.json"
+      ]
+    },
+    {
+      "id": "T07.06",
+      "phase_id": "S07",
+      "subject": "验收另一台电脑能复现交付",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T07.01",
+        "T07.02",
+        "T07.03",
+        "T07.04",
+        "T07.05"
+      ],
+      "requires_gates": [
+        "G02",
+        "G03",
+        "G05"
+      ],
+      "acceptance_criteria": [
+        "接收方不依赖发送方盘符路径即可复现测试",
+        "缺文件、错基线和坏哈希都不通过"
+      ],
+      "evidence_required": [
+        "G07 回执"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T08.01",
+      "phase_id": "S08",
+      "subject": "实现按终端展开的多根任务树",
+      "lead_role": "UI",
+      "depends_on": [
+        "T05.06",
+        "T06.06"
+      ],
+      "requires_gates": [
+        "G05",
+        "G06"
+      ],
+      "acceptance_criteria": [
+        "终端归属明确",
+        "本地树与跨端关系可区分",
+        "改名、筛选不改变任务 UID"
+      ],
+      "evidence_required": [
+        "UI 场景与数据断言"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection",
+        "pending": [
+          "Receipted remote actions, dependency graph and historical pagination",
+          "Full Markdown trace and saved chat handoff summary",
+          "Actual Windows desktop clients and two-PC G08 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/fleet-view.md",
+        "docs/federation/fleet-view-evidence.json",
+        "tests/fleetviewtest.mjs",
+        "docs/federation/fleet-evidence.md",
+        "docs/federation/fleet-evidence-evidence.json",
+        "tests/fleetevidencetest.mjs"
+      ]
+    },
+    {
+      "id": "T08.02",
+      "phase_id": "S08",
+      "subject": "实现同步新鲜度和离线状态",
+      "lead_role": "UI",
+      "depends_on": [
+        "T08.01"
+      ],
+      "requires_gates": [
+        "G05",
+        "G06"
+      ],
+      "acceptance_criteria": [
+        "每个远端显示最后同步时间",
+        "缓存/待同步/取消待送达明确",
+        "不把远端未知显示为零任务",
+        "Markdown 快照与聊天回复区分本机生成时间和各来源最后同步时间；离线显示缓存，重连后刷新"
+      ],
+      "evidence_required": [
+        "offline-UI 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection; atomic Markdown evidence catalog and explicit version-bound immutable handoff notes with recovery",
+        "pending": [
+          "Receipted remote actions, dependency graph and historical pagination",
+          "Actual Windows desktop clients and two-PC G08 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "design_references": [
+        "docs/federation/desktop-context.md"
+      ],
+      "implementation_evidence": [
+        "docs/federation/fleet-view.md",
+        "docs/federation/fleet-view-evidence.json",
+        "tests/fleetviewtest.mjs",
+        "docs/federation/desktop-context.md",
+        "docs/federation/desktop-context-evidence.json",
+        "tests/desktopcontexttest.mjs",
+        "docs/federation/context-retention-evidence.json",
+        "docs/federation/fleet-evidence.md",
+        "docs/federation/fleet-evidence-evidence.json",
+        "tests/fleetevidencetest.mjs",
+        "docs/federation/context-evidence.md",
+        "docs/federation/context-evidence-evidence.json",
+        "tests/contextevidencetest.mjs"
+      ]
+    },
+    {
+      "id": "T08.03",
+      "phase_id": "S08",
+      "subject": "实现带回执的远端操作流程",
+      "lead_role": "UI",
+      "depends_on": [
+        "T08.02"
+      ],
+      "requires_gates": [
+        "G05",
+        "G06"
+      ],
+      "acceptance_criteria": [
+        "操作显示待发送、已接收、拒绝等结果",
+        "连点不重复建卡",
+        "权限不足原因清晰"
+      ],
+      "evidence_required": [
+        "action-idempotency 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Panel delivery includes approved source Git integration, explicit version-bound acceptance, bilateral completion approvals and local settlement; actual Git/HTTP regressions and nine browser actions passed on two temporary localhost boards, with one synthetic fixture run and no new real-provider call.",
+        "pending": [
+          "Full dependency graph and structural editor",
+          "History pagination and operator queue retention procedure",
+          "Actual Tailscale two-PC and desktop G08 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/fleet-actions.md",
+        "docs/federation/fleet-actions-evidence.json",
+        "core/fleet-actions.mjs",
+        "tests/fleetactionstest.mjs",
+        "core/fleet-binding-actions.mjs",
+        "docs/federation/fleet-binding-actions-evidence.json",
+        "core/fleet-delivery-actions.mjs",
+        "tests/completiontest.mjs",
+        "docs/federation/fleet-delivery-actions-evidence.json",
+        "core/fleet-completion-actions.mjs",
+        "docs/federation/fleet-completion-actions-evidence.json"
+      ]
+    },
+    {
+      "id": "T08.04",
+      "phase_id": "S08",
+      "subject": "实现角色、运行及证据追溯",
+      "lead_role": "UI",
+      "depends_on": [
+        "T08.01",
+        "T08.03"
+      ],
+      "requires_gates": [
+        "G05",
+        "G06"
+      ],
+      "acceptance_criteria": [
+        "可从父卡追到委派、run、执行器、验证回执与产物",
+        "无密钥或未授权原文外泄",
+        "通过获准的桌面 MCP 查询总览和任务，返回所有者、更新时间和任务链接",
+        "生成可配置本机目录中的 Markdown 上下文，交接摘要与实际任务 UID 关联"
+      ],
+      "evidence_required": [
+        "traceability/visibility 测试"
+      ],
+      "status": "in_progress",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Read-only cross-terminal delegation links and scoped parent/subtree run, candidate, artifact, verification, integration and historical settlement metadata; independent Windows data/HTTP/MCP tests and isolated browser inspection; atomic Markdown evidence catalog and explicit version-bound immutable handoff notes with recovery; complete visible relation-to-result index and snapshot-bound operator panel/HTTP history pagination; shared snapshot-bound MCP history pagination for scoped coordinate/observe clients, independent stdio traversal and current-auth enforcement",
+        "pending": [
+          "Complete dependency/structure editing and action queue retention",
+          "Actual Windows desktop clients and two-PC G08 acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "design_references": [
+        "docs/federation/desktop-context.md"
+      ],
+      "implementation_evidence": [
+        "docs/federation/desktop-context.md",
+        "docs/federation/desktop-context-evidence.json",
+        "tests/desktopcontexttest.mjs",
+        "docs/federation/context-retention-evidence.json",
+        "packaging/desktop/README.md",
+        "docs/federation/desktop-package-evidence.json",
+        "tests/desktop-packagetest.mjs",
+        "docs/federation/fleet-evidence.md",
+        "docs/federation/fleet-evidence-evidence.json",
+        "tests/fleetevidencetest.mjs",
+        "docs/federation/context-evidence.md",
+        "docs/federation/context-evidence-evidence.json",
+        "tests/contextevidencetest.mjs",
+        "docs/federation/desktop-package-native-evidence.json",
+        "docs/federation/fleet-history-evidence.json",
+        "tests/recoverytest.mjs",
+        "docs/federation/mcp-history-evidence.json",
+        "tests/mcpevidencetest.mjs"
+      ]
+    },
+    {
+      "id": "T08.05",
+      "phase_id": "S08",
+      "subject": "实现阶段进度与人工确认记录",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T08.04"
+      ],
+      "requires_gates": [
+        "G05",
+        "G06"
+      ],
+      "acceptance_criteria": [
+        "仅 accepted 任务计入完成度",
+        "阻塞、待验收单列",
+        "修改合同后旧门禁失效可见"
+      ],
+      "evidence_required": [
+        "progress/gate 测试"
+      ],
+      "status": "implemented_pending_acceptance",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Read-only operator API and panel derive accepted-only task/phase progress from administrator-enrolled external review records. Scoped contract/input changes invalidate affected gates and dependants, preserve unrelated gates, and expose blocked/pending tasks and confirmation history. Actual HTTP, browser, CLI and the existing 72-task manifest were verified locally.",
+        "pending": [
+          "G08 independent review of the UI and administrator enrollment procedure",
+          "Actual desktop and two-PC use, confirmation distribution and Windows file permissions"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "core/fleet-progress.mjs",
+        "cli/progress.mjs",
+        "tests/fleetprogresstest.mjs",
+        "docs/federation/fleet-progress.md",
+        "docs/federation/fleet-progress-evidence.json"
+      ]
+    },
+    {
+      "id": "T08.06",
+      "phase_id": "S08",
+      "subject": "验收全局视图与离线可用性",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T08.01",
+        "T08.02",
+        "T08.03",
+        "T08.04",
+        "T08.05"
+      ],
+      "requires_gates": [
+        "G05",
+        "G06"
+      ],
+      "acceptance_criteria": [
+        "三根任务可浏览",
+        "无公网字体/脚本依赖",
+        "键盘操作可用",
+        "窄屏无关键内容遮挡",
+        "两台 Windows 的已接入桌面端新对话查询相同获准任务，状态与对应看板版本一致",
+        "离线缓存、重连更新、同名终端区分及多对话只读查询通过，查询不启动执行器或消耗任务配额"
+      ],
+      "evidence_required": [
+        "G08 回执与界面检查"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null,
+      "design_references": [
+        "docs/federation/desktop-context.md"
+      ]
+    },
+    {
+      "id": "T09.01",
+      "phase_id": "S09",
+      "subject": "执行双机核心验收场景",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T06.06",
+        "T07.06",
+        "T08.06"
+      ],
+      "requires_gates": [
+        "G06",
+        "G07",
+        "G08"
+      ],
+      "acceptance_criteria": [
+        "AT01–AT08 在不同设备通过",
+        "记录设备、网络路径、时间和代码版本"
+      ],
+      "evidence_required": [
+        "two-node-acceptance.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T09.02",
+      "phase_id": "S09",
+      "subject": "执行双机分区与补充三节点协议场景",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T09.01"
+      ],
+      "requires_gates": [
+        "G06",
+        "G07",
+        "G08"
+      ],
+      "acceptance_criteria": [
+        "AT09–AT12 在两台实体机电脑通过",
+        "另以三个隔离节点实例验证分区和非同时恢复，不把模拟记为实体结果"
+      ],
+      "evidence_required": [
+        "partition-acceptance.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T09.03",
+      "phase_id": "S09",
+      "subject": "执行权限与恶意输入场景",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T09.01"
+      ],
+      "requires_gates": [
+        "G06",
+        "G07",
+        "G08"
+      ],
+      "acceptance_criteria": [
+        "AT13–AT16 通过",
+        "伪造身份、跨项目读取、事件篡改和路径越界均拒绝并有审计"
+      ],
+      "evidence_required": [
+        "negative-security.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T09.04",
+      "phase_id": "S09",
+      "subject": "执行负载、同步积压与空间不足测试",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T09.02",
+        "T09.03"
+      ],
+      "requires_gates": [
+        "G06",
+        "G07",
+        "G08"
+      ],
+      "acceptance_criteria": [
+        "冻结负载与延迟阈值达标",
+        "磁盘满不虚报持久成功",
+        "恢复后可追踪补发"
+      ],
+      "evidence_required": [
+        "load/backpressure.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T09.05",
+      "phase_id": "S09",
+      "subject": "执行升级、回退和灾难恢复",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T09.04"
+      ],
+      "requires_gates": [
+        "G06",
+        "G07",
+        "G08"
+      ],
+      "acceptance_criteria": [
+        "AT17–AT20 通过",
+        "跨版本行为符合矩阵",
+        "恢复副本不重复执行旧任务"
+      ],
+      "evidence_required": [
+        "upgrade-recovery.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T09.06",
+      "phase_id": "S09",
+      "subject": "汇总缺陷并确认集成质量",
+      "lead_role": "REVIEW",
+      "depends_on": [
+        "T09.01",
+        "T09.02",
+        "T09.03",
+        "T09.04",
+        "T09.05"
+      ],
+      "requires_gates": [
+        "G06",
+        "G07",
+        "G08"
+      ],
+      "acceptance_criteria": [
+        "必选场景通过",
+        "S0/S1 为零",
+        "例外有具体范围、替代控制与到期日"
+      ],
+      "evidence_required": [
+        "G09 回执与缺陷清单"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T10.01",
+      "phase_id": "S10",
+      "subject": "准备真实调用范围与停机条件",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T09.06"
+      ],
+      "requires_gates": [
+        "G09"
+      ],
+      "acceptance_criteria": [
+        "给出确切节点、任务样本、模型、预算、回退与停止条件",
+        "OP 确认后才产生真实模型调用"
+      ],
+      "evidence_required": [
+        "canary-authorization.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T10.02",
+      "phase_id": "S10",
+      "subject": "执行 Claude/Codex 真实闭环",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T10.01"
+      ],
+      "requires_gates": [
+        "G09"
+      ],
+      "acceptance_criteria": [
+        "两类各完成独立小任务并交付可验证产物",
+        "登录、模型权限、结构化结果及预算均有证据"
+      ],
+      "evidence_required": [
+        "live-claude/live-codex 报告"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "preliminary_isolated_probe_partial",
+        "scope": "Explicitly authorized minimal task before full grey rollout; Claude passed, Codex failed; stages not accepted",
+        "pending": [
+          "Codex success",
+          "Artifact-producing tasks, full rollout dependencies and G10 evidence"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
+      ]
+    },
+    {
+      "id": "T10.03",
+      "phase_id": "S10",
+      "subject": "执行 Zcode 真实闭环",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T10.01"
+      ],
+      "requires_gates": [
+        "G09"
+      ],
+      "acceptance_criteria": [
+        "在支持的显式权限模式下完成任务",
+        "无交互卡死",
+        "错误分类、取消及结果解析有实测"
+      ],
+      "evidence_required": [
+        "live-zcode 报告"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": {
+        "result": "not_started_auth_path_unresolved",
+        "scope": "China account record not found in selected home; cached China plan unavailable; not a live subscription-entitlement check",
+        "pending": [
+          "User identifies correct China account home or signs in",
+          "One authorized real task remains unused"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/real-provider-probes.md",
+        "docs/federation/real-provider-evidence.json"
+      ]
+    },
+    {
+      "id": "T10.04",
+      "phase_id": "S10",
+      "subject": "执行真实跨端委派与独立审阅",
+      "lead_role": "TEST",
+      "depends_on": [
+        "T10.02",
+        "T10.03"
+      ],
+      "requires_gates": [
+        "G09"
+      ],
+      "acceptance_criteria": [
+        "真实任务经身份分派、跨端执行、证据传输和授权审阅",
+        "作者不能自签通过"
+      ],
+      "evidence_required": [
+        "live-cross-node 报告"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T10.05",
+      "phase_id": "S10",
+      "subject": "执行 72 小时观察与预算核对",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T10.04"
+      ],
+      "requires_gates": [
+        "G09"
+      ],
+      "acceptance_criteria": [
+        "含一次离线重连及一次重启",
+        "无丢任务、重复验收、失控进程",
+        "未知用量明确标注"
+      ],
+      "evidence_required": [
+        "soak-72h.json 与费用摘要"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T10.06",
+      "phase_id": "S10",
+      "subject": "确认灰度结论与发布候选",
+      "lead_role": "OP",
+      "depends_on": [
+        "T10.02",
+        "T10.03",
+        "T10.04",
+        "T10.05"
+      ],
+      "requires_gates": [
+        "G09"
+      ],
+      "acceptance_criteria": [
+        "OP 查看成本、异常、未覆盖范围、停止方案",
+        "发布候选 SHA 与配置固定"
+      ],
+      "evidence_required": [
+        "G10 回执"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T11.01",
+      "phase_id": "S11",
+      "subject": "整理发布包和升级顺序",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T10.06"
+      ],
+      "requires_gates": [
+        "G10"
+      ],
+      "acceptance_criteria": [
+        "代码、schema、配置、角色章程与协议版本均有摘要",
+        "不携带密钥",
+        "节点顺序可回退"
+      ],
+      "evidence_required": [
+        "release-manifest.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/node-startup.md",
+        "docs/federation/node-startup-evidence.json",
+        "tests/nodestartuptest.mjs"
+      ]
+    },
+    {
+      "id": "T11.02",
+      "phase_id": "S11",
+      "subject": "配置告警与日常巡检",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T11.01"
+      ],
+      "requires_gates": [
+        "G10"
+      ],
+      "acceptance_criteria": [
+        "监控同步积压、执行挂起、预算、磁盘、认证到期、关系登记不可用",
+        "告警去重并有恢复事件"
+      ],
+      "evidence_required": [
+        "monitor-drill.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T11.03",
+      "phase_id": "S11",
+      "subject": "落实备份、保留期与恢复职责",
+      "lead_role": "OPS",
+      "depends_on": [
+        "T11.02"
+      ],
+      "requires_gates": [
+        "G10"
+      ],
+      "acceptance_criteria": [
+        "任务数据库、事件和产物按冻结策略备份",
+        "恢复身份/epoch/游标流程经过演练"
+      ],
+      "evidence_required": [
+        "backup-policy 与恢复回执"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T11.04",
+      "phase_id": "S11",
+      "subject": "完成使用和故障手册",
+      "lead_role": "ENG",
+      "depends_on": [
+        "T11.03"
+      ],
+      "requires_gates": [
+        "G10"
+      ],
+      "acceptance_criteria": [
+        "新节点加入、改名、撤销、离线、重试、取消、验收和接管都有可执行步骤与预期结果"
+      ],
+      "evidence_required": [
+        "operator-runbook.md"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T11.05",
+      "phase_id": "S11",
+      "subject": "进行操作者现场验收",
+      "lead_role": "OP",
+      "depends_on": [
+        "T11.04"
+      ],
+      "requires_gates": [
+        "G10"
+      ],
+      "acceptance_criteria": [
+        "OP 从全局界面完成建卡、跨端委派、查看离线、核对证据、验收和停止",
+        "无需开发者替代关键操作"
+      ],
+      "evidence_required": [
+        "user-acceptance.json"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    },
+    {
+      "id": "T11.06",
+      "phase_id": "S11",
+      "subject": "正式发布与关闭项目阶段",
+      "lead_role": "OP",
+      "depends_on": [
+        "T11.01",
+        "T11.02",
+        "T11.03",
+        "T11.04",
+        "T11.05"
+      ],
+      "requires_gates": [
+        "G10"
+      ],
+      "acceptance_criteria": [
+        "最终清单全部通过",
+        "遗留项有责任与日期",
+        "维护者接收，发布范围明确"
+      ],
+      "evidence_required": [
+        "G11 最终回执"
+      ],
+      "status": "planned",
+      "count_weight": 1,
+      "owner_node_id": null,
+      "agent_instance_id": null,
+      "execution_authorized": false,
+      "verification_result": null,
+      "acceptance_receipt": null
+    }
+  ],
+  "acceptance_scenarios": [
+    {
+      "id": "AT01",
+      "scenario": "三节点注册，其中两个尝试同名，再对一个节点改名重启",
+      "expected_result": "冲突按规则拒绝或显式解决；已存在任务 owner 不变；旧链接仍可定位",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT02",
+      "scenario": "本机经 MCP 创建任务并映射身份，各执行器用桩完成",
+      "expected_result": "路由符合能力与预算；可追踪到 task/run；未授权工具被拒",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT03",
+      "scenario": "A 对 B 同一委派请求连续重发十次并丢弃一次 ACK",
+      "expected_result": "B 只有一个关联任务；同一 run 不产生多个活跃执行者",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT04",
+      "scenario": "B 接受并领取后断开隧道 30 分钟，过程中产生进度和结果",
+      "expected_result": "B 继续已有工作；A 显示离线/状态可能滞后；不重派；重连后状态补齐",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT05",
+      "scenario": "B 已把结果落盘但 ACK 丢失；A/B 各重启一次后恢复",
+      "expected_result": "同一交付及验收只入账一次；本机结果未丢失；run/证据关联不变",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT06",
+      "scenario": "1000 个事件注入 20% 重复、乱序和至少一处序号缺口",
+      "expected_result": "完整事件恢复后，权威节点与授权副本投影一致；不以时间戳覆盖状态",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT07",
+      "scenario": "在事务提交前、提交后发送前、接收落盘后确认前三个点杀进程",
+      "expected_result": "每次均恢复成可解释状态；无假 ACK；无无法补发的已完成任务",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT08",
+      "scenario": "A 在 B 离线时请求取消；B 同时完成旧 run",
+      "expected_result": "A 在 ACK 前显示取消待送达；旧结果可审计但不能覆盖新裁定",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT09",
+      "scenario": "两台实体机设备间双向委派并形成多层任务链",
+      "expected_result": "每卡 owner 明确；本地树无多父；跨端结果使正确依赖推进",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT10",
+      "scenario": "两台实体 A/B 断开隧道后分步恢复；补充三个隔离实例 A 与 B/C 的协议分区测试",
+      "expected_result": "各自继续已领取本地工作；无所有权争抢；恢复后授权投影一致",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT11",
+      "scenario": "并发提交 A 等 B、B 等 A；再关闭关系登记节点",
+      "expected_result": "至多接受一个成环边；新关系待确认；已有任务继续；恢复后不误放行",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT12",
+      "scenario": "节点时钟偏移正负十分钟；另一个节点从备份恢复",
+      "expected_result": "按版本/epoch/seq 排序；不重用事件身份；旧事件不能覆盖新状态",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT13",
+      "scenario": "伪造 owner、node_name、peer 身份，并用 worker 凭据调用裁定接口",
+      "expected_result": "所有越权请求拒绝；不泄露 token、路径秘密或未授权任务内容",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT14",
+      "scenario": "将同一 event_id 的 payload 改写后重发，再发送超大批次",
+      "expected_result": "冲突事件隔离并告警；消息大小与速率限制生效；正常节点不被拖垮",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT15",
+      "scenario": "发送带父目录跳转、绝对盘符、越界链接及坏哈希的证据",
+      "expected_result": "全部拒绝落入授权目录外；坏内容不能进入可验收证据集合",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT16",
+      "scenario": "用三个真实适配器的权限配置测试读取治理文件及改写登记簿；模型探测安排在已授权灰度",
+      "expected_result": "实际能力不超声明；无等价隔离的情况明确限制能力，不伪报通过",
+      "acceptance_phases": [
+        "S09",
+        "S10"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT17",
+      "scenario": "支持范围内混合协议版本，同步中滚动升级一台，再尝试不兼容降级",
+      "expected_result": "支持组合不中断正确语义；不兼容写入拒绝；schema 不能安全降级时恢复备份",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT18",
+      "scenario": "数据库/证据存储空间不足，再释放空间和重启",
+      "expected_result": "不虚报成功、不中途删除未确认结果；积压可见，恢复后可补发",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT19",
+      "scenario": "从一致性备份恢复一台节点，并模拟原节点可能再次上线",
+      "expected_result": "恢复节点先隔离核验；epoch/凭据与执行权明确；同一身份不同时激活两个写者",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT20",
+      "scenario": "任务超时、CLI 挂起、速率限制、登录失效、缺少指定模型",
+      "expected_result": "各类错误可区分；子进程受控结束；重试受预算限制；不无限拉起",
+      "acceptance_phases": [
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT21",
+      "scenario": "三种真实模型各完成至少一个有实际产物的小任务，再做一次跨端独立审阅",
+      "expected_result": "真实输入输出、产物、用量和验证回执可核对；模型文本不能自授通过",
+      "acceptance_phases": [
+        "S10"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT22",
+      "scenario": "全局看板展示三节点，关闭其中一个并连续点击远端操作",
+      "expected_result": "显示缓存新鲜度；操作有唯一请求号；不把未确认状态画成成功",
+      "acceptance_phases": [
+        "S08",
+        "S09"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT23",
+      "scenario": "连续运行 72 小时，安排一次 30 分钟断线和一次节点重启",
+      "expected_result": "无任务/证据丢失、重复验收、失控调用；预算与告警记录一致",
+      "acceptance_phases": [
+        "S10"
+      ],
+      "status": "not_run",
+      "evidence": null
+    },
+    {
+      "id": "AT24",
+      "scenario": "从生产候选执行停止新分派、备份、升级失败、恢复和重新接入",
+      "expected_result": "恢复时间达到冻结指标；在途任务有明确处置；未生成重复执行",
+      "acceptance_phases": [
+        "S09",
+        "S11"
+      ],
+      "status": "not_run",
+      "evidence": null
+    }
+  ],
+  "repository_package_version": "0.24.0",
+  "authorizations": [
+    {
+      "date": "2026-09-29",
+      "scope": "用户授权以目标模式自主完成项目"
+    },
+    {
+      "date": "2026-09-29",
+      "scope": "Claude、Codex、Zcode 各 1 个最小真实任务，使用现有订阅",
+      "calls_consumed": {
+        "claude": 1,
+        "codex": 1,
+        "zcode": 0
+      },
+      "consumption_basis": "One supervised dispatch task; failed launches count; not the number of underlying inference requests",
+      "evidence": "docs/federation/real-provider-evidence.json"
+    },
+    {
+      "date": "2026-09-30",
+      "kind": "user_scope_clarification",
+      "physical_nodes": 2,
+      "physical_selection": "the two physical computers already on Tailscale",
+      "zcode_subscription": "Chinese Coding Plan",
+      "quota_statement": "not recorded in the public manifest",
+      "extra_physical_node_required": false,
+      "real_model_call_limit_changed": false
+    }
+  ],
+  "progress_record": "federation/PROGRESS.md",
+  "updated_date": "2026-10-01",
+  "platform_scope": {
+    "decision_date": "2026-09-30",
+    "source": "explicit_user_instruction",
+    "supported_os": [
+      "Windows"
+    ],
+    "physical_nodes": "two physical Windows computers connected by Tailscale",
+    "linux": "out_of_scope_for_future_implementation_ci_deployment_and_acceptance",
+    "historical_evidence": "preserved_as_record_only"
+  }
+}

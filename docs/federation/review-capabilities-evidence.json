@@ -1,0 +1,230 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-33-review-capability-and-git-contracts",
+  "date": "2026-09-30",
+  "platform": "Windows",
+  "node_version": "24.16.0",
+  "code_base_commit": "73ca689d1dfeedef61931e1cb882fb8b1f246a9e",
+  "review_baseline": "601890a",
+  "normalization": "UTF-8 LF",
+  "code_sha256": {
+    "cli/doctor.mjs": "d01d8dc4eef7c16bbef302c9e58032b2a48c4e8a9b69ef76b031afa1ea9dd5bb",
+    "cli/mcp-admin.mjs": "130b52d84350166b2b9b2a9bb5931e17eca12f468a9602511ee9bbaca9e2aeac",
+    "core/artifacts/git-reader.mjs": "7a410a8ca42e0fe64b517863ac1362afec1abf7e32f5e54432c479d3fb5f50c1",
+    "core/git-version.mjs": "36a12dd0a3fdce805b9e2b65d3f1076f58440be27d2ccace026e883c46f1ab4e",
+    "core/execution/adapters.mjs": "902a7133d4e237f4b2486e8a3de4f511c2c037f5543f898d005c5f376ea8a8d4",
+    "core/mcp/policy.mjs": "639bff156495a1910254eb83b44b9eed4b47dff453034f1440c72fe6bca02a99",
+    "core/mcp/tools.mjs": "a32e2d85346a6da96c5f95def170e696ae9ad3e3e1c46786dd0c2f2cb1a2498e",
+    "tests/adaptertest.mjs": "088052ec10997cac6dc86d85fb614c3e3ed2cffc4319a7ae98f3b5e389f85cb0",
+    "tests/dispatchtest.mjs": "771a4b2e5247c468541249348678390d77221177e0aca6568c86cf763b0c0311",
+    "tests/mcptest.mjs": "1fe4c063b19dd5e6cb0cce5f5ef0a513315715936fd6299439fb04553cd6e87d",
+    "tests/repositorytest.mjs": "43fa83070ee4427a5b3f2e16ff56fa7a89f8ec2e04f90f04cf22c5ba04f2fb04",
+    "tests/workspacetest.mjs": "5e8ea47577517797cf1c54abbedbf2fad4ca429f903cfe024f7e50e1f4819caf",
+    "tests/workspacefiletest.mjs": "c3cefceda4d78122b691892c1a2a4695749c3adcca50303af90a5a1fecacbebc",
+    "tests/gitpackagetest.mjs": "8a10267980bc812fc4f43fa39b1fe0f2beb6cf31399ec024b8e2203f3641a8ed",
+    "tests/clitest.mjs": "f8c3c09acd7503354272a788c69a43709e16301c4f80ff2c624747463a85feaf"
+  },
+  "code_git_blobs": {
+    "cli/doctor.mjs": "4ad8fb12dbbb6eaa167f083dc194fbea76b74f9c",
+    "cli/mcp-admin.mjs": "fe243a00f2cd2244d778bc2d9ed65cfd4dc9ad1f",
+    "core/artifacts/git-reader.mjs": "c8cd0af8265d8c0d3a07f8f7f8656ef05a2d7ddc",
+    "core/git-version.mjs": "7c278ce0d4bff4134adcd02d74e0feabc1a1e825",
+    "core/execution/adapters.mjs": "30cf05224bba3cd9277bb1ff50a24781419e0a2c",
+    "core/mcp/policy.mjs": "ce9cd0b6ea45f519d7ab61882711f1df55fe4990",
+    "core/mcp/tools.mjs": "557e76c1378a0f09c0dff2978a80dd9c405b0783",
+    "tests/adaptertest.mjs": "2e5c8be29db20e6217ed604b3a97c5cf24a7c49e",
+    "tests/dispatchtest.mjs": "73db60447ac6c838dcb869de04ed6fd2198310cc",
+    "tests/mcptest.mjs": "d973588afb4e56c9809a14359af304e6b3099100",
+    "tests/repositorytest.mjs": "611af3b2a979549a4252f66ebee4af13dc95aa64",
+    "tests/workspacetest.mjs": "df18823d2f468ee50894cdc6b8ea4cd97ba8e66d",
+    "tests/workspacefiletest.mjs": "573b350141606b6d5c6878c5eebfe14712cb04dd",
+    "tests/gitpackagetest.mjs": "f7db31785037181953247c8a09002a6c684258f0",
+    "tests/clitest.mjs": "e3ba2417bac5b7edb47ff691680c187ad78146cf"
+  },
+  "local_validation": {
+    "native_unique_pass": 168,
+    "classic_cli_pass": 41,
+    "total_unique_pass": 209,
+    "new_cases": 6,
+    "failed": 0,
+    "skipped": 0,
+    "runs": [
+      {
+        "log": ".data/review33-capabilities.log",
+        "native_pass": 140,
+        "files": [
+          "mcptest",
+          "dispatchtest",
+          "adaptertest",
+          "workspacetest",
+          "workspacefiletest"
+        ]
+      },
+      {
+        "log": ".data/review33-git.log",
+        "native_pass": 68,
+        "classic_cli_pass": 41,
+        "files": [
+          "repositorytest",
+          "gitpackagetest",
+          "workspacetest",
+          "workspacefiletest",
+          "clitest"
+        ],
+        "note": "Node reports 69 including classic CLI wrapper. 40 workspace cases rerun after Git changes are not double-counted."
+      }
+    ],
+    "coverage": [
+      "Registration rejects unsupported or combined execution profiles before database writes",
+      "Stored unsupported/corrupt policies cannot grant, authenticate, route or launch; healthy roles remain available",
+      "Versioned administrator repair preserves old records and invalidates prior credentials",
+      "Rejected prepare/launch does not consume a model allowance or advance task state",
+      "Actual pinned installed Git version/flag probe and synthetic old/missing/unsupported diagnostics",
+      "Actual capture and snapshot of ordinary git directory, with metadata aliases still rejected",
+      "Independent workspace, bound file edits, actual Git commits and CLI regressions"
+    ],
+    "syntax_checks": [
+      "cli/doctor.mjs",
+      "cli/mcp-admin.mjs"
+    ],
+    "logs_sha256": {
+      ".data/review33-capabilities.log": "b1dea5efb31989cf47198b80d4f1941eec833a15322055a5a21b459ad5836dc2",
+      ".data/review33-git.log": "3e054577149e7c81918c3b2ab39d16cbce59ff616e6e5395b21e79440cb21795"
+    }
+  },
+  "git_compatibility": {
+    "minimum": "2.45.0",
+    "source": "https://raw.githubusercontent.com/git/git/v2.45.0/Documentation/RelNotes/2.45.0.txt",
+    "old_version_test": "synthetic output and process failures; no old Git installation or real model used",
+    "probe_cache": "positive only, per process, keyed by canonical executable path and verified SHA-256; max 128 entries",
+    "executable_digest_rechecked_each_use": true,
+    "installed_version_probe": "2.54.0"
+  },
+  "new_commit_ci": "completed",
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false,
+  "limitations": [
+    "PR remains draft; unresolved ledger issues include Git batching and release/migration documentation.",
+    "Capabilities identify supported broker tool profiles, not arbitrary shell privileges or OS containment.",
+    "Invalid legacy roles and task requirements are not automatically translated to new privileges.",
+    "Old version and missing option branches use deterministic probes; actual old Git binaries were not installed.",
+    "Repository blob reads remain per-object; full-tree integrity checks remain enabled."
+  ],
+  "secret_scan": {
+    "tool": "Windows gitleaks 8.24.3",
+    "scope": "staged diff",
+    "exit_code": 0,
+    "findings": 0
+  },
+  "exact_commit_ci": {
+    "commit": "dafddec6bbb7899b67e1ed49ef8e2be4db4ac0f4",
+    "run_id": 36696304917,
+    "run_url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36696304917",
+    "windows_job_id": 109824988441,
+    "gitleaks_job_id": 109824988103,
+    "status": "completed",
+    "conclusion": "success",
+    "main_pass": 1489,
+    "additional_pass": 90,
+    "failed": 0,
+    "skipped": 0,
+    "counts": {
+      "native": [
+        15,
+        14,
+        18,
+        26,
+        20,
+        29,
+        21,
+        19,
+        18,
+        21,
+        26,
+        28,
+        35,
+        40,
+        24,
+        18,
+        24,
+        21,
+        19,
+        4,
+        8,
+        8,
+        10,
+        8,
+        14,
+        32,
+        44,
+        38,
+        22,
+        24
+      ],
+      "classic": [
+        [
+          402,
+          0
+        ],
+        [
+          25,
+          0
+        ],
+        [
+          29,
+          0
+        ],
+        [
+          27,
+          0
+        ],
+        [
+          41,
+          0
+        ],
+        [
+          20,
+          0
+        ],
+        [
+          57,
+          0
+        ],
+        [
+          13,
+          0
+        ],
+        [
+          72,
+          0
+        ],
+        [
+          195,
+          0
+        ],
+        [
+          22,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          23,
+          0
+        ]
+      ],
+      "native_total": 648,
+      "classic_total": 931
+    },
+    "additional_checks": "codex-selftest 20, prompt-selftest 57, verify_page 13; gates_lib and health alarm steps succeeded without numeric summaries"
+  }
+}

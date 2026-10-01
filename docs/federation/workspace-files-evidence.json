@@ -1,0 +1,135 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-24-workspace-files",
+  "date": "2026-09-30",
+  "base_commit": "4d87e28531756d0e2b9bd688e13ba89d2adcccc2",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    ".github/workflows/ci.yml": "e54bba91915d87ad415ec96b94be875902736f98a29c0d2774d54b1ebcb883ff",
+    "cli/dispatch.mjs": "a28ab61f5aa9987de902385690fba050efd941b807cfd77a38ec8cf5f0e028ab",
+    "cli/workspace.mjs": "dd419e848858eb6e7e2590b7abdc3aaf2378de8e3cb4664225c3d2f027aed407",
+    "core/artifacts/workspace-commit.mjs": "6f5ac6c7b39a20fc05c883522bd48cf8ac28cc5d47426c2c18c49f2d04c2434b",
+    "core/artifacts/workspace-session.mjs": "c7853c558531c32c9022e6c618c2e5b877b0b1450aadf728d187a92138808036",
+    "core/artifacts/workspaces.mjs": "ff42ca63625bea6d556a7da829ce50f5e0e0c00ac71d869689d830f5e74aa1ee",
+    "core/execution/adapters.mjs": "24e520a6429cbb0a35e0c578fd0bd8f010201cf6bd8b1c79bdb46f2d8e842231",
+    "core/execution/dispatch.mjs": "46f9e7ae6972259a3c755f4164f1a7e029556cfce4704e31e0a5eb811aeac966",
+    "core/execution/receipts.mjs": "c896cc4e24571c99bb60c75d2878a4fb211851b68f0cf4cce3b89ca80007c023",
+    "core/execution/runner.mjs": "bbc1bb49ff5a2600c915ad097479ad9507bfb5eeed07fbf3e81acb523f77c74c",
+    "core/mcp/policy.mjs": "158b4361d6a72edf68ca59dbe9658397238643f6b8f96a63f7c8f10accc9f246",
+    "core/mcp/tools.mjs": "064c27889b98d616ee015a81866c226f1306f8b51b8b496a7f3a3fd26af73779",
+    "package.json": "cee896e77b3a932c4cc9b16d324dd4d4142420b52db2eef0a1df4f30ee504a27",
+    "tests/adaptertest.mjs": "a723d8f1a35528b899a388d4318ca85e4c6e60d6c61711dfd7ae0113d7408b32",
+    "tests/workspacefiletest.mjs": "c3cefceda4d78122b691892c1a2a4695749c3adcca50303af90a5a1fecacbebc"
+  },
+  "local_validation": {
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "classic_pass": 841,
+      "native_pass": 532,
+      "failed": 0,
+      "skipped": 0,
+      "source_digests_verified": 15,
+      "source_snapshot": ".data/workspace-files-tested-source.json",
+      "log": ".data/workspace-files-full-suite.log",
+      "passed": 1373,
+      "source_note": "Full suite ran before a role-display annotation correction; 13 final source digests unchanged. The two final files were verified by the targeted MCP read below; exact final commit CI remains required.",
+      "preceding_changed_file_sha256": {
+        "core/mcp/tools.mjs": "d8b13ffca757232b9e6ba1c9ad809f65f31bd80a34e331defc559de5773f75a0",
+        "tests/workspacefiletest.mjs": "edfe142067cab818a92a805951ca47a1a543a2146194a336366800b895930b76"
+      }
+    },
+    "profile_suite_before_final_utf8_boundary": {
+      "command": "node --test tests/adaptertest.mjs tests/workspacefiletest.mjs",
+      "passed": 37,
+      "failed": 0,
+      "log": ".data/workspace-files-profile.log"
+    },
+    "utf8_boundary": {
+      "passed": 1,
+      "failed": 0,
+      "log": ".data/workspace-files-utf8.log"
+    },
+    "actual_project_baseline_read": {
+      "kind": "actual_read_only_committed_project_snapshot",
+      "head": "4d87e28531756d0e2b9bd688e13ba89d2adcccc2",
+      "files": 222,
+      "total_bytes": 3129475,
+      "elapsed_ms": 20062,
+      "passed": true
+    },
+    "coverage": [
+      "actual permitted Git baseline BLOBs, current run and exact v2 launch binding",
+      "MCP file bytes, versions, audit and replay receipt in one SQLite transaction",
+      "UTF-8 byte boundaries, file/range/role/project restrictions and capacity",
+      "independent-process compare-and-swap editing race and database reopen",
+      "actual supervised Node fixture edits through loopback MCP, then actual Git commit and byte capture",
+      "actual captured JavaScript materialized and executed in a separate temporary directory",
+      "dirty and untracked checkout content, checkout HEAD and real index preserved",
+      "deterministic commit retry after audit failure, immutable delivery record and full tree verification",
+      "provider-labelled unknown process cleanup rejected, native task completion closes tools",
+      "actual CLI prepare/commit/manifest and trusted runner process/journal with a v2 file descriptor",
+      "Claude/Codex configuration for mediated file tools, read-only roles and descriptor tampering",
+      "transactional schema-one migration and actual backup/retire/activate preserving old bytes while fencing old epochs"
+    ],
+    "role_display_correction": {
+      "command": "node --test --test-name-pattern=\"file session imports\" tests/workspacefiletest.mjs",
+      "passed": 1,
+      "failed": 0,
+      "log": ".data/workspace-files-role-label.log",
+      "verified": "Actual list_roles MCP output labels workspace-files enforcement and keeps coordinator board-only label",
+      "changed_files": [
+        "core/mcp/tools.mjs",
+        "tests/workspacefiletest.mjs"
+      ]
+    }
+  },
+  "ci": {
+    "tested_commit": "293d6de56c128b274f117ed279657f6d97836a6e",
+    "run_id": 36621602685,
+    "run_number": 83,
+    "status": "completed",
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109588097971,
+      "classic": 931,
+      "native": 532,
+      "main_suite_passed": 1373,
+      "failed": 0,
+      "skipped": 0,
+      "extra_classic_checks": 90
+    },
+    "linux": {
+      "job_id": 109588098085,
+      "classic": 928,
+      "native": 531,
+      "main_suite_passed": 1369,
+      "failed": 0,
+      "skipped": 1,
+      "extra_classic_checks": 90
+    },
+    "gitleaks": {
+      "job_id": 109588097781,
+      "conclusion": "success"
+    },
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36621602685"
+  },
+  "real_model_calls_used": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "phase_gates_total": 12,
+  "physical_integration": "not_run; two Tailscale Windows computers are the user-selected scope",
+  "limitations": [
+    "No real provider invocation in these fixtures; fake provider-labelled processes do not prove model usage",
+    "No OS filesystem sandbox claim; providers use empty scratch cwd and mediated MCP file tools",
+    "UTF-8 editing only; no agent shell or test command in this profile",
+    "Actual Git delivery commits are local and not yet referenced in cross-node result envelopes or transferred",
+    "Independent verification, source CAS merge, positive acceptance, relation retirement and parent advancement pending",
+    "Zcode adapter, scheduler, global UI, operations and physical two-PC acceptance remain open",
+    "Database backup does not include physical workspace Git repositories; retain those independently",
+    "No production repository registration, deployment, global MCP edit or source-approval update"
+  ]
+}

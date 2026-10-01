@@ -1,0 +1,538 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-40-native-provider",
+  "date": "2026-09-30",
+  "base_commit": "41dfc40c0c0753ca77c1a11e34781762a246cbdb",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "code_and_document_files": [
+    {
+      "path": "core/execution/adapters.mjs",
+      "sha256": "dcc1168c9424e69f52842a56efb3c02a5f4e8a84cd18370fcb71788c1bf4819d",
+      "git_blob": "4b59628413cc5a22ce7d3addb39ef35a7485939b"
+    },
+    {
+      "path": "tests/adaptertest.mjs",
+      "sha256": "5ec2a46e8b173010d45938460b2abdc69fdc0f7d4fa3823f3f5eb55547b4047d",
+      "git_blob": "366a39517dc7fa71feb64c1cb9402c98a28575e8"
+    },
+    {
+      "path": "tests/repositorytest.mjs",
+      "sha256": "b91ad1966b164d124a45035dcdf4379bc0f88e1da57bd4e301408c2b5c31c946",
+      "git_blob": "3af1f88e1ca1b8eb307724e4f8e5901f12fa5eb1"
+    },
+    {
+      "path": "docs/federation/adapters.md",
+      "sha256": "711f371f546e465101c6073d865c43afdd0a2a2325cd29f7c9bcee9f9ca758af",
+      "git_blob": "1aa6b3f46742b55bb2dc564700101440be736b34"
+    },
+    {
+      "path": "docs/federation/workspace-files.md",
+      "sha256": "7b197544dee654775be336627b175b37cc19eb1e4d82257d0bb03e92e1aff697",
+      "git_blob": "a09331d28316c95ecdcc027ca93e1b22f905180e"
+    }
+  ],
+  "local_validation": {
+    "distinct_pass": 135,
+    "unresolved_failed": 0,
+    "adapter_dispatch_output": {
+      "pass": 107,
+      "failed": 0,
+      "skipped": 0,
+      "node": "24.16.0",
+      "log": ".data/review40-regression.log",
+      "duration_ms": 73769.1491
+    },
+    "repository_initial": {
+      "pass": 27,
+      "failed": 1,
+      "skipped": 0,
+      "node": "24.21.0",
+      "log": ".data/review40-repository.log",
+      "failure": "Alias probe spawned python without the absolute PYTHON configured in this shell (ENOENT); product reader and 600-file test passed.",
+      "batch_case_ms": 4857.618
+    },
+    "repository_alias_recheck": {
+      "pass": 1,
+      "failed": 0,
+      "skipped": 0,
+      "node": "24.21.0",
+      "log": ".data/review40-repository-alias.log",
+      "repair": "Set PYTHON and BOARD_PYTHON to the already installed absolute interpreter; no implementation change.",
+      "duration_ms": 2224.1369
+    },
+    "fixture_change": "Only 600-file setup git add gets 60000ms; all other helper calls default 10000ms and production Git reader 10000/30000ms remain unchanged."
+  },
+  "native_cli": {
+    "codex": {
+      "version": "0.149.1",
+      "sha256": "a395030b56b126f608f2403036dddb654a9c063213e9c2b5f85d954cf490ebe6",
+      "account": "empty isolated home",
+      "provider": "loopback fake Responses server",
+      "real_provider_calls": 0
+    },
+    "claude": {
+      "observed_version": "2.1.284",
+      "sha256": "0416631e846f743110da5282409776fa1313e65f33a588aae066eaf8db0fda7d",
+      "registered_contract_version": "2.1.247",
+      "inspection": "version and help only; contract not upgraded or authorized",
+      "real_provider_calls": 0
+    }
+  },
+  "native_probes": [
+    {
+      "tightened": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "fixture",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "function",
+              "name": "view_image"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "client_metadata"
+          ]
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "tightened": true,
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "fixture",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "function",
+              "name": "view_image"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "client_metadata"
+          ]
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "gpt54-baseline",
+      "model": "gpt-5.4",
+      "disabled": false,
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "gpt-5.4",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "custom",
+              "name": "apply_patch"
+            },
+            {
+              "type": "function",
+              "name": "view_image"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "text",
+            "client_metadata"
+          ]
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "gpt54-features",
+      "model": "gpt-5.4",
+      "disabled": true,
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "gpt-5.4",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "custom",
+              "name": "apply_patch"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "text",
+            "client_metadata"
+          ]
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "codex-features",
+      "model": "gpt-5.3-codex",
+      "disabled": true,
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "gpt-5.3-codex",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "client_metadata"
+          ]
+        }
+      ],
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "write_exists": false,
+      "name": "gpt54-patch-denial",
+      "model": "gpt-5.4",
+      "disabled": true,
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "gpt-5.4",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "custom",
+              "name": "apply_patch"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "text",
+            "client_metadata"
+          ],
+          "tool_outputs": []
+        },
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "gpt-5.4",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "custom",
+              "name": "apply_patch"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "text",
+            "client_metadata"
+          ],
+          "tool_outputs": [
+            {
+              "type": "custom_tool_call_output",
+              "output": "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+            }
+          ]
+        }
+      ],
+      "stderr_bytes": 159,
+      "stderr_sha256": "7228f45ff8f1e5ba1e49c93d88b6fd509e4cc8b8f1cae02b0c669594acb99f6d"
+    },
+    {
+      "write_exists": false,
+      "name": "gpt54-patch-denial",
+      "model": "gpt-5.4",
+      "disabled": true,
+      "code": 0,
+      "signal": null,
+      "timedOut": false,
+      "requests": [
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "gpt-5.4",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "custom",
+              "name": "apply_patch"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "text",
+            "client_metadata"
+          ],
+          "tool_outputs": []
+        },
+        {
+          "method": "POST",
+          "path": "/v1/responses",
+          "model": "gpt-5.4",
+          "tools": [
+            {
+              "type": "function",
+              "name": "update_plan"
+            },
+            {
+              "type": "function",
+              "name": "request_user_input"
+            },
+            {
+              "type": "custom",
+              "name": "apply_patch"
+            }
+          ],
+          "keys": [
+            "model",
+            "instructions",
+            "input",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "reasoning",
+            "store",
+            "stream",
+            "include",
+            "prompt_cache_key",
+            "text",
+            "client_metadata"
+          ],
+          "tool_outputs": [
+            {
+              "type": "custom_tool_call_output",
+              "output": "patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings"
+            }
+          ]
+        }
+      ],
+      "stderr_bytes": 159,
+      "stderr_sha256": "b970ff4cb47f124a6dd03c3ed64ee2c9bc3bbcd77dce08ae070b929f9004df1b"
+    }
+  ],
+  "probe_source_receipts": [
+    {
+      "path": ".data/probe-codex-native.mjs",
+      "sha256": "360ee4184cc673972b038c6c6b499bef9657a16bd2592ab8fbf922b41d646db8"
+    },
+    {
+      "path": ".data/probe-codex-native-v2.mjs",
+      "sha256": "f9f421b4f5341d6b6b3f04d7096d3671754e9626d80dc4efcd55bc5538c23f05"
+    },
+    {
+      "path": ".data/probe-codex-patch.mjs",
+      "sha256": "dba38f7af6491880025cea1aebca04eec1e7942c4835451caa0655e60e08e906"
+    },
+    {
+      "path": ".data/probe-codex-view-only.mjs",
+      "sha256": "c9a4aaa225cd7657378738f7576a2c71ca302f8d9dc4e415d64898f86828f9c0"
+    }
+  ],
+  "findings": [
+    "Top-level include_apply_patch_tool=false/include_view_image_tool=false did not remove view_image from the fixture-model tool list.",
+    "features.view_image=false removed view_image in native requests.",
+    "features.apply_patch_freeform=false did not remove apply_patch for gpt-5.4 and was not added to the adapter.",
+    "With only the adopted view_image feature change, the native gpt-5.4 configuration still offered apply_patch, but the attempted fixture file write was rejected by read-only sandbox and approval settings; the file did not exist.",
+    "Claude help says --bare excludes OAuth; managed settings remain with safe mode. Native Claude subscription/configuration isolation is not yet verified."
+  ],
+  "new_commit_ci": "pending",
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false,
+  "limitations": [
+    "Local fake-provider probes do not prove the real subscription, the complete role MCP startup, every model or complete Windows OS isolation.",
+    "Claude managed settings, auto memory, ancestor context and version-contract update remain M5 work.",
+    "Native tools being present is distinct from permission to execute; documentation no longer claims every native file tool is hidden."
+  ],
+  "references": [
+    "https://developers.openai.com/codex/config-schema.json",
+    "https://code.claude.com/docs/en/settings"
+  ],
+  "final_ci": {
+    "commit": "e32191801095f84806288693eae3b0e85b74e584",
+    "run_id": 36708993471,
+    "windows_job_id": 109865981623,
+    "gitleaks_job_id": 109865981874,
+    "status": "success",
+    "main_pass": 1512,
+    "additional_pass": 90,
+    "fail": 0,
+    "skip": 0
+  }
+}

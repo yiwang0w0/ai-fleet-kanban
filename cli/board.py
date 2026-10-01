@@ -7,18 +7,21 @@
   $P show <id>
   $P create --file payload.json
   $P claim --as alpha                        # pick-a-card claim (routing/locks/deps decided server-side)
-  $P take  <id> --as coord                   # claim a SPECIFIC id (coordinator finishing one card)
-  $P edit  <id> --file payload.json          # rewrite the card face. An in-progress card accepts ONLY a
+  $P take  <id> --as coord --version <aggregate_version>                   # claim a SPECIFIC id (coordinator finishing one card)
+  $P edit  <id> --file payload.json --version <aggregate_version>          # rewrite the card face. An in-progress card accepts ONLY a
                                              #   tail-append to description, invisible to this round's worker
-  $P done  <id> --as alpha --file evidence.md   # -> waiting/review
-  $P wait  <id> --as alpha --file reason.md     # -> waiting/decision (own attempts exhausted)
-  $P approve|reject <id> [--file note.md] [--verify-ok]
-  $P reopen <id> [--line alpha]              # done/waiting -> not_started (attempts + ruling history kept)
-  $P release|hold <id>                       # release to workers / pull back into coordinator staging
-  $P archive <id> [--restore|--force]
+  $P done  <id> --as alpha --run <run_id> --file evidence.md   # -> waiting/review
+  $P wait  <id> --as alpha --run <run_id> --file reason.md     # -> waiting/decision (own attempts exhausted)
+  $P approve|reject <id> [--file note.md] [--verify-ok] --version <aggregate_version>
+  $P reopen <id> [--line alpha] --version <aggregate_version>              # done/waiting -> not_started (attempts + ruling history kept)
+  $P release|hold <id> --version <aggregate_version>                       # release to workers / pull back into coordinator staging
+  $P archive <id> [--restore|--force] --version <aggregate_version>
   $P lines status|start <line|all>|stop <line|all>   # worker-loop supervisor
   $P bless                                   # accept THIS tree: write the gated subtree's hash to
                                              #   <data>/accepted_rev (the revision gate compares against it)
+
+Task control writes (take/edit/approve/reject/reopen/release/hold/archive) require
+--version <aggregate_version from show>; a JSON edit payload may carry expected_version.
 
 Environment:
   BOARD_URL           board base URL                       (default http://127.0.0.1:47824)
@@ -46,7 +49,7 @@ text: a bare backslash inside inline JSON is an escape error (measured — a car
 creation died on a C:\\ path), while a file passed via --file needs no escaping
 gymnastics; inside JSON strings write / or a doubled backslash.
 """
-import json, sys, io, os, urllib.request, urllib.error
+import json, sys, io, os, re, urllib.request, urllib.error
 
 # Python on Windows writes to PIPES in the locale code page (GBK, CP932, ...).
 # Card subjects legitimately contain non-ASCII — a single CJK wave dash was enough
@@ -83,6 +86,13 @@ def _board_token():
         return ""
 
 def call(method, path, body=None):
+    if method == "POST" and re.fullmatch(r"/api/tasks/\d+/(claim|resolve|autoreview|update|pin|release|reopen|archive)", path):
+        body = dict(body or {})
+        if "expected_version" not in body:
+            version = arg("--version")
+            if not version or not version.isascii() or not version.isdigit():
+                sys.exit("此操作需要 --version <所见 aggregate_version>；先用 show 核对任务，不会自动读取新版本覆盖旧内容")
+            body["expected_version"] = int(version)
     data = json.dumps(body, ensure_ascii=False).encode("utf-8") if body is not None else None
     req = urllib.request.Request(BASE + path, data=data, method=method,
                                  headers={"Content-Type": "application/json; charset=utf-8",
@@ -182,7 +192,7 @@ def main():
         t = d["task"]
         print(f"已认领 #{t['id']}(第 {t['attempts']}/{t['max_attempts']} 次): {t['subject']}")
         print(f"  证据请写到 loop 指定的 evidence_path;手动交付用"
-              f" board.py done {t['id']} --as {who} --file <证据>")
+              f" board.py done {t['id']} --as {who} --run {t['run_id']} --file <证据>")
 
     elif cmd == "take":
         # Claim a SPECIFIC id. `claim` is pick-a-card, so a coordinator that must
@@ -199,14 +209,16 @@ def main():
         if s >= 400: die(s, d)
         t = d["task"]
         print(f"已领 #{t['id']}(第 {t['attempts']}/{t['max_attempts']} 次): {t['subject']}")
-        print(f"  → 交付: board.py done {t['id']} --as {who} --file <证据>")
+        print(f"  → 交付: board.py done {t['id']} --as {who} --run {t['run_id']} --file <证据>")
 
     elif cmd in ("done", "wait"):
+        run_id = arg("--run")
+        if not run_id: sys.exit("交付必须带领取回执的 --run <run_id>，不能自动查找当前执行 ID")
         if not tid or not who: sys.exit(f"{cmd} <id> --as <线名> --file <证据/原因>")
         ev = readfile(fp)
         if not ev.strip(): sys.exit("必须用 --file 附证据(改了什么/跑了什么/输出是什么)")
         s, d = call("POST", f"/api/tasks/{tid}/report",
-                    {"worker": who, "outcome": cmd, "evidence": ev})
+                    {"worker": who, "run_id": run_id, "outcome": cmd, "evidence": ev})
         if s >= 400: die(s, d)
         t = d["task"]
         print(f"#{tid} → {LABEL_of(t['status'])}/{WF_of(t['waiting_for'])}")

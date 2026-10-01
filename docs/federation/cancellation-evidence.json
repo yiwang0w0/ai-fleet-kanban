@@ -1,0 +1,102 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-20-cancellation",
+  "date": "2026-09-30",
+  "base_commit": "acbf94c979f534913d34101ead136ede891ebcc5",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/cancellation_guard.js": "51d7ea3ca59143e0135595f1d1d87c7e9fe6bb8e19960491906b6405bbc29649",
+    "core/delegation_guard.js": "38e0acfaf780f682c0fc446d096d683acdb126fbce7ddf135751ae4f3cee1b3c",
+    "core/federation/cancellation.mjs": "0997edb579a01bcab4c0ffb7b50a3639c85361303167345f19118a0d63f11066",
+    "core/federation/cancellation-service.mjs": "5d49bbea66571e8432c772198ae762b86220aab15d15cfef28dc9262c1ccc472",
+    "core/federation/cancellation-client.mjs": "9277dd48fbe76704dcd51f8d8bdeb8216eddd0f64edff7495ad70ee3b4b956c1",
+    "core/federation/bindings.mjs": "5f24de23e0a4db0a6a8ef7c073cdd6c8e98ebe91bfcdec70663797e1d0a78af4",
+    "core/federation/gateway.mjs": "6a326bcef143be0e55a9acc7014695cefa7bca079d35d36ce3a88fb7ebb3b7ef",
+    "core/federation/protocol.mjs": "d34fd5925e81865eef0e559559559300f1a963b927d5ef9d6d55ac774ceceaa0",
+    "core/execution/control.mjs": "583de91247778b89f196d38f2a04b074cf570d322e45199454d86a76e17fe573",
+    "core/execution/dispatch.mjs": "8f8fe1bd6d3122c8312f1d04bb0b32003375851fbed93ad7acb31d17f2bd9c75",
+    "core/execution/runner.mjs": "81a7fe586c4b8ab68afeeec9809833e3427917314e2b7d172d1cb993e47af7be",
+    "core/mcp/policy.mjs": "8bce48969ab1b18322f9ffe1193217dcfde894aa2692fef25373e60ddb28875c",
+    "core/mcp/tools.mjs": "dc73cfa3f130022ea6c0b224a8ccec1ebaa2a0a4769c30b699c016313a1dd65d",
+    "cli/cancellation.mjs": "5d8a83d6a74b861b86a06d69f05ba84676618ab536880f16dbb439ba52f3c01b",
+    "tests/cancellationtest.mjs": "a8eea5bcd2bf924333393253d36e9b4750ec5c44110b401de2fb38aecbcc8d7d",
+    "tests/selftest.mjs": "63a8a0804a87cbb289f29101271dccbbe1ee7c425947f8a67fbdf71d2c436081",
+    "package.json": "a7d160874e40ad9dfdb854cb705264ccb83aaf018861f4db725e027ae63a297b",
+    ".github/workflows/ci.yml": "821fd80bb0552c682eda91f4755c58532da85929ff67a95fea1a5ddb94e15589"
+  },
+  "local_validation": {
+    "targeted": {
+      "command": "node --test tests/cancellationtest.mjs",
+      "passed": 24,
+      "failed": 0,
+      "log": ".data/cancellation-targeted.log"
+    },
+    "full_suite": {
+      "command": "npm test",
+      "exit": 0,
+      "passed": 1290,
+      "classic_pass": 841,
+      "native_pass": 449,
+      "failed": 0,
+      "cancellation_tests": 24,
+      "log": ".data/cancellation-full-suite.log"
+    },
+    "coverage": [
+      "durable received versus stopped acknowledgement and exact contract/epoch authorization",
+      "actual frozen and pending before/desired subtree scope with downstream propagation",
+      "unlaunched and interrupted permit cleanup without budget consumption",
+      "late result retention; task report and lease expiry are not physical stop proof",
+      "actual supervised synthetic Windows process and child stop; POSIX remains unconfirmed",
+      "MCP role/project scoping and atomic task/principal/audit/tool-response rollback",
+      "actual CLI request, HTTP send/poll, inspection and unresolved exit codes",
+      "independent-process launch permission versus cancellation receipt race",
+      "actual HTTP lost responses and source persistence failure replay",
+      "revocation during actual HTTP body upload",
+      "backup restore activation quarantines old stop proof and labels old list identity",
+      "both launch-fence migration orders and retained immutable history",
+      "unsent downstream closure versus unknown approval recovery and registrar withdrawal"
+    ]
+  },
+  "ci": {
+    "run_id": 36599990511,
+    "conclusion": "success",
+    "windows": {
+      "job_id": 109514596572,
+      "passed": 1290,
+      "failed": 0
+    },
+    "linux": {
+      "job_id": 109514596280,
+      "passed": 1286,
+      "failed": 0,
+      "skipped": 1
+    },
+    "gitleaks": {
+      "job_id": 109514595922,
+      "conclusion": "success"
+    },
+    "extra_checks": "passed",
+    "receipt": ".data/cancellation-ci.json"
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "real_operations": {
+    "deployment_changed": false,
+    "global_config_changed": false,
+    "source_approval_changed": false,
+    "physical_multi_node_test": false
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "source final acceptance/cancellation ordering and graph retirement are not yet implemented; source and target holds remain",
+    "automatic delivery/deadline scheduling and full UI are pending",
+    "POSIX group_signalled is not strong process-tree quiescence proof",
+    "fixture stop proofs are labelled and cannot serve as real provider acceptance",
+    "unmanaged or old-epoch run history remains unresolved without actual proof",
+    "physical integration is the two user-specified computers; no physical test is claimed"
+  ],
+  "tested_commit": "8f1c7198439cd0e0d5196db9d241ab40ff7857ab"
+}

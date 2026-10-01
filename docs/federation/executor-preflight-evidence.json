@@ -1,0 +1,135 @@
+{
+  "format": "ai-fleet-executor-preflight-evidence/v1",
+  "batch": 81,
+  "base_commit": "41d2d70663016128cf10cbc06d9e1368e6e5cf9d",
+  "recorded_at": "2026-10-01T12:54:12.642450+00:00",
+  "review_items": [
+    "seven-module/H6a"
+  ],
+  "status": "implemented_with_local_windows_evidence_not_formally_accepted",
+  "contract": {
+    "pure_complete_request_before_authorizeLaunch": true,
+    "serialized_request_limit_bytes": 524288,
+    "includes_newline": true,
+    "prompt_limit_bytes": 131072,
+    "independent_filesystem_pin_rechecks_retained": true,
+    "preflight_failure": {
+      "phase": "prepared",
+      "quota_used": 0,
+      "reservation_retained": true,
+      "execution_record_created": false,
+      "credential_callable": false
+    },
+    "post_permit_failure": {
+      "typed_allowlisted_codes_preserved": true,
+      "unknown_exceptions_sanitized": true,
+      "process_stop_claimed": false,
+      "refund": false,
+      "retry": false,
+      "signed_journal_replay": true
+    }
+  },
+  "node_runs": [
+    {
+      "log": "review81-red.log",
+      "sha256": "f081c1340240f63ede24e1d4d3270d75d4b2e25fa2762b53a8b78665317dcbf9",
+      "tests": 2,
+      "pass": 0,
+      "fail": 2,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 5405.4141
+    },
+    {
+      "log": "review81-focused.log",
+      "sha256": "fe023d0fa411ea1c559e64b3b34f94a61215b98798fd2a66f04e4eb2abaca947",
+      "tests": 2,
+      "pass": 0,
+      "fail": 2,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 5132.4229
+    },
+    {
+      "log": "review81-regression.log",
+      "sha256": "90913c5ad3b30948f7f2d3aa70c7e4f79ffb4b0feab2a383df9b6d2078987c29",
+      "tests": 94,
+      "pass": 94,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 90265.7379
+    },
+    {
+      "log": "review81-isolation.log",
+      "sha256": "49da8b37493966a3df0b378a55c9914792b9fbf25bfaeebf854896fee83f010c",
+      "tests": 6,
+      "pass": 6,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 4656.6604
+    }
+  ],
+  "distinct_passing_node_cases": 100,
+  "intermediate_test_fixture_corrections": [
+    "After the two intended defects were repaired, the focused run reached two incorrect test assumptions: preparation has more than one audit event, and changed pin refusal precedes phase refusal.",
+    "Final tests compare audit count with its actual preflight value and restore the original credential bytes before asserting the separate one-use phase fence. The original red assertions were retained."
+  ],
+  "source_hash_encoding": "UTF-8 LF normalized",
+  "source_hashes": [
+    {
+      "path": "core/execution/launch-request.mjs",
+      "sha256": "81a0dadf6e4b8f347996855f9d25dacb5197f11864d71669f5e3c230c96820cf"
+    },
+    {
+      "path": "core/execution/supervisor.mjs",
+      "sha256": "6e887ffc1bce428010cb19380eedba4fec8aaa9aee1c67349bc84b7ae700a762"
+    },
+    {
+      "path": "core/execution/runner.mjs",
+      "sha256": "e9aa60f756f3512e1afa971bf5359f78b1e425b86b3decf52d7349a565850d0e"
+    },
+    {
+      "path": "core/execution/receipts.mjs",
+      "sha256": "380a1ca067cdf5746e24b0428b9d0029fb65ac1c710f5de4cd0f5796365b8b08"
+    },
+    {
+      "path": "tests/launchrequesttest.mjs",
+      "sha256": "3577fcf385e0ed6aaca03aed253d67b08466ee8c832ca10bf43cc6a6a4c6b2f3"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "17bc7b3858a67adca5cc176e5dd1fb72dfa386563f22937194bd70fd9f0674f3"
+    },
+    {
+      "path": "package.json",
+      "sha256": "bf9b507b93ca4fd91c780229e5dcd9451f8ae4015b5ea1cda8551246afeaf666"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "9a7910292d48cad38a347fd542d6428ca19da8e0dbda2fd2ac17be501c1b80c2"
+    }
+  ],
+  "plan_source_sha256": "23f8649cad6f74701d5c7ec3e801a85ad897195057acddfbe3a8bf87c0f18d34",
+  "remaining_review_items": [
+    "H6b output activity and idle detection",
+    "H6c provider stderr error categories"
+  ],
+  "limitations": [
+    "Windows synthetic subprocesses and temporary databases only",
+    "New typed failures with unknown process state do not certify process stop",
+    "Preflight does not authorize retry of a consumed permit",
+    "Older readers can reject new typed failure observations"
+  ],
+  "production_changed": false,
+  "models_called": false,
+  "tailscale_changed": false,
+  "real_peers_enabled": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}
