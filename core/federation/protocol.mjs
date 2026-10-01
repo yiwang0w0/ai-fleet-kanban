@@ -3,8 +3,9 @@ export class PeerError extends Error {
 }
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const READONLY_CANCELLATION_STATUS = "delegation-cancellation-status-readonly-v1";
+export const OPERATOR_STOP_EVIDENCE = "delegation-operator-stop-v1";
 export const CANCELLATION_CLOSURE = "delegation-cancellation-closure-v1";
-export const CAPABILITIES = Object.freeze(["node-identity-v1", "peer-health-v1", "task-projection-sync-v1", "task-snapshot-v1", "source-epoch-recovery-v1", "delegation-intents-v1", "project-relations-v1", "delegation-bindings-v1","delegation-cancellation-v1",READONLY_CANCELLATION_STATUS,CANCELLATION_CLOSURE,"delegation-results-v1","artifact-transfer-v1","delegation-completion-v1"]);
+export const CAPABILITIES = Object.freeze(["node-identity-v1", "peer-health-v1", "task-projection-sync-v1", "task-snapshot-v1", "source-epoch-recovery-v1", "delegation-intents-v1", "project-relations-v1", "delegation-bindings-v1","delegation-cancellation-v1",READONLY_CANCELLATION_STATUS,CANCELLATION_CLOSURE,OPERATOR_STOP_EVIDENCE,"delegation-results-v1","artifact-transfer-v1","delegation-completion-v1"]);
 export const SCOPES = Object.freeze(["peer:handshake", "peer:health", "sync:pull", "sync:ack", "delegation:offer", "delegation:status", "relations:publish", "relations:approve", "relations:read", "delegation:binding","delegation:control","delegation:result","artifact:write","delegation:complete","relations:complete"]);
 export const PROTOCOL = Object.freeze({ min: 1, max: 1 });
 export function bad(message) { throw new PeerError("BAD_INPUT", message); }

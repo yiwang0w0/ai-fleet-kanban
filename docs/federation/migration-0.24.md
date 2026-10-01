@@ -73,3 +73,7 @@ H4a 修复将 binding_schema 从 3 升到 4、relation_schema 从 2 升到 3，�
 | 发布 | 准确提交的 Windows CI 和秘密扫描、完成的阶段验收及上线授权 |
 
 源码、数据库各组件 schema、worker 协议、peer 协议和 package 版本是不同合同，不要求数字相同。逐项定义见 [GLOSSARY](../GLOSSARY.md#federation-contracts-024-development)，详细 run 行为见 [runs.md](runs.md)。
+
+## 人工未知运行恢复记录
+
+新增只增不改的 `broker_execution_resolutions` 与 `broker_execution_resolution_schema=1`；dispatch schema 仍为 3，既有观察/结果保持。人工停止证据进入取消时使用停止回执 v2，登记节点握手能力为 `delegation-operator-stop-v1`。旧 v1 回执继续有效；参与人工恢复的节点需同时升级，不能静默降级证据。操作及限制见 [人工恢复](uncertain-execution.md)。

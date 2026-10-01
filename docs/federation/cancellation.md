@@ -61,3 +61,7 @@ peer 协商能力 delegation-cancellation-v1，并使用 POST /peer/v1/delegatio
 ## 尚需完成
 
 取消的双端关系退役、本地结算和来源解锁已有实现；自动投递/轮询、取消交付物的长期清理和物理双机演练未完成。未知或不受监管的旧进程保留待核验状态，不能通过补写停止标志绕过。恢复换代后原取消继续隔离；接收范围不会因重启、改名或旧记录删除而自动解锁。
+
+## 人工停止声明
+
+缺失监管观察的运行可由本机操作者按 [未知运行恢复](uncertain-execution.md) 留存真实停止声明，再显式推进取消。含此类证据的停止回执使用 v2 与 `includes_operator_attestation` 标记，并传递到全部上游；不能当作机器 `job_empty`。取消退役需要登记节点支持 `delegation-operator-stop-v1`。

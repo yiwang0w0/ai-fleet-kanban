@@ -91,3 +91,7 @@ MCP get_sync_status 在该项目授权范围内显示分派阶段和原因，不
 npm run test:dispatch 覆盖原生闸、版本/授权变化、源代码闸、预算保留和 CAS、两个独立进程争抢、嵌套事务拒绝、提交失败回滚、旧 run 回执、MCP 先交付、独立 stdio 进程、租约回收和本地管理 CLI。源文件摘要及完整回归/CI 结果见 dispatch-evidence.json。阶段 G04 仍未通过。
 
 持续调度现已接通本机已授权 provider 请求、受限预算、私有启动目录及登记工作区，并保留一次性许可与进程停止证明。命令、停止及回执恢复流程见 [scheduler.md](scheduler.md)。这个接线不替代真实订阅、OS 隔离或 G04/G10 验收。
+
+## 未知运行的人工出口
+
+本机 CLI 新增 `prepare-uncertain` / `record-uncertain`，用于已消费许可但无可信停止观察的运行。两步核对绑定当前状态，保留不可变人工决定，任务留在人工闸；原额度不退、观察不伪造。计划、停止声明及重放条件见 [操作合同](uncertain-execution.md)。

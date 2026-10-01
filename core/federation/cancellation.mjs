@@ -80,9 +80,10 @@ export function peerCancellationState(db,peer,{relation_id,project_id,cancel_id}
 export function recordCancellationReceipt(db,{relationId,receipt:r}){return unit(db,()=>{
  const c=row(db,relationId);if(c.side!=="source")fail("FORBIDDEN","仅来源记录远端停止回执",403);
  const fields=["schema_version","kind","cancel_id","relation_id","request_digest","source_node_id","source_epoch","target_node_id","target_epoch","stopped"];
- const stopped=r?.kind==="cancel_stopped";exact(r,stopped?[...fields,"scope_digest","member_count","run_count","downstream_count","proof_digest","fixture_runs"]:fields);
- const expected=receipt(c,stopped?"cancel_stopped":"cancel_received");if(fields.some(k=>r[k]!==expected[k]))fail("RECEIPT_MISMATCH","取消回执身份或请求摘要不匹配");
+ const stopped=r?.kind==="cancel_stopped",attested=stopped&&r.schema_version===2;exact(r,stopped?[...fields,"scope_digest","member_count","run_count","downstream_count","proof_digest","fixture_runs",...(attested?["operator_attested_runs","stop_evidence"]:[])]:fields);
+ const expected=receipt(c,stopped?"cancel_stopped":"cancel_received",attested?{schema_version:2}:{});if(fields.some(k=>r[k]!==expected[k]))fail("RECEIPT_MISMATCH","取消回执身份或请求摘要不匹配");
  if(stopped){for(const k of ["scope_digest","proof_digest"])if(typeof r[k]!=="string"||!/^[0-9a-f]{64}$/.test(r[k]))fail("RECEIPT_MISMATCH","停止证明摘要无效");for(const k of ["member_count","run_count","downstream_count","fixture_runs"])if(!Number.isSafeInteger(r[k])||r[k]<(k==="member_count"?1:0)||r[k]>100000)fail("RECEIPT_MISMATCH","停止证明范围无效");if(r.fixture_runs>r.run_count)fail("RECEIPT_MISMATCH","夹具运行计数无效");}
+ if(attested&&(r.stop_evidence!=="includes_operator_attestation"||!Number.isSafeInteger(r.operator_attested_runs)||r.operator_attested_runs<0||r.operator_attested_runs+r.fixture_runs>r.run_count||r.operator_attested_runs===0&&r.downstream_count===0))fail("RECEIPT_MISMATCH","人工停止证明范围无效");
  if(c.state==="stopped"){if(stopped&&c.stopped_json!==canonical(r))fail("RECEIPT_MISMATCH","停止证明不能替换");return cancellationState(db,relationId);}
  if(stopped)db.prepare("UPDATE delegation_cancellations SET state='stopped',stopped_json=? WHERE relation_id=?").run(canonical(r),relationId);
  else if(c.state==="pending")db.prepare("UPDATE delegation_cancellations SET state='received',received_json=? WHERE relation_id=?").run(canonical(r),relationId);
@@ -98,10 +99,10 @@ export function cancellationWork(db,relationId){
 }
 export function confirmCancellationStopped(db,relationId){return unit(db,()=>{
  const {c,members,runs,downstream}=cancellationWork(db,relationId);if(c.state==="stopped")return {receipt:JSON.parse(c.stopped_json),blockers:[]};
- const {blockers,proofs,fixtureRuns}=inspectStoppedRuns(db,{nodeId:c.node_id,nodeEpoch:c.node_epoch,members,runs}),downproofs=[];
- for(const b of downstream){const child=db.prepare("SELECT state,stopped_json,node_id,node_epoch FROM delegation_cancellations WHERE relation_id=? AND side='source'").get(b.relation_id);if(b.state==="prepared"||child?.state!=="stopped"||child.node_id!==c.node_id||child.node_epoch!==c.node_epoch)blockers.push({kind:"downstream_pending",relation_id:b.relation_id});else downproofs.push({relation_id:b.relation_id,receipt_digest:digest(JSON.parse(child.stopped_json))});}
+ const {blockers,proofs,fixtureRuns,operatorAttestedRuns}=inspectStoppedRuns(db,{nodeId:c.node_id,nodeEpoch:c.node_epoch,members,runs,allowOperatorAttested:true}),downproofs=[];let downstreamAttested=false;
+ for(const b of downstream){const child=db.prepare("SELECT state,stopped_json,node_id,node_epoch FROM delegation_cancellations WHERE relation_id=? AND side='source'").get(b.relation_id);if(b.state==="prepared"||child?.state!=="stopped"||child.node_id!==c.node_id||child.node_epoch!==c.node_epoch)blockers.push({kind:"downstream_pending",relation_id:b.relation_id});else {const stopped=JSON.parse(child.stopped_json);downproofs.push({relation_id:b.relation_id,receipt_digest:digest(stopped)});if(stopped.schema_version===2)downstreamAttested=true;}}
  if(blockers.length)return {receipt:JSON.parse(c.received_json),blockers:blockers.slice(0,100),blocker_count:blockers.length};
  const proof={cancel_id:c.cancel_id,scope_digest:c.scope_digest,member_uids:members.map(t=>t.task_uid),runs:proofs,downstream:downproofs};
- const ack=receipt(c,"cancel_stopped",{scope_digest:c.scope_digest,member_count:members.length,run_count:runs.length,downstream_count:downstream.length,proof_digest:digest(proof),fixture_runs:fixtureRuns});
+ const ack=receipt(c,"cancel_stopped",{scope_digest:c.scope_digest,member_count:members.length,run_count:runs.length,downstream_count:downstream.length,proof_digest:digest(proof),fixture_runs:fixtureRuns,...(operatorAttestedRuns||downstreamAttested?{schema_version:2,operator_attested_runs:operatorAttestedRuns,stop_evidence:"includes_operator_attestation"}:{})});
  db.prepare("INSERT INTO cancellation_proofs VALUES(?,?,?,?)").run(c.cancel_id,canonical(proof),digest(proof),at());db.prepare("UPDATE delegation_cancellations SET state='stopped',stopped_json=? WHERE relation_id=?").run(canonical(ack),relationId);event(db,relationId,"stop_confirmed",{proof_digest:digest(proof)});return {receipt:ack,blockers:[]};
 });}

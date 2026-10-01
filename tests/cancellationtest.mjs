@@ -1,3 +1,4 @@
+import {normalizeCancellationClosure} from '../core/federation/cancellation-contract.mjs';
 import {migrateCancellationClosure,cancellationClosureState,startCancellationRetirement,recordCancellationRetirement,settleCancellation} from "../core/federation/cancellation-closure.mjs";
 import {submitCancellationRetirement} from "../core/federation/cancellation-closure-client.mjs";
 import {cancelRelation,completeRelation,localRegistrarPeer} from "../core/federation/relations.mjs";
@@ -7,7 +8,7 @@ import {readFleetTask} from "../core/fleet-view.mjs";
 import {migrateCancellations,listCancellations,prepareCancellation,receiveCancellation,cancellationState,recordCancellationReceipt,confirmCancellationStopped,cancellationWork} from "../core/federation/cancellation.mjs";
 import {progressCancellation} from "../core/federation/cancellation-service.mjs";
 import {deliverCancellation} from "../core/federation/cancellation-client.mjs";
-import {migrateDispatch,putQuota,prepareDispatch,authorizeLaunch,finishDispatch,dispatchStatus,quotaStatus} from "../core/execution/dispatch.mjs";
+import {prepareUncertainResolution,recordUncertainResolution,migrateDispatch,putQuota,prepareDispatch,authorizeLaunch,finishDispatch,dispatchStatus,quotaStatus} from "../core/execution/dispatch.mjs";
 import {watchDelegationCancellation} from "../core/execution/control.mjs";
 import {pinFile,superviseProcess} from "../core/execution/supervisor.mjs";
 import {existsSync} from "node:fs";
@@ -449,4 +450,35 @@ test("cancellation closure works with registrar on source in a two-node layout a
  const f=fullyBound({localRegistrar:true});stopped(f);closureGrants(f);const url=await network(f.a);
  assert.equal((await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id})).delivery_state,"waiting_peer");assert.equal((await submitCancellationRetirement(f.b.db,{relationId:f.d.relation_id,url,credentialFile:f.br.file})).closure_phase,"retired");assert.equal((await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id,mode:"poll"})).closure_phase,"retired");settlePair(f);
  const view=readFleetTask(f.a.db,f.source.task_uid).evidence.relations;assert.equal(view.modules.binding,"available");assert.equal(view.modules.registration,"available");const edge=view.items.find(r=>r.relation_id===f.d.relation_id);assert.equal(edge.binding_state,"cancelled");assert.equal(edge.registration_state,"cancelled");assert.equal(edge.closed,true);
+});
+
+
+function lostProvider(f){
+ const {w,q}=worker(f,{mode:'provider'}),execution={format:'ai-fleet-process/v1',adapter_contract:'lost-observation-fixture/v1',adapter_digest:'1'.repeat(64),runtime:'claude',model:'fixture-model',effort:'low',run_id:w.run_id,agent_instance_id:w.agent_instance_id,principal_id:w.principal_id,command_sha256:'2'.repeat(64),python_sha256:'3'.repeat(64),files_digest:'4'.repeat(64),prompt_sha256:'5'.repeat(64),environment_sha256:'6'.repeat(64),timeout_ms:5000,heartbeat_ms:50,stderr_limit:1024};
+ authorizeLaunch(f.b.db,{dispatchId:w.dispatch_id,sourceGate,execution});return {w,q};
+}
+function attestLost(f,w){const plan=prepareUncertainResolution(f.b.db,w.dispatch_id),attestation={format:'ai-fleet-uncertain-execution-attestation/v1',node_id:plan.node_id,node_epoch:plan.node_epoch,dispatch_id:plan.dispatch_id,run_id:plan.run_id,launch_digest:plan.launch_digest,plan_digest:plan.plan_digest,supervisor_stopped:true,process_tree_stopped:true,remote_session_stopped:true,no_automatic_retry:true,evidence_ref:'fixture:explicit-stopped-provider-tree',attested_at:new Date().toISOString()};return recordUncertainResolution(f.b.db,{plan,expectedPlanDigest:plan.plan_digest,attestation});}
+
+test('operator-attested lost outcome travels through actual HTTP cancellation and registrar retirement with an explicit evidence tier',async()=>{
+ const f=fullyBound(),{w,q}=lostProvider(f);received(f);assert.equal(progressCancellation(f.b.db,f.d.relation_id).receipt.stopped,false);const resolution=attestLost(f,w),stopped=progressCancellation(f.b.db,f.d.relation_id).receipt;assert.equal(stopped.schema_version,2);assert.equal(stopped.operator_attested_runs,1);assert.equal(stopped.stop_evidence,'includes_operator_attestation');assert.equal(dispatchStatus(f.b.db,w.dispatch_id).execution.observation,null);assert.equal(resolution.outcome_known,false);
+ assert.throws(()=>normalizeCancellationClosure({schema_version:1,kind:'delegation_cancellation',request:cancellationState(f.b.db,f.d.relation_id).request,stopped:null}),{code:'BAD_INPUT'});
+ const before=counts(f.a.db);for(const patch of [{operator_attested_runs:2},{stop_evidence:'machine_verified'},{schema_version:1},{operator_attested_runs:0}]){assert.throws(()=>recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:{...stopped,...patch}}));assert.equal(counts(f.a.db),before);}
+ const url=await network(f.b),receivedStop=await deliverCancellation(f.a.db,{relationId:f.d.relation_id,mode:'poll',url,credentialFile:f.ab.file});assert.equal(receivedStop.receipt.schema_version,2);assert.equal(receivedStop.stopped,true);closureGrants(f);const registrarURL=await network(f.r),paths=[];
+ const oldPeer=await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id,url:registrarURL,credentialFile:f.ar.file,fetchImpl:async(u,o)=>{paths.push(new URL(u).pathname);const response=await fetch(u,o);if(u.endsWith('/hello')){const body=await response.json();body.capabilities=body.capabilities.filter(c=>c!=='delegation-operator-stop-v1');return new Response(JSON.stringify(body),{status:200,headers:{'Content-Type':'application/json'}});}return response;}});assert.equal(oldPeer.error_code,'REQUIRED_FEATURE_UNSUPPORTED');assert.deepEqual(paths,['/peer/v1/hello']);assert.equal(oldPeer.attempts.length,0);
+ assert.equal((await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id,url:registrarURL,credentialFile:f.ar.file})).delivery_state,'waiting_peer');const retired=await submitCancellationRetirement(f.b.db,{relationId:f.d.relation_id,url:registrarURL,credentialFile:f.br.file});assert.equal(retired.retirement.cancellation.stopped.schema_version,2);assert.throws(()=>recordCancellationRetirement(f.a.db,{relationId:f.d.relation_id,receipt:{...retired.retirement,schema_version:2}}),{code:'BAD_CANCELLATION_CLOSURE'});assert.equal((await submitCancellationRetirement(f.a.db,{relationId:f.d.relation_id,mode:'poll',url:registrarURL,credentialFile:f.ar.file})).delivery_state,'acknowledged');settlePair(f);assert.equal(bindingState(f.a.db,f.d.relation_id).state,'cancelled');assert.equal(store.get(f.b.db,f.target.id).human_gate,true);assert.equal(store.get(f.a.db,f.source.id).released,false);assert.equal(quotaStatus(f.b.db,q.quota_id).used,1);assert.equal(graphVersion(f)>1,true);
+});
+
+test("downstream operator attestation is propagated upstream and survives bottom-up retirement",()=>{
+ const f=fullyBound({withThird:true}),c=f.c,bc=grant(f.b,c),cr=grant(c,f.r,["peer:handshake","relations:read","relations:approve","relations:publish"]),source=store.get(f.b.db,f.target.id);
+ const out=createIntent(f.b.db,{delegationId:randomUUID(),taskUid:source.task_uid,expectedVersion:source.aggregate_version,targetNodeId:c.node.node_id,targetEpoch:c.node.sync_epoch});receiveOffer(c.db,bc.peer,out.offer);
+ const accepted=decideIncoming(c.db,{delegationId:out.delegation_id,decisionId:randomUUID(),expectedVersion:1,decision:"accept",note:"downstream"});recordReceipt(f.b.db,out.delegation_id,accepted);register(f,c,cr);
+ const target=store.get(c.db,c.db.prepare("SELECT id FROM tasks WHERE task_uid=?").get(accepted.target_task_uid).id),q={a:f.b,b:c,r:f.r,g:f.g,ab:bc,ar:f.br,br:cr,source,target,out};
+ q.d={...f.d,relation_id:randomUUID(),delegation_id:out.delegation_id,source_node_id:f.b.node.node_id,source_epoch:f.b.node.sync_epoch,source_task_uid:source.task_uid,target_node_id:c.node.node_id,target_epoch:c.node.sync_epoch,target_task_uid:target.task_uid,offer_digest:out.offer_digest};begin(q);finish(q);
+ const lost=lostProvider(q);received(f);const waiting=progressCancellation(f.b.db,f.d.relation_id);assert.equal(waiting.receipt.stopped,false);assert.ok(waiting.blockers.some(b=>b.relation_id===q.d.relation_id));
+ const childCancel=cancellationState(f.b.db,q.d.relation_id);assert.equal(childCancel.request.reason_code,"upstream_cancelled");receiveCancellation(c.db,bc.peer,childCancel.request);attestLost(q,lost.w);const done=progressCancellation(c.db,q.d.relation_id).receipt;
+ recordCancellationReceipt(f.b.db,{relationId:q.d.relation_id,receipt:done});assert.equal(progressCancellation(f.b.db,f.d.relation_id).receipt.downstream_count,1);const upstream=progressCancellation(f.b.db,f.d.relation_id).receipt;assert.equal(upstream.schema_version,2);assert.equal(upstream.operator_attested_runs,0);assert.equal(upstream.stop_evidence,"includes_operator_attestation");
+ closureGrants(f);assert.throws(()=>startCancellationRetirement(f.b.db,{relationId:f.d.relation_id,expectedVersion:graphVersion(f)}),{code:"DOWNSTREAM_PENDING"});
+ retirePair(q);settlePair(q);recordCancellationReceipt(f.a.db,{relationId:f.d.relation_id,receipt:progressCancellation(f.b.db,f.d.relation_id).receipt});retirePair(f);settlePair(f);
+ assert.equal(relationStatus(f.r.db,f.ar.peer,{project_id:"demo",graph_id:f.g.graph_id,graph_epoch:f.g.graph_epoch,relation_id:null}).edges,0);assert.equal(store.claimById(f.b.db,{id:f.target.id,worker:"middle-stays-held"}).ok,false);
+
 });

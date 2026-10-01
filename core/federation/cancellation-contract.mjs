@@ -9,9 +9,9 @@ export function normalizeCancellationClosure(c){
  if(c.schema_version!==1||c.kind!=="delegation_cancellation"||Buffer.byteLength(canonical(c))>16384)fail();
  const q=c.request,r=c.stopped;exact(q,["schema_version","kind","cancel_id","relation","reason_code"]);uuid(q.cancel_id,"cancel_id");const d=normalizeRelation(q.relation);
  if(q.schema_version!==1||q.kind!=="cancel_delegation"||!["operator_cancelled","upstream_cancelled","deadline_exceeded"].includes(q.reason_code))fail();
- exact(r,["schema_version","kind","cancel_id","relation_id","request_digest","source_node_id","source_epoch","target_node_id","target_epoch","stopped","scope_digest","member_count","run_count","downstream_count","proof_digest","fixture_runs"]);
- if(r.schema_version!==1||r.kind!=="cancel_stopped"||r.cancel_id!==q.cancel_id||r.relation_id!==d.relation_id||r.request_digest!==digest(q)||r.stopped!==true||["source_node_id","source_epoch","target_node_id","target_epoch"].some(k=>r[k]!==d[k])||!hash(r.scope_digest)||!hash(r.proof_digest))fail();
- for(const k of ["member_count","run_count","downstream_count","fixture_runs"])if(!Number.isSafeInteger(r[k])||r[k]<(k==="member_count"?1:0)||r[k]>100000)fail();if(r.fixture_runs>r.run_count)fail();return c;
+ const attested=r?.schema_version===2;exact(r,["schema_version","kind","cancel_id","relation_id","request_digest","source_node_id","source_epoch","target_node_id","target_epoch","stopped","scope_digest","member_count","run_count","downstream_count","proof_digest","fixture_runs",...(attested?["operator_attested_runs","stop_evidence"]:[])]);
+ if(![1,2].includes(r.schema_version)||r.kind!=="cancel_stopped"||r.cancel_id!==q.cancel_id||r.relation_id!==d.relation_id||r.request_digest!==digest(q)||r.stopped!==true||["source_node_id","source_epoch","target_node_id","target_epoch"].some(k=>r[k]!==d[k])||!hash(r.scope_digest)||!hash(r.proof_digest))fail();
+ for(const k of ["member_count","run_count","downstream_count","fixture_runs"])if(!Number.isSafeInteger(r[k])||r[k]<(k==="member_count"?1:0)||r[k]>100000)fail();if(r.fixture_runs>r.run_count)fail();if(attested&&(r.stop_evidence!=="includes_operator_attestation"||!Number.isSafeInteger(r.operator_attested_runs)||r.operator_attested_runs<0||r.operator_attested_runs+r.fixture_runs>r.run_count||r.operator_attested_runs===0&&r.downstream_count===0))fail();return c;
 }
 export function checkCancellationRetirement(r,c,{registrarNodeId,registrarEpoch}){
  normalizeCancellationClosure(c);const d=c.request.relation;

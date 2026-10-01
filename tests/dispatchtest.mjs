@@ -1,3 +1,6 @@
+import {createBackup,restoreBackup} from '../core/backup.mjs';
+import {prepareRecovery,activateRecovery,retireNode} from '../core/recovery.mjs';
+import {inspectStoppedRuns} from '../core/execution/stop-proof.mjs';
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import {DatabaseSync} from "node:sqlite";
@@ -6,7 +9,7 @@ import {randomUUID} from "node:crypto";
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync,cpSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
-import {execFileSync,spawn} from "node:child_process";
+import {execFileSync,spawn,spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {prepareAdapter,ADAPTER_CONTRACTS} from "../core/execution/adapters.mjs";
 import {executionJournal} from "../core/execution/journal.mjs";
@@ -18,7 +21,7 @@ import {migrateBroker,putRole,issuePrincipal,revokePrincipal,authenticatePrincip
 import {callTool} from "../core/mcp/tools.mjs";
 import {pinFile,superviseProcess} from "../core/execution/supervisor.mjs";
 import {createSourceGate} from "../core/execution/source-gate.mjs";
-import {migrateDispatch,putQuota,quotaStatus,prepareDispatch,authorizeLaunch,finishDispatch,abandonPrepared,dispatchStatus} from "../core/execution/dispatch.mjs";
+import {prepareUncertainResolution,recordUncertainResolution,migrateDispatch,putQuota,quotaStatus,prepareDispatch,authorizeLaunch,finishDispatch,abandonPrepared,dispatchStatus} from "../core/execution/dispatch.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js"),ROOT=fileURLToPath(new URL("../",import.meta.url));
 const TMP=mkdtempSync(join(tmpdir(),"fleet-dispatch-")),dbs=[],children=[];let seq=0;
 after(async()=>{for(const c of children)if(c.exitCode===null&&c.signalCode===null){const done=new Promise(r=>c.once("close",r));c.kill();await done;}for(const db of dbs){try{db.close();}catch{}}rmSync(TMP,{recursive:true,force:true});});
@@ -34,8 +37,8 @@ const SOURCE=source();
 function policy(id,kind,extra={}){
  return {role_id:id,kind,projects:["demo"],capabilities:kind==="implement"?["board-tools"]:[],runtime:kind==="implement"?"claude":null,model:kind==="implement"?"fixture-model":null,effort:kind==="implement"?"fixture-effort":null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:2,max_open_tasks:100,requests_per_minute:300},...extra};
 }
-function fixture({limit=5,sourceInfo=SOURCE,executionMode="fixture"}={}){
- const dbPath=path("board")+".db",db=new DatabaseSync(dbPath);dbs.push(db);db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000");store.migrate(db);migratePeers(db);migrateSync(db);migrateBroker(db);migrateDispatch(db);
+function fixture({limit=5,sourceInfo=SOURCE,executionMode="fixture",databaseDirectory=TMP}={}){
+ const dbPath=databaseDirectory===TMP?path("board")+".db":join(databaseDirectory,"board.db"),db=new DatabaseSync(dbPath);dbs.push(db);db.exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000");store.migrate(db);migratePeers(db);migrateSync(db);migrateBroker(db);migrateDispatch(db);
  putRole(db,policy("coord","coordinate"));putRole(db,policy("engine","implement"));
  const file=path("coordinator")+".json",p=issuePrincipal(db,{roleId:"coord",projects:["demo"],credentialFile:file});
  const coord={...p,auth:"Bearer "+JSON.parse(readFileSync(file,"utf8")).token};
@@ -563,4 +566,71 @@ test("sanitized Codex errors survive signed settlement without refund, retry or 
  assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);assert.equal(store.get(f.db,w.receipt.task_id).waiting_for,"decision");
  assert.throws(()=>launch(f,w),{code:"LAUNCH_NOT_AVAILABLE"});assert.throws(()=>authenticatePrincipal(f.db,w.auth));
  assert.equal(reconcileExecutionJournal(f.db,file).phase,"settled");
+});
+
+
+test("operator recovery plan exists for a consumed provider permit with no observation",()=>{
+ const f=fixture({executionMode:"provider"}),t=card(f),w=prepare(f,assign(f,t));recorded(f,w);
+ const output=path("uncertain-plan")+".json",r=spawnSync(process.execPath,[join(ROOT,"cli/dispatch.mjs"),"prepare-uncertain","--db",f.dbPath,"--dispatch",w.receipt.dispatch_id,"--plan-file",output],{encoding:"utf8",windowsHide:true,timeout:30000});
+ assert.equal(r.status,0,r.stdout+r.stderr);const p=JSON.parse(readFileSync(output,"utf8"));assert.equal(p.format,"ai-fleet-uncertain-execution-plan/v1");assert.equal(p.dispatch_id,w.receipt.dispatch_id);assert.equal(p.run_id,w.receipt.run_id);assert.equal(dispatchStatus(f.db,w.receipt.dispatch_id).phase,"launch_committed");assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+});
+
+function uncertain(f,w){const plan=prepareUncertainResolution(f.db,w.receipt.dispatch_id);return {plan,expectedPlanDigest:plan.plan_digest,attestation:{format:'ai-fleet-uncertain-execution-attestation/v1',node_id:plan.node_id,node_epoch:plan.node_epoch,dispatch_id:plan.dispatch_id,run_id:plan.run_id,launch_digest:plan.launch_digest,plan_digest:plan.plan_digest,supervisor_stopped:true,process_tree_stopped:true,remote_session_stopped:true,no_automatic_retry:true,evidence_ref:'fixture:explicit-operator-stop-check',attested_at:new Date().toISOString()}};}
+function uncertainProof(f,w,allowOperatorAttested=false){return inspectStoppedRuns(f.db,{nodeId:w.receipt.node_id,nodeEpoch:w.receipt.node_epoch,members:[],runs:f.db.prepare('SELECT * FROM task_runs WHERE run_id=?').all(w.receipt.run_id),allowOperatorAttested});}
+function resolutionState(f){return JSON.stringify(Object.fromEntries(['tasks','task_runs','task_events','broker_dispatches','broker_principals','broker_call_quotas','broker_execution_records','broker_execution_resolutions','broker_dispatch_events','broker_auth_events'].map(n=>[n,f.db.prepare('SELECT * FROM '+n+' ORDER BY rowid').all()])));}
+
+test('operator recovery CLI holds the original task, revokes credentials and replays one retained decision without refund',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f)));recorded(f,w);const input=uncertain(f,w),p=path('operator-plan')+'.json',a=path('operator-attestation')+'.json';writeFileSync(p,JSON.stringify(input.plan));writeFileSync(a,JSON.stringify(input.attestation));
+ const argv=[join(ROOT,'cli/dispatch.mjs'),'record-uncertain','--db',f.dbPath,'--plan-file',p,'--plan-digest',input.expectedPlanDigest,'--attestation-file',a],run=()=>spawnSync(process.execPath,argv,{encoding:'utf8',windowsHide:true,timeout:30000});
+ const r=run();assert.equal(r.status,0,r.stdout+r.stderr);const receipt=JSON.parse(r.stdout),s=dispatchStatus(f.db,w.receipt.dispatch_id),t=store.get(f.db,w.receipt.task_id);assert.equal(receipt.code,'OPERATOR_ATTESTED_LOST');assert.equal(receipt.process_stop_evidence,'operator_attested_not_machine_verified');assert.equal(receipt.outcome_known,false);assert.equal(s.phase,'interrupted');assert.equal(s.result,null);assert.equal(s.execution.observation,null);assert.equal(t.status,'waiting');assert.equal(t.human_gate,true);assert.equal(t.released,false);assert.equal(store.claimById(f.db,{id:t.id,worker:'no-retry'}).ok,false);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);assert.throws(()=>authenticatePrincipal(f.db,w.auth));assert.throws(()=>authorizeLaunch(f.db,{dispatchId:w.receipt.dispatch_id,sourceGate:f.source.gate}));
+ const before=resolutionState(f),replay=run();assert.equal(replay.status,0,replay.stderr);assert.deepEqual(JSON.parse(replay.stdout),receipt);assert.equal(resolutionState(f),before);assert.ok(uncertainProof(f,w).blockers.some(b=>b.kind==='outcome_missing'));const proof=uncertainProof(f,w,true);assert.equal(proof.blockers.length,0);assert.equal(proof.operatorAttestedRuns,1);assert.equal(proof.proofs[0].kind,'operator_attested_not_machine_verified');
+ assert.equal(f.db.prepare("SELECT count(*) n FROM task_events WHERE kind='execution_uncertain_recorded'").get().n,1);assert.throws(()=>f.db.exec("UPDATE broker_execution_resolutions SET receipt_json='{}'"),/immutable/);assert.throws(()=>f.db.exec('DELETE FROM broker_execution_resolutions'),/retained/);
+ migrateDispatch(f.db);const reopened=new DatabaseSync(f.dbPath,{readOnly:true});try{assert.deepEqual(dispatchStatus(reopened,w.receipt.dispatch_id).resolution,receipt);}finally{reopened.close();}
+});
+
+test('operator recovery refuses mismatched, incomplete and stale attestation without changing business state',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f)));recorded(f,w);const input=uncertain(f,w),before=resolutionState(f);
+ for(const change of [x=>x.expectedPlanDigest='0'.repeat(64),x=>x.plan.run_id=randomUUID(),x=>x.attestation.dispatch_id=randomUUID(),x=>x.attestation.process_tree_stopped=false,x=>x.attestation.supervisor_stopped=false,x=>x.attestation.remote_session_stopped=false,x=>x.attestation.no_automatic_retry=false,x=>x.attestation.evidence_ref='',x=>x.attestation.attested_at='invalid',x=>x.attestation.extra='untrusted']){const x=structuredClone(input);change(x);assert.throws(()=>recordUncertainResolution(f.db,x));assert.equal(resolutionState(f),before);}
+ f.db.prepare('UPDATE tasks SET lease_until=lease_until+1 WHERE id=?').run(w.receipt.task_id);const changed=resolutionState(f);assert.throws(()=>recordUncertainResolution(f.db,input),{code:'PLAN_STALE'});assert.equal(resolutionState(f),changed);
+ const fresh=uncertain(f,w);recordUncertainResolution(f.db,fresh);const end=resolutionState(f);fresh.attestation.evidence_ref='fixture:different-evidence';assert.throws(()=>recordUncertainResolution(f.db,fresh),{code:'REQUEST_CONFLICT'});assert.equal(resolutionState(f),end);
+});
+
+test('operator recovery rolls back task hold, run ending, revocation and resolution if history persistence fails',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f)));recorded(f,w);const input=uncertain(f,w),before=resolutionState(f);
+ f.db.exec("CREATE TRIGGER operator_fault BEFORE INSERT ON task_events WHEN NEW.kind='execution_uncertain_recorded' BEGIN SELECT RAISE(ABORT,'operator history fault'); END");assert.throws(()=>recordUncertainResolution(f.db,input),/operator history fault/);assert.equal(resolutionState(f),before);f.db.exec('DROP TRIGGER operator_fault');assert.equal(recordUncertainResolution(f.db,input).code,'OPERATOR_ATTESTED_LOST');assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+});
+
+test('operator recovery preserves uncertain observations and never substitutes for available machine stop evidence',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);const o={status:'failed',evidence:'supervisor result unavailable',usage:null,diagnostic:'SUPERVISOR_ERROR',observed:null,real_model_call_confirmed:false,process:{started:null,cleanup:'unconfirmed',containment:null}};settleObserved(f,w,o);const input=uncertain(f,w),before=dispatchStatus(f.db,w.receipt.dispatch_id);recordUncertainResolution(f.db,input);const after=dispatchStatus(f.db,w.receipt.dispatch_id);assert.deepEqual(after.execution,before.execution);assert.deepEqual(after.result,before.result);assert.equal(uncertainProof(f,w,true).blockers.length,0);
+ const g=fixture({executionMode:'provider'}),v=prepare(g,assign(g,card(g)));assert.throws(()=>prepareUncertainResolution(g.db,v.receipt.dispatch_id),{code:'UNCERTAIN_NOT_AVAILABLE'});const y=executionFor(v);recorded(g,v,y);settleObserved(g,v,observed(y));assert.throws(()=>prepareUncertainResolution(g.db,v.receipt.dispatch_id),{code:'OBSERVATION_AVAILABLE'});
+});
+
+test('late authenticated journals after operator recovery retain the observation without reopening or accepting the task',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f))),x=executionFor(w);recorded(f,w,x);const journal=path('late-authenticated-journal')+'.json';writeFileSync(journal,JSON.stringify(executionJournal(f.db,{dispatchId:w.receipt.dispatch_id,observation:observed(x)})));const receipt=recordUncertainResolution(f.db,uncertain(f,w)),before=JSON.stringify(store.get(f.db,w.receipt.task_id));const late=reconcileExecutionJournal(f.db,journal);assert.equal(late.phase,'settled');assert.deepEqual(late.resolution,receipt);assert.equal(late.result.accepted,false);assert.equal(late.execution.observation.diagnostic,'SUCCESS');assert.equal(JSON.stringify(store.get(f.db,w.receipt.task_id)),before);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+});
+
+test('operator recovery of an ended old run does not modify a replacement run or revoke its principal',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f)));recorded(f,w);f.db.prepare('UPDATE tasks SET lease_until=1 WHERE id=?').run(w.receipt.task_id);store.reapExpired(f.db);const t=store.get(f.db,w.receipt.task_id),v=prepare(f,assign(f,t));recorded(f,v);const before=JSON.stringify(store.get(f.db,t.id)),replacementPrincipal=f.db.prepare('SELECT * FROM broker_principals WHERE principal_id=?').get(v.receipt.principal_id),receipt=recordUncertainResolution(f.db,uncertain(f,w));assert.equal(receipt.task_disposition,'replacement_preserved');assert.equal(JSON.stringify(store.get(f.db,t.id)),before);assert.deepEqual(f.db.prepare('SELECT * FROM broker_principals WHERE principal_id=?').get(v.receipt.principal_id),replacementPrincipal);assert.equal(dispatchStatus(f.db,v.receipt.dispatch_id).phase,'launch_committed');assert.equal(quotaStatus(f.db,f.quota.quota_id).used,2);
+});
+
+
+test('a separate process exits after committing its permit and recovers without inventing a journal observation',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f))),x=executionFor(w),script=path('crash-after-permit')+'.mjs';
+ writeFileSync(script,`import {DatabaseSync} from 'node:sqlite';import {authorizeLaunch} from ${JSON.stringify(new URL('../core/execution/dispatch.mjs',import.meta.url).href)};import {createSourceGate} from ${JSON.stringify(new URL('../core/execution/source-gate.mjs',import.meta.url).href)};const db=new DatabaseSync(${JSON.stringify(f.dbPath)});authorizeLaunch(db,{dispatchId:${JSON.stringify(w.receipt.dispatch_id)},sourceGate:createSourceGate(${JSON.stringify({codeRoot:f.source.codeRoot,approvalFile:f.source.approvalFile})}),execution:${JSON.stringify(x)}});process.exit(73);`);
+ const crashed=spawnSync(process.execPath,[script],{encoding:'utf8',windowsHide:true,timeout:30000});assert.equal(crashed.status,73,crashed.stderr);const d=dispatchStatus(f.db,w.receipt.dispatch_id);assert.equal(d.phase,'launch_committed');assert.equal(d.execution.observation,null);const r=recordUncertainResolution(f.db,uncertain(f,w));assert.equal(r.outcome_known,false);assert.equal(uncertainProof(f,w,true).operatorAttestedRuns,1);assert.equal(quotaStatus(f.db,f.quota.quota_id).used,1);
+});
+
+
+test('operator recovery is unavailable through MCP and cannot cross a restore hold or node epoch',()=>{
+ const dir=path('operator-source');mkdirSync(dir);const f=fixture({executionMode:'provider',databaseDirectory:dir}),w=prepare(f,assign(f,card(f)));recorded(f,w);const input=uncertain(f,w);
+ assert.throws(()=>callTool(f.db,f.coord.auth,'record_uncertain',{request_id:randomUUID(),...input}),{code:'UNKNOWN_TOOL'});
+ const evidence=join(dir,'evidence');mkdirSync(evidence);writeFileSync(join(evidence,'fixture.txt'),'isolated operator recovery fixture');const backup=createBackup({dbPath:f.dbPath,evidenceDir:evidence,destination:path('operator-backup')}),restoredDir=path('operator-restored');restoreBackup({backupDirectory:backup.destination,destination:restoredDir});const restoredPath=join(restoredDir,'board.db'),db=new DatabaseSync(restoredPath);dbs.push(db);
+ assert.throws(()=>recordUncertainResolution(db,input),{code:'RESTORE_HOLD'});assert.throws(()=>prepareUncertainResolution(db,w.receipt.dispatch_id),{code:'RESTORE_HOLD'});
+ retireNode({dbPath:f.dbPath,expectedEpoch:w.receipt.node_epoch});const plan=prepareRecovery({dbPath:restoredPath});activateRecovery({dbPath:restoredPath,plan,expectedPlanDigest:plan.plan_digest,attestation:{format:'ai-fleet-retirement-attestation/v1',node_id:plan.node_id,retired_epoch:plan.retired_epoch,plan_digest:plan.plan_digest,original_board_stopped:true,original_agents_stopped:true,original_identity_disabled:true,other_restored_writers_stopped:true,evidence_ref:'isolated fixture only; not a physical attestation',attested_at:new Date().toISOString()}});
+ const before=resolutionState({db});assert.throws(()=>recordUncertainResolution(db,input),{code:'EPOCH_CHANGED'});assert.equal(resolutionState({db}),before);assert.throws(()=>recordUncertainResolution(f.db,input),{code:'NODE_RETIRED'});
+});
+
+test('read-only recovery planning preserves all rows and unsupported resolution schema is rejected',()=>{
+ const f=fixture({executionMode:'provider'}),w=prepare(f,assign(f,card(f)));recorded(f,w);const before=resolutionState(f),ro=new DatabaseSync(f.dbPath,{readOnly:true});let plan;try{plan=prepareUncertainResolution(ro,w.receipt.dispatch_id);}finally{ro.close();}assert.equal(plan.dispatch_id,w.receipt.dispatch_id);assert.equal(resolutionState(f),before);
+ const receipt=recordUncertainResolution(f.db,uncertain(f,w));assert.equal(receipt.code,'OPERATOR_ATTESTED_LOST');f.db.exec('UPDATE broker_execution_resolution_schema SET version=2');assert.throws(()=>dispatchStatus(f.db,w.receipt.dispatch_id),{code:'SCHEMA_INCOMPATIBLE'});assert.throws(()=>migrateDispatch(f.db),{code:'SCHEMA_INCOMPATIBLE'});assert.equal(f.db.prepare('SELECT count(*) n FROM broker_execution_resolutions').get().n,1);
 });

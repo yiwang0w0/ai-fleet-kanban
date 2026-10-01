@@ -74,3 +74,5 @@ Windows 生命周期依据 Microsoft [Job Objects](https://learn.microsoft.com/e
 供应商执行、普通命令监管及 Python 宿主入口均在非 Windows 环境提前拒绝（WINDOWS_REQUIRED）；执行入口在消费启动许可之前检查。已移除 Python 的 POSIX 进程组启动实现，Windows Job 为唯一启动与停止证明路径。测试在 Windows 子进程中替换平台标识，验证拒绝发生在配置读取和进程启动之前；这不构成 Linux 支持或 Linux 实机测试。
 
 Codex 失败诊断现可附带经过白名单校验的 observed.provider_error，仅含固定类别、合法状态和消息长度/摘要，不含供应商原文。它不改变失败判定、额度或重试规则，旧回执仍兼容。首次真实联调及其尚未定位的失败见 [实际订阅记录](real-provider-probes.md)。
+
+丢失可信进程回执或仅有未确认监管错误时，可通过 [人工未知运行恢复](uncertain-execution.md) 保留明确的人工停止声明与未知结果。它不生成机器观察、不退款、不自动重试；取消使用可识别的 v2 证据。

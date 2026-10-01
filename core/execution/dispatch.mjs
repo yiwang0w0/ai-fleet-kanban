@@ -1,3 +1,4 @@
+import {migrateExecutionResolutions,executionResolution} from './resolutions.mjs';
 import {validateWorkspaceLaunch,bindWorkspaceLaunch} from "../artifacts/workspace-session.mjs";
 import {createRequire} from "node:module";
 import {randomUUID,randomBytes} from "node:crypto";
@@ -49,6 +50,7 @@ export function migrateDispatch(db){
   db.exec("DROP TRIGGER IF EXISTS broker_execution_launch_immutable; CREATE TRIGGER broker_execution_launch_immutable BEFORE UPDATE OF dispatch_id,launch_digest,launch_json,created_at,journal_key ON broker_execution_records BEGIN SELECT RAISE(ABORT,'execution launch is immutable'); END;");
   if(db.prepare("SELECT 1 FROM sqlite_master WHERE name=\'cancellation_members\'").get())db.exec("CREATE TRIGGER IF NOT EXISTS cancellation_launch_hold BEFORE UPDATE OF launch_at ON broker_dispatches WHEN NEW.launch_at IS NOT NULL AND OLD.launch_at IS NULL AND "+cancellation.heldSQL("NEW.task_id")+" BEGIN SELECT RAISE(ABORT,\'CANCELLATION_PENDING: launch refused\'); END");
   if(schema<3)db.prepare("UPDATE broker_dispatch_schema SET version=3").run();
+  migrateExecutionResolutions(db);
  });
 }
 function audit(db,{dispatchId=null,quotaId=null,kind,detail={}}){
@@ -117,7 +119,7 @@ export function dispatchStatus(db,id){
  const d=fresh(db,id),run=db.prepare("SELECT state,terminal_task_status FROM task_runs WHERE run_id=?").get(d.run_id);
  const execution=db.prepare("SELECT * FROM broker_execution_records WHERE dispatch_id=?").get(id);
  return {...d,execution:execution?{launch_digest:execution.launch_digest,launch:JSON.parse(execution.launch_json),observation_digest:execution.observation_digest,observation:execution.observation_json?JSON.parse(execution.observation_json):null}:null,source:JSON.parse(d.source_json),result:d.result_json?JSON.parse(d.result_json):null,run,
-  launch_permit:false,real_model_call_confirmed:false};
+  resolution:executionResolution(db,id),launch_permit:false,real_model_call_confirmed:false};
 }
 /** Atomically reserves budget, claims through native gates and issues a run-bound MCP credential. Does not spawn. */
 export function prepareDispatch(db,{assignmentId,quotaId,executionMode,credentialFile,sourceGate}){
@@ -241,5 +243,55 @@ export function finishDispatch(db,{dispatchId,result,observation=null}){
   db.prepare("UPDATE broker_assignments SET state='ended',reason=? WHERE assignment_id=?").run(delivery,d.assignment_id);
   audit(db,{dispatchId,quotaId:d.quota_id,kind:"settled",detail:{status:result.status,delivery}});
   return dispatchStatus(db,dispatchId);
+ });
+}
+
+
+const UNCERTAIN_PLAN='ai-fleet-uncertain-execution-plan/v1',UNCERTAIN_ATTESTATION='ai-fleet-uncertain-execution-attestation/v1';
+const hash=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
+function uncertainSnapshot(db,dispatchId){
+ const d=fresh(db,dispatchId),e=db.prepare('SELECT * FROM broker_execution_records WHERE dispatch_id=?').get(dispatchId),t=store.get(db,d.task_id),r=db.prepare('SELECT * FROM task_runs WHERE run_id=?').get(d.run_id);
+ if(!d.launch_at||!e||!t||t.task_uid!==d.task_uid||!r)fail('UNCERTAIN_NOT_AVAILABLE','需要已消费许可且有固定启动记录的运行');
+ const p=e.observation_json?JSON.parse(e.observation_json).process:null;
+ if(p&&(p.started===false&&p.cleanup==='not_started'||p.containment==='windows-job'&&p.cleanup==='job_empty'))fail('OBSERVATION_AVAILABLE','已有机器停止观察，应使用正常结算');
+ if(executionResolution(db,dispatchId))fail('ALREADY_RESOLVED','此运行已有人工恢复回执');
+ const principals=db.prepare('SELECT principal_id,status,version FROM broker_principals WHERE run_id=? ORDER BY principal_id').all(d.run_id);
+ return {node_id:d.node_id,node_epoch:d.node_epoch,dispatch_id:dispatchId,run_id:d.run_id,task_uid:d.task_uid,task_version:t.aggregate_version,launch_digest:e.launch_digest,
+  observation_digest:e.observation_digest,result_digest:d.result_digest,phase:d.phase,run_state:r.state,task_status:t.status,task_run_id:t.run_id,
+  state_digest:digest({dispatch:d,task:t,run:r,principals}),outcome_known:false,accepted:false,automatic_retry:false,quota_refunded:false,process_stop_evidence:'operator_attested_not_machine_verified'};
+}
+/** Read-only preview; no stale-heartbeat/PID heuristic and no automatic recovery. */
+export function prepareUncertainResolution(db,dispatchId){
+ const own=!db.isTransaction;if(own)db.exec('BEGIN');try{const payload={format:UNCERTAIN_PLAN,...uncertainSnapshot(db,dispatchId),prepared_at:at()},plan={...payload,plan_digest:digest(payload)};if(own)db.exec('COMMIT');return plan;}catch(e){if(own)db.exec('ROLLBACK');throw e;}
+}
+/** Local CLI only. The operator must first stop the supervisor, its tree and remote session. */
+export function recordUncertainResolution(db,{plan,expectedPlanDigest,attestation}){
+ const fields=['format','node_id','node_epoch','dispatch_id','run_id','task_uid','task_version','launch_digest','observation_digest','result_digest','phase','run_state','task_status','task_run_id','state_digest','outcome_known','accepted','automatic_retry','quota_refunded','process_stop_evidence','prepared_at','plan_digest'];
+ exact(plan,fields,'uncertain_execution_plan');const {plan_digest,...payload}=plan;
+ if(plan.format!==UNCERTAIN_PLAN||!hash(expectedPlanDigest)||plan_digest!==expectedPlanDigest||digest(payload)!==expectedPlanDigest||!Number.isFinite(Date.parse(plan.prepared_at)))fail('PLAN_MISMATCH','恢复计划不匹配明确核对的摘要');
+ exact(attestation,['format','node_id','node_epoch','dispatch_id','run_id','launch_digest','plan_digest','supervisor_stopped','process_tree_stopped','remote_session_stopped','no_automatic_retry','evidence_ref','attested_at'],'uncertain_execution_attestation');
+ if(attestation.format!==UNCERTAIN_ATTESTATION||['node_id','node_epoch','dispatch_id','run_id','launch_digest','plan_digest'].some(k=>attestation[k]!==plan[k]))fail('ATTESTATION_MISMATCH','声明未绑定此节点、运行与已核对计划');
+ if(['supervisor_stopped','process_tree_stopped','remote_session_stopped','no_automatic_retry'].some(k=>attestation[k]!==true)||typeof attestation.evidence_ref!=='string'||attestation.evidence_ref.trim().length<8||attestation.evidence_ref.length>2048||/[\x00-\x1f\x7f]/.test(attestation.evidence_ref)||!Number.isFinite(Date.parse(attestation.attested_at)))fail('STOP_ATTESTATION_REQUIRED','需要完整停止声明、证据引用与时间');
+ return atomic(db,()=>{
+  const d=fresh(db,plan.dispatch_id),attestationDigest=digest(attestation),old=executionResolution(db,d.dispatch_id);
+  if(old){if(old.plan_digest!==plan_digest||old.attestation_digest!==attestationDigest)fail('REQUEST_CONFLICT','同一运行已有不同人工恢复决定');return old;}
+  const current=uncertainSnapshot(db,d.dispatch_id);if(Object.entries(current).some(([k,v])=>canonical(v)!==canonical(plan[k])))fail('PLAN_STALE','运行、任务或凭据状态已改变，需重新核对计划');
+  const t=store.get(db,d.task_id);let disposition='replacement_preserved';
+  if(t.run_id===d.run_id&&!t.archived_at){
+   if(t.status==='in_progress')store.report(db,{id:t.id,worker:d.worker,runId:d.run_id,outcome:'wait',evidence:'OPERATOR_ATTESTED_LOST: 运行结果未知；停止由人工声明，未机证。不自动重试或验收。'});
+   const nowTask=store.get(db,t.id);if(nowTask.status==='in_progress')fail('RUN_ACTIVE','原运行仍未结束');
+   store.update(db,{id:t.id,expectedVersion:nowTask.aggregate_version,humanGate:true,actor:'human'});
+   store.setReleased(db,{id:t.id,expectedVersion:store.get(db,t.id).aggregate_version,released:false,actor:'human'});disposition='held_for_human';
+  }
+  if(db.prepare('SELECT state FROM task_runs WHERE run_id=?').get(d.run_id).state!=='ended')fail('RUN_ACTIVE','原运行尚未形成终态，不能人工记录停止');
+  revokeRunPrincipals(db,d.run_id,'operator_attested_lost');
+  if(!d.result_digest)db.prepare("UPDATE broker_dispatches SET phase='interrupted',reason='OPERATOR_ATTESTED_LOST',finished_at=? WHERE dispatch_id=?").run(at(),d.dispatch_id);
+  db.prepare("UPDATE broker_assignments SET state='ended',reason='OPERATOR_ATTESTED_LOST' WHERE assignment_id=?").run(d.assignment_id);
+  const receipt={format:'ai-fleet-uncertain-execution-resolution/v1',code:'OPERATOR_ATTESTED_LOST',node_id:d.node_id,node_epoch:d.node_epoch,dispatch_id:d.dispatch_id,run_id:d.run_id,task_uid:d.task_uid,launch_digest:plan.launch_digest,plan_digest,attestation_digest:attestationDigest,
+   process_stop_evidence:'operator_attested_not_machine_verified',outcome_known:false,accepted:false,automatic_retry:false,quota_refunded:false,real_model_call_confirmed:false,task_disposition:disposition,recorded_at:at()};
+  db.prepare('INSERT INTO broker_execution_resolutions VALUES(?,?,?,?,?,?,?,?)').run(d.dispatch_id,plan_digest,canonical(plan),attestationDigest,canonical(attestation),digest(receipt),canonical(receipt),receipt.recorded_at);
+  const detail={dispatch_id:d.dispatch_id,run_id:d.run_id,receipt_digest:digest(receipt),code:receipt.code,process_stop_evidence:receipt.process_stop_evidence,task_disposition:disposition};
+  db.prepare("INSERT INTO task_events(at,task_id,kind,actor,detail) VALUES(?,?,'execution_uncertain_recorded','human',?)").run(at(),d.task_id,canonical(detail));
+  audit(db,{dispatchId:d.dispatch_id,quotaId:d.quota_id,kind:'operator_attested_lost',detail});return receipt;
  });
 }
