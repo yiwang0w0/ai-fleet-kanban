@@ -3075,7 +3075,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
 
  const actionDialog=$("fleet-action-dialog"),actionBody=$("fleet-action-body"),actionSubmit=$("fleet-action-submit"),actionStatus=$("fleet-action-status");
  const actionStates={pending:"已保存 · 待处理",applied:"本机已记录",acknowledged:"协议回执已核验",retry_pending:"等待重连重发",blocked:"请求受阻"};
- const commandNames={resume_delivery:"恢复原交付操作",register_artifact_target:"授权文件接收",prepare_artifact:"准备实际文件包",send_artifact:"发送或续传文件",verify_artifact:"核验接收内容",prepare_verification:"准备独立检查",run_verification:"执行独立检查",reconcile_verification:"恢复检查回执",create_delegation:"发起委派",decide_delegation:"处理接收委派",resend_delegation:"重发委派",poll_delegation:"查询委派回执",request_cancellation:"请求取消",progress_cancellation:"核对本机停止",resend_cancellation:"重发取消",poll_cancellation:"查询停止回执",prepare_result:"封存并回传候选",reject_result:"要求返工",resend_result:"重传候选",poll_result:"查询验收决定",release_delegation:"放行本机任务",publish_topology:"登记当前结构",refresh_registration:"刷新登记状态",resend_topology:"恢复原结构提交",cancel_topology:"取消结构提交",propose_binding:"准备来源绑定",accept_binding_proposal:"接受绑定提案",decline_binding_proposal:"拒绝绑定提案",approve_binding:"恢复本方确认",poll_binding:"查询双方确认",withdraw_binding:"撤回绑定",cancel_binding:"撤回未确认绑定",send_binding_proposal:"发送绑定提案",send_source_ready:"发送来源就绪证明"};
+ const commandNames={prepare_integration:"准备来源合并",apply_integration:"合并到来源引用",reconcile_integration:"核对合并结果",check_integration:"复核来源提交",prepare_completion:"确认候选验收",send_completion:"发送验收决定",register_completion:"提交本端结案确认",poll_completion:"查询双端结案",settle_completion:"完成本端结案",resume_delivery:"恢复原交付操作",register_artifact_target:"授权文件接收",prepare_artifact:"准备实际文件包",send_artifact:"发送或续传文件",verify_artifact:"核验接收内容",prepare_verification:"准备独立检查",run_verification:"执行独立检查",reconcile_verification:"恢复检查回执",create_delegation:"发起委派",decide_delegation:"处理接收委派",resend_delegation:"重发委派",poll_delegation:"查询委派回执",request_cancellation:"请求取消",progress_cancellation:"核对本机停止",resend_cancellation:"重发取消",poll_cancellation:"查询停止回执",prepare_result:"封存并回传候选",reject_result:"要求返工",resend_result:"重传候选",poll_result:"查询验收决定",release_delegation:"放行本机任务",publish_topology:"登记当前结构",refresh_registration:"刷新登记状态",resend_topology:"恢复原结构提交",cancel_topology:"取消结构提交",propose_binding:"准备来源绑定",accept_binding_proposal:"接受绑定提案",decline_binding_proposal:"拒绝绑定提案",approve_binding:"恢复本方确认",poll_binding:"查询双方确认",withdraw_binding:"撤回绑定",cancel_binding:"撤回未确认绑定",send_binding_proposal:"发送绑定提案",send_source_ready:"发送来源就绪证明"};
  let actionDraft=null,actionBusy=false;const actionFolds=new Map();
  function actionButton(label,projectId,command,args,review,{note=false,required=false}={}){
   const b=el("button",label);b.type="button";b.addEventListener("click",()=>openAction(label,projectId,command,args,review,{note,required}));return b;
@@ -3083,7 +3083,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
  function openAction(label,projectId,command,args,review,{note=false,required=false}={}){
   if(actionBusy)return;
   $("fleet-action-title").textContent=label;actionBody.replaceChildren(el("p","项目："+projectId,"fleet-note"),el("pre",review));
-  let input=null;if(note){const field=el("label","处理说明");input=el("textarea");input.maxLength=command==="reject_result"?4096:512;input.required=required;field.append(input);actionBody.append(field);}
+  let input=null;if(note){const field=el("label","处理说明");input=el("textarea");input.maxLength=["reject_result","prepare_completion"].includes(command)?4096:512;input.required=required;field.append(input);actionBody.append(field);}
   actionDraft={action_id:crypto.randomUUID(),project_id:projectId,command,arguments:{...args},input,frozen:null};
   actionStatus.textContent="核对对象和当前版本后提交。请求回执不代表任务已停止或已验收。";actionSubmit.disabled=false;actionSubmit.textContent="确认提交";
   if(!actionDialog.open)actionDialog.showModal();
@@ -3132,13 +3132,52 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
    const review="项目："+vfy.project_id+"\n检查："+vfy.verification_id+"\n传输："+vfy.transfer_id+"\n固定配置："+vfy.profile_id;
    if(vfy.phase==="ready")bar.append(actionButton("执行本机独立检查",vfy.project_id,"run_verification",{id:vfy.verification_id},review+"\n将运行本机管理者批准的固定测试程序，并记录实际退出和停止状态；本步骤不批准任务。"));
    if(vfy.phase==="launch_committed")bar.append(actionButton("恢复已有检查回执",vfy.project_id,"reconcile_verification",{id:vfy.verification_id},review+"\n仅核对已保留的进程观察。缺少观察时保持受阻，不重复启动。"));
+   if(vfy.phase==="settled"&&vfy.checks_passed&&v.closure?.enabled){
+    for(const p of v.closure.policies.filter(p=>p.project_id===vfy.project_id&&p.mapping_id===vfy.mapping_id)){
+     if(v.closure.integrations.some(i=>i.verification_id===vfy.verification_id))continue;
+     bar.append(actionButton("准备合并 · "+p.repo_id,vfy.project_id,"prepare_integration",{verification_id:vfy.verification_id,policy_id:p.policy_id},review+"\n来源仓库："+p.repo_id+"\n获准引用："+p.ref+"\n先保存并准备合并内容；下一步单独确认更新来源引用。"));
+    }
+   }
    if(vfy.receipt_digest)card.append(el("p","回执摘要："+vfy.receipt_digest,"fleet-id"));
    if(vfy.diagnostic)card.append(el("p","检查结果："+vfy.diagnostic,"fleet-note"));
    card.append(bar);section.append(card);
   }
+  renderClosure(v.closure,section);
   if(!v.artifacts.length&&!v.verifications.length)section.append(el("p","从交付候选授权接收仓库或准备文件包。","fleet-note"));
   if(v.truncated)section.append(el("p","文件与检查记录已截断，请缩小项目范围。","fleet-note fleet-warning"));
   box.append(section);
+ }
+
+
+ function renderClosure(v,section){
+  if(!v?.enabled){section.append(el("p","来源合并和结案尚未配置。","fleet-note"));return;}
+  section.append(el("h4","来源合并与双端结案"));
+  for(const i of v.integrations){
+   const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
+   const state=({ready:"合并内容已准备",preparing:"准备未完成，保留原意图",launch_committed:"合并已启动，待核对",settled:"来源已合并，等待验收",abandoned:"合并已放弃"}[i.phase]||i.phase);
+   card.append(el("p",state,"fleet-task-title"),el("p",i.project_id+" · "+i.ref,"fleet-note"),el("p",i.integration_id,"fleet-id"));
+   const review="项目："+i.project_id+"\n候选："+i.result_id+"\n合并："+i.integration_id+"\n来源引用："+i.ref+"\n原基线："+i.base_commit+"\n交付提交："+i.artifact_commit;
+   if(i.phase==="ready")bar.append(actionButton("确认合并到来源引用",i.project_id,"apply_integration",{id:i.integration_id},review+"\n仅当引用仍是原基线才更新；本步骤尚不验收任务。"));
+   if(i.phase==="launch_committed")bar.append(actionButton("核对已有合并结果",i.project_id,"reconcile_integration",{id:i.integration_id},review+"\n核对实际引用与已绑定提交，不再次更新引用。"));
+   if(i.merge_commit)card.append(el("p","来源合并提交："+i.merge_commit,"fleet-id"));
+   const completion=v.completions.find(c=>c.result_id===i.result_id);
+   if(i.phase==="settled"&&!completion){
+    bar.append(actionButton("复核当前来源提交",i.project_id,"check_integration",{id:i.integration_id},review+"\n重新核对来源提交、独立检查和当前授权。"));
+    if(i.context_current&&Number.isSafeInteger(i.source_task_version))bar.append(actionButton(i.fixture_runs?"确认模拟候选验收":"确认候选验收",i.project_id,"prepare_completion",{integration_id:i.integration_id,expected_version:i.source_task_version,allow_fixture:i.fixture_runs>0},review+"\n来源当前版本："+i.source_task_version+"\n合并提交："+i.merge_commit+"\n本决定将冻结当前任务范围，发送后还需双方结案确认。"+(i.fixture_runs?"\n含 "+i.fixture_runs+" 次模拟执行：只关闭模拟任务，不属于真实模型或阶段验收。":""),{note:true,required:true}));
+   }
+   if(completion)card.append(el("p",completion.accepted?"本端已按回执结案":"验收决定已保存，等待双端结案。","fleet-note"));
+   card.append(bar);section.append(card);
+  }
+  for(const c of v.completions){
+   const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
+   const state=({prepared:"验收决定已保存，尚未取得对端回执",ready:"执行端已就绪，等待双方登记确认",retired:"双方登记已完成，可结案",settled:"本端已验收结案"}[c.phase]||c.phase);
+   card.append(el("p",state+(c.fixture_runs?" · 模拟任务":""),"fleet-task-title"),el("p",c.project_id+" · "+(c.side==="source"?"来源端":"执行端"),"fleet-note"),el("p",c.completion_id,"fleet-id"),el("p",c.note,"fleet-note"));
+   const review="项目："+c.project_id+"\n候选："+c.result_id+"\n结案："+c.completion_id+"\n来源合并提交："+c.source_merge_commit+"\n验收说明："+c.note;
+   if(c.side==="source"&&c.phase==="prepared")bar.append(actionButton("发送原验收决定",c.project_id,"send_completion",{id:c.completion_id},review));
+   if(c.phase==="ready")bar.append(actionButton("提交本端结案确认",c.project_id,"register_completion",{id:c.completion_id},review+"\n仅登记本端确认；需要双方确认才能关闭关系。"),actionButton("查询双端结案",c.project_id,"poll_completion",{id:c.completion_id},review));
+   if(c.phase==="retired")bar.append(actionButton("完成本端结案",c.project_id,"settle_completion",{id:c.completion_id},review+"\n按已冻结证据关闭本端任务和委派关系；父任务只重新进入审阅。"));
+   card.append(bar);section.append(card);
+  }
  }
 
  function renderActions(v){
@@ -3213,7 +3252,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   renderDelivery(v.delivery,box);
   const receipts=el("details",undefined,"fleet-trace");receipts.open=true;receipts.append(el("summary","操作回执 · "+v.actions.length));
-  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),el("p",a.action_id,"fleet-id"));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
+  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({integration_ready:"合并内容已准备",integration_launched:"合并已启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),el("p",a.action_id,"fleet-id"));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
   if(!v.actions.length)receipts.append(el("p","从本机任务详情发起委派，或处理收到的委派。","fleet-note"));box.append(receipts);
   if(v.truncated)box.append(el("p","每类最多显示 100 条；请缩小项目范围。","fleet-note fleet-warning"));
  }

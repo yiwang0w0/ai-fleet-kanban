@@ -66,9 +66,9 @@ export function executeIntegration(db,{integrationId,sourceGate}){
  return transaction(db,()=>{current(db,r,sourceGate);x.git.compareAndSwap({ref:x.b.ref,expected:x.b.base_commit,next:x.o.merge_commit});return save(db,r,observe(db,r,x,sourceGate));});
 }
 /** Reconcile actual single-ref outcome. Missing/other state never causes a second update. */
-export function reconcileIntegration(db,{integrationId,sourceGate}){
+export function reconcileIntegration(db,{integrationId,sourceGate,authorize=()=>{}}){
  outside(db);const r=row(db,integrationId),state=integrationState(db,integrationId);if(state.phase==="settled")return state;if(state.phase!=="launch_committed")fail("INTEGRATION_NOT_LAUNCHED","没有待核对的来源合并启动");const x=preparedGit(db,r);
- return transaction(db,()=>{const receipt=observe(db,r,x,sourceGate);return save(db,r,receipt);});
+ return transaction(db,()=>{authorize();const receipt=observe(db,r,x,sourceGate);authorize();return save(db,r,receipt);});
 }
 /** Historical source-applied records are not current acceptance authority. */
 export function captureAppliedIntegration(db,{integrationId,sourceGate}){

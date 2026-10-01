@@ -244,11 +244,11 @@ import {openFleetActions} from "../core/fleet-actions.mjs";
 import {revokePrincipal} from "../core/mcp/policy.mjs";
 const fleetDeliveryControllers=[];
 after(async()=>{for(const c of fleetDeliveryControllers)await c.close();});
-function deliveryOperator(n,{receivers=[],profiles=[],peers=[],...options}={}){
+function deliveryOperator(n,{receivers=[],profiles=[],peers=[],integrationPolicies,...options}={}){
  const role_id="delivery"+serial++,principal_file=join(TMP,role_id+".json");
  putRole(n.db,{role_id,kind:"coordinate",projects:["demo","other"],capabilities:[],runtime:null,model:null,effort:null,tools:"write",priority:10,enabled:true,limits:{max_task_attempts:1,max_open_tasks:100,requests_per_minute:300}});
  const principal=issuePrincipal(n.db,{roleId:role_id,projects:["demo","other"],credentialFile:principal_file});
- const config={format:"ai-fleet-actions/v1",node_id:n.node.node_id,node_epoch:n.node.sync_epoch,principal_file,peers,delivery:{approval_file:join(src,"approved-fixture-tree"),receivers,verification_profiles:profiles}};
+ const config={format:"ai-fleet-actions/v1",node_id:n.node.node_id,node_epoch:n.node.sync_epoch,principal_file,peers,delivery:{approval_file:join(src,"approved-fixture-tree"),receivers,verification_profiles:profiles,...(integrationPolicies===undefined?{}:{integration_policies:integrationPolicies})}};
  const open=extra=>{const c=openFleetActions(n.db,{config,sourceGate,...options,...extra});fleetDeliveryControllers.push(c);return c;};
  return {config,principal,open,actions:open()};
 }
@@ -310,4 +310,66 @@ test("panel delivery principal revocation stops a running fixed check and preser
  assert.equal(existsSync(marker),true);revokePrincipal(f.a.db,{principalId:source.principal.principal_id,expectedVersion:1});await running;
  const state=verificationState(f.a.db,v.verificationId);assert.equal(state.phase,"settled");assert.equal(state.receipt.checks_passed,false);assert.equal(state.receipt.observation.process.cleanup,"job_empty");
  assert.equal(f.a.db.prepare("SELECT count(*) n FROM verification_launches").get().n,1);assert.throws(()=>source.actions.catalog("demo"));assert.equal(resultState(f.a.db,f.r.result_id).accepted,false);
+});
+
+
+test("panel closure merges once, freezes explicit acceptance, and settles both endpoints through actual HTTP",async()=>{
+ const x=await mergeFixture({registrarOnSource:true}),{f,v,config}=x;
+ const aUrl=await network(f.a),bUrl=await network(f.b);
+ const peer=(n,url,file)=>({node_id:n.node.node_id,node_epoch:n.node.sync_epoch,projects:["demo"],url,credential_file:file});
+ const source=deliveryOperator(f.a,{profiles:[v.profileId],integrationPolicies:[config.policyId],peers:[peer(f.b,bUrl,f.ab.file)]});
+ const target=deliveryOperator(f.b,{integrationPolicies:[],peers:[peer(f.a,aUrl,f.ba.file)]});
+ const request=deliveryRequest("prepare_integration",{verification_id:v.verificationId,policy_id:config.policyId});
+ const prep=await deliveryDo(source.actions,request);assert.equal(prep.state,"applied",JSON.stringify(prep));assert.equal(prep.result.state,"integration_ready");
+ assert.equal(source.actions.enqueue({...request,action_id:randomUUID()}).action_id,prep.action_id);
+ const integrationId=prep.result.integration_id;assert.equal(refValue(f,config.ref),f.base);
+ const merged=await deliveryDo(source.actions,deliveryRequest("apply_integration",{id:integrationId}));assert.equal(merged.result.source_applied,true,JSON.stringify(merged));
+ const commit=refValue(f,config.ref);assert.notEqual(commit,f.base);assert.equal(store.get(f.a.db,f.source.id).status,"not_started");
+ assert.equal((await deliveryDo(source.actions,deliveryRequest("apply_integration",{id:integrationId}))).result.source_applied,true);assert.equal(refValue(f,config.ref),commit);assert.equal(f.a.db.prepare("SELECT count(*) n FROM integration_launches").get().n,1);
+ const args={integration_id:integrationId,expected_version:store.get(f.a.db,f.source.id).aggregate_version,note:"Explicit operator acceptance of synthetic fixture only",allow_fixture:true};
+ assert.throws(()=>source.actions.enqueue(deliveryRequest("prepare_completion",{...args,allow_fixture:false})),{code:"FIXTURE_ACCEPTANCE_REQUIRED"});
+ const prepare=deliveryRequest("prepare_completion",args),decision=await deliveryDo(source.actions,prepare);assert.equal(decision.state,"applied",JSON.stringify(decision));
+ const id=decision.result.completion_id;assert.ok(id);assert.equal(source.actions.enqueue({...prepare,action_id:randomUUID()}).action_id,decision.action_id);assert.equal(store.get(f.a.db,f.source.id).status,"not_started");
+ assert.equal((await deliveryDo(source.actions,deliveryRequest("send_completion",{id}))).state,"acknowledged");
+ assert.equal((await deliveryDo(source.actions,deliveryRequest("register_completion",{id}))).state,"applied");
+ assert.equal((await deliveryDo(target.actions,deliveryRequest("register_completion",{id}))).state,"acknowledged");
+ assert.equal((await deliveryDo(source.actions,deliveryRequest("poll_completion",{id}))).state,"acknowledged");
+ for(const op of [source,target]){const done=await deliveryDo(op.actions,deliveryRequest("settle_completion",{id}));assert.equal(done.result.accepted,true,JSON.stringify(done));assert.equal((await deliveryDo(op.actions,deliveryRequest("settle_completion",{id}))).result.accepted,true);}
+ assert.equal(store.get(f.a.db,f.source.id).status,"done");assert.equal(store.get(f.b.db,f.target.id).status,"done");
+ assert.equal(source.actions.catalog("demo").delivery.closure.completions[0].accepted,true);assert.equal(source.actions.catalog("other").delivery.closure.completions.length,0);
+ for(const op of [source,target]){const text=JSON.stringify(op.actions.catalog("demo"));assert.ok(!text.includes(op.config.principal_file));assert.ok(!text.includes(f.receiverRoot));}
+});
+
+
+test("panel closure resumes the same Git update after receipt failure without applying it again",async()=>{
+ const {f,v,config}=await mergeFixture(),source=deliveryOperator(f.a,{profiles:[v.profileId],integrationPolicies:[config.policyId]});
+ const prep=await deliveryDo(source.actions,deliveryRequest("prepare_integration",{verification_id:v.verificationId,policy_id:config.policyId})),id=prep.result.integration_id;
+ f.a.db.exec("CREATE TRIGGER fail_integration_receipt BEFORE INSERT ON integration_receipts BEGIN SELECT RAISE(ABORT,'fixture interrupted receipt'); END");
+ const applied=await deliveryDo(source.actions,deliveryRequest("apply_integration",{id}));assert.equal(applied.state,"blocked");assert.equal(integrationState(f.a.db,id).phase,"launch_committed");const commit=refValue(f,config.ref);assert.notEqual(commit,f.base);
+ f.a.db.exec("DROP TRIGGER fail_integration_receipt");await source.actions.close();source.actions=source.open();
+ await deliveryDo(source.actions,deliveryRequest("resume_delivery",{id:applied.action_id}));
+ assert.equal(integrationState(f.a.db,id).phase,"settled");assert.equal(refValue(f,config.ref),commit);assert.equal(f.a.db.prepare("SELECT count(*) n FROM integration_launches").get().n,1);
+ assert.equal(source.actions.catalog("demo").actions.find(a=>a.action_id===applied.action_id).state,"applied");
+});
+
+test("panel closure refuses unauthorized policy and changed authority before queued Git effects",async()=>{
+ const {f,v,config}=await mergeFixture(),source=deliveryOperator(f.a,{profiles:[v.profileId],integrationPolicies:[config.policyId]});
+ const args={verification_id:v.verificationId,policy_id:config.policyId};
+ assert.throws(()=>source.actions.enqueue(deliveryRequest("prepare_integration",args,"other")),{code:"NOT_FOUND"});
+ assert.throws(()=>source.actions.enqueue(deliveryRequest("prepare_integration",{...args,policy_id:randomUUID()})),{code:"FORBIDDEN"});
+ assert.throws(()=>source.actions.enqueue(deliveryRequest("prepare_integration",{...args,ref:"refs/heads/arbitrary"})),{code:"BAD_INPUT"});
+ f.a.db.exec("CREATE TRIGGER fail_panel_closure BEFORE INSERT ON fleet_operator_actions BEGIN SELECT RAISE(ABORT,'fixture queue rollback'); END");
+ assert.throws(()=>source.actions.enqueue(deliveryRequest("prepare_integration",args)),/fixture queue rollback/);assert.equal(f.a.db.prepare("SELECT count(*) n FROM integration_attempts").get().n,0);f.a.db.exec("DROP TRIGGER fail_panel_closure");
+ const prep=await deliveryDo(source.actions,deliveryRequest("prepare_integration",args)),id=prep.result.integration_id;
+ const apply=deliveryRequest("apply_integration",{id});source.actions.enqueue(apply);revokeIntegrationPolicy(f.a.db,{policyId:config.policyId});await source.actions.tick();
+ assert.equal(source.actions.catalog("demo").actions.find(a=>a.action_id===apply.action_id).last_error_code,"INTEGRATION_REVOKED");assert.equal(refValue(f,config.ref),f.base);assert.equal(f.a.db.prepare("SELECT count(*) n FROM integration_launches").get().n,0);
+});
+
+test("panel closure rechecks operator authority after a remote readiness response before local receipt writes",async()=>{
+ const x=await completionFixture(),{f,completionId}=x;prepareCompletion(f.a.db,x.completeArgs);const url=await network(f.b);let source,revoked=false;
+ const fetchImpl=async(address,options)=>{const response=await fetch(address,options);if(String(address).endsWith('/delegation/complete')&&!revoked){revoked=true;revokePrincipal(f.a.db,{principalId:source.principal.principal_id,expectedVersion:1});}return response;};
+ source=deliveryOperator(f.a,{integrationPolicies:[],peers:[{node_id:f.b.node.node_id,node_epoch:f.b.node.sync_epoch,projects:["demo"],url,credential_file:f.ab.file}],fetchImpl});
+ const request=deliveryRequest("send_completion",{id:completionId});source.actions.enqueue(request);await source.actions.tick();
+ assert.equal(revoked,true);assert.equal(completionState(f.b.db,completionId).phase,"ready");assert.equal(completionState(f.a.db,completionId).phase,"prepared");assert.equal(f.a.db.prepare("SELECT state FROM fleet_operator_actions WHERE action_id=?").get(request.action_id).state,"blocked");
+ assert.equal(f.a.db.prepare("SELECT count(*) n FROM completion_ready").get().n,0);
 });

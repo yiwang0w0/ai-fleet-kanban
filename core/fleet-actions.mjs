@@ -39,7 +39,7 @@ function summary(state){
  const receipt=state.receipt??null;
  return {state:state.state??receipt?.state??(state.released===true?"released":receipt?.kind==="cancel_stopped"?"stopped":receipt?.kind==="cancel_received"?"received":state.decision?"decision_recorded":"prepared"),
   delegation_id:state.delegation_id??state.offer?.delegation_id??null,relation_id:state.relation_id??state.body?.relation?.relation_id??receipt?.relation_id??null,
-  result_id:state.result_id??state.body?.result_id??null,transfer_id:state.transfer_id??null,verification_id:state.verification_id??null,checks_passed:state.checks_passed??null,target_task_uid:receipt?.target_task_uid??null,
+  result_id:state.result_id??state.body?.result_id??null,transfer_id:state.transfer_id??null,verification_id:state.verification_id??null,checks_passed:state.checks_passed??null,integration_id:state.integration_id??null,completion_id:state.completion_id??null,source_applied:state.source_applied===true,accepted:state.accepted===true,target_task_uid:receipt?.target_task_uid??null,
   stopped:state.stopped===true||receipt?.kind==="cancel_stopped",blocker_count:state.blocker_count??state.blockers?.length??0,dispatch_started:false};
 }
 export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now,sourceGate}){
@@ -87,7 +87,7 @@ export function openFleetActions(db,{config,fetchImpl=fetch,now=Date.now,sourceG
   const requestHash=digest({project_id:input.project_id,command:input.command,arguments:input.arguments}),old=db.prepare("SELECT * FROM fleet_operator_actions WHERE action_id=?").get(input.action_id);
   if(old){authorized(old,context);if(old.input_digest!==requestHash)fail("REQUEST_CONFLICT","同一操作 ID 的内容不能改变");return publicRow(old);}
   // Repeated create from another tab keeps the same delegation, even with a new click ID.
-  if(["create_delegation","prepare_artifact","prepare_verification"].includes(input.command)){
+  if(["create_delegation","prepare_artifact","prepare_verification","prepare_integration","prepare_completion"].includes(input.command)){
    const prior=db.prepare("SELECT * FROM fleet_operator_actions WHERE principal_id=? AND node_id=? AND node_epoch=? AND command=? AND input_digest=?").get(p.principal_id,c.node_id,c.node_epoch,input.command,requestHash);
    if(prior){authorized(prior,context);return publicRow(prior);}
   }
