@@ -94,6 +94,8 @@ jobs:
         run: bash hrun.sh node tests/gitpackagetest.mjs
       - name: artifacttransfertest (durable chunks, lost ACK, restart and local verification)
         run: bash hrun.sh node tests/artifacttransfertest.mjs
+      - name: appcontainertest (Windows token, file/network boundaries and resource limits)
+        run: bash hrun.sh node tests/appcontainertest.mjs
       - name: commandsupervisortest (bounded test output and Windows process receipts)
         run: bash hrun.sh node tests/commandsupervisortest.mjs
       - name: verificationworkspacetest (independent source checks, one-use launch and recovery)

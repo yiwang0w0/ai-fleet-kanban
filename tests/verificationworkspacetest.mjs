@@ -147,7 +147,7 @@ import {registerVerificationProfile,revokeVerificationProfile,prepareVerificatio
 function localCheck(f,code="console.log('source check passed');",overrides={}){
  const checker=join(TMP,"local-check-"+serial+++".mjs"),poolRoot=join(TMP,"verify-pool-"+serial++);mkdirSync(poolRoot);writeFileSync(checker,code);
  const python=pinFile(execFileSync(process.env.BOARD_PYTHON||process.env.PYTHON||"python",["-I","-S","-X","utf8","-c","import sys;print(sys.executable)"],{encoding:"utf8",windowsHide:true}).trim());
- const definition={command:pinFile(process.execPath),python,pins:[pinFile(checker)],args:[checker],env:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase()))),timeout_ms:5000,heartbeat_ms:100,stdout_limit:8192,stderr_limit:8192,...overrides};
+ const definition={command:pinFile(process.execPath),python,pins:[pinFile(checker)],args:overrides.isolation?["--preserve-symlinks","--preserve-symlinks-main",checker]:[checker],env:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp"].includes(k.toLowerCase()))),timeout_ms:5000,heartbeat_ms:100,stdout_limit:8192,stderr_limit:8192,...overrides};
  const config={profileId:randomUUID(),mappingId:f.receiverMapping.mapping_id,poolRoot,allowFullHistoryCopy:true,definition,sourceGate},profile=registerVerificationProfile(f.a.db,config);
  return {config,profile,checker,poolRoot,verificationId:randomUUID(),transferId:f.t.transfer_id,profileId:profile.profile_id,sourceGate};
 }
@@ -215,4 +215,14 @@ test("received Git reconstruction supports both file-to-directory and directory-
   const manifest={...args.manifest,base_commit:base,commit,tree:after.tree,content_snapshot_digest:digest(after),files},manifestDigest=digest(manifest),packageBytes=encodeGitPackage({manifest,manifest_digest:manifestDigest,files:files.filter(x=>x.operation==="write").map(x=>({path:x.path,bytes:bytes.get(x.path)})),commitBytes:g.commitBytes(commit)});g.verify();
   const materialized=materializeVerificationInput({...args,source:{...args.source,base_tree:before.tree},container:join(TMP,"swap-"+serial++),manifest,manifestDigest,packageBytes});assert.equal(assertVerificationInput(materialized).commit,commit);base=commit;
  }
+});
+
+test("AppContainer source verification executes delivered code while the authority database remains inaccessible",async()=>{
+ const {f}=receivedInput();
+ const code="import {readFileSync,writeFileSync} from 'node:fs';import {pathToFileURL} from 'node:url';import {join} from 'node:path';import assert from 'node:assert/strict';const {result}=await import(pathToFileURL(join(process.cwd(),'src/generated.mjs')));assert.equal(result,42);const db="+JSON.stringify(f.a.path)+";for(const act of [()=>readFileSync(db),()=>writeFileSync(db,'corrupt')])assert.throws(act,e=>['EPERM','EACCES'].includes(e.code));writeFileSync('sandbox-check.txt','verified');console.log('isolated verified 42');";
+ const isolation={kind:"windows-appcontainer",network:"none",memory_limit_bytes:268435456,process_limit:4},v=localCheck(f,code,{isolation});prepareVerification(f.a.db,v);
+ const before=JSON.stringify(store.get(f.a.db,f.source.id)),done=await executeVerification(f.a.db,v);
+ assert.equal(done.receipt.checks_passed,true,JSON.stringify(done));assert.equal(done.receipt.filesystem_sandbox,true);assert.equal(done.receipt.observation.stdout.text,"isolated verified 42\n");assert.equal(done.receipt.observation.process.sandbox.profile_removed,true);assert.equal(done.accepted,false);assert.equal(JSON.stringify(store.get(f.a.db,f.source.id)),before);
+ assert.equal(captureVerificationReceipt(f.a.db,v).currently_valid,true);assert.deepEqual(reconcileVerification(f.a.db,v),done);await assert.rejects(executeVerification(f.a.db,v),{code:"VERIFICATION_ALREADY_LAUNCHED"});
+ const restarted=new DatabaseSync(f.a.path);dbs.push(restarted);assert.equal(verificationState(restarted,v.verificationId).receipt.filesystem_sandbox,true);
 });

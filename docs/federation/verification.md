@@ -31,6 +31,7 @@ JSON 只含 `profileId`、`mappingId`、`poolRoot`、`allowFullHistoryCopy:true`
 | timeout_ms | 50–3,600,000 毫秒 |
 | heartbeat_ms | 100–10,000 毫秒 |
 | stdout_limit / stderr_limit | 每流 1–65,536 字节；超量或非法 UTF-8 失败 |
+| isolation | 可选 Windows AppContainer 配置；见下节。明确请求后，创建、权限或令牌核验失败均拒绝，不回退为宿主执行 |
 
 普通测试命令和模型执行协议分开。退出码 0 表示选定命令通过；业务覆盖取决于本机批准的测试本身。回执保留实际输出、字节数、摘要、退出码、监管宿主及程序摘要、Windows Job 清空结果。空输出可以是成功测试，但不会被标成模型调用或凭空产生测试用例数。
 
@@ -44,8 +45,33 @@ JSON 只含 `profileId`、`mappingId`、`poolRoot`、`allowFullHistoryCopy:true`
 
 ## 隔离边界和后续验收
 
-独立 Git 副本隔离源仓库对象和输入；Windows Job 管理普通子进程生命周期。**当前不是操作系统文件或网络沙箱**：测试及导入代码以宿主账户权限执行。本机注册者须先审查要运行的代码；回执明确 `filesystem_sandbox:false`，不能将其作为恶意代码隔离证明或自动生产放行依据。本机观察文件/数据库的管理员完整性属于可信主机边界。
+独立 Git 副本隔离源仓库对象和输入，Windows Job 管理进程生命周期。未指定 isolation 的旧配置仍以宿主账户执行，只允许已审查的可信测试，回执保持 filesystem_sandbox:false，不能作为恶意代码隔离或 G07 完成证明。
 
-工作目录核对的 50,000 条目 / 512 MiB 是事后检查上限，并非磁盘配额。尚需 Windows 权限隔离、资源约束及两台 kanata 实体联调；来源 CAS 合并与双端验收已有独立实现和恢复记录，仍须整体验收。当前测试仅使用本机临时仓库、合成委派和普通测试进程；未消耗真实模型额度。
+需要隔离的来源检查必须注册一个新 profile，显式加入：
+
+~~~json
+"isolation": {
+  "kind": "windows-appcontainer",
+  "network": "none",
+  "memory_limit_bytes": 268435456,
+  "process_limit": 4
+}
+~~~
+
+内存范围为 64 MiB–2 GiB，进程数为 1–64，都是整个 Job 的限制；原有超时、心跳和输出上限继续生效。进程在挂起状态加入 Job，并核验实际 AppContainer SID 和零 capability 后才恢复。此配置只用于普通来源检查，模型监管入口明确拒绝，未为 Claude/Codex/Zcode 宣称同等隔离。
+
+每次运行创建新的 Windows AppContainer profile，不加入网络 capability，也不设置 loopback exemption。只给本次验证仓库读写权限；命令和固定辅助文件复制到私有暂存区，重新核对字节摘要并仅授予该 profile 读/执行权限。原路径及祖先 ACL 不修改；完整参数值与已固定文件路径相同时替换为副本路径，其他参数保持原样。固定文件副本保留盘符下的相对目录层级，不改写脚本正文中的硬编码路径。所有非系统依赖必须包含在固定文件清单中；无法读取的依赖失败，不临时扩大宿主权限。复制总量上限 512 MiB。
+
+Node 模块测试应在批准的 args 中明确加入 --preserve-symlinks 和 --preserve-symlinks-main，避免模块解析需要探查未授权祖先目录。本机 24.16.0 已实测；未携带这些参数时出现根目录 lstat EPERM，属于配置失败，不会给磁盘根目录放权。工作目录在启动前拒绝 reparse point 和文件硬链接。生成的用户目录、临时目录及 PATH 只指向本次暂存区和 Windows 系统目录；不把现有 CLI 登录目录复制进沙箱。
+
+通过回执要求：命令通过、原始输入仍一致、Job 清空、实际令牌核验成功、profile 与暂存区均清理成功，且这些观察与固定 isolation 配置相符。filesystem_sandbox:true 只描述本次实际进程的 AppContainer 边界，不表示任务已验收；缺观察、配置不匹配或清理不完整不能得到 checks_passed:true。崩溃恢复保留原一次启动许可，不重复执行或退回未隔离模式。
+
+正常结束保留验证仓库及生成证据，不清除其文件；仓库可能保留已删除 profile 的专属 SID ACE，不能复用该 profile 名称。异常杀死监管宿主时可能保留 ai-fleet-check- 前缀 profile 或 ai-fleet-sandbox- 暂存区；须先核对该次运行与进程停止再清理，不能批量删除未知 profile 或目录。删除 profile 并不等于删除用户账号。
+
+AppContainer 仍能访问 Windows 明确授予应用容器的公共系统资源；宿主管理员、其他具有本机账户权限的进程以及管理员配置属于可信边界。本机负向测试证明受保护的目录外文件及来源数据库不可读取/改写，不能外推为每个现存宿主文件均不可读。网络测试使用前后可正常连接的本机监听端口，未访问外部服务。
+
+工作目录核对的 50,000 条目 / 512 MiB 是事后检查上限，并非磁盘配额。磁盘容量限制、真实验证配置/依赖、模型适配器 OS 隔离以及两台 kanata 实体演练仍需完成。没有改动生产 profile、accepted_rev 或真实任务，也未调用模型。
+
+实现依据：[微软 AppContainer 启动与令牌边界](https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer)，[Node 模块路径参数](https://nodejs.org/download/release/v25.9.0/docs/api/cli.html#--preserve-symlinks-main)。行为结论以本项目 Windows 实测为准，详见 windows-appcontainer-evidence.json。
 
 已配置的操作员面板也可准备、启动和恢复原验证，见 [文件交付与独立检查](fleet-actions.md#文件交付与来源独立检查)。测试程序仍须由本机 CLI 预先登记，面板只选择固定配置。

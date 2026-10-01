@@ -9,7 +9,7 @@ import {repositoryState,workspaceRepositorySource} from "../artifacts/repositori
 import {directoryIdentity,verifyDirectory,overlaps} from "../artifacts/git-workspace.mjs";
 import {materializeVerificationInput,assertVerificationInput} from "./workspace.mjs";
 import {createHash} from "node:crypto";
-import {pinFile,superviseCommand} from "../execution/supervisor.mjs";
+import {pinFile,superviseCommand,commandIsolation,sandboxObservation} from "../execution/supervisor.mjs";
 import {writeRecoveryJSON,readRecoveryJSON} from "../recovery.mjs";
 const fail=(code,message)=>{throw new PeerError(code,message,409);},at=()=>new Date().toISOString();
 const hash=x=>typeof x==="string"&&/^[a-f0-9]{64}$/.test(x);
@@ -20,7 +20,8 @@ function sameIdentity(db,r){const n=localIdentity(db);if(r.node_id!==n.node_id||
 function checkedPin(p){exact(p,["path","sha256"]);if(!hash(p.sha256)||canonical(pinFile(p.path))!==canonical(p))fail("PIN_CHANGED","固定程序或测试文件变化");return p;}
 function sourceCheck(gate){const s=gate?.check?.();if(!s||!isAbsolute(s.code_root)||!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(s.tree))fail("SOURCE_UNVERIFIED","需要本机已批准的治理代码");return {code_root:realpathSync(s.code_root),tree:s.tree};}
 function definition(d){
- exact(d,["command","python","pins","args","env","timeout_ms","heartbeat_ms","stdout_limit","stderr_limit"]);
+ exact(d,["command","python","pins","args","env","timeout_ms","heartbeat_ms","stdout_limit","stderr_limit",...(Object.hasOwn(d,"isolation")?["isolation"]:[])]);
+ if(Object.hasOwn(d,"isolation")){if(d.isolation===null)fail("BAD_VERIFICATION","显式隔离配置不能为 null");commandIsolation(d.isolation);}
  for(const p of [d.command,d.python]){checkedPin(p);if(!p.path.toLowerCase().endsWith(".exe"))fail("NATIVE_EXECUTABLE_REQUIRED","验证只能使用固定 Windows 原生程序");}
  if(!Array.isArray(d.pins)||d.pins.length>15)fail("BAD_VERIFICATION","最多固定 15 个辅助文件");d.pins.forEach(checkedPin);
  if(!Array.isArray(d.args)||d.args.length>200||d.args.some(x=>typeof x!=="string"||x.includes("\0"))||Buffer.byteLength(canonical(d.args))>65536)fail("BAD_VERIFICATION","测试参数无效");
@@ -86,7 +87,7 @@ export function prepareVerification(db,{verificationId,profileId,transferId,sour
 }
 function journalPath(r){return join(r.container,"verification-observation.json");}
 function stopped(o){return o?.format==="ai-fleet-command-observation/v1"&&o.process?.started===true&&o.process.containment==="windows-job"&&o.process.cleanup==="job_empty"&&o.process.host_error===null&&o.process.host_exit_code===0;}
-function successObservation(o,config){return stopped(o)&&o.status==="success"&&o.diagnostic==="SUCCESS"&&o.process.exit_code===0&&o.process.executable_sha256===config.command.sha256&&o.process.python_sha256===config.python.sha256&&["stdout","stderr"].every(k=>{const s=o[k];return s&&typeof s.text==="string"&&s.utf8_valid===true&&s.truncated===false&&s.bytes===s.retained_bytes&&s.bytes===Buffer.byteLength(s.text)&&s.bytes<=config[k+"_limit"]&&createHash("sha256").update(s.text).digest("hex")===s.sha256;});}
+function successObservation(o,config){return (!config.isolation||sandboxObservation(o?.process?.sandbox,config.isolation))&&stopped(o)&&o.status==="success"&&o.diagnostic==="SUCCESS"&&o.process.exit_code===0&&o.process.executable_sha256===config.command.sha256&&o.process.python_sha256===config.python.sha256&&["stdout","stderr"].every(k=>{const s=o[k];return s&&typeof s.text==="string"&&s.utf8_valid===true&&s.truncated===false&&s.bytes===s.retained_bytes&&s.bytes===Buffer.byteLength(s.text)&&s.bytes<=config[k+"_limit"]&&createHash("sha256").update(s.text).digest("hex")===s.sha256;});}
 function finish(db,r,receipt,sourceGate){return transaction(db,()=>{row(db,r.verification_id);if(receipt.checks_passed){try{current(db,r,sourceGate);}catch(e){receipt={...receipt,checks_passed:false,settlement_error:e.code??"VERIFICATION_STALE"};}}const old=db.prepare("SELECT receipt_json FROM verification_receipts WHERE verification_id=?").get(r.verification_id);if(old){if(old.receipt_json!==canonical(receipt))fail("REQUEST_CONFLICT","验证终态不可替换");}else db.prepare("INSERT INTO verification_receipts VALUES(?,?,?,?)").run(r.verification_id,canonical(receipt),digest(receipt),at());return verificationState(db,r.verification_id);});}
 function checkAfter(db,r,i,sourceGate){try{const p=current(db,r,sourceGate);definition(p.descriptor.definition);verifyDirectory(p.descriptor.pool);return {input:assertVerificationInput(i,{allowGenerated:true}),error:null};}catch(e){return {input:null,error:typeof e.code==="string"?e.code:"VERIFICATION_CHECK_FAILED"};}}
 /** Consumes one durable local launch. Repeating run never starts another command. */
@@ -98,19 +99,20 @@ export async function executeVerification(db,{verificationId,sourceGate,signal=n
  const launch={format:"ai-fleet-verification-launch/v1",verification_id:verificationId,binding_digest:r.binding_digest,input_digest:digest(i),profile_digest:p.descriptor_digest,command_sha256:config.command.sha256,python_sha256:config.python.sha256};
  transaction(db,()=>{current(db,r,sourceGate);if(db.prepare("SELECT 1 FROM verification_launches WHERE verification_id=?").get(verificationId))fail("VERIFICATION_ALREADY_LAUNCHED","启动许可已消费");db.prepare("INSERT INTO verification_launches VALUES(?,?,?,?)").run(verificationId,canonical(launch),digest(launch),at());});
  let observation;
- try{observation=await superviseCommand({python:config.python,command:config.command,args:config.args,pins:config.pins,cwd:i.identities.repo.root,env:config.env,timeoutMs:config.timeout_ms,heartbeatMs:config.heartbeat_ms,stdoutLimit:config.stdout_limit,stderrLimit:config.stderr_limit,signal,heartbeat:()=>{current(db,r,sourceGate);return true;}});}
+ try{observation=await superviseCommand({isolation:config.isolation??null,python:config.python,command:config.command,args:config.args,pins:config.pins,cwd:i.identities.repo.root,env:config.env,timeoutMs:config.timeout_ms,heartbeatMs:config.heartbeat_ms,stdoutLimit:config.stdout_limit,stderrLimit:config.stderr_limit,signal,heartbeat:()=>{current(db,r,sourceGate);return true;}});}
  catch(e){observation={format:"ai-fleet-command-launch-error/v1",diagnostic:typeof e.code==="string"?e.code:"COMMAND_LAUNCH_FAILED",process:{started:false,cleanup:"unconfirmed"}};}
  const after=checkAfter(db,r,i,sourceGate),passed=successObservation(observation,config)&&after.error===null;
- const receipt={format:"ai-fleet-verification-receipt/v1",verification_id:verificationId,binding_digest:r.binding_digest,launch_digest:digest(launch),input_digest:digest(i),observation,after,checks_passed:passed,accepted:false,filesystem_sandbox:false,recorded_at:at()};
+ const receipt={format:"ai-fleet-verification-receipt/v1",verification_id:verificationId,binding_digest:r.binding_digest,launch_digest:digest(launch),input_digest:digest(i),observation,after,checks_passed:passed,accepted:false,filesystem_sandbox:!!config.isolation&&sandboxObservation(observation?.process?.sandbox,config.isolation,{finished:false}),recorded_at:at()};
  verifyDirectory(i.identities.container);writeRecoveryJSON(journalPath(r),receipt);return finish(db,r,receipt,sourceGate);
 }
 /** Trusted local recovery of observed bytes only. Never recreates or repeats a lost launch. */
 export function reconcileVerification(db,{verificationId,sourceGate}){
  outsideTransaction(db);const r=row(db,verificationId),state=verificationState(db,verificationId);if(state.phase==="settled")return state;if(state.phase!=="launch_committed")fail("VERIFICATION_NOT_LAUNCHED","没有待恢复启动");
  const i=input(db,verificationId);verifyDirectory(i.identities.container);if(!existsSync(journalPath(r)))fail("VERIFICATION_OBSERVATION_MISSING","缺少停止观察；保留启动占用，不自动重跑");
+ const config=profile(db,r.profile_id,{active:false}).descriptor.definition;
  const receipt=readRecoveryJSON(journalPath(r));exact(receipt,["format","verification_id","binding_digest","launch_digest","input_digest","observation","after","checks_passed","accepted","filesystem_sandbox","recorded_at"]);
- if(receipt.format!=="ai-fleet-verification-receipt/v1"||receipt.verification_id!==verificationId||receipt.binding_digest!==r.binding_digest||receipt.launch_digest!==state.launch_digest||receipt.input_digest!==digest(i)||receipt.accepted!==false||receipt.filesystem_sandbox!==false||typeof receipt.checks_passed!=="boolean")fail("VERIFICATION_RECEIPT_MISMATCH","本机观察与已占用启动不符");
- if(receipt.checks_passed&&(!successObservation(receipt.observation,profile(db,r.profile_id,{active:false}).descriptor.definition)||receipt.after?.error!==null||receipt.after?.input?.inputs_unchanged!==true))fail("VERIFICATION_RECEIPT_MISMATCH","通过声明缺少完整观察");
+ if(receipt.format!=="ai-fleet-verification-receipt/v1"||receipt.verification_id!==verificationId||receipt.binding_digest!==r.binding_digest||receipt.launch_digest!==state.launch_digest||receipt.input_digest!==digest(i)||receipt.accepted!==false||receipt.filesystem_sandbox!==(!!config.isolation&&sandboxObservation(receipt.observation?.process?.sandbox,config.isolation,{finished:false}))||typeof receipt.checks_passed!=="boolean")fail("VERIFICATION_RECEIPT_MISMATCH","本机观察与已占用启动不符");
+ if(receipt.checks_passed&&(!successObservation(receipt.observation,config)||receipt.after?.error!==null||receipt.after?.input?.inputs_unchanged!==true))fail("VERIFICATION_RECEIPT_MISMATCH","通过声明缺少完整观察");
  // A once-passing receipt becomes unusable if context changed before durable settlement.
  const after=checkAfter(db,r,i,sourceGate);if(after.error!==null)return finish(db,r,{...receipt,checks_passed:false,recovery_error:after.error},sourceGate);
  return finish(db,r,receipt,sourceGate);

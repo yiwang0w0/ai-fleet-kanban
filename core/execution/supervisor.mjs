@@ -25,6 +25,7 @@ function verifyPin(pin){
  * The caller must commit a fresh dispatch permit before calling this function.
  */
 export async function superviseProcess(options){
+ if(options.isolation!=null)fail("PROVIDER_ISOLATION_UNSUPPORTED");
  if(process.platform!=="win32")fail("WINDOWS_REQUIRED");
  return supervise({...options,commandOutput:false});
 }
@@ -33,8 +34,17 @@ export async function superviseCommand(options){
  if(process.platform!=="win32")fail("WINDOWS_REQUIRED");
  return supervise({input:"",pins:[],stderrLimit:65536,...options,commandOutput:true});
 }
-async function supervise({python,command,args,cwd,env,input,pins,runtime,decoder={},commandOutput=false,stdoutLimit=65536,timeoutMs=60000,
+export function commandIsolation(value){
+ if(value===null)return null;
+ if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).sort().join(",")!=="kind,memory_limit_bytes,network,process_limit"||value.kind!=="windows-appcontainer"||value.network!=="none"||!Number.isSafeInteger(value.memory_limit_bytes)||value.memory_limit_bytes<67108864||value.memory_limit_bytes>2147483648||!Number.isInteger(value.process_limit)||value.process_limit<1||value.process_limit>64)fail("BAD_ISOLATION");
+ return {...value};
+}
+export function sandboxObservation(value,isolation,{finished=true}={}){
+ return !!value&&value.kind==="windows-appcontainer"&&value.network==="none"&&value.capability_count===0&&value.token_verified===true&&typeof value.profile_name==="string"&&/^ai-fleet-check-[0-9a-f-]{36}$/.test(value.profile_name)&&value.memory_limit_bytes===isolation?.memory_limit_bytes&&value.process_limit===isolation?.process_limit&&(!finished||value.profile_removed===true&&value.staging_removed===true);
+}
+async function supervise({python,command,args,cwd,env,input,pins,runtime,decoder={},commandOutput=false,stdoutLimit=65536,timeoutMs=60000,isolation=null,
  signal=null,heartbeat=null,heartbeatMs=10000,stderrLimit=1024*1024}){
+ isolation=commandIsolation(isolation);if(isolation&&!commandOutput)fail("PROVIDER_ISOLATION_UNSUPPORTED");
  const py=verifyPin(python),exe=verifyPin(command);
  if(!Array.isArray(args)||args.length>200||args.some(x=>typeof x!=="string"||x.includes("\0")))fail("BAD_ARGS");
  if(!isAbsolute(cwd)||!statSync(cwd).isDirectory())fail("BAD_CWD");
@@ -46,12 +56,12 @@ async function supervise({python,command,args,cwd,env,input,pins,runtime,decoder
  if(!Array.isArray(pins)||pins.length>15)fail("BAD_PINS");
  const checkedPins=[exe,...pins.map(verifyPin)],hostPin=pinFile(HOST);
  const output=commandOutput?createCommandOutput({stdoutLimit,stderrLimit}):createOutputDecoder(runtime,decoder);
- const request={command:exe.path,args,cwd:realpathSync(cwd),env,input,pins:checkedPins,timeout_ms:timeoutMs};
+ const request={command:exe.path,args,cwd:realpathSync(cwd),env,input,pins:checkedPins,timeout_ms:timeoutMs,...(isolation?{isolation}:{})};
  const requestBytes=Buffer.from(JSON.stringify(request)+"\n");
  if(requestBytes.length>524288)fail("REQUEST_LIMIT");
  if(signal?.aborted)return {...output.finish({stopReason:"cancelled"}),process:{started:false,cleanup:"not_started",containment:null}};
  // No shell is used for either the host or the provider process.
- const host=spawn(py.path,["-I","-S","-B",HOST],{windowsHide:true,stdio:["pipe","pipe","pipe"],env:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp","ld_library_path"].includes(k.toLowerCase())))});
+ const host=spawn(py.path,["-I","-S","-B",HOST],{windowsHide:true,stdio:["pipe","pipe","pipe"],env:Object.fromEntries(Object.entries(process.env).filter(([k])=>["systemroot","windir","temp","tmp",...(isolation?["userprofile","localappdata","appdata","homedrive","homepath"]:[])].includes(k.toLowerCase())))});
  let started=false,ended=false,settled=false,done=null,fatal=null,stopReason=null,buffer=Buffer.alloc(0),stderrBytes=0,stderrHashedBytes=0,stderrHash=createHash("sha256"),hostErrors=0,beating=false,stopTimer=null;
  const processInfo={started:false,pid:null,containment:null,cleanup:"unconfirmed",host_sha256:hostPin.sha256,executable_sha256:exe.sha256,python_sha256:py.sha256};
  const stop=reason=>{
@@ -70,6 +80,8 @@ async function supervise({python,command,args,cwd,env,input,pins,runtime,decoder
   if(ended)throw Error();
   if(e.kind==="started"){
    if(started||!Number.isSafeInteger(e.pid)||e.pid<1||!["windows-job","posix-process-group"].includes(e.containment))throw Error();
+   if(isolation&&!sandboxObservation(e.sandbox,isolation,{finished:false})||!isolation&&e.sandbox)throw Error();
+   if(isolation)processInfo.sandbox=e.sandbox;
    started=true;Object.assign(processInfo,{started:true,pid:e.pid,containment:e.containment});
   }else if(e.kind==="stdout"||e.kind==="stderr"){
    if(!started||typeof e.data!=="string"||e.data.length>21848||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(e.data))throw Error();
@@ -79,6 +91,8 @@ async function supervise({python,command,args,cwd,env,input,pins,runtime,decoder
   }else if(e.kind==="done"){
    if(!started||e.exit_code!==null&&(!Number.isSafeInteger(e.exit_code)||e.exit_code< -128)||
     ![null,"cancelled","timeout","parent_disconnected"].includes(e.stop_reason)||!["job_empty","group_signalled","unconfirmed"].includes(e.cleanup))throw Error();
+   if(isolation&&!sandboxObservation(e.sandbox,isolation,{finished:false})||!isolation&&e.sandbox)throw Error();
+   if(isolation){processInfo.sandbox=e.sandbox;if(!sandboxObservation(e.sandbox,isolation))stopReason??="transport_error";}
    done=e;ended=true;processInfo.cleanup=e.cleanup;
    if(!stopReason&&e.stop_reason)stopReason=e.stop_reason==="parent_disconnected"?"transport_error":e.stop_reason;
    host.stdin.end();
