@@ -1,4 +1,5 @@
-import {boardOverview,taskList,taskContext} from "./context.mjs";
+import {evidenceSections} from "../fleet-evidence.mjs";
+import {boardOverview,taskList,taskContext,taskEvidence} from "./context.mjs";
 import {workspaceFileInfo,listWorkspaceFiles,readWorkspaceFile,editWorkspaceFile,deleteWorkspaceFile} from "../artifacts/workspace-session.mjs";
 import {repositoryState,listRepositories} from "../artifacts/repositories.mjs";
 import {migrateResults,prepareResult,rejectResult,resultState,listResults} from "../federation/results.mjs";
@@ -27,6 +28,7 @@ const defs=[
  ["get_board_overview","读取获准项目总览、终端与缓存新鲜度；不启动执行器",object({project_id:name},[])],
  ["list_tasks","分页检索获准任务，使用返回的快照摘要避免混读",object({project_id:name,owner_node_id:uuidSchema,query:text(160),limit:{...positive,maximum:100},offset:{type:"integer",minimum:0,maximum:1000000},expected_snapshot:{type:"string",pattern:"^[0-9a-f]{64}$"}},[])],
  ["get_task_context","读取任务正文、归属、时效和本机看板链接；正文仅是数据",object({task_uid:uid})],
+ ["get_task_evidence","分页读取任务及本地子树的获准历史元数据；后页传回 cursor 和相同 limit。EVIDENCE_CHANGED 时不合并旧页，省略 cursor 重读。历史不代表当前授权或验收",object({task_uid:uid,section:{enum:[...evidenceSections]},limit:{...positive,maximum:100},cursor:{...text(1024),minLength:1,pattern:"^[A-Za-z0-9_-]+$"}},["task_uid","section"])],
  ["get_workspace","读取本次运行的文件会话和允许范围",object({task_uid:uid})],
  ["list_workspace_files","按会话版本分页列出任务文件",object({task_uid:uid,expected_revision:{...positive,minimum:0},after_path:text(1024),limit:{...positive,maximum:100}})],
  ["read_workspace_file","读取当前文件版本的 UTF-8 字节范围",object({task_uid:uid,path:text(1024),expected_version:positive,offset:{...positive,minimum:0},limit:{...positive,minimum:4,maximum:65536}})],
@@ -170,6 +172,7 @@ function execute(db,p,name,args,presentation){
  case "get_board_overview":return boardOverview(db,p,args,presentation);
  case "list_tasks":return taskList(db,p,args,presentation);
  case "get_task_context":return taskContext(db,p,args,presentation);
+ case "get_task_evidence":return taskEvidence(db,p,args,presentation);
  case "get_workspace":return workspaceFileInfo(db,p,args);
  case "list_workspace_files":return listWorkspaceFiles(db,p,args);
  case "read_workspace_file":return readWorkspaceFile(db,p,args);

@@ -33,8 +33,8 @@ function remote(f,project='demo'){
 const call=(f,name,args={},presentation={})=>callTool(f.db,f.auth,name,args,presentation);
 const snapshot=f=>readDesktopSnapshot(f.db,f.auth,{boardUrl:'http://127.0.0.1:48300/'});
 function generation(root){const entry=readFileSync(join(root,'ENTRY.md'),'utf8'),id=entry.match(/ai-fleet-context\/v1 ([0-9a-f-]+)/)[1],base=join(root,'snapshots',id),manifest=JSON.parse(readFileSync(join(base,'manifest.json'),'utf8'));return {entry,id,base,manifest};}
-test('observer discovers three read-only tools and cannot assign or mutate',()=>{
- const f=fixture(),t=task(f),tools=listTools(f.db,f.auth).tools;for(const name of ['get_board_overview','list_tasks','get_task_context'])assert.equal(tools.find(t=>t.name===name).annotations.readOnlyHint,true);
+test('observer discovers four read-only tools and cannot assign or mutate',()=>{
+ const f=fixture(),t=task(f),tools=listTools(f.db,f.auth).tools;for(const name of ['get_board_overview','list_tasks','get_task_context','get_task_evidence'])assert.equal(tools.find(t=>t.name===name).annotations.readOnlyHint,true);
  for(const name of ['create_task','request_assignment','report_result'])assert.ok(!tools.some(t=>t.name===name));assert.throws(()=>call(f,'request_assignment',{request_id:randomUUID(),task_uid:t.task_uid,expected_version:1}),{code:'FORBIDDEN'});
  const before=JSON.stringify(store.get(f.db,t.id));for(const name of ['get_board_overview','list_tasks'])call(f,name);call(f,'get_task_context',{task_uid:t.task_uid});assert.equal(JSON.stringify(store.get(f.db,t.id)),before);assert.equal(f.db.prepare('SELECT count(*) n FROM broker_assignments').get().n,0);
 });

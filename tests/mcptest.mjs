@@ -488,3 +488,9 @@ test("MCP credentials are owner-only and failed protection rolls back principal 
  assert.equal(existsSync(file),false);assert.equal(count(f,"broker_principals"),1);assert.equal(count(f,"broker_auth_events"),before);
  assert.equal(listTools(f.db,f.coord.auth).tools.length>0,true);
 });
+
+for(const kind of ["implement","review"])test(kind+" run cannot discover or call desktop evidence pagination",()=>{
+ const f=fixture(),w=worker(f,{kind});
+ assert.ok(!listTools(f.db,w.identity.auth).tools.some(t=>t.name==="get_task_evidence"));
+ assert.throws(()=>callTool(f.db,w.identity.auth,"get_task_evidence",{task_uid:w.task.task_uid,section:"runs"}),{code:"FORBIDDEN",status:403});
+});

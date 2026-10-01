@@ -66,3 +66,7 @@
 格式依据 [MCPB manifest](https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md) 0.3；客户端参考 [Claude Desktop 本地 MCP](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)、[OpenAI MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Zcode MCP](https://zcode.z.ai/cn/docs/mcp-services)，2026-09-30 核对。接入包与源代码采用 Apache-2.0 许可。
 
 未在这个包中携带服务端、生成真实授权或更改全局设置。真实桌面安装、双机联调与模型任务必须分别保存实际结果，不能用包内协议检查替代。
+
+## 聊天中继续查看历史
+
+升级到提供 get_task_evidence 的本机代理后，重新连接客户端并检查 tools/list，即可按任务 UID 分页查询运行、产物和回执。stdio桥接动态读取工具清单，不需要加入其他权限或修改凭据文件。使用 page.next_cursor 和相同 limit 继续，收到 EVIDENCE_CHANGED 后从第一页重查；详见 [桌面上下文合同](../../docs/federation/desktop-context.md)。旧预检的 ready 只证明原三项基础查询，不作为新工具或实际客户端联调证明。

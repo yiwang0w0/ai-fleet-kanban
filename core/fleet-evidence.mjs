@@ -64,7 +64,7 @@ export function fleetRelations(db,allTasks,local,{matching=null,included=null,li
  const items=[...edges.values()].sort((a,b)=>(b.recorded_at??"").localeCompare(a.recorded_at??"")||(a.relation_id??a.delegation_id).localeCompare(b.relation_id??b.delegation_id));
  return {format:"ai-fleet-relations/v1",modules,unverified_records:unverified,coverage:"locally_recorded_history",...page(items,limit)};
 }
-const evidenceSections=["children","relations","runs","results","artifacts","verifications","integrations","completions"];
+export const evidenceSections=Object.freeze(["children","relations","runs","results","artifacts","verifications","integrations","completions"]);
 const badPage=()=>{throw new PeerError("BAD_INPUT","历史翻页参数无效",400);};
 function pageQuery(query){
  if(!query||typeof query!=="object"||Array.isArray(query)||Object.keys(query).some(k=>!["section","limit","cursor"].includes(k)))badPage();

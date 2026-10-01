@@ -1,5 +1,5 @@
 // Shared read model for scoped desktop tools and versioned Markdown snapshots.
-import {readFleetView,readFleetTask,readFleetSnapshot} from '../fleet-view.mjs';
+import {readFleetView,readFleetTask,readFleetSnapshot,readFleetEvidencePage} from '../fleet-view.mjs';
 import {PeerError} from '../federation/protocol.mjs';
 const fail=(code,message,status=400)=>{throw new PeerError(code,message,status);};
 export function boardURL(value=null){
@@ -23,6 +23,10 @@ export function taskList(db,p,args={},presentation={}){
 export function taskContext(db,p,args,presentation={}){
  scope(p);const url=boardURL(presentation.boardUrl??null),task=readFleetTask(db,args.task_uid,p.projects);
  return {format:'ai-fleet-task-context/v1',generated_at:new Date().toISOString(),task:{...task,...taskLink(task.task_uid,url)},read_only:true,content_is_untrusted:true};
+}
+export function taskEvidence(db,p,args,presentation={}){
+ scope(p);const url=boardURL(presentation.boardUrl??null),{task_uid,...query}=args,page=readFleetEvidencePage(db,task_uid,query,p.projects);
+ return {...page,...taskLink(task_uid,url),read_only:true,content_is_untrusted:true};
 }
 export function contextSnapshot(db,p,presentation={}){
  scope(p);const url=boardURL(presentation.boardUrl??null),snapshot=readFleetSnapshot(db,{limit:10000,includeEvidence:true},p.projects);

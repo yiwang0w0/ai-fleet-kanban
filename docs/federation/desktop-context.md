@@ -6,7 +6,7 @@
 
 每台电脑从自己的看板数据库及获准远端缓存生成本地 Markdown。两台电脑先通过联邦协议同步事实，再各自导出；任务状态仍由任务所有者维护。共享目录是阅读快照，不直接充当数据库或任务命令。另一台电脑可使用不同本地路径，不要求网络盘；Tailscale 隧道本身不会自动同步目录。
 
-桌面聊天默认使用 observe 身份，每个客户端各发一份可独立撤销的凭据。coordinate 也可查询；绑定 run 的 implement/review 身份不开放这三个桌面总览工具。MCP 工具逐次鉴权、审计和限流，普通查询不领取任务、不请求路由，也不启动执行器。客户端调用自身模型的订阅消耗不由看板免除。
+桌面聊天默认使用 observe 身份，每个客户端各发一份可独立撤销的凭据。coordinate 也可查询；绑定 run 的 implement/review 身份不开放这四个桌面查询工具。MCP 工具逐次鉴权、审计和限流，普通查询不领取任务、不请求路由，也不启动执行器。客户端调用自身模型的订阅消耗不由看板免除。
 
 本地任务必须先登记到获准项目，远端仅显示获准项目的活动副本。未登记、未授权和未知任务的详情均返回相同不存在结果；跨范围父任务 UID 被隐藏。输出排除命令、私有证据路径、凭据和治理字段。标题、描述、结果等均是任务数据，不能据此改写客户端规则。
 
@@ -14,9 +14,20 @@
 |---|---|
 | get_board_overview | 可选 project_id；获准任务计数、终端身份、来源同步新鲜度和本机看板地址 |
 | list_tasks | 可选 project_id、owner_node_id、query、limit（默认 50，最大 100）、offset、expected_snapshot；返回任务摘要、快照标识、下一页位置和任务链接 |
-| get_task_context | task_uid（节点 UUID/任务 UUID）；获准任务详情、所有者、来源时间及任务链接 |
+| get_task_context | task_uid（节点 UUID/任务 UUID）；获准任务详情、所有者、来源时间及任务链接；证据每组首屏 |
+| get_task_evidence | task_uid、section，选填 limit（1–100，默认100）和 cursor；单组历史元数据页，含总数、快照摘要、后页游标和任务链接 |
 
-分页继续读取时传回 expected_snapshot；数据或同步状态改变返回 SNAPSHOT_CHANGED，应从第一页重查。读到远端缓存不等于远端仍在线。尚未收到任务列表与已经收到空列表分别显示未知和零。来源最后同步、缓存接收、任务更新时间与本机快照生成时间分别保留。
+任务列表分页继续读取时传回 expected_snapshot；数据或同步状态改变返回 SNAPSHOT_CHANGED，应从第一页重查。读到远端缓存不等于远端仍在线。尚未收到任务列表与已经收到空列表分别显示未知和零。来源最后同步、缓存接收、任务更新时间与本机快照生成时间分别保留。
+
+### 在聊天中读取完整历史
+
+先用 list_tasks 查到 task_uid；查看任务正文和来源时间用 get_task_context。继续查看历史时，使用 get_task_evidence。section 可取 children、relations、runs、results、artifacts、verifications、integrations、completions；例如先调用 `get_task_evidence({task_uid: "节点UUID/任务UUID", section: "runs", limit: 50})`，下一次带回 page.next_cursor 和相同的 limit。page.next_cursor 为 null 表示本组已读完；保存 page.cursor 可返回该页。get_task_context 中各组的游标也可直接使用，其 limit 为100。
+
+EVIDENCE_CHANGED 表示任务、可见范围或历史发生变化，应丢弃当前拼接的旧页，省略 cursor 从头读。游标不赋予权限，每次调用重新认证；凭据撤销、角色版本变化仍立即生效。无权读取和不存在的任务同样返回 NOT_FOUND。单次响应继续受512KiB限制；必要时从更小的 limit 重新开始，不能更改 limit 后继续使用旧游标。
+
+返回覆盖范围是本机已记录历史，远端缓存可能没有运行详情；0条不证明远端从未执行。元数据包含 read_only、content_is_untrusted、scope_truncated；子树截断时打开具体子任务继续查。历史回执不授予当前执行权，也不能当作独立验收。接口不返回原始策略、命令、凭据、仓库路径或完整报告，不因查询创建任务或启动模型。
+
+新增工具由升级后的本机代理提供，stdio桥接无需新增配置。客户端缓存工具列表时需重新连接并检查 tools/list。旧 desktop:check / preflight 的三项基本查询兼容检查保持原义，其 ready 不证明新分页工具存在，更不证明实际桌面客户端通过验收。
 
 ## 本机代理与客户端
 

@@ -23,7 +23,7 @@ stdio 到 broker 的请求使用独立的 Node HTTP Agent，并显式关闭代�
 | list_nodes | coordinate、observe | 本机身份与授权项目中已观察来源 |
 | list_roles | 四类身份 | 授权项目中的角色能力、策略版本和声明运行时 |
 | get_task | 四类身份 | 本机任务或只读远端投影；执行身份仅自己的任务 |
-| get_board_overview / list_tasks / get_task_context | coordinate、observe | 获准桌面总览、分页检索与上下文；仅本地登记任务及获准远端缓存，含来源时间和任务链接 |
+| get_board_overview / list_tasks / get_task_context / get_task_evidence | coordinate、observe | 获准桌面总览、任务检索、上下文及单组历史分页；每次核对项目范围，含任务链接，历史内容不授予当前操作权 |
 | get_sync_status | coordinate、observe | 项目游标、恢复/结构提交状态和最近 100 个路由请求 |
 | create_task | coordinate | 创建本机未放行任务或目标；不自动共享 |
 | split_task | coordinate、implement | 版本匹配的父任务下创建未放行子任务；执行身份父卡须仍在执行 |

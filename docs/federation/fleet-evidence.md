@@ -24,7 +24,7 @@ GET /api/fleet 新增 relations，仍要求操作员令牌；GET /api/fleet/task
 
 GET /api/fleet/evidence?uid=<task_uid>&section=<section> 返回 ai-fleet-evidence-page/v1，page 包含 items、total、offset、limit、snapshot_id、cursor 和 next_cursor。section 为 children、relations、runs、results、artifacts、verifications、integrations、completions；limit 为 1–100，默认 100。后续请求携带 cursor（第一页可保存其 cursor 用于返回）；游标绑定任务、组别、页大小和当前可见历史摘要，不提供访问授权。每次请求重新检查操作员令牌、来源和当前可见任务，并在同一 SQLite 读取事务内生成结果。
 
-可见记录、任务版本、模块状态或节点 epoch 变化后返回 409 EVIDENCE_CHANGED；页面清空该组旧内容，点击「返回最新记录」重新读取。无效参数为 400，不可见任务为 404。每组翻页独立，不重复更新任务或触发执行。桌面 MCP get_task_context 仍返回每组首屏；本批分页入口为面板及操作员 HTTP API，未增加 MCP 工具或权限。
+可见记录、任务版本、模块状态或节点 epoch 变化后返回 409 EVIDENCE_CHANGED；页面清空该组旧内容，点击「返回最新记录」重新读取。无效参数为 400，不可见任务为 404。每组翻页独立，不重复更新任务或触发执行。桌面 MCP get_task_context 返回每组首屏；新增 get_task_evidence 供获准的 coordinate/observe 身份读取同一分页。参数为 task_uid、section、limit、cursor，复用面板的查询、游标和范围检查。绑定 run 的 implement/review 不开放此工具；MCP调用只增加审计/限流记录，不写任务或产生调度回执。详见 desktop-context.md。
 
 当前查询仍扫描本机历史表和可见任务后投影，并非数据库查询成本上限。大规模负载和 API 延迟需要后续测量。本批解决详情翻页，不改变操作队列历史保留或全局关系列表的 500 条上限。桌面 Markdown 已增加同代完整证据目录、任务关联链接和明确保存的交接摘要，详见 context-evidence.md；实体客户端读取仍待验收。
 
@@ -32,6 +32,8 @@ GET /api/fleet/evidence?uid=<task_uid>&section=<section> 返回 ai-fleet-evidenc
 
 运行 npm run test:fleet-evidence、npm run test:fleet-view，以及桌面上下文和 completiontest 回归。新增检查包含同名终端、筛选外链接、项目隔离、撤回端点、分页一致性、取消改变快照、读取无写入、未来 schema、坏摘要和超限提示。既有真实临时 Git 交付/验证/合并/双端结案流程补充追溯断言和坏验收摘要检查。
 
-浏览器只使用独立的模拟数据库，检查键盘入口、父任务、端点跳转、筛选和恶意 HTML 字样的纯文本显示。这不替代实际两台 Windows 电脑、真实执行器或 72 小时验收。本地面板的跨端操作与阶段进度另见对应实现记录。完整依赖/结构编辑、操作队列历史保留、MCP 历史翻页、实际桌面接入及实体 G08 验收仍待完成。
+浏览器只使用独立的模拟数据库，检查键盘入口、父任务、端点跳转、筛选和恶意 HTML 字样的纯文本显示。这不替代实际两台 Windows 电脑、真实执行器或 72 小时验收。本地面板的跨端操作与阶段进度另见对应实现记录。完整依赖/结构编辑、操作队列历史保留、实际桌面接入及实体 G08 验收仍待完成。
 
 本批历史分页回归、HTTP 权限及 Markdown 兼容性共 76 个 Node 单元通过；另一个针对真实备份恢复 API 的旧游标失效专项通过，去重合计 77。205 条同时间戳运行/候选与 206 条关系分多页读取无遗漏和重复，读取不写数据库；真实浏览器核对前后翻页、键盘、变更后刷新及 390 像素无溢出。详见 [历史分页证据](fleet-history-evidence.json)。
+
+桌面 MCP 分页的独立 stdio 往返、角色边界、撤销和只读验证见 [MCP 历史分页证据](mcp-history-evidence.json)。

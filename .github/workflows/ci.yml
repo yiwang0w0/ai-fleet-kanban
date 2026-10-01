@@ -160,6 +160,8 @@ jobs:
         run: bash hrun.sh node tests/fleetactionstest.mjs
       - name: "fleetevidencetest (scoped relationships and task history)"
         run: bash hrun.sh node tests/fleetevidencetest.mjs
+      - name: "mcpevidencetest (scoped history pages and independent stdio continuation)"
+        run: bash hrun.sh node tests/mcpevidencetest.mjs
       - name: "desktopcontexttest (scoped reads, private Markdown and refresh)"
         run: bash hrun.sh node tests/desktopcontexttest.mjs
       - name: "contextevidencetest (scoped Markdown evidence and durable handoffs)"
