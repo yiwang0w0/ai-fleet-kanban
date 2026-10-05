@@ -1,0 +1,31 @@
+{
+  "artifact_type": "independent_task_review_draft",
+  "task_id": "T08.05",
+  "plan_id": "AFK-FED-001",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "decision": "pending",
+  "acceptance_criteria": [
+    "仅 accepted 任务计入完成度",
+    "阻塞、待验收单列",
+    "修改合同后旧门禁失效可见"
+  ],
+  "required_roles": [
+    "TEST",
+    "REVIEW"
+  ],
+  "implementer": "codex-fleet-federation-foundation",
+  "reviewer_instance_id": null,
+  "verified_at": null,
+  "acceptance_receipt": null,
+  "ci_steps": [
+    "fleetprogresstest (scoped contracts, external confirmations and invalidation)"
+  ],
+  "evidence_manifest": "docs/federation/acceptance-candidate-evidence.json",
+  "evidence_sha256": "2e744e2abb647daeb874c3d55e56843980de6c75922ec99a6279806f9c8c104a",
+  "historical_evidence": {
+    "path": "docs/federation/fleet-progress-evidence.json",
+    "sha256": "d44de1c72482c7909885468c9dcba3d6e4adf907c784427ae5e79222c9d86e3b",
+    "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+  },
+  "note": "Review packet only, not a registered acceptance receipt. Independent reviewer records actual findings and identity; implementation/test success does not sign acceptance."
+}

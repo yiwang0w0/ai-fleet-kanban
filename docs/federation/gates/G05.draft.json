@@ -5,9 +5,9 @@
   "plan_id": "AFK-FED-001",
   "plan_version": "1.3",
   "decision": "pending",
-  "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
   "schema_version": {
-    "federation_sync": 4,
+    "federation_sync": 5,
     "broker_dispatch": 3
   },
   "schema_note": "Code contracts only; no production database schema inspection is claimed. Other components version independently.",
@@ -18,33 +18,7 @@
   "config_digest": null,
   "node_aliases": [],
   "node_note": "The user selected two physical PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
-  "runtime_versions": {
-    "local_test_node": "24.16.0",
-    "local_test_python": "3.12.14"
-  },
   "accepted_task_ids": [],
-  "test_results": [
-    {
-      "case": "f10f268 targeted six-suite baseline",
-      "passed": 134,
-      "failed": 1,
-      "skipped": 0,
-      "embedded_server_assertions": "195 passed within one wrapper; not additive",
-      "isolated_retry": "1 passed, initial failure retained"
-    },
-    {
-      "case": "seven-module defect observations",
-      "observations": 8,
-      "result": "reproduced; unresolved",
-      "model_calls": 0
-    },
-    {
-      "case": "six Python selftest commands",
-      "passed_commands": 5,
-      "failed_commands": 1,
-      "failed_assertion": "Readonly-rule assertion rejects .data in checkout parent path; original 56 PASS / 1 FAIL retained"
-    }
-  ],
   "task_assessments": [
     {
       "task_id": "T05.01",
@@ -55,11 +29,17 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "tests/synctest.mjs",
+        "docs/federation/acceptance-candidate-evidence.json",
         "docs/federation/sync-evidence.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/offline-soak-evidence.json",
+        "docs/federation/single-host-load-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Atomic state/outbox and crash evidence is historical; current full CI and independent review pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Atomic publication and capacity-failure rollback pass CI; physical and independent acceptance remain pending.",
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)"
+      ]
     },
     {
       "task_id": "T05.02",
@@ -71,11 +51,17 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "tests/synctest.mjs",
+        "docs/federation/acceptance-candidate-evidence.json",
         "docs/federation/sync-evidence.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/offline-soak-evidence.json",
+        "docs/federation/single-host-load-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Local replay/ACK-loss evidence exists; current full suite pending and physical peer ACK path unverified. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Durable receive, replay and lost-ACK regression pass CI; physical ACK path and independent acceptance remain pending.",
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)"
+      ]
     },
     {
       "task_id": "T05.03",
@@ -86,11 +72,17 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "tests/synctest.mjs",
-        "docs/federation/pr2-0.24-evidence.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sync-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/offline-soak-evidence.json",
+        "docs/federation/single-host-load-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Current three-source event UUID isolation green/red verified; reorder/clock cases remain historical until current CI. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Ordering, event identity and recovery guards pass CI; independent review remains pending.",
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "epochrecoverytest (reviewed source epochs, missing results and atomic cutover)"
+      ]
     },
     {
       "task_id": "T05.04",
@@ -102,11 +94,18 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "tests/synctest.mjs",
+        "docs/federation/acceptance-candidate-evidence.json",
         "docs/federation/sync-evidence.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/offline-soak-evidence.json",
+        "docs/federation/single-host-load-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Local gateway-outage fixture exists; physical Tailscale disconnect with continued claimed work and reconnect result sync has not been performed. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Actual-duration 30-minute local runtime outage evidence is available; real two-PC Tailscale disconnect and real desktop/provider acceptance remain pending.",
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "noderuntimetest (owned loopback gateways, scoped sync and restart)",
+        "schedulertest (continuous queue, durable lifecycle controls and native stop receipts)"
+      ]
     },
     {
       "task_id": "T05.05",
@@ -117,13 +116,18 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "tests/snapshottest.mjs",
-        "tests/epochrecoverytest.mjs",
-        "docs/federation/snapshots-evidence.json",
-        "docs/federation/source-recovery-evidence.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sync-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/offline-soak-evidence.json",
+        "docs/federation/single-host-load-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Local snapshot/retention/recovery evidence exists; physical rejoin/recovery and current full CI pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Snapshot, retention and reviewed epoch recovery pass CI; physical rejoin and active-contract recovery coordination are not accepted.",
+      "ci_steps": [
+        "snapshottest (frozen pages, crash resume and retained-history recovery)",
+        "epochrecoverytest (reviewed source epochs, missing results and atomic cutover)",
+        "recoverytest (retirement, reviewed activation and crash rollback)"
+      ]
     },
     {
       "task_id": "T05.06",
@@ -133,47 +137,59 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "docs/federation/gates/G05.draft.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sync-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/offline-soak-evidence.json",
+        "docs/federation/single-host-load-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): G02/G03, physical bilateral fault-scenario projection hashes and independent TEST/REVIEW acceptance pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "CI fault regressions and separate local partition supplement are available; physical bidirectional fault drill, G02/G03 and independent review remain pending.",
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "snapshottest (frozen pages, crash resume and retained-history recovery)",
+        "epochrecoverytest (reviewed source epochs, missing results and atomic cutover)",
+        "sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)"
+      ]
     }
   ],
-  "evidence_manifest": "docs/federation/seven-module-review-evidence.json",
-  "evidence_sha256": "ff244251f63ec032968df1c7005cf67f85e0aafd44ba809d129d6133f808c515",
-  "evidence_hash_format": "UTF-8 LF",
+  "evidence_manifest": "docs/federation/acceptance-candidate-evidence.json",
+  "evidence_sha256": "2e744e2abb647daeb874c3d55e56843980de6c75922ec99a6279806f9c8c104a",
+  "evidence_hash_format": "UTF-8 LF, exact committed document bytes",
   "required_roles": [
     "TEST",
     "REVIEW"
   ],
-  "unresolved_findings": [
-    "G02 and G03 not accepted",
-    "Current complete Windows CI pending",
-    "Physical two-PC offline/reconnect test and projection hash comparison missing",
-    "Independent reviewer receipt missing",
-    "Seven-module H2/H3/H4/H5/H7/H12 runtime observations remain unresolved; see current manifest",
-    "Initial snapshot-suite failure and path-sensitive Python assertion are retained; no all-green full baseline claim"
-  ],
   "reviewer_instance_id": null,
   "operator_decision_ref": null,
   "verified_at": null,
-  "drafted_at": "2026-10-01",
+  "drafted_at": "2026-10-05T03:49:15.282422+00:00",
   "rollback_ref": "backup/pr2-before-main-20261001",
   "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database.",
-  "historical_test_evidence": {
-    "namespace": "PR2 inline review B1-B3/H1-H7; not seven-module H1-H12",
-    "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
-    "evidence_manifest": "docs/federation/pr2-0.24-evidence.json",
-    "evidence_sha256": "1a633f4037c41f35e8e62d12535f6ab2b88b576e935fd869cacfecdb03687cca",
-    "test_results": [
-      {
-        "case": "H7",
-        "green": "passed",
-        "negative_control": "expected_failure",
-        "test_file": "tests/synctest.mjs",
-        "test_name_pattern": "three nodes isolate event UUIDs"
-      }
-    ]
+  "reanchored_at": "2026-10-05T03:49:15.282422+00:00",
+  "runtime_versions": {
+    "ci_node_requested": "24",
+    "ci_python_requested": "3.12",
+    "note": "Requested runner versions from the pinned workflow, not a physical-machine inventory."
   },
-  "reanchored_at": "2026-10-01T07:28:24.034Z"
+  "test_results": [
+    {
+      "case": "CI #149 Windows harness and gitleaks",
+      "status": "passed",
+      "run_id": 37258132393,
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393",
+      "steps": "Every recorded step completed successfully; counts are CI steps, not test assertions."
+    }
+  ],
+  "unresolved_findings": [
+    "G02 and G03 are not accepted.",
+    "Physical Tailscale disconnect, continued work and reconnect projection hashes are not verified.",
+    "Independent TEST/REVIEW confirmations are missing."
+  ],
+  "historical_draft": {
+    "path": "docs/federation/gates/history/f10f268/G05.draft.json",
+    "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+    "sha256": "c8b828bc04b110c1a96ecd31dd789cf7c577baa6275d2871fb49a4a4f59d2c69",
+    "scope": "Exact previous draft retained, including its original failures and older dfcbc73 evidence. No historical experiment was relabeled as a current rerun."
+  }
 }

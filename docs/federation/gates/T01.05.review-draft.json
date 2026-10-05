@@ -1,0 +1,34 @@
+{
+  "artifact_type": "independent_task_review_draft",
+  "task_id": "T01.05",
+  "plan_id": "AFK-FED-001",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "decision": "pending",
+  "acceptance_criteria": [
+    "运行中数据库使用一致性备份方式",
+    "恢复后任务、事件、证据索引可校验",
+    "恢复副本不连接生产 peers"
+  ],
+  "required_roles": [
+    "TEST",
+    "REVIEW"
+  ],
+  "implementer": "codex-fleet-federation-foundation",
+  "reviewer_instance_id": null,
+  "verified_at": null,
+  "acceptance_receipt": null,
+  "ci_steps": [
+    "backuptest (WAL snapshots and quarantined restore)",
+    "recoverytest (retirement, reviewed activation and crash rollback)",
+    "resulttest (sealed candidates, owner rejection and durable rework)",
+    "completiontest (bilateral acceptance, retirement, parent review and recovery)"
+  ],
+  "evidence_manifest": "docs/federation/acceptance-candidate-evidence.json",
+  "evidence_sha256": "2e744e2abb647daeb874c3d55e56843980de6c75922ec99a6279806f9c8c104a",
+  "historical_evidence": {
+    "path": "docs/federation/sealed-restore-evidence.json",
+    "sha256": "135a454313430cf128c2d8b7549ea2f43354e1df3bfd6cbd59b29b439485f4db",
+    "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+  },
+  "note": "Review packet only, not a registered acceptance receipt. Independent reviewer records actual findings and identity; implementation/test success does not sign acceptance."
+}

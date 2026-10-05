@@ -710,13 +710,25 @@
       "evidence_required": [
         "regression-report.json"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "required_windows_ci_passed",
+        "tested_commit": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "ci_run_id": 37258132393,
+        "ci_run_url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393",
+        "scope": "Pinned Windows CI and gitleaks completed successfully; historical local/browser evidence retains its original source. No physical multi-PC or independent acceptance is claimed.",
+        "evidence": "docs/federation/acceptance-candidate-evidence.json",
+        "whole_phase_accepted": false,
+        "independent_review": "pending"
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/acceptance-candidate-evidence.json"
+      ]
     },
     {
       "id": "T01.04",
@@ -770,17 +782,31 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "passed",
-        "scope": "isolated local restore and dual-platform CI",
-        "tested_commit": "f97de7a9bd0c1fbb8428a46f20a156ed17662ff4",
-        "ci_run_id": 36530311581,
-        "whole_phase_accepted": false
+        "result": "required_windows_ci_passed",
+        "tested_commit": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "ci_run_id": 37258132393,
+        "ci_run_url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393",
+        "scope": "Pinned Windows CI and gitleaks completed successfully; historical local/browser evidence retains its original source. No physical multi-PC or independent acceptance is claimed.",
+        "evidence": "docs/federation/acceptance-candidate-evidence.json",
+        "whole_phase_accepted": false,
+        "independent_review": "pending"
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/backup.md",
         "tests/backuptest.mjs",
-        "2026-09-29 live database read-only restore drill; private receipt in ignored worktree data"
+        "2026-09-29 live database read-only restore drill; private receipt in ignored worktree data",
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/gates/T01.05.review-draft.json"
+      ],
+      "verification_history": [
+        {
+          "result": "passed",
+          "scope": "isolated local restore and dual-platform CI",
+          "tested_commit": "f97de7a9bd0c1fbb8428a46f20a156ed17662ff4",
+          "ci_run_id": 36530311581,
+          "whole_phase_accepted": false
+        }
       ]
     },
     {
@@ -2547,12 +2573,14 @@
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_component_passed",
-        "scope": "Read-only operator API and panel derive accepted-only task/phase progress from administrator-enrolled external review records. Scoped contract/input changes invalidate affected gates and dependants, preserve unrelated gates, and expose blocked/pending tasks and confirmation history. Actual HTTP, browser, CLI and the existing 72-task manifest were verified locally.",
-        "pending": [
-          "G08 independent review of the UI and administrator enrollment procedure",
-          "Actual desktop and two-PC use, confirmation distribution and Windows file permissions"
-        ]
+        "result": "required_windows_ci_passed",
+        "tested_commit": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "ci_run_id": 37258132393,
+        "ci_run_url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393",
+        "scope": "Pinned Windows CI and gitleaks completed successfully; historical local/browser evidence retains its original source. No physical multi-PC or independent acceptance is claimed.",
+        "evidence": "docs/federation/acceptance-candidate-evidence.json",
+        "whole_phase_accepted": false,
+        "independent_review": "pending"
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
@@ -2560,7 +2588,19 @@
         "cli/progress.mjs",
         "tests/fleetprogresstest.mjs",
         "docs/federation/fleet-progress.md",
-        "docs/federation/fleet-progress-evidence.json"
+        "docs/federation/fleet-progress-evidence.json",
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/gates/T08.05.review-draft.json"
+      ],
+      "verification_history": [
+        {
+          "result": "local_component_passed",
+          "scope": "Read-only operator API and panel derive accepted-only task/phase progress from administrator-enrolled external review records. Scoped contract/input changes invalidate affected gates and dependants, preserve unrelated gates, and expose blocked/pending tasks and confirmation history. Actual HTTP, browser, CLI and the existing 72-task manifest were verified locally.",
+          "pending": [
+            "G08 independent review of the UI and administrator enrollment procedure",
+            "Actual desktop and two-PC use, confirmation distribution and Windows file permissions"
+          ]
+        }
       ]
     },
     {

@@ -5,9 +5,9 @@
   "plan_id": "AFK-FED-001",
   "plan_version": "1.3",
   "decision": "pending",
-  "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
   "schema_version": {
-    "federation_sync": 4,
+    "federation_sync": 5,
     "broker_dispatch": 3
   },
   "schema_note": "Code contracts only; no production database schema inspection is claimed. Other components version independently.",
@@ -18,33 +18,7 @@
   "config_digest": null,
   "node_aliases": [],
   "node_note": "The user selected two physical PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
-  "runtime_versions": {
-    "local_test_node": "24.16.0",
-    "local_test_python": "3.12.14"
-  },
   "accepted_task_ids": [],
-  "test_results": [
-    {
-      "case": "f10f268 targeted six-suite baseline",
-      "passed": 134,
-      "failed": 1,
-      "skipped": 0,
-      "embedded_server_assertions": "195 passed within one wrapper; not additive",
-      "isolated_retry": "1 passed, initial failure retained"
-    },
-    {
-      "case": "seven-module defect observations",
-      "observations": 8,
-      "result": "reproduced; unresolved",
-      "model_calls": 0
-    },
-    {
-      "case": "six Python selftest commands",
-      "passed_commands": 5,
-      "failed_commands": 1,
-      "failed_assertion": "Readonly-rule assertion rejects .data in checkout parent path; original 56 PASS / 1 FAIL retained"
-    }
-  ],
   "task_assessments": [
     {
       "task_id": "T01.01",
@@ -55,11 +29,16 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "docs/federation/foundation-evidence.json",
-        "docs/federation/real-provider-probes.md",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sealed-restore-evidence.json",
+        "docs/federation/node-health-evidence.json",
+        "docs/federation/capacity-health-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Current local test runtimes recorded; both PCs and all three native executors are not fully verified. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Both physical nodes and all actual executor logins still require review; CI uses isolated fixtures.",
+      "ci_steps": [
+        "clitest (setup / reset / node preflight)",
+        "adaptertest (explicit provider profiles, scoped tools and sealed configuration)"
+      ]
     },
     {
       "task_id": "T01.02",
@@ -69,11 +48,16 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "docs/federation/foundation-evidence.json",
-        "cli/doctor.mjs",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sealed-restore-evidence.json",
+        "docs/federation/node-health-evidence.json",
+        "docs/federation/capacity-health-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Production directory/ACL/configuration digest and second-PC setup remain unverified. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Actual deployment directories, ACLs and configuration digest remain to be recorded.",
+      "ci_steps": [
+        "clitest (setup / reset / node preflight)",
+        "nodestartuptest (reviewed logon bundle, Task Scheduler validation and hidden launch)"
+      ]
     },
     {
       "task_id": "T01.03",
@@ -84,10 +68,16 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "docs/federation/pr2-0.24-evidence.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sealed-restore-evidence.json",
+        "docs/federation/node-health-evidence.json",
+        "docs/federation/capacity-health-evidence.json"
       ],
-      "remaining": "f10f268 targeted six-suite run: 134 PASS / 1 FAIL; failed snapshot case passed one isolated retry. Prompt selftest: 56 PASS / 1 path-sensitive assertion FAIL. Full current baseline is not confirmed green."
+      "remaining": "CI #149 passes every required step at the pinned candidate; independent review remains pending.",
+      "ci_steps": [
+        "selftest (store)",
+        "review-contracttest (version, qualified terms and safe upgrade instructions)"
+      ]
     },
     {
       "task_id": "T01.04",
@@ -98,12 +88,18 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "tests/looptest.mjs",
-        "tests/dispatchtest.mjs",
-        "tests/servertest.mjs",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sealed-restore-evidence.json",
+        "docs/federation/node-health-evidence.json",
+        "docs/federation/capacity-health-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Existing model-free process fixtures; this batch only reran named PR2 cases, not every lifecycle scenario. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Current Windows CI covers isolated lifecycle fixtures; no production tasks or real provider acceptance.",
+      "ci_steps": [
+        "looptest (worker loop, end to end with a stub CLI)",
+        "dispatchtest (native gates, reservations, one-use permits and stale receipts)",
+        "schedulertest (continuous queue, durable lifecycle controls and native stop receipts)",
+        "servertest (supervisor: stop reasons, backoff, refusal)"
+      ]
     },
     {
       "task_id": "T01.05",
@@ -114,12 +110,18 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "docs/federation/backup-evidence.json",
-        "docs/federation/review-recovery-evidence.json",
-        "tests/recoverytest.mjs",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sealed-restore-evidence.json",
+        "docs/federation/node-health-evidence.json",
+        "docs/federation/capacity-health-evidence.json"
       ],
-      "remaining": "Earlier restore drills do not cover sealed candidates with evidence_path. f10f268 reproduced RESULT_PENDING and incomplete restore (H5a). Fix and independent non-implementer sign-off remain required."
+      "remaining": "Sealed-evidence relocation is implemented and passes current CI; independent non-implementer review remains pending.",
+      "ci_steps": [
+        "backuptest (WAL snapshots and quarantined restore)",
+        "recoverytest (retirement, reviewed activation and crash rollback)",
+        "resulttest (sealed candidates, owner rejection and durable rework)",
+        "completiontest (bilateral acceptance, retirement, parent review and recovery)"
+      ]
     },
     {
       "task_id": "T01.06",
@@ -128,82 +130,56 @@
       ],
       "status": "pending_acceptance",
       "evidence": [
-        "docs/federation/gates/G01.draft.json",
-        "docs/federation/seven-module-review-evidence.json"
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/sealed-restore-evidence.json",
+        "docs/federation/node-health-evidence.json",
+        "docs/federation/capacity-health-evidence.json"
       ],
-      "remaining": "Prior assessment (historical scope): Independent TEST/REVIEW acceptance, G00 and remaining S01 evidence are pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+      "remaining": "Required CI is green; G00, actual configuration and independent S01 sign-off remain pending.",
+      "ci_steps": [
+        "backuptest (WAL snapshots and quarantined restore)",
+        "recoverytest (retirement, reviewed activation and crash rollback)"
+      ]
     }
   ],
-  "evidence_manifest": "docs/federation/seven-module-review-evidence.json",
-  "evidence_sha256": "ff244251f63ec032968df1c7005cf67f85e0aafd44ba809d129d6133f808c515",
-  "evidence_hash_format": "UTF-8 LF",
+  "evidence_manifest": "docs/federation/acceptance-candidate-evidence.json",
+  "evidence_sha256": "2e744e2abb647daeb874c3d55e56843980de6c75922ec99a6279806f9c8c104a",
+  "evidence_hash_format": "UTF-8 LF, exact committed document bytes",
   "required_roles": [
     "TEST",
     "REVIEW"
   ],
-  "unresolved_findings": [
-    "G00 not accepted",
-    "Current complete Windows CI pending",
-    "Two-PC/runtime/configuration evidence incomplete",
-    "Independent reviewer receipt missing",
-    "Seven-module H2/H3/H4/H5/H7/H12 runtime observations remain unresolved; see current manifest",
-    "Initial snapshot-suite failure and path-sensitive Python assertion are retained; no all-green full baseline claim"
-  ],
   "reviewer_instance_id": null,
   "operator_decision_ref": null,
   "verified_at": null,
-  "drafted_at": "2026-10-01",
+  "drafted_at": "2026-10-05T03:49:15.282422+00:00",
   "rollback_ref": "backup/pr2-before-main-20261001",
   "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database.",
-  "historical_test_evidence": {
-    "namespace": "PR2 inline review B1-B3/H1-H7; not seven-module H1-H12",
-    "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
-    "evidence_manifest": "docs/federation/pr2-0.24-evidence.json",
-    "evidence_sha256": "1a633f4037c41f35e8e62d12535f6ab2b88b576e935fd869cacfecdb03687cca",
-    "test_results": [
-      {
-        "case": "B2-version",
-        "green": "passed",
-        "negative_control": "expected_failure",
-        "test_file": "tests/review-contracttest.mjs",
-        "test_name_pattern": "B2 package, desktop manifests"
-      },
-      {
-        "case": "B2-domains",
-        "green": "passed",
-        "negative_control": "expected_failure",
-        "test_file": "tests/review-contracttest.mjs",
-        "test_name_pattern": "B2 glossary distinguishes"
-      },
-      {
-        "case": "B3-doc",
-        "green": "passed",
-        "negative_control": "expected_failure",
-        "test_file": "tests/review-contracttest.mjs",
-        "test_name_pattern": "B3 every operator entry"
-      },
-      {
-        "case": "B3-cli",
-        "green": "passed",
-        "negative_control": "expected_failure",
-        "test_file": "tests/review-contracttest.mjs",
-        "test_name_pattern": "B3 CLI refuses"
-      },
-      {
-        "case": "H5",
-        "green": "passed",
-        "negative_control": "expected_failure",
-        "test_file": "tests/repositorytest.mjs",
-        "test_name_pattern": "Git version and required no-lazy-fetch"
-      },
-      {
-        "case": "H6",
-        "green": "passed",
-        "negative_control": "expected_failure",
-        "test_file": "tests/recoverytest.mjs",
-        "test_name_pattern": "explicit restore upgrade reaches reviewed activation"
-      }
-    ]
+  "reanchored_at": "2026-10-05T03:49:15.282422+00:00",
+  "runtime_versions": {
+    "ci_node_requested": "24",
+    "ci_python_requested": "3.12",
+    "note": "Requested runner versions from the pinned workflow, not a physical-machine inventory."
   },
-  "reanchored_at": "2026-10-01T07:28:24.034Z"
+  "test_results": [
+    {
+      "case": "CI #149 Windows harness and gitleaks",
+      "status": "passed",
+      "run_id": 37258132393,
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393",
+      "steps": "Every recorded step completed successfully; counts are CI steps, not test assertions."
+    }
+  ],
+  "unresolved_findings": [
+    "G00 is not accepted.",
+    "Physical-node directories, permissions, runtime/login inventory and configuration digest are incomplete.",
+    "Independent TEST/REVIEW confirmations are missing."
+  ],
+  "historical_draft": {
+    "path": "docs/federation/gates/history/f10f268/G01.draft.json",
+    "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+    "sha256": "27a08d3c0fa363805071e94183aa114f78e906908f25e8c812949b6e4c15d649",
+    "scope": "Exact previous draft retained, including its original failures and older dfcbc73 evidence. No historical experiment was relabeled as a current rerun."
+  }
 }

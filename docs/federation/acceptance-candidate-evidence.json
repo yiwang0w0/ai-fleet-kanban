@@ -1,0 +1,874 @@
+{
+  "format": "ai-fleet-acceptance-candidate-evidence/v1",
+  "prepared_at": "2026-10-05T03:49:15.282422+00:00",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "version": "0.24.0",
+  "decision": "pending",
+  "candidate_selection": "First resumed candidate whose Windows harness and gitleaks both completed successfully. CI success is not task or phase acceptance.",
+  "ci": {
+    "format": "ai-fleet-ci-observation/v1",
+    "checked_at": "2026-10-05T03:48:56.467Z",
+    "run_id": 37258132393,
+    "run_number": 149,
+    "run_attempt": 1,
+    "head_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393",
+    "created_at": "2026-10-05T03:07:32Z",
+    "updated_at": "2026-10-05T03:47:11Z",
+    "jobs": [
+      {
+        "id": 111599455773,
+        "name": "harness (windows-latest)",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T03:07:37Z",
+        "completed_at": "2026-10-05T03:47:11Z",
+        "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393/job/111599455773",
+        "steps": [
+          {
+            "name": "Set up job",
+            "number": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:38Z",
+            "completed_at": "2026-10-05T03:07:39Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:39Z",
+            "completed_at": "2026-10-05T03:07:46Z"
+          },
+          {
+            "name": "Run actions/setup-node@v4",
+            "number": 3,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:46Z",
+            "completed_at": "2026-10-05T03:07:50Z"
+          },
+          {
+            "name": "Run actions/setup-python@v5",
+            "number": 4,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:50Z",
+            "completed_at": "2026-10-05T03:07:50Z"
+          },
+          {
+            "name": "define hrun (FAIL lines become annotations)",
+            "number": 5,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:50Z",
+            "completed_at": "2026-10-05T03:07:50Z"
+          },
+          {
+            "name": "selftest (store)",
+            "number": 6,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:50Z",
+            "completed_at": "2026-10-05T03:08:01Z"
+          },
+          {
+            "name": "progressdiagnostictest (local blockers and audited parent rearm)",
+            "number": 7,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:01Z",
+            "completed_at": "2026-10-05T03:08:02Z"
+          },
+          {
+            "name": "identitytest (node ownership and atomic migration)",
+            "number": 8,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:02Z",
+            "completed_at": "2026-10-05T03:08:11Z"
+          },
+          {
+            "name": "backuptest (WAL snapshots and quarantined restore)",
+            "number": 9,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:11Z",
+            "completed_at": "2026-10-05T03:08:19Z"
+          },
+          {
+            "name": "runfencetest (stale dispatch rejection and worker protocol)",
+            "number": 10,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:19Z",
+            "completed_at": "2026-10-05T03:08:21Z"
+          },
+          {
+            "name": "versiontest (stale task commands and concurrent edits)",
+            "number": 11,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:21Z",
+            "completed_at": "2026-10-05T03:08:24Z"
+          },
+          {
+            "name": "peertest (credential binding, revocation and protocol negotiation)",
+            "number": 12,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:24Z",
+            "completed_at": "2026-10-05T03:08:48Z"
+          },
+          {
+            "name": "peer endpoints (pre-send address binding and persisted source origin)",
+            "number": 13,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:48Z",
+            "completed_at": "2026-10-05T03:08:51Z"
+          },
+          {
+            "name": "synctest (durable projections, replay, lost ACK and offline resume)",
+            "number": 14,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:08:51Z",
+            "completed_at": "2026-10-05T03:09:10Z"
+          },
+          {
+            "name": "sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)",
+            "number": 15,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:09:10Z",
+            "completed_at": "2026-10-05T03:09:14Z"
+          },
+          {
+            "name": "snapshottest (frozen pages, crash resume and retained-history recovery)",
+            "number": 16,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:09:14Z",
+            "completed_at": "2026-10-05T03:09:40Z"
+          },
+          {
+            "name": "recoverytest (retirement, reviewed activation and crash rollback)",
+            "number": 17,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:09:40Z",
+            "completed_at": "2026-10-05T03:09:53Z"
+          },
+          {
+            "name": "epochrecoverytest (reviewed source epochs, missing results and atomic cutover)",
+            "number": 18,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:09:53Z",
+            "completed_at": "2026-10-05T03:10:40Z"
+          },
+          {
+            "name": "treetest (deep ancestry, subtree moves and concurrent cycles)",
+            "number": 19,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:10:40Z",
+            "completed_at": "2026-10-05T03:10:43Z"
+          },
+          {
+            "name": "delegationtest (bilateral intents, scoped decisions and offline retries)",
+            "number": 20,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:10:43Z",
+            "completed_at": "2026-10-05T03:11:10Z"
+          },
+          {
+            "name": "relationstest (serialized project graphs, bilateral approvals and mixed cycles)",
+            "number": 21,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:11:10Z",
+            "completed_at": "2026-10-05T03:11:41Z"
+          },
+          {
+            "name": "topologytest (local graph commitments, offline transitions and MCP placement)",
+            "number": 22,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:11:41Z",
+            "completed_at": "2026-10-05T03:12:10Z"
+          },
+          {
+            "name": "graph recovery (append-only generations, member attestations and held tasks)",
+            "number": 23,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:12:10Z",
+            "completed_at": "2026-10-05T03:12:21Z"
+          },
+          {
+            "name": "bindingtest (endpoint contracts, bilateral readiness and scoped release)",
+            "number": 24,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:12:21Z",
+            "completed_at": "2026-10-05T03:13:46Z"
+          },
+          {
+            "name": "cancellationtest (durable cancel, subtree fences and observed stop receipts)",
+            "number": 25,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:13:46Z",
+            "completed_at": "2026-10-05T03:15:41Z"
+          },
+          {
+            "name": "resulttest (sealed candidates, owner rejection and durable rework)",
+            "number": 26,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:15:41Z",
+            "completed_at": "2026-10-05T03:17:08Z"
+          },
+          {
+            "name": "repositorytest (local repo mapping, verified committed bytes and portable paths)",
+            "number": 27,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:17:08Z",
+            "completed_at": "2026-10-05T03:17:55Z"
+          },
+          {
+            "name": "workspacetest (independent task repos, declared conflicts and retained files)",
+            "number": 28,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:17:55Z",
+            "completed_at": "2026-10-05T03:19:19Z"
+          },
+          {
+            "name": "workspacefiletest (transactional MCP edits, bound launches and actual Git commits)",
+            "number": 29,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:19:19Z",
+            "completed_at": "2026-10-05T03:20:57Z"
+          },
+          {
+            "name": "gitpackagetest (actual Git objects, byte identity and complete delivery trees)",
+            "number": 30,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:20:57Z",
+            "completed_at": "2026-10-05T03:21:17Z"
+          },
+          {
+            "name": "artifacttransfertest (durable chunks, lost ACK, restart and local verification)",
+            "number": 31,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:21:17Z",
+            "completed_at": "2026-10-05T03:22:38Z"
+          },
+          {
+            "name": "appcontainertest (Windows token, file/network boundaries and resource limits)",
+            "number": 32,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:22:38Z",
+            "completed_at": "2026-10-05T03:22:46Z"
+          },
+          {
+            "name": "commandsupervisortest (bounded test output and Windows process receipts)",
+            "number": 33,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:22:46Z",
+            "completed_at": "2026-10-05T03:22:50Z"
+          },
+          {
+            "name": "verificationworkspacetest (independent source checks, one-use launch and recovery)",
+            "number": 34,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:22:50Z",
+            "completed_at": "2026-10-05T03:25:10Z"
+          },
+          {
+            "name": "integrationtest (source ref CAS, bound commits and crash reconciliation)",
+            "number": 35,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:25:10Z",
+            "completed_at": "2026-10-05T03:27:03Z"
+          },
+          {
+            "name": "completiontest (bilateral acceptance, retirement, parent review and recovery)",
+            "number": 36,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:27:03Z",
+            "completed_at": "2026-10-05T03:33:32Z"
+          },
+          {
+            "name": "mcptest (scoped tools, replay, revocation and stdio)",
+            "number": 37,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:33:32Z",
+            "completed_at": "2026-10-05T03:34:12Z"
+          },
+          {
+            "name": "dispatchtest (native gates, reservations, one-use permits and stale receipts)",
+            "number": 38,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:34:12Z",
+            "completed_at": "2026-10-05T03:36:23Z"
+          },
+          {
+            "name": "inspectiontest (read-only pending inventories, scoped cursors and sanitized errors)",
+            "number": 39,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:36:23Z",
+            "completed_at": "2026-10-05T03:36:38Z"
+          },
+          {
+            "name": "fleet health and conflict diagnostics (read-only observations and retry guidance)",
+            "number": 40,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:36:38Z",
+            "completed_at": "2026-10-05T03:36:40Z"
+          },
+          {
+            "name": "outputtest (provider terminals, UTF-8, identity and bounds)",
+            "number": 41,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:36:40Z",
+            "completed_at": "2026-10-05T03:36:40Z"
+          },
+          {
+            "name": "executoractivitytest (monotonic idle clock and bounded stderr categories)",
+            "number": 42,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:36:40Z",
+            "completed_at": "2026-10-05T03:36:40Z"
+          },
+          {
+            "name": "launchrequesttest (complete pre-permit request bounds and safe diagnostics)",
+            "number": 43,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:36:40Z",
+            "completed_at": "2026-10-05T03:36:41Z"
+          },
+          {
+            "name": "supervisortest (pinned processes, timeout, cancellation and descendants)",
+            "number": 44,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:36:41Z",
+            "completed_at": "2026-10-05T03:36:54Z"
+          },
+          {
+            "name": "adaptertest (explicit provider profiles, scoped tools and sealed configuration)",
+            "number": 45,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:36:54Z",
+            "completed_at": "2026-10-05T03:37:32Z"
+          },
+          {
+            "name": "nodestartuptest (reviewed logon bundle, Task Scheduler validation and hidden launch)",
+            "number": 46,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:37:32Z",
+            "completed_at": "2026-10-05T03:38:32Z"
+          },
+          {
+            "name": "noderuntimetest (owned loopback gateways, scoped sync and restart)",
+            "number": 47,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:38:32Z",
+            "completed_at": "2026-10-05T03:38:42Z"
+          },
+          {
+            "name": "runtime lock recovery (reviewed plan, stopped host and preserved history)",
+            "number": 48,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:38:42Z",
+            "completed_at": "2026-10-05T03:38:48Z"
+          },
+          {
+            "name": "schedulertest (continuous queue, durable lifecycle controls and native stop receipts)",
+            "number": 49,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:38:48Z",
+            "completed_at": "2026-10-05T03:40:33Z"
+          },
+          {
+            "name": "decisiontest (rulings + handoff)",
+            "number": 50,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:40:33Z",
+            "completed_at": "2026-10-05T03:40:33Z"
+          },
+          {
+            "name": "gatetest (deliverable gate)",
+            "number": 51,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:40:33Z",
+            "completed_at": "2026-10-05T03:40:33Z"
+          },
+          {
+            "name": "decomposetest (decompose prompt)",
+            "number": 52,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:40:33Z",
+            "completed_at": "2026-10-05T03:40:33Z"
+          },
+          {
+            "name": "clitest (setup / reset / node preflight)",
+            "number": 53,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:40:33Z",
+            "completed_at": "2026-10-05T03:41:07Z"
+          },
+          {
+            "name": "gates_lib selftest (revision pin + budget)",
+            "number": 54,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:07Z",
+            "completed_at": "2026-10-05T03:41:07Z"
+          },
+          {
+            "name": "worker_loop codex selftest (pure functions)",
+            "number": 55,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:07Z",
+            "completed_at": "2026-10-05T03:41:08Z"
+          },
+          {
+            "name": "worker_loop prompt selftest (card-face budgets, loud truncation)",
+            "number": 56,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:08Z",
+            "completed_at": "2026-10-05T03:41:23Z"
+          },
+          {
+            "name": "board_health_watch selftest (alarm criteria + throttle)",
+            "number": 57,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:23Z",
+            "completed_at": "2026-10-05T03:41:23Z"
+          },
+          {
+            "name": "healthwatchtest (fleet alarm backoff, recovery and unavailable observations)",
+            "number": 58,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:23Z",
+            "completed_at": "2026-10-05T03:41:23Z"
+          },
+          {
+            "name": "verify_page selftest (assertion builder + host allowlist, no browser needed)",
+            "number": 59,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:23Z",
+            "completed_at": "2026-10-05T03:41:23Z"
+          },
+          {
+            "name": "looptest (worker loop, end to end with a stub CLI)",
+            "number": 60,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:23Z",
+            "completed_at": "2026-10-05T03:41:38Z"
+          },
+          {
+            "name": "servertest (supervisor: stop reasons, backoff, refusal)",
+            "number": 61,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:41:38Z",
+            "completed_at": "2026-10-05T03:43:01Z"
+          },
+          {
+            "name": "panel authentication (anonymous boundary, local pairing and authenticated events)",
+            "number": 62,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:43:01Z",
+            "completed_at": "2026-10-05T03:43:05Z"
+          },
+          {
+            "name": "reviewtest (auto-reviewer, end to end with a stub CLI)",
+            "number": 63,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:43:05Z",
+            "completed_at": "2026-10-05T03:43:08Z"
+          },
+          {
+            "name": "legacy verification and evidence boundaries",
+            "number": 64,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:43:08Z",
+            "completed_at": "2026-10-05T03:43:10Z"
+          },
+          {
+            "name": "sentrytest (SSE sentry re-runs itself once, old connection closed first)",
+            "number": 65,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:43:10Z",
+            "completed_at": "2026-10-05T03:43:12Z"
+          },
+          {
+            "name": "fleetviewtest (operator reads, ownership and offline freshness)",
+            "number": 66,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:43:12Z",
+            "completed_at": "2026-10-05T03:43:13Z"
+          },
+          {
+            "name": "fleetprogresstest (scoped contracts, external confirmations and invalidation)",
+            "number": 67,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:43:13Z",
+            "completed_at": "2026-10-05T03:43:14Z"
+          },
+          {
+            "name": "fleetactionstest (operator outbox, receipts and idempotent remote commands)",
+            "number": 68,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:43:14Z",
+            "completed_at": "2026-10-05T03:44:08Z"
+          },
+          {
+            "name": "fleetevidencetest (scoped relationships and task history)",
+            "number": 69,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:44:08Z",
+            "completed_at": "2026-10-05T03:44:09Z"
+          },
+          {
+            "name": "mcpevidencetest (scoped history pages and independent stdio continuation)",
+            "number": 70,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:44:09Z",
+            "completed_at": "2026-10-05T03:44:13Z"
+          },
+          {
+            "name": "desktopcontexttest (scoped reads, private Markdown and refresh)",
+            "number": 71,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:44:13Z",
+            "completed_at": "2026-10-05T03:46:38Z"
+          },
+          {
+            "name": "contextevidencetest (scoped Markdown evidence and durable handoffs)",
+            "number": 72,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:46:38Z",
+            "completed_at": "2026-10-05T03:47:03Z"
+          },
+          {
+            "name": "desktop-packagetest (portable MCPB, independent extraction and Windows preflight)",
+            "number": 73,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:03Z",
+            "completed_at": "2026-10-05T03:47:06Z"
+          },
+          {
+            "name": "desktop-archivetest (ZIP writer: Python cross-decode, determinism, bounds, no subprocess)",
+            "number": 74,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:06Z",
+            "completed_at": "2026-10-05T03:47:07Z"
+          },
+          {
+            "name": "review-contracttest (version, qualified terms and safe upgrade instructions)",
+            "number": 75,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:07Z",
+            "completed_at": "2026-10-05T03:47:07Z"
+          },
+          {
+            "name": "tltest (timeline drawing primitives + source shape)",
+            "number": 76,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:07Z",
+            "completed_at": "2026-10-05T03:47:07Z"
+          },
+          {
+            "name": "Post Run actions/setup-python@v5",
+            "number": 150,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:07Z",
+            "completed_at": "2026-10-05T03:47:07Z"
+          },
+          {
+            "name": "Post Run actions/setup-node@v4",
+            "number": 151,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:07Z",
+            "completed_at": "2026-10-05T03:47:08Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "number": 152,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:08Z",
+            "completed_at": "2026-10-05T03:47:10Z"
+          },
+          {
+            "name": "Complete job",
+            "number": 153,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:47:10Z",
+            "completed_at": "2026-10-05T03:47:10Z"
+          }
+        ]
+      },
+      {
+        "id": 111599455786,
+        "name": "gitleaks",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T03:07:35Z",
+        "completed_at": "2026-10-05T03:07:49Z",
+        "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393/job/111599455786",
+        "steps": [
+          {
+            "name": "Set up job",
+            "number": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:36Z",
+            "completed_at": "2026-10-05T03:07:37Z"
+          },
+          {
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:37Z",
+            "completed_at": "2026-10-05T03:07:43Z"
+          },
+          {
+            "name": "scan Git history with pinned Windows gitleaks",
+            "number": 3,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:43Z",
+            "completed_at": "2026-10-05T03:07:45Z"
+          },
+          {
+            "name": "Post Run actions/checkout@v4",
+            "number": 6,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:45Z",
+            "completed_at": "2026-10-05T03:07:47Z"
+          },
+          {
+            "name": "Complete job",
+            "number": 7,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-10-05T03:07:47Z",
+            "completed_at": "2026-10-05T03:07:48Z"
+          }
+        ]
+      }
+    ]
+  },
+  "source_hashes": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "a1f4892fca3b83debdee7e52084ab68cc3efd5de5c7ec9a708d1267123489304",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "core/backup.mjs",
+      "sha256": "3b11c20cafdecb90b5db06f79295db6da191b14bae376051a56a741cff82af70",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "core/recovery.mjs",
+      "sha256": "1b2283423655932da989e444c9032095df6d9c033c9d4a925da3986101394fd3",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "core/fleet-progress.mjs",
+      "sha256": "3e2d5eb2afd5fdcf6a800fd79cc85af5334c2d8f63e66e9254eea439d5f67f8c",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "core/federation/sync-store.mjs",
+      "sha256": "721f9d494212332f69579abcc18c3f66a567e44c98bcbb4cf036e44c2f19c2e6",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "core/federation/sync-client.mjs",
+      "sha256": "28bde83be48c6d261f62d5c557a91a44ac098bb1a9962d41eb24a8e013148fad",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "core/execution/dispatch.mjs",
+      "sha256": "fec926e534941db25682de33b0961f040f28f214f571cecc58b5ad5518b9354e",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "core/server.mjs",
+      "sha256": "2bcd855f84c27b63336ec3276f000dcd20279238a00bca39c78ff7e5823629b7",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/backuptest.mjs",
+      "sha256": "aa98c9df4824e601a2d5a4a528b429a154693e28b37317e09fb8bf3c00566aec",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/recoverytest.mjs",
+      "sha256": "16c3d106a830ddf5bd51f0e1c188863b3d1eec8428df2707ecdbbde13d473fa9",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/fleetprogresstest.mjs",
+      "sha256": "a10e9b4834d472c6dec6b5c33d8c1d90ade4769743868abd2041ddf01ada788c",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/resulttest.mjs",
+      "sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/synctest.mjs",
+      "sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/snapshottest.mjs",
+      "sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/epochrecoverytest.mjs",
+      "sha256": "d0298fe4361bc10fbeabf82c338c7c6cfadf7c272fe56491e81eb4c05fce424c",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "tests/offline-soak.mjs",
+      "sha256": "2358825babada861b287af8731e40e4fbbbc9032f86ef464c5d6fb0a4f61d83f",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    }
+  ],
+  "supporting_evidence": [
+    {
+      "path": "docs/federation/ci-resumption-evidence.json",
+      "sha256": "1e938069f91a613e29c5b0b150f2408270eca442f91bef6de0c3b6280c5442e8",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "docs/federation/single-host-load-evidence.json",
+      "sha256": "6c0791e58909ecebe85b968f93d862a0e6dc60536e0a35f37db1b52414e2ce32",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "docs/federation/offline-soak-evidence.json",
+      "sha256": "664866b26f03e40de94a8d901bf6b27ffd29fa1465d703ccbbf570c0bbe7a61b",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "docs/federation/sealed-restore-evidence.json",
+      "sha256": "135a454313430cf128c2d8b7549ea2f43354e1df3bfd6cbd59b29b439485f4db",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "docs/federation/fleet-progress-evidence.json",
+      "sha256": "d44de1c72482c7909885468c9dcba3d6e4adf907c784427ae5e79222c9d86e3b",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "docs/federation/source-lineage-evidence.json",
+      "sha256": "f5e702447e5a6403f47bca96e3f68aac3d82c06534d7a35e81523b6a16815a55",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "docs/federation/peer-endpoints-evidence.json",
+      "sha256": "221a34e9fcf29c5a9a53a4039e5d14d586a936643f4fbbfabdda5b4facf11317",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    },
+    {
+      "path": "docs/federation/graph-recovery-evidence.json",
+      "sha256": "a1286a272d90cfd06adf5326d589639bc1b62551b713d72f5cf00c064a9072ca",
+      "measured_source": "Git blob at candidate; individual historical experiment keeps its original source SHA"
+    }
+  ],
+  "scope": {
+    "required_ci_completed": true,
+    "ci_runner": "windows-latest",
+    "real_provider_calls_added": 0,
+    "physical_two_pc_acceptance": false,
+    "production_deployed": false,
+    "independent_review_performed": false,
+    "formal_accepted_tasks": 0,
+    "formal_accepted_phases": 0
+  },
+  "later_supplement": {
+    "code_sha": "a9369518b40ef541ef3e79a065d2207b012e1e2e",
+    "evidence": "docs/federation/three-node-partition-evidence.json",
+    "scope": "Locally passing opt-in protocol experiment; not included in CI #149 and not a physical multi-PC test."
+  },
+  "remaining": [
+    "Independent T01.05/T08.05 review and G00/G01/G02/G05 decisions.",
+    "B node initialization receipt, physical networking, real desktop and remaining authorized provider trial.",
+    "H10 archive migration authorization and implementation, active-contract recovery coordination, reviewed continuous-operation budget and 72-hour observation."
+  ]
+}

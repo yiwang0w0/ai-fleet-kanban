@@ -1,0 +1,236 @@
+{
+  "artifact_type": "phase_gate_receipt_draft",
+  "gate_id": "G02",
+  "phase_id": "S02",
+  "plan_id": "AFK-FED-001",
+  "plan_version": "1.3",
+  "decision": "pending",
+  "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "schema_version": {
+    "federation_sync": 4,
+    "broker_dispatch": 3
+  },
+  "schema_note": "Code contracts only; no production database schema inspection is claimed. Other components version independently.",
+  "protocol_version": {
+    "worker": 2,
+    "peer": 1
+  },
+  "config_digest": null,
+  "node_aliases": [],
+  "node_note": "The user selected two physical PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
+  "runtime_versions": {
+    "local_test_node": "24.16.0",
+    "local_test_python": "3.12.14"
+  },
+  "accepted_task_ids": [],
+  "test_results": [
+    {
+      "case": "f10f268 targeted six-suite baseline",
+      "passed": 134,
+      "failed": 1,
+      "skipped": 0,
+      "embedded_server_assertions": "195 passed within one wrapper; not additive",
+      "isolated_retry": "1 passed, initial failure retained"
+    },
+    {
+      "case": "seven-module defect observations",
+      "observations": 8,
+      "result": "reproduced; unresolved",
+      "model_calls": 0
+    },
+    {
+      "case": "six Python selftest commands",
+      "passed_commands": 5,
+      "failed_commands": 1,
+      "failed_assertion": "Readonly-rule assertion rejects .data in checkout parent path; original 56 PASS / 1 FAIL retained"
+    }
+  ],
+  "task_assessments": [
+    {
+      "task_id": "T02.01",
+      "acceptance_criteria": [
+        "重启/改名保持 node_id",
+        "重装按恢复规程处理",
+        "同名或复制身份被检测"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/identitytest.mjs",
+        "docs/federation/foundation-evidence.json",
+        "docs/federation/recovery.md",
+        "docs/federation/seven-module-review-evidence.json"
+      ],
+      "remaining": "Prior assessment (historical scope): Stable identity and recovery are implemented; physical device enrollment/duplicate identity checks and independent acceptance remain pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+    },
+    {
+      "task_id": "T02.02",
+      "acceptance_criteria": [
+        "三个节点各生成至少 10000 个 UID 无冲突",
+        "旧数字 ID 查询兼容",
+        "迁移重跑无重复"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/identitytest.mjs",
+        "docs/federation/foundation-evidence.json",
+        "docs/federation/seven-module-review-evidence.json"
+      ],
+      "remaining": "Prior assessment (historical scope): Historical three-node UID/migration coverage; not rerun in this batch, current full CI pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+    },
+    {
+      "task_id": "T02.03",
+      "acceptance_criteria": [
+        "owner、executor、role、runtime、agent_instance、run_id 分开",
+        "新 run 不复用旧授权快照"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/runfencetest.mjs",
+        "docs/federation/runs-evidence.json",
+        "tests/review-contracttest.mjs",
+        "docs/federation/seven-module-review-evidence.json"
+      ],
+      "remaining": "Prior assessment (historical scope): Qualified role/identity vocabulary asserted now; run contract evidence is historical until current CI and independent review. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+    },
+    {
+      "task_id": "T02.04",
+      "acceptance_criteria": [
+        "远端副本不可直接领取或改写",
+        "旧 expected_version 返回冲突",
+        "非所有者不能伪造事件"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/versiontest.mjs",
+        "tests/synctest.mjs",
+        "docs/federation/pr2-0.24-evidence.json",
+        "docs/federation/seven-module-review-evidence.json"
+      ],
+      "remaining": "Prior assessment (historical scope): Current B1/H1/H7 targeted checks pass; complete authority/replica matrix still requires current CI and independent review. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+    },
+    {
+      "task_id": "T02.05",
+      "acceptance_criteria": [
+        "支持范围有矩阵",
+        "未知必需字段/不兼容版本明确拒绝",
+        "可选扩展不破坏兼容"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/peertest.mjs",
+        "docs/federation/peers-evidence.json",
+        "docs/federation/migration-0.24.md",
+        "docs/federation/seven-module-review-evidence.json"
+      ],
+      "remaining": "Prior assessment (historical scope): Protocol negotiation matrix exists; historical evidence plus current migration instruction checks, full current CI pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+    },
+    {
+      "task_id": "T02.06",
+      "acceptance_criteria": [
+        "存量任务不丢失、ID 不漂移、数据备份可恢复",
+        "状态域没有混用"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "tests/recoverytest.mjs",
+        "docs/federation/gates/G02.draft.json",
+        "docs/federation/seven-module-review-evidence.json"
+      ],
+      "remaining": "Prior assessment (historical scope): Two legacy schema recovery cases pass now; G01 and independent ARCH/TEST/REVIEW acceptance pending. Current f10f268 targeted review is recorded separately; independent acceptance remains pending."
+    }
+  ],
+  "evidence_manifest": "docs/federation/seven-module-review-evidence.json",
+  "evidence_sha256": "ff244251f63ec032968df1c7005cf67f85e0aafd44ba809d129d6133f808c515",
+  "evidence_hash_format": "UTF-8 LF",
+  "required_roles": [
+    "ARCH",
+    "TEST",
+    "REVIEW"
+  ],
+  "unresolved_findings": [
+    "G01 not accepted",
+    "Current complete Windows CI pending",
+    "Physical identity binding not accepted",
+    "Independent architecture/reviewer receipt missing",
+    "Seven-module H2/H3/H4/H5/H7/H12 runtime observations remain unresolved; see current manifest",
+    "Initial snapshot-suite failure and path-sensitive Python assertion are retained; no all-green full baseline claim"
+  ],
+  "reviewer_instance_id": null,
+  "operator_decision_ref": null,
+  "verified_at": null,
+  "drafted_at": "2026-10-01",
+  "rollback_ref": "backup/pr2-before-main-20261001",
+  "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database.",
+  "historical_test_evidence": {
+    "namespace": "PR2 inline review B1-B3/H1-H7; not seven-module H1-H12",
+    "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
+    "evidence_manifest": "docs/federation/pr2-0.24-evidence.json",
+    "evidence_sha256": "1a633f4037c41f35e8e62d12535f6ab2b88b576e935fd869cacfecdb03687cca",
+    "test_results": [
+      {
+        "case": "B1",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/versiontest.mjs",
+        "test_name_pattern": "HTTP requires versions, rejects stale controls and returns current version"
+      },
+      {
+        "case": "B2-version",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B2 package, desktop manifests"
+      },
+      {
+        "case": "B2-domains",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B2 glossary distinguishes"
+      },
+      {
+        "case": "B3-doc",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B3 every operator entry"
+      },
+      {
+        "case": "B3-cli",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/review-contracttest.mjs",
+        "test_name_pattern": "B3 CLI refuses"
+      },
+      {
+        "case": "H1",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/versiontest.mjs",
+        "test_name_pattern": "migration rebuilds semantic version coverage"
+      },
+      {
+        "case": "H4",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/mcptest.mjs",
+        "test_name_pattern": "role registration rejects unknown and incompatible"
+      },
+      {
+        "case": "H6",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/recoverytest.mjs",
+        "test_name_pattern": "explicit restore upgrade reaches reviewed activation"
+      },
+      {
+        "case": "H7",
+        "green": "passed",
+        "negative_control": "expected_failure",
+        "test_file": "tests/synctest.mjs",
+        "test_name_pattern": "three nodes isolate event UUIDs"
+      }
+    ]
+  },
+  "reanchored_at": "2026-10-01T07:28:24.034Z"
+}
