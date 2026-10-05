@@ -1,5 +1,9 @@
 # Contributing
 
+The repository [development charter](AGENTS.md) governs the development loop,
+test scope, progress updates and milestone evidence. Follow it when older
+process notes conflict.
+
 This project has one unusual property worth knowing before you start: **it was
 built by running it** — the mechanisms exist because incidents demanded them,
 and the code comments carry those reasons. Contributions are welcome; the bar
@@ -9,19 +13,10 @@ they clear is the same one the codebase already holds itself to.
 
 1. **Machine assertions over prose.** A change to behavior comes with a harness
    assertion that goes red without it. "I tested it manually" does not survive
-   the next contributor. `npm test` is the authoritative list of the Node
-   harnesses. Windows CI also runs four Python selftests and one Node page
-   verifier selftest:
-
-   ```powershell
-   $env:PYTHONUTF8 = "1"
-   npm test
-   python gates/gates_lib.py
-   python loops/worker_loop.py --codex-selftest
-   python loops/worker_loop.py --prompt-selftest
-   python watchers/board_health_watch.py --selftest
-   node examples/verify_page.mjs --selftest
-   ```
+   the next contributor. Locally, run only the harnesses affected by the change.
+   CI runs the full Node and Python checks; `npm test` defines the full Node
+   harness list. Development may use simulated executors and isolated fixtures;
+   required real-environment evidence belongs to milestone acceptance.
 
    **Windows regression and secret scanning are both blocking.** Future work,
    deployment and acceptance target Windows only. Older Linux measurements
@@ -54,9 +49,9 @@ they clear is the same one the codebase already holds itself to.
 
 ## Practical notes
 
-- **Dev loop:** `node cli/doctor.mjs` first; the harnesses need no running
-  board (each spins up its own on a temp port with a temp data dir — never
-  point tests at a live board).
+- **Dev loop:** choose the directly affected harnesses; the harnesses need no
+  running board (each spins up its own on a temp port with a temp data dir —
+  never point tests at a live board).
 - **Line endings:** the index is LF everywhere (`.gitattributes` pins it).
 - **Language:** user-facing display strings are Chinese; machine contracts and
   code comments in `core/`/`tests/` are English; the Python loops' comments are

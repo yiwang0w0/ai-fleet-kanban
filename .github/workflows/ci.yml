@@ -30,13 +30,17 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        if: ${{ !cancelled() }}
       - uses: actions/setup-node@v4
+        if: ${{ !cancelled() }}
         with:
           node-version: 24        # node:sqlite (DatabaseSync) — the store's engine
       - uses: actions/setup-python@v5
+        if: ${{ !cancelled() }}
         with:
           python-version: "3.12"
       - name: define hrun (FAIL lines become annotations)
+        if: ${{ !cancelled() }}
         run: |
           cat > hrun.sh <<'SH'
           set -o pipefail
@@ -52,162 +56,233 @@ jobs:
 
       # Pure layers first: store, rulings, gates, prompt library.
       - name: selftest (store)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/selftest.mjs
       - name: progressdiagnostictest (local blockers and audited parent rearm)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/progressdiagnostictest.mjs
       - name: identitytest (node ownership and atomic migration)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/identitytest.mjs
       - name: backuptest (WAL snapshots and quarantined restore)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/backuptest.mjs
       - name: runfencetest (stale dispatch rejection and worker protocol)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/runfencetest.mjs
       - name: versiontest (stale task commands and concurrent edits)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/versiontest.mjs
       - name: peertest (credential binding, revocation and protocol negotiation)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/peertest.mjs
       - name: peer endpoints (pre-send address binding and persisted source origin)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node --test tests/peer-endpointtest.mjs
       - name: synctest (durable projections, replay, lost ACK and offline resume)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/synctest.mjs
       - name: sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node --test tests/sync-capacitytest.mjs
       - name: snapshottest (frozen pages, crash resume and retained-history recovery)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/snapshottest.mjs
       - name: recoverytest (retirement, reviewed activation and crash rollback)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/recoverytest.mjs
       - name: epochrecoverytest (reviewed source epochs, missing results and atomic cutover)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/epochrecoverytest.mjs
       - name: treetest (deep ancestry, subtree moves and concurrent cycles)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/treetest.mjs
       - name: delegationtest (bilateral intents, scoped decisions and offline retries)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/delegationtest.mjs
       - name: relationstest (serialized project graphs, bilateral approvals and mixed cycles)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/relationstest.mjs
       - name: topologytest (local graph commitments, offline transitions and MCP placement)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/topologytest.mjs
       - name: graph recovery (append-only generations, member attestations and held tasks)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node --test tests/graphrecoverytest.mjs tests/contractrecoverytest.mjs tests/pendingrelationrecoverytest.mjs
       - name: bindingtest (endpoint contracts, bilateral readiness and scoped release)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/bindingtest.mjs
       - name: cancellationtest (durable cancel, subtree fences and observed stop receipts)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/cancellationtest.mjs
       - name: resulttest (sealed candidates, owner rejection and durable rework)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/resulttest.mjs
       - name: repositorytest (local repo mapping, verified committed bytes and portable paths)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/repositorytest.mjs
       - name: workspacetest (independent task repos, declared conflicts and retained files)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/workspacetest.mjs
       - name: workspacefiletest (transactional MCP edits, bound launches and actual Git commits)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/workspacefiletest.mjs
       - name: gitpackagetest (actual Git objects, byte identity and complete delivery trees)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/gitpackagetest.mjs
       - name: artifacttransfertest (durable chunks, lost ACK, restart and local verification)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/artifacttransfertest.mjs
       - name: appcontainertest (Windows token, file/network boundaries and resource limits)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/appcontainertest.mjs
       - name: commandsupervisortest (bounded test output and Windows process receipts)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/commandsupervisortest.mjs
       - name: verificationworkspacetest (independent source checks, one-use launch and recovery)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/verificationworkspacetest.mjs
       - name: integrationtest (source ref CAS, bound commits and crash reconciliation)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/integrationtest.mjs
       - name: completiontest (bilateral acceptance, retirement, parent review and recovery)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/completiontest.mjs
       - name: mcptest (scoped tools, replay, revocation and stdio)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/mcptest.mjs
       - name: dispatchtest (native gates, reservations, one-use permits and stale receipts)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/dispatchtest.mjs
       - name: inspectiontest (read-only pending inventories, scoped cursors and sanitized errors)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/inspectiontest.mjs
       - name: fleet health and conflict diagnostics (read-only observations and retry guidance)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node --test tests/fleethealthtest.mjs tests/conflicttest.mjs
       - name: outputtest (provider terminals, UTF-8, identity and bounds)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/outputtest.mjs
       - name: executoractivitytest (monotonic idle clock and bounded stderr categories)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/executoractivitytest.mjs
       - name: launchrequesttest (complete pre-permit request bounds and safe diagnostics)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/launchrequesttest.mjs
       - name: supervisortest (pinned processes, timeout, cancellation and descendants)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/supervisortest.mjs
       - name: adaptertest (explicit provider profiles, scoped tools and sealed configuration)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/adaptertest.mjs
       - name: nodestartuptest (reviewed logon bundle, Task Scheduler validation and hidden launch)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/nodestartuptest.mjs
       - name: noderuntimetest (owned loopback gateways, scoped sync and restart)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/noderuntimetest.mjs
       - name: runtime lock recovery (reviewed plan, stopped host and preserved history)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node --test tests/runtimelocktest.mjs
       - name: schedulertest (continuous queue, durable lifecycle controls and native stop receipts)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/schedulertest.mjs
         env:
           PYTHON: python
       - name: decisiontest (rulings + handoff)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/decisiontest.mjs
       - name: gatetest (deliverable gate)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/gatetest.mjs
       - name: decomposetest (decompose prompt)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/decomposetest.mjs
       - name: clitest (setup / reset / node preflight)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/clitest.mjs
       - name: gates_lib selftest (revision pin + budget)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh python gates/gates_lib.py
       - name: worker_loop codex selftest (pure functions)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh python loops/worker_loop.py --codex-selftest
       - name: worker_loop prompt selftest (card-face budgets, loud truncation)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh python loops/worker_loop.py --prompt-selftest
       - name: board_health_watch selftest (alarm criteria + throttle)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh python watchers/board_health_watch.py --selftest
       - name: healthwatchtest (fleet alarm backoff, recovery and unavailable observations)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh python tests/healthwatchtest.py
       - name: verify_page selftest (assertion builder + host allowlist, no browser needed)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node examples/verify_page.mjs --selftest
 
       # Process layers: the real loop against an isolated board, then the supervisor.
       - name: looptest (worker loop, end to end with a stub CLI)
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/looptest.mjs
         env:
           PYTHON: python
       - name: "servertest (supervisor: stop reasons, backoff, refusal)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/servertest.mjs
       - name: "panel authentication (anonymous boundary, local pairing and authenticated events)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node --test tests/panelauth.test.mjs tests/panelclient.test.mjs
       - name: "reviewtest (auto-reviewer, end to end with a stub CLI)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/reviewtest.mjs
       - name: "legacy verification and evidence boundaries"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node --test tests/legacy-boundariestest.mjs
         env:
           PYTHON: python
       - name: "sentrytest (SSE sentry re-runs itself once, old connection closed first)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/sentrytest.mjs
         env:
           PYTHON: python
       - name: "fleetviewtest (operator reads, ownership and offline freshness)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/fleetviewtest.mjs
       - name: "fleetprogresstest (scoped contracts, external confirmations and invalidation)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/fleetprogresstest.mjs
       - name: "fleetactionstest (operator outbox, receipts and idempotent remote commands)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/fleetactionstest.mjs
       - name: "fleetevidencetest (scoped relationships and task history)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/fleetevidencetest.mjs
       - name: "mcpevidencetest (scoped history pages and independent stdio continuation)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/mcpevidencetest.mjs
       - name: "desktopcontexttest (scoped reads, private Markdown and refresh)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/desktopcontexttest.mjs
       - name: "contextevidencetest (scoped Markdown evidence and durable handoffs)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/contextevidencetest.mjs
       - name: "desktop-packagetest (portable MCPB, independent extraction and Windows preflight)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/desktop-packagetest.mjs
         env:
           PYTHON: python
       - name: "desktop-archivetest (ZIP writer: Python cross-decode, determinism, bounds, no subprocess)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/desktop-archivetest.mjs
         env:
           PYTHON: python
       - name: "review-contracttest (version, qualified terms and safe upgrade instructions)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/review-contracttest.mjs
         env:
           PYTHON: python
       - name: "tltest (timeline drawing primitives + source shape)"
+        if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/tltest.mjs
 
   gitleaks:
@@ -215,9 +290,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        if: ${{ !cancelled() }}
         with:
           fetch-depth: 0          # scan the whole history, not just the tip
       - name: scan Git history with pinned Windows gitleaks
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
