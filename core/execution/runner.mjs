@@ -2,7 +2,7 @@ import {DEFAULT_PROVIDER_IDLE_MS} from "./activity.mjs";
 import {buildLaunchRequest,launchFailureCode} from "./launch-request.mjs";
 import {watchDelegationCancellation} from "./control.mjs";
 import {createRequire} from "node:module";
-import {existsSync} from "node:fs";
+import {existsSync,statSync} from "node:fs";
 import {join} from "node:path";
 import {validatePreparedAdapter} from "./adapters.mjs";
 import {pinFile,superviseProcess} from "./supervisor.mjs";
@@ -21,6 +21,11 @@ export async function executePreparedDispatch(db,{dispatchId,sourceGate,prepared
  const d=dispatchStatus(db,dispatchId);
  if(d.execution_mode!=="provider")fail("EXECUTION_MODE_MISMATCH","供应商适配器仅允许 provider 调用预算");
  if(d.phase!=="prepared")fail("LAUNCH_NOT_AVAILABLE","启动许可已消费或运行已结束");
+ // 把配置错误挡在单次许可消费之前（外部审计 2026-10-05）：准备后消失的工作目录不得白烧一次额度，
+ // 且必须走编码拒绝而非裸文件系统异常。statSync 失败一律按 BAD_CWD 处理；此后与消费之间的
+ // TOCTOU 窗口由下方 validatePreparedAdapter 的目录重读与 supervisor 的原检查兜底。
+ let cwdStat=null;try{cwdStat=statSync(prepared.plan.cwd);}catch{}
+ if(!cwdStat?.isDirectory())fail("BAD_CWD","执行工作目录不存在或不是目录；启动许可尚未消费");
  validatePreparedAdapter(prepared);
  const plan=prepared.plan;
  if(plan.codeRoot!==sourceGate.codeRoot||plan.codeRoot!==d.source.code_root)fail("SOURCE_CHANGED","启动适配器与治理代码根不一致");
