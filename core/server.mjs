@@ -170,7 +170,7 @@ const DECISION_CTX = { repoRoot: REPO_ROOT, targets: HANDOFF_TARGETS };
 const GATE_OFF = process.env.BOARD_DELIVERABLE_GATE === "off";
 let extractor = null;
 try {
-  const top = execFileSync("git", ["-C", REPO_ROOT, "ls-tree", "-z", "HEAD"],
+  const top = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "ls-tree", "-z", "HEAD"],
                            { maxBuffer: 8 * 1024 * 1024 }).toString("utf8");
   const prefixes = dgate.topLevelPrefixes(top);
   if (prefixes.length) extractor = dgate.makeExtractor({ prefixes });
@@ -192,7 +192,7 @@ const headFiles = () => {
   let set = null;
   try {
     // ⚠ -z mandatory (same reason as above).
-    const out = execFileSync("git", ["-C", REPO_ROOT, "ls-tree", "-r", "--name-only", "-z", "HEAD"],
+    const out = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "ls-tree", "-r", "--name-only", "-z", "HEAD"],
                              { maxBuffer: 64 * 1024 * 1024 });
     set = new Set(out.toString("utf8").split("\0").filter(Boolean));
   } catch { set = null; }        // no git / not a repo → the gate is silently off (closures not blocked)
@@ -245,7 +245,7 @@ const absentOf = (t) => {
 const dirtyFiles = () => {
   let out;
   try {
-    out = execFileSync("git", ["-C", REPO_ROOT, "status", "--porcelain", "-z"],
+    out = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "status", "--porcelain", "-z"],
                        { maxBuffer: 64 * 1024 * 1024 }).toString("utf8");
   } catch { return null; }        // unmeasurable ⇒ null ⇒ callers pass
   const rows = [];
@@ -368,7 +368,7 @@ const fpContext = () => {
   if (Date.now() - fpCache.at < FP_TTL_MS) return { treeRev: fpCache.treeRev, extra: fpCache.extra };
   let treeRev = null, extra = null;
   try {
-    treeRev = execFileSync("git", ["-C", REPO_ROOT, "rev-parse", "HEAD:"],
+    treeRev = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "rev-parse", "HEAD:"],
                            { encoding: "utf8", windowsHide: true }).trim() || null;
   } catch { treeRev = null; }
   const cmd = CFG.fingerprint_extra_cmd;
@@ -690,7 +690,7 @@ function blessStep() {
   let head = null;
   try {
     const spec = CFG_GATED_SUBTREE === "." ? "" : CFG_GATED_SUBTREE;
-    head = execFileSync("git", ["-C", CODE_ROOT, "rev-parse", `HEAD:${spec}`],
+    head = execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "rev-parse", `HEAD:${spec}`],
                         { encoding: "utf8", windowsHide: true }).trim();
   } catch (e) {
     return { state: "unknown", detail: `读不到代码的版本(${String(e.message).slice(0, 60)})`,
@@ -720,7 +720,7 @@ const gatedTree = () => {
   if (!CFG_GATED_SUBTREE) return { err: "还没配置要盯住的代码范围(gated_subtree)" };
   try {
     const spec = CFG_GATED_SUBTREE === "." ? "" : CFG_GATED_SUBTREE;
-    return { tree: execFileSync("git", ["-C", CODE_ROOT, "rev-parse", `HEAD:${spec}`],
+    return { tree: execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "rev-parse", `HEAD:${spec}`],
                                 { encoding: "utf8", windowsHide: true }).trim() };
   } catch (e) { return { err: String(e.message).slice(0, 60) }; }
 };
@@ -733,7 +733,7 @@ function treeStat(prev, tree) {
   if (!statCache.has(k)) {
     let lines;
     try {
-      lines = execFileSync("git", ["-C", CODE_ROOT, "diff", "--stat=90", prev, tree], { encoding: "utf8", windowsHide: true })
+      lines = execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "diff", "--stat=90", prev, tree], { encoding: "utf8", windowsHide: true })
         .split("\n").map((l) => l.trimEnd()).filter(Boolean);
     } catch (e) { lines = [`(git diff --stat 失败:${String(e.message).slice(0, 60)})`]; }
     if (statCache.size > 32) statCache.clear();
@@ -766,7 +766,7 @@ function acceptTree(confirmTree, who) {
   writeFileSync(acceptedFile(), tree + "\n", "utf8");
   let dirty = 0;
   try {
-    dirty = execFileSync("git", ["-C", CODE_ROOT, "status", "--short", "--", CFG_GATED_SUBTREE === "." ? "." : CFG_GATED_SUBTREE],
+    dirty = execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "status", "--short", "--", CFG_GATED_SUBTREE === "." ? "." : CFG_GATED_SUBTREE],
                          { encoding: "utf8", windowsHide: true }).split("\n").filter((l) => l.trim()).length;
   } catch {}
   console.log(`已接受 ${CFG_GATED_SUBTREE} = ${tree}(${who})` + (prev ? `,上次 ${prev.slice(0, 12)}` : ",首次")

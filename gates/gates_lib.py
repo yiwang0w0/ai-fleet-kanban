@@ -69,7 +69,7 @@ def gated_tree(repo, subtree):
     """
     spec = "" if str(subtree) == "." else subtree
     try:
-        r = subprocess.run(["git", "-C", repo, "rev-parse", f"HEAD:{spec}"],
+        r = subprocess.run(["git", "--no-lazy-fetch", "-C", repo, "rev-parse", f"HEAD:{spec}"],
                            capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=30)
     except Exception as e:
@@ -118,7 +118,7 @@ def source_gate(repo, data_dir, subtree=None, log=print, loaded_tree=_UNSET):
                 "git rev-parse HEAD:%s > %s)" % (rev_file, subtree, rev_file))
 
     def _git(*args):
-        r = subprocess.run(["git", "-C", repo, *args], capture_output=True,
+        r = subprocess.run(["git", "--no-lazy-fetch", "-C", repo, *args], capture_output=True,
                            text=True, encoding="utf-8", errors="replace",
                            timeout=30)
         return r.returncode, (r.stdout or "").strip(), (r.stderr or "").strip()

@@ -399,7 +399,7 @@ def main():
 
         if SUBTREE:
             try:
-                r = subprocess.run(["git", "status", "--short", "--", SUBTREE],
+                r = subprocess.run(["git", "--no-lazy-fetch", "status", "--short", "--", SUBTREE],
                                    cwd=CODE_ROOT, capture_output=True, text=True,
                                    encoding="utf-8", timeout=30)
                 dirty = [l for l in (r.stdout or "").splitlines() if l.strip()]

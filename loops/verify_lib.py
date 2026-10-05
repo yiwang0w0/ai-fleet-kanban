@@ -112,7 +112,7 @@ def readonly_edit_rules(repo, data_dir):
     rules, prefix = [], ""
     for depth, ancestor in enumerate(parts):
         try:
-            r = subprocess.run(["git", "-C", repo_abs, "ls-tree", "-z", "HEAD"] + ([prefix] if prefix else []),
+            r = subprocess.run(["git", "--no-lazy-fetch", "-C", repo_abs, "ls-tree", "-z", "HEAD"] + ([prefix] if prefix else []),
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         except Exception:
             return None

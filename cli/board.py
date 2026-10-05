@@ -331,7 +331,7 @@ def main():
         spec = "" if sub == "." else sub
         repo = os.path.dirname(HERE)
         def git(*a):
-            return subprocess.run(["git", *a], capture_output=True, text=True,
+            return subprocess.run(["git", "--no-lazy-fetch", *a], capture_output=True, text=True,
                                   encoding="utf-8", errors="replace", cwd=repo)
         r = git("rev-parse", f"HEAD:{spec}")
         if r.returncode != 0:

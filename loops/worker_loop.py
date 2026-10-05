@@ -565,7 +565,7 @@ def worktree_state():
     —— 因此要明写「不一定是你写的」。"""
     def git(*a):
         try:
-            w = subprocess.run(["git", *a], cwd=REPO, capture_output=True, text=True,
+            w = subprocess.run(["git", "--no-lazy-fetch", *a], cwd=REPO, capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=20)
             return w.stdout.strip() if w.returncode == 0 else ""
         except Exception:
