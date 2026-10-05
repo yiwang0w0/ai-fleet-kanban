@@ -722,13 +722,28 @@
       "evidence_required": [
         "environment-report.json"
       ],
-      "status": "planned",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_environment_entrypoints_ready_for_independent_review",
+        "code_sha": "08619bfa4be2e8b7612e2a74b6ddf186e1855a47",
+        "code_sha_scope": "repository head when material was prepared, not attribution of earlier CLI version checks",
+        "observed_at": "2026-10-05T07:37:44.718613+00:00",
+        "scope": "A single Windows host: actual private absolute entrypoints, versions, unchanged executable/script digests, six successful version and three successful CLI help checks. No desktop/provider-task success inferred.",
+        "evidence": "docs/federation/environment-report.json",
+        "formal_acceptance": false,
+        "pending": [
+          "Independent review of T01.01; not part of the completed 16-task Sol review.",
+          "Original dependency T00.06 and G00 gate."
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/environment-report.json"
+      ]
     },
     {
       "id": "T01.02",

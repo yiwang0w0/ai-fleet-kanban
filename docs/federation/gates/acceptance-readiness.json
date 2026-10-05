@@ -1559,6 +1559,60 @@
         "Original task prerequisites and gates remain; T05.01 wording and actual reboot evidence are unresolved.",
         "Retirement attestation is operator-supplied fixture data, not machine-verified retirement or physical RPO/RTO."
       ]
+    },
+    {
+      "task_id": "T01.01",
+      "prior_status": "planned",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "08619bfa4be2e8b7612e2a74b6ddf186e1855a47",
+      "code_sha_scope": "repository head at report preparation; entrypoint observations have separate timestamps and binary digests",
+      "criteria": [
+        {
+          "criterion": "Node、Python、Git、三类 CLI 实際路径和版本有记录",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "Six actual absolute entrypoints, versions and content digests are preserved in the private manifest; public path displays use a profile placeholder. All six files still match their observed digests.",
+          "references": []
+        },
+        {
+          "criterion": "区分桌面与独立 CLI",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "Claude/Codex entries are native CLI executables; Zcode is a Node CLI script. Zcode desktop FileVersion is recorded separately; no desktop connection inferred.",
+          "references": []
+        },
+        {
+          "criterion": "无必需入口失效",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "All six version invocations and all three provider CLI help invocations exited zero. This proves the selected entrypoints start; authentication, task execution and desktop connection have separate pending acceptance.",
+          "references": []
+        }
+      ],
+      "ci_run_id": null,
+      "ci_steps": [],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T00.06"
+        ],
+        "gates": [
+          "G00"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/environment-report.json",
+          "sha256": "338be4173d3e1335a183ac7134573038a1cca9aa6b81f96e63b1fe54821ded84",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Single-machine S01 entrypoint checks; no physical B environment verification.",
+        "Not part of the completed16-task independent review at ad3.",
+        "Actual absolute paths are in the private manifest, public paths use profile placeholders.",
+        "Existing provider-task failures and unresolved authentication remain separate and do not reset invocation authorization."
+      ]
     }
   ],
   "ready_task_ids": [
@@ -1577,12 +1631,13 @@
     "T07.05",
     "T05.02",
     "T05.03",
-    "T05.05"
+    "T05.05",
+    "T01.01"
   ],
   "gating_notes": [
     "G00 is not frozen; dependent tasks cannot count as accepted even after their technical review.",
     "Physical enrollment is assessed in T00.02/T03.01; it is not silently added to every S02 component criterion.",
-    "A new independent reviewer is not yet authorized in this chat. No identity or confirmation is fabricated.",
+    "The user-created Sol6.1 fork reviewed the original16 tasks at ad3:15 passed,T05.02 failed and its fix awaits recheck. T01.01 is newly prepared, outside that completed review. No reviewer identity or formal confirmation is prefilled.",
     "Original 864feec gate/review drafts stay pending. This index does not register a receipt, change accepted_rev or modify live task cards."
   ],
   "unchanged_formal_progress": {
@@ -1593,5 +1648,5 @@
     "task_completion_percent": 0,
     "phase_completion_percent": 0
   },
-  "updated_at": "2026-10-05T16:00:34.140455+09:00"
+  "updated_at": "2026-10-05T08:50:05.058627+00:00"
 }
