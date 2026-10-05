@@ -59,6 +59,8 @@ if($ts.status -eq 'ok'){
 $connection=@{status='not_requested';actual_desktop_client_verified=$false}
 if($BrokerUrl -or $CredentialFile){
   if(-not $BrokerUrl -or -not $CredentialFile){$connection=@{status='both_broker_and_credential_required'}}
+  # 外部审计 2026-10-05:desktop-check.mjs 只在展开后的 bundle 内与本脚本平铺;源码树缺该文件时明示布局不符并跳过,不得当作连接失败。
+  elseif(-not (Test-Path -LiteralPath ([IO.Path]::Combine($PSScriptRoot,'cli','desktop-check.mjs')))){$connection=@{status='skipped-layout';actual_desktop_client_verified=$false;note='此布局仅存在于展开后的 bundle;请在 bundle 目录运行(README)'}}
   elseif(-not $nodeVersion -or [version]$nodeVersion -lt [version]'24.0.0'){$connection=@{status='node_24_required'}}
   else {
     $probe=Invoke-Probe $node @(([IO.Path]::Combine($PSScriptRoot,'cli','desktop-check.mjs')),'--url',$BrokerUrl,'--credential-file',$CredentialFile) 40000
