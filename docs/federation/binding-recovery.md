@@ -62,3 +62,6 @@ get-recovery 只读；get / list 的 recovery 字段也提供回执摘要，完�
 本入口不恢复关系图、不更换拓扑绑定、不轮换凭据、不清除异常运行实例锁。回执明确 graph_recovered=false。若本机也曾恢复换代，可对本机同一 UUID 的旧 prepared 绑定生成新计划退出；旧 epoch 普通绑定 API 仍拒绝复用，本地拓扑仍可能报 TOPOLOGY_RECOVERY_REQUIRED。登记节点与来源同机时，填写的新登记 epoch 必须等于当前本机 epoch。
 
 存储新增独立 binding_recovery_schema=1 和不可修改/删除的 binding_recoveries；现有 binding schema 仍为 4。部署前遵守 [迁移要求](migration-0.24.md)，不混用旧写入者。运行证据见 [binding-recovery-evidence.json](binding-recovery-evidence.json)。隔离测试不构成实体双机或阶段签收。
+
+
+已有实际接受合同的未决关系，可在端点退出后按 [未决提议恢复](pending-relation-recovery.md) 将双方证据交给恢复后的原登记节点，再建立后继图。原退出回执仍是本地历史，不修改其中的 `graph_recovered=false`；后续图是否恢复由新的登记/图回执证明。

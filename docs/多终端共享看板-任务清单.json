@@ -2816,14 +2816,15 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Stopped contract recovery plus explicitly chosen pending topology after successor graph retirement; dependency and parent reversal, restored owner, subsequent generation, retained unknown request outcomes, held tasks and atomic CLI persistence.",
+        "scope": "Actual registrar backup/restore: stopped contract recovery, explicit pending topology resolution and pending accepted-delegation proposal recovery; retained historical outcomes, held tasks and same-host source/registrar layout.",
         "evidence": [
           "docs/federation/contract-recovery-evidence.json",
-          "docs/federation/pending-topology-recovery-evidence.json"
+          "docs/federation/pending-topology-recovery-evidence.json",
+          "docs/federation/pending-relation-recovery-evidence.json"
         ],
         "pending": [
           "Remaining AT17-AT20/AT24 physical upgrade and recovery acceptance",
-          "Completion-sealed, unconfirmed relation and all member-only recovery coordination",
+          "Completion-sealed and member-only contract recovery; missing bilateral evidence remains blocked",
           "Independent review and frozen recovery-time threshold"
         ]
       },
@@ -2838,7 +2839,12 @@
         "core/federation/topology.mjs",
         "cli/graph-recovery.mjs",
         "tests/graphrecoverytest.mjs",
-        "docs/federation/pending-topology-recovery-evidence.json"
+        "docs/federation/pending-topology-recovery-evidence.json",
+        "core/federation/pending-relation-recovery.mjs",
+        "cli/pending-relation-recovery.mjs",
+        "tests/pendingrelationrecoverytest.mjs",
+        "docs/federation/pending-relation-recovery.md",
+        "docs/federation/pending-relation-recovery-evidence.json"
       ],
       "verification_history": [
         {
@@ -2848,6 +2854,19 @@
           "pending": [
             "Remaining AT17-AT20/AT24 physical upgrade and recovery acceptance",
             "Completion-sealed and unresolved topology recovery coordination",
+            "Independent review and frozen recovery-time threshold"
+          ]
+        },
+        {
+          "result": "local_component_passed",
+          "scope": "Stopped contract recovery plus explicitly chosen pending topology after successor graph retirement; dependency and parent reversal, restored owner, subsequent generation, retained unknown request outcomes, held tasks and atomic CLI persistence.",
+          "evidence": [
+            "docs/federation/contract-recovery-evidence.json",
+            "docs/federation/pending-topology-recovery-evidence.json"
+          ],
+          "pending": [
+            "Remaining AT17-AT20/AT24 physical upgrade and recovery acceptance",
+            "Completion-sealed, unconfirmed relation and all member-only recovery coordination",
             "Independent review and frozen recovery-time threshold"
           ]
         }
