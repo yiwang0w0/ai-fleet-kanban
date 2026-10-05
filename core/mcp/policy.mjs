@@ -173,12 +173,23 @@ export function cleanupPrincipalCredentials(db,{principalId=null,runId=null}={})
  if(db.isTransaction)fail("TRANSACTION_ACTIVE","凭据清理必须在数据库提交后执行",409);
  localIdentity(db);
  if(principalId!==null)uuid(principalId,"principal_id");if(runId!==null)uuid(runId,"run_id");
- const rows=db.prepare("SELECT f.* FROM broker_credential_files f JOIN broker_principals p USING(principal_id) WHERE p.status='revoked' AND f.cleanup_status NOT IN ('deleted','missing') AND (? IS NULL OR p.principal_id=?) AND (? IS NULL OR p.run_id=?) ORDER BY p.created_at,p.principal_id LIMIT 100").all(principalId,principalId,runId,runId);
+ // ⭐ A run can reach its terminal state through DATABASE triggers alone (operator
+ //   ruling/cancel/archive, lease reap) — paths that never pass through dispatch.mjs,
+ //   where the three revocation call sites live. Those principals stay 'active' forever
+ //   and the old `p.status='revoked'` filter could structurally never collect them
+ //   (external audit 2026-10-05, confirmed). The sweep now also collects active
+ //   principals whose bound run is no longer running and revokes them in the same
+ //   pass; residual power after run end is only same-digest report_result replay, so
+ //   collection at the sanctioned operator command (rather than a hot-path trigger)
+ //   is the proportionate closure.
+ const rows=db.prepare("SELECT f.*,p.status AS principal_status FROM broker_credential_files f JOIN broker_principals p USING(principal_id) WHERE (p.status='revoked' OR (p.status='active' AND p.run_id IS NOT NULL AND EXISTS(SELECT 1 FROM task_runs r WHERE r.run_id=p.run_id AND r.state<>'running'))) AND f.cleanup_status NOT IN ('deleted','missing') AND (? IS NULL OR p.principal_id=?) AND (? IS NULL OR p.run_id=?) ORDER BY p.created_at,p.principal_id LIMIT 100").all(principalId,principalId,runId,runId);
  const items=[];
  for(const row of rows){
+  if(row.principal_status==='active')
+   db.prepare("UPDATE broker_principals SET status='revoked',secret_hash='',version=version+1 WHERE principal_id=?").run(row.principal_id);
   const status=removePrivateCredential(row.file_path,row.sha256);
   db.prepare("UPDATE broker_credential_files SET cleanup_status=?,checked_at=? WHERE principal_id=?").run(status,new Date().toISOString(),row.principal_id);
-  items.push({principal_id:row.principal_id,status});
+  items.push({principal_id:row.principal_id,status,reason:row.principal_status==='active'?"run_ended":"revoked"});
  }
  return {format:"ai-fleet-credential-cleanup/v1",items,limit:100};
 }

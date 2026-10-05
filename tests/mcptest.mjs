@@ -541,3 +541,22 @@ test("H7c credential revocation removes only registered matching files after com
  const {cleanupPrincipalCredentials}=await import("../core/mcp/policy.mjs");assert.equal(cleanupPrincipalCredentials(f.db).items.length,0);
  const active=grant(f,"coord");assert.equal(cleanupPrincipalCredentials(f.db).items.length,0);assert.equal(existsSync(active.file),true);
 });
+
+test("H7d cleanup also collects principals whose run ended through DB triggers",async()=>{
+ const f=fixture(),w=worker(f);
+ assert.equal(existsSync(w.identity.file),true);
+ // Trigger-path terminal state: the operator archives the card directly — no
+ // executor receipt, so none of dispatch.mjs's three revocation call sites runs.
+ store.archive(f.db,{id:w.task.id,force:true});
+ const run=f.db.prepare("SELECT state FROM task_runs WHERE run_id=?").get(w.task.run_id);
+ assert.equal(run.state,"ended","(premise) the archive trigger ended the run");
+ const p=f.db.prepare("SELECT status FROM broker_principals WHERE principal_id=?").get(w.identity.principal.principal_id);
+ assert.equal(p.status,"active","(premise) the principal outlived its run — the structural gap");
+ const {cleanupPrincipalCredentials}=await import("../core/mcp/policy.mjs");
+ const out=cleanupPrincipalCredentials(f.db);
+ const mine=out.items.find(x=>x.principal_id===w.identity.principal.principal_id);
+ assert.ok(mine&&mine.reason==="run_ended",JSON.stringify(out.items));
+ assert.equal(existsSync(w.identity.file),false,"credential file collected");
+ const after=f.db.prepare("SELECT status FROM broker_principals WHERE principal_id=?").get(w.identity.principal.principal_id);
+ assert.equal(after.status,"revoked","sweep revokes in the same pass");
+});
