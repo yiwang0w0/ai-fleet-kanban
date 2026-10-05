@@ -10,3 +10,11 @@ export function writeTopologyBinding(db,b,values){
  const keys=Object.keys(values);if(!keys.length||keys.some(k=>!['phase','revision','snapshot_json','receipt_json'].includes(k)))throw new PeerError('BAD_INPUT','不可修改拓扑绑定身份',400);
  const table=b.generation?'topology_binding_generations':'topology_bindings';db.prepare('UPDATE '+table+' SET '+keys.map(k=>k+'=?').join(',')+' WHERE project_id=?'+(b.generation?' AND generation=?':'')).run(...keys.map(k=>values[k]),b.project_id,...(b.generation?[b.generation]:[]));
 }
+
+// Historical requests remain pending when their remote outcome is unknown. Only an
+// atomic, retained successor recovery receipt removes them from the actionable queue.
+export function unresolvedTopologyAttemptSQL(db,alias='a') {
+ if(!/^[a-z]+$/.test(alias))throw new Error('Invalid SQL alias');
+ if(!db.prepare("SELECT 1 FROM sqlite_master WHERE name='topology_recoveries'").get())return alias+".state='pending'";
+ return alias+".state='pending' AND NOT EXISTS(SELECT 1 FROM topology_recoveries tr JOIN topology_operations ro ON ro.operation_id="+alias+".operation_id WHERE ro.state='cancelled' AND tr.project_id=ro.project_id AND json_extract(tr.receipt_json,'$.pending_resolution.operation_id')=ro.operation_id AND json_extract(ro.receipt_json,'$.kind')='topology_recovery_superseded' AND tr.plan_digest=json_extract(ro.receipt_json,'$.plan_digest'))";
+}

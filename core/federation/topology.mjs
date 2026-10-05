@@ -195,3 +195,34 @@ export function checkRegistrarStatus(b,s){
  if(!s||s.project_id!==b.project_id||s.graph_id!==b.graph_id||s.graph_epoch!==b.graph_epoch||s.registrar_node_id!==b.registrar_node_id||s.registrar_epoch!==b.registrar_epoch||!Array.isArray(s.topologies)||!Array.isArray(s.members))fail("GRAPH_MISMATCH","关系登记状态身份不匹配");
  version(s.version);if(!s.members.some(m=>m.node_id===b.owner_node_id&&m.node_epoch===b.owner_epoch))fail("FORBIDDEN","登记节点未授权本机当前代次",403);
 }
+
+/** Read-only input to local disaster recovery; old request outcomes are not inferred. */
+export function pendingTopologyRecoveryChoice(db,{projectId,choice}) {
+ if(!['before','desired','intersection'].includes(choice))fail('BAD_INPUT','必须明确选择 before、desired 或 intersection');
+ project(projectId);
+ const b=db.prepare('SELECT * FROM '+topologyBindingsTable(db)+' WHERE project_id=?').get(projectId);
+ const o=db.prepare("SELECT * FROM topology_operations WHERE project_id=? AND state='prepared'").get(projectId);
+ if(!b||!o||b.phase!=='pending'||b.revision!==o.base_revision||b.owner_epoch!==o.owner_epoch)fail('CONFLICT','没有可恢复的未决拓扑操作');
+ const n=localIdentity(db),before=JSON.parse(o.before_json),current=capture(db,b,o.base_revision+1),intersection=JSON.parse(o.intersection_json),selected=JSON.parse(o[choice+'_json']);
+ if(b.owner_node_id!==n.node_id||before.owner_node_id!==n.node_id||before.owner_epoch!==o.owner_epoch||before.graph_id!==b.graph_id||before.graph_epoch!==b.graph_epoch)fail('IDENTITY_MISMATCH','未决操作的旧身份不匹配');
+ // A restored owner may have a new epoch; the exact local vertices must still match.
+ if(canonical(current.vertices)!==canonical(intersection.vertices))fail('TOPOLOGY_DIVERGED','本地中间结构已经变化');
+ validateCombinedGraph([selected]);metadataCheck(selected,rows(db,b),current);
+ return {operation_id:o.operation_id,choice,remote_outcome:'unknown',before_digest:digest(before),intersection_digest:digest(intersection),desired_digest:digest(JSON.parse(o.desired_json)),selected_snapshot:selected};
+}
+/** Internal transactional step: caller has validated the successor receipt and held every task. */
+export function applyPendingTopologyRecovery(db,{projectId,resolution,planDigest}) {
+ if(!db.isTransaction)fail('TRANSACTION_REQUIRED','拓扑恢复必须与新绑定、暂停及回执原子提交');
+ const b=binding(db,projectId),o=db.prepare('SELECT * FROM topology_operations WHERE operation_id=? AND project_id=?').get(resolution.operation_id,projectId);
+ if(!o||o.state!=='prepared'||b.phase!=='unregistered'||b.revision!==0||!b.generation||!['before','desired','intersection'].includes(resolution.choice)||b.graph_id===resolution.selected_snapshot.graph_id)fail('CONFLICT','必须先建立尚未发布的后继绑定');
+ const selected=JSON.parse(o[resolution.choice+'_json']);
+ if(canonical(selected)!==canonical(resolution.selected_snapshot))fail('PLAN_STALE','选择的原始结构不匹配');
+ const current=capture(db,b,1),rs=rows(db,b);
+ if(canonical(current.vertices)!==canonical(JSON.parse(o.intersection_json).vertices))fail('TOPOLOGY_DIVERGED','本地中间结构已经变化');
+ if(db.prepare("SELECT 1 FROM tasks t JOIN broker_task_projects p ON p.task_id=t.id WHERE p.project_id=? AND t.archived_at IS NULL AND t.status<>'done' AND (t.released<>0 OR t.human_gate<>1) LIMIT 1").get(projectId))fail('TOPOLOGY_RECOVERY_BLOCKED','恢复结构前必须暂停所有未完成任务');
+ validateCombinedGraph([selected]);metadataCheck(selected,rs,current);apply(db,b,o.operation_id,selected);
+ const receipt={kind:'topology_recovery_superseded',operation_id:o.operation_id,choice:resolution.choice,remote_outcome:'unknown',old_graph_id:selected.graph_id,new_graph_id:b.graph_id,plan_digest:planDigest,automatic_release:false};
+ db.prepare("UPDATE topology_operations SET state='cancelled',receipt_json=?,updated_at=? WHERE operation_id=?").run(canonical(receipt),at(),o.operation_id);
+ event(db,b,o.operation_id,'recovery_superseded',receipt);
+ return receipt;
+}

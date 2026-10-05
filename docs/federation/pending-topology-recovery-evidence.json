@@ -1,0 +1,118 @@
+{
+  "format": "ai-fleet-pending-topology-recovery-evidence/v1",
+  "prepared_at": "2026-10-05T04:41:18.872897+00:00",
+  "base_commit": "fbdcd28523e75997592a3bb405ac9b133de35453",
+  "scope": "Single Windows host; actual isolated SQLite backups and epoch activation, local administrative CLI; synthetic identities only.",
+  "tests": {
+    "unique_passing_cases": 14,
+    "new_recovery_cases": 4,
+    "existing_graph_recovery_cases": 5,
+    "adjacent_topology_inspection_cases": 5,
+    "remaining_failed_cases": 0,
+    "full_repository_suite_repeated": false,
+    "count_note": "Eight passing graph cases plus the separately repaired parent fixture plus five adjacent cases. First happy-path pass overlaps, not added.",
+    "source_note": "Final product bytes were tested in all final runs. The last test-file edit only sets tree mode at fixture creation using default-equivalent optional arguments; the changed parent case was rerun separately. Final test hashes do not claim identical file bytes for earlier logs."
+  },
+  "logs": [
+    {
+      "name": "review97-pending-before.log",
+      "sha256": "c5aaf933a520f86f9fb7e1947e987bc0c017902261516b31f6ff8bcb1dfcd370",
+      "result": "1 expected failure: actual lost registrar ACK followed by restore remains blocked without the new recovery choice"
+    },
+    {
+      "name": "review97-pending-first.log",
+      "sha256": "19eb969be0c586fe7a76f678158c73d737632c9a49166e34e303cc7cedcc7c2d",
+      "result": "1 initial passing new case, overlaps the later graph run"
+    },
+    {
+      "name": "review97-graph-final.log",
+      "sha256": "4355e1cd385ed3b7c7c4f17d95b5ba36145fb3fb166ae16a154e2122ab3b4dda",
+      "result": "8 passed and 1 fixture failure; product code final; fixture attempted immutable tree-mode mutation"
+    },
+    {
+      "name": "review97-parent-final.log",
+      "sha256": "ba0acc33a448e3b23c4900d4bb39beea87b96ef24febbefbfabaee58066856a5",
+      "result": "1/1 repaired fixture, parent reversal plus owner restore and another recovery generation"
+    },
+    {
+      "name": "review97-adjacent-final.log",
+      "sha256": "6d330455ee979dbf9d7a06a7adbadd363e89670f5dc7f587a92369a8a31c5c36",
+      "result": "5/5 adjacent normal topology and incomplete/orphan inventory cases"
+    }
+  ],
+  "source_hashes": [
+    {
+      "path": "core/federation/topology.mjs",
+      "worktree_sha256": "f0477611aee6c37dded0c8a187b1f889055c72543fafa0ad7100da2686f9ce6a",
+      "git_blob_sha256": "fb88f4f956bbf55d3fe650f748e44543800806838f9e59b70ea65c66d48b6541"
+    },
+    {
+      "path": "core/federation/topology-generations.mjs",
+      "worktree_sha256": "907dc3b8c85c6dcd05c00e7a0ddb5ece655c1d356a72233bfb7ebe6de7f48a8d",
+      "git_blob_sha256": "e21199f039a9bd3916118f01efd4f846892e79574ceb1b5c108dae7bc91e8812"
+    },
+    {
+      "path": "core/federation/graph-recovery.mjs",
+      "worktree_sha256": "e1dfe71463060aa89d9533a22b2faf61f56e3a883861fe4de2fa3eac4157c3b9",
+      "git_blob_sha256": "83e67081e9829c58bae9563b3647baea9d29c82ae4cc2a0c2fdcb1099344e8fb"
+    },
+    {
+      "path": "core/inspection.mjs",
+      "worktree_sha256": "e2f690c133afb676d00ee2dae75a5422ea636a9bfc6d94d673fa378d01d66d51",
+      "git_blob_sha256": "3dfa5111fa0cd20f95f5bdbdc49a3f3a46508921d53775ee498d757f9a7309e3"
+    },
+    {
+      "path": "cli/graph-recovery.mjs",
+      "worktree_sha256": "c541461aa705deccb5077dad060aa102647b7059ae3bacc7d5e1b437c702da35",
+      "git_blob_sha256": "47b6ea407a1225824270087f475e3f19bc14d6866f855a90c61fef63063701b6"
+    },
+    {
+      "path": "tests/graphrecoverytest.mjs",
+      "worktree_sha256": "2cffafe52d50732284c96d7ffe29c5f6ed1b1a1cea9390fe6c8eaa96ccee2125",
+      "git_blob_sha256": "268821c8546398fe83d33fcb3f9f07b96603c7fe066a29063e208c9457c38908"
+    },
+    {
+      "path": "tests/topologytest.mjs",
+      "worktree_sha256": "cd8b90ea65df307771cd0f04f646f269cce1fde29600c209dca5c03d2900d1f0",
+      "git_blob_sha256": "d28f82a8481e2f35dc2ae820692ba474a3802459e709ea611a5e3ff672ff13aa"
+    },
+    {
+      "path": "tests/inspectiontest.mjs",
+      "worktree_sha256": "5c6331fb0cd5de721bb251787d46e189ddc8d721828d714faa3225f12cb80418",
+      "git_blob_sha256": "1521a00149511e4f35048be2eb1014171a555ef53f0bb9a5d26efeaa21dea862"
+    }
+  ],
+  "invariants": [
+    "Registrar committed the desired snapshot before its response was withheld from owner.",
+    "Successor graph requires original registrar identity and all-member operator declarations.",
+    "The selected before/desired/intersection snapshot is reviewed in a separate attestation bound to a fresh state digest.",
+    "All historical request bytes and original topology snapshots are preserved; remote outcome stays unknown.",
+    "Late old ACK cannot revive old graph; retained recovery receipt removes obsolete requests from actionable inventory and later recovery blockers.",
+    "Generation, held tasks, structural edits, operation disposition and recovery audit roll back together on receipt insertion failure.",
+    "No execution is released by the recovery or by republishing.",
+    "Existing schema and immutable/history triggers remain unchanged."
+  ],
+  "limits": {
+    "physical_multi_pc_acceptance": false,
+    "real_desktop_verified": false,
+    "providers_called": false,
+    "configuration_changed": false,
+    "formal_acceptance_changed": false,
+    "successor_receipt_authority": "operator supplied local file; hash integrity is not remote machine verification",
+    "not_covered": [
+      "completion-sealed contracts",
+      "unconfirmed relations",
+      "all member-only contract recovery",
+      "physical peer communication and reboot",
+      "72-hour operation"
+    ]
+  },
+  "ci": {
+    "this_change_verified_by_ci": false,
+    "previous_running_ci": {
+      "run_id": 37261300239,
+      "head_sha": "dfb8051b180e375254e3465259cf224a46c46986",
+      "covers_this_change": false
+    }
+  }
+}

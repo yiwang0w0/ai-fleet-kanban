@@ -7,9 +7,9 @@ import {localIdentity} from './peers.mjs';
 import {canonical,digest,atomic} from './sync-store.mjs';
 import {migrateRelations} from './relations.mjs';
 import {currentRelationGraphs,relationGraphsTable} from './graph-generations.mjs';
-import {migrateTopology} from './topology.mjs';
+import {migrateTopology,pendingTopologyRecoveryChoice,applyPendingTopologyRecovery} from './topology.mjs';
 import {inspectStoppedRuns} from '../execution/stop-proof.mjs';
-import {topologyBindingsTable} from './topology-generations.mjs';
+import {topologyBindingsTable,unresolvedTopologyAttemptSQL} from './topology-generations.mjs';
 const store=createRequire(import.meta.url)('../store.js');
 const GP='ai-fleet-graph-recovery-plan/v1',GR='ai-fleet-graph-recovery-receipt/v1',TP='ai-fleet-topology-recovery-plan/v1',TR='ai-fleet-topology-recovery-receipt/v1';
 const at=()=>new Date().toISOString(),has=(db,t)=>!!db.prepare('SELECT 1 FROM sqlite_master WHERE name=?').get(t);
@@ -60,27 +60,34 @@ function graphReceipt(r){
  for(const k of ['old_graph_id','old_graph_epoch','old_registrar_epoch'])uuid(r[k],k);for(const k of ['graph_id','graph_epoch','registrar_node_id','registrar_epoch'])uuid(r.graph[k],k);project(r.graph.project_id);membersOf(r.members);
  if(r.old_graph_id===r.graph.graph_id||r.old_graph_epoch===r.graph.graph_epoch||r.graph.version!==1||!Number.isSafeInteger(r.graph.generation)||r.graph.generation<1)fail('RECEIPT_MISMATCH','后继图身份无效');return r;
 }
-function topologySnapshot(db,projectId,receipt){
+function topologySnapshot(db,projectId,receipt,pendingChoice=null){
  project(projectId);const r=graphReceipt(receipt),n=localIdentity(db),b=db.prepare('SELECT * FROM '+topologyBindingsTable(db)+' WHERE project_id=?').get(projectId);if(!b)fail('NOT_FOUND','项目未绑定');
  if(b.owner_node_id!==n.node_id||b.project_id!==r.graph.project_id||b.graph_id!==r.old_graph_id||b.graph_epoch!==r.old_graph_epoch||b.registrar_node_id!==r.graph.registrar_node_id||b.registrar_epoch!==r.old_registrar_epoch||!r.members.some(m=>m.node_id===n.node_id&&m.node_epoch===n.sync_epoch))fail('IDENTITY_MISMATCH','旧绑定、新图或本机成员代次不匹配');
  if(b.registrar_node_id===n.node_id&&r.graph.registrar_epoch!==n.sync_epoch)fail('IDENTITY_MISMATCH','本机登记节点代次不匹配');
  const tasks=db.prepare('SELECT t.* FROM tasks t JOIN broker_task_projects p ON p.task_id=t.id WHERE p.project_id=? ORDER BY t.id').all(projectId),runs=db.prepare('SELECT r.* FROM task_runs r JOIN broker_task_projects p ON p.task_id=r.task_id WHERE p.project_id=? ORDER BY r.run_id').all(projectId),operations=db.prepare('SELECT * FROM topology_operations WHERE project_id=? ORDER BY rowid').all(projectId),attempts=db.prepare('SELECT a.* FROM topology_attempts a JOIN topology_operations o USING(operation_id) WHERE o.project_id=? ORDER BY a.rowid').all(projectId),bindings=has(db,'delegation_bindings')?db.prepare('SELECT * FROM delegation_bindings WHERE project_id=? ORDER BY rowid').all(projectId):[],blockers=[];
- const pending=operations.filter(o=>o.state==='prepared');if(pending.length||attempts.some(a=>a.state==='pending'))blockers.push({kind:'pending_topology',operation_ids:pending.map(o=>o.operation_id)});
+ const resolution=pendingChoice===null?null:pendingTopologyRecoveryChoice(db,{projectId,choice:pendingChoice});
+ const pending=operations.filter(o=>o.state==='prepared'&&o.operation_id!==resolution?.operation_id);
+ const unresolved=db.prepare('SELECT a.operation_id FROM topology_attempts a JOIN topology_operations o USING(operation_id) WHERE o.project_id=? AND '+unresolvedTopologyAttemptSQL(db)).all(projectId).filter(a=>a.operation_id!==resolution?.operation_id);
+ if(pending.length||unresolved.length)blockers.push({kind:'pending_topology',operation_ids:[...new Set([...pending,...unresolved].map(o=>o.operation_id))]});
  if(tasks.some(t=>t.status==='in_progress')||runs.some(r=>r.state==='running'))blockers.push({kind:'active_work'});
  const runChecks=runs.map(run=>{const dispatch=has(db,'broker_dispatches')?db.prepare('SELECT node_epoch FROM broker_dispatches WHERE run_id=?').get(run.run_id):null;return inspectStoppedRuns(db,{nodeId:n.node_id,nodeEpoch:dispatch?.node_epoch??n.sync_epoch,members:[],runs:[run],allowOperatorAttested:true});});
  for(const check of runChecks)blockers.push(...check.blockers);
  const open=bindings.filter(b=>b.state!=='cancelled'&&!b.closed);if(open.length)blockers.push({kind:'open_bindings',relation_ids:open.map(b=>b.relation_id)});
- return {node_id:n.node_id,node_epoch:n.sync_epoch,project_id:projectId,old_graph_id:b.graph_id,old_graph_epoch:b.graph_epoch,generation:(b.generation??0)+1,graph_receipt:r,state_digest:digest({binding:b,tasks,runs,operations,attempts,bindings,runChecks}),blockers,automatic_release:false};
+ return {node_id:n.node_id,node_epoch:n.sync_epoch,project_id:projectId,old_graph_id:b.graph_id,old_graph_epoch:b.graph_epoch,generation:(b.generation??0)+1,graph_receipt:r,state_digest:digest({binding:b,tasks,runs,operations,attempts,bindings,runChecks}),...(resolution?{pending_resolution:resolution}:{}),blockers,automatic_release:false};
 }
-export function prepareTopologyRecovery(db,{projectId,graphReceipt:r}){return readonly(db,()=>{const body={format:TP,...topologySnapshot(db,projectId,r),prepared_at:at()};return {...body,plan_digest:digest(body)};});}
-export function recordTopologyRecovery(db,{plan:p,expectedPlanDigest}){
- checkedPlan(p,expectedPlanDigest,TP);return independent(db,()=>{const n=localIdentity(db);if(n.node_id!==p.node_id||n.sync_epoch!==p.node_epoch)fail('IDENTITY_MISMATCH','端点身份已变化');
-  const old=has(db,'topology_recoveries')&&db.prepare('SELECT * FROM topology_recoveries WHERE project_id=? AND generation=?').get(p.project_id,p.generation);if(old){if(old.plan_digest!==p.plan_digest)fail('REQUEST_CONFLICT','本代次已有不同恢复决定');const prior=JSON.parse(old.receipt_json);if(digest(prior)!==old.receipt_digest)fail('RECEIPT_MISMATCH','持久回执摘要不匹配');return prior;}
-  const s=topologySnapshot(db,p.project_id,p.graph_receipt);assertSnapshot(p,s);if(s.blockers.length)fail('TOPOLOGY_RECOVERY_BLOCKED','先结算本机工作、端点绑定和未决拓扑请求');migrateTopology(db);const g=s.graph_receipt.graph;
+export function prepareTopologyRecovery(db,{projectId,graphReceipt:r,pendingChoice=null}){return readonly(db,()=>{const body={format:TP,...topologySnapshot(db,projectId,r,pendingChoice),prepared_at:at()};return {...body,plan_digest:digest(body)};});}
+export function recordTopologyRecovery(db,{plan:p,expectedPlanDigest,attestation=null}){
+ checkedPlan(p,expectedPlanDigest,TP);
+ if(p.pending_resolution){const a=attestation;if(!a||a.format!=='ai-fleet-pending-topology-recovery-attestation/v1'||a.node_id!==p.node_id||a.node_epoch!==p.node_epoch||a.plan_digest!==p.plan_digest||a.operation_id!==p.pending_resolution.operation_id||a.choice!==p.pending_resolution.choice||a.old_graph_retired!==true||a.remote_outcome_unknown!==true||a.selected_structure_reviewed!==true||!evidence(a))fail('ATTESTATION_MISMATCH','须核对旧图已退役、旧请求结果未知及明确选择的结构');}
+ else if(attestation!==null)fail('BAD_INPUT','无未决拓扑时不接受额外恢复声明');
+ return independent(db,()=>{const n=localIdentity(db);if(n.node_id!==p.node_id||n.sync_epoch!==p.node_epoch)fail('IDENTITY_MISMATCH','端点身份已变化');
+  const old=has(db,'topology_recoveries')&&db.prepare('SELECT * FROM topology_recoveries WHERE project_id=? AND generation=?').get(p.project_id,p.generation);if(old){if(old.plan_digest!==p.plan_digest)fail('REQUEST_CONFLICT','本代次已有不同恢复决定');const prior=JSON.parse(old.receipt_json);if(p.pending_resolution&&prior.pending_attestation_digest!==digest(attestation))fail('REQUEST_CONFLICT','本代次已有不同未决拓扑声明');if(digest(prior)!==old.receipt_digest)fail('RECEIPT_MISMATCH','持久回执摘要不匹配');return prior;}
+  const s=topologySnapshot(db,p.project_id,p.graph_receipt,p.pending_resolution?.choice??null);assertSnapshot(p,s);if(s.blockers.length)fail('TOPOLOGY_RECOVERY_BLOCKED','先结算本机工作、端点绑定和未决拓扑请求');migrateTopology(db);const g=s.graph_receipt.graph;
   db.prepare("INSERT INTO topology_binding_generations VALUES(?,?,?,?,?,?,?,0,'unregistered',NULL,NULL,?,?)").run(p.project_id,g.graph_id,g.graph_epoch,g.registrar_node_id,g.registrar_epoch,n.node_id,n.sync_epoch,at(),p.generation);
   const tasks=db.prepare("SELECT t.id FROM tasks t JOIN broker_task_projects p ON p.task_id=t.id WHERE p.project_id=? AND t.archived_at IS NULL AND t.status<>'done' ORDER BY t.id").all(p.project_id);
   for(const t of tasks){store.update(db,{id:t.id,expectedVersion:store.get(db,t.id).aggregate_version,humanGate:true,actor:'human'});store.setReleased(db,{id:t.id,expectedVersion:store.get(db,t.id).aggregate_version,released:false,actor:'human'});}
-  const receipt={format:TR,node_id:n.node_id,node_epoch:n.sync_epoch,project_id:p.project_id,generation:p.generation,old_graph_id:p.old_graph_id,new_graph_id:g.graph_id,plan_digest:p.plan_digest,graph_receipt_digest:s.graph_receipt.receipt_digest,authority:'operator_supplied_graph_receipt',phase:'unregistered',automatic_release:false,held_task_ids:tasks.map(t=>t.id),recorded_at:at()};
+  if(s.pending_resolution)applyPendingTopologyRecovery(db,{projectId:p.project_id,resolution:s.pending_resolution,planDigest:p.plan_digest});
+  const receipt={format:TR,node_id:n.node_id,node_epoch:n.sync_epoch,project_id:p.project_id,generation:p.generation,old_graph_id:p.old_graph_id,new_graph_id:g.graph_id,plan_digest:p.plan_digest,graph_receipt_digest:s.graph_receipt.receipt_digest,authority:'operator_supplied_graph_receipt',phase:'unregistered',automatic_release:false,held_task_ids:tasks.map(t=>t.id),...(s.pending_resolution?{pending_resolution:s.pending_resolution,pending_attestation:attestation,pending_attestation_digest:digest(attestation)}:{}),recorded_at:at()};
   db.prepare('INSERT INTO topology_recoveries VALUES(?,?,?,?,?,?,?)').run(p.project_id,p.generation,p.plan_digest,canonical(p),digest(receipt),canonical(receipt),receipt.recorded_at);return receipt;
  });
 }

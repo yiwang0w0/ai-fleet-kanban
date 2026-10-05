@@ -1,4 +1,4 @@
-import {topologyBindingsTable} from "./federation/topology-generations.mjs";
+import {topologyBindingsTable,unresolvedTopologyAttemptSQL} from "./federation/topology-generations.mjs";
 // Local operational inventory. No migration, network I/O or execution-state transitions.
 import {createRequire} from 'node:module';
 import {localIdentity} from './federation/peers.mjs';
@@ -87,7 +87,7 @@ export function federationStuck(db,input){
    }
   }
   if(modules.topology==='available'){
-   for(const r of scan("SELECT a.request_id record_id,a.operation_id related_id,a.state,a.created_at,o.project_id,b.owner_node_id node_id,o.owner_epoch node_epoch FROM topology_attempts a LEFT JOIN topology_operations o USING(operation_id) LEFT JOIN "+topologyBindingsTable(db)+" b USING(project_id) WHERE a.state='pending' AND "+scope('o.project_id')))
+   for(const r of scan("SELECT a.request_id record_id,a.operation_id related_id,a.state,a.created_at,o.project_id,b.owner_node_id node_id,o.owner_epoch node_epoch FROM topology_attempts a LEFT JOIN topology_operations o USING(operation_id) LEFT JOIN "+topologyBindingsTable(db)+" b USING(project_id) WHERE "+unresolvedTopologyAttemptSQL(db)+" AND "+scope('o.project_id')))
     add('topology_attempt',r,'TOPOLOGY_RECEIPT_PENDING','resume_topology_submit');
   }
   if(modules.completion==='available'){
