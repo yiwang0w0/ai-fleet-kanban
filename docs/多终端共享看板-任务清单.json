@@ -2651,13 +2651,28 @@
       "evidence_required": [
         "partition-acceptance.json"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "candidate_code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "One Windows host, three isolated HTTP/SQLite sources: staggered rejoin, owner-retained share withdrawal, committed-ACK response loss, durable receiver reopen and duplicate replay; six authorized projection hashes converge.",
+        "formal_acceptance": false,
+        "remaining": [
+          "AT09-AT12 on two actual Windows machines via Tailscale",
+          "Physical crash/restart and epoch-changing recovery where required",
+          "Independent gate acceptance"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "tests/partitiontest.mjs",
+        "docs/federation/three-node-partition.md",
+        "docs/federation/three-node-partition-evidence.json"
+      ]
     },
     {
       "id": "T09.03",

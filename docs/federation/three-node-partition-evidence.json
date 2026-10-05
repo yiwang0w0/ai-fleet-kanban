@@ -1,0 +1,123 @@
+{
+  "format": "ai-fleet-three-node-partition-evidence/v1",
+  "batch": 94,
+  "prepared_at": "2026-10-05T03:29:51.043807+00:00",
+  "base_commit": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "task_id": "T09.02",
+  "formal_acceptance": false,
+  "final_tests": {
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 6065.3297
+  },
+  "experiment": {
+    "format": "ai-fleet-three-node-partition/v1",
+    "physical_hosts": 1,
+    "isolated_nodes": 3,
+    "tailscale": false,
+    "providers_called": false,
+    "epoch_changed": false,
+    "restoration_order": [
+      "B",
+      "C",
+      "A receiver reopen"
+    ],
+    "unavailable_sources": [
+      "B",
+      "C"
+    ],
+    "ack_committed_before_response_loss": true,
+    "duplicate_replay_applied": 0,
+    "global_shared_tasks": 23,
+    "visible_tasks_by_node": {
+      "A": 24,
+      "B": 23,
+      "C": 23
+    },
+    "withdrawn_task_retained_by_owner": true,
+    "local_authoritative_tasks_per_node": 10,
+    "task_runs": 0,
+    "projection_checks": [
+      {
+        "source": "A",
+        "receiver": "B",
+        "tasks": 7,
+        "projection_sha256": "77e507dcc69815af6b4abb0d5710dfe73f734eaaf46ac36588e0d05500bc5d46",
+        "acked_seq": 23
+      },
+      {
+        "source": "A",
+        "receiver": "C",
+        "tasks": 7,
+        "projection_sha256": "77e507dcc69815af6b4abb0d5710dfe73f734eaaf46ac36588e0d05500bc5d46",
+        "acked_seq": 23
+      },
+      {
+        "source": "B",
+        "receiver": "A",
+        "tasks": 8,
+        "projection_sha256": "39d3f5e9378588ec74707d0c515840a373e07921cd664d4171f3cd646ca58afb",
+        "acked_seq": 24
+      },
+      {
+        "source": "B",
+        "receiver": "C",
+        "tasks": 8,
+        "projection_sha256": "39d3f5e9378588ec74707d0c515840a373e07921cd664d4171f3cd646ca58afb",
+        "acked_seq": 24
+      },
+      {
+        "source": "C",
+        "receiver": "A",
+        "tasks": 8,
+        "projection_sha256": "15c9d2e14fe6d94a95879fb997a072bdcb500ff846669ddea3de5e477c45daec",
+        "acked_seq": 16
+      },
+      {
+        "source": "C",
+        "receiver": "B",
+        "tasks": 8,
+        "projection_sha256": "15c9d2e14fe6d94a95879fb997a072bdcb500ff846669ddea3de5e477c45daec",
+        "acked_seq": 16
+      }
+    ],
+    "elapsed_ms": 5827
+  },
+  "source_sha256": {
+    "tests/partitiontest.mjs": "c2254b0ca972015f47742cc06aa695af4d7a56509f2809a2f1c910b35b94b798",
+    "tests/helpers/peer-network.mjs": "3c0f819187d882a6b5b1fb75c13b6d5bc125e942051cfa5f6d861fbd00de074a",
+    "core/federation/sync-client.mjs": "20e02f8c86ce233aa8ec692a78d4239043e0fb842f746427306721ec38193f51",
+    "core/federation/sync-store.mjs": "9cd97daa7284858a37348ee726812b706772f2b6b381e000003b106507e92c5f",
+    "core/federation/gateway.mjs": "95adf860c4f9eac5f5475ca80eff0803fba4252be662ade0248c55f7801e9c86",
+    "core/fleet-view.mjs": "7875e36d9114f2b244773450e43bfbd15883f716f45173cffca2aeaa8e1f57f0"
+  },
+  "runs": [
+    {
+      "path": ".data/review94-partition-first.log",
+      "sha256": "65ca4a166f3ca68b9feff3d3902a28f50dece99803821642d3cd45ece94d2025",
+      "result": "failed_fixture_hash_included_changing_sync_timestamp"
+    },
+    {
+      "path": ".data/review94-partition-final.log",
+      "sha256": "a02fd29dc045bffc850f30700baa6a8a5b01b7fdaa31824917d39b16793bf8af",
+      "result": "failed_fixture_expected_owner_to_hide_withdrawn_share"
+    },
+    {
+      "path": ".data/review94-partition-pass.log",
+      "sha256": "0a5f4622dc94959fbe3f36d2072b47ef243f6ec466a49f3d9a9ed70911d7d40f",
+      "result": "passed"
+    }
+  ],
+  "limitations": [
+    "One Windows host and three real file databases / loopback endpoints; not three physical machines.",
+    "Short ordered disconnect/rejoin scenario; the separate 30-minute test is recorded in batch 93.",
+    "ACK response loss is injected after a real HTTP acknowledgement commits; it is not a physical packet-loss measurement.",
+    "Database reopen keeps the original epoch; no power-loss, epoch activation, active-contract recovery, model or desktop session is claimed."
+  ],
+  "execution_topology": {
+    "gateway_host_processes": 1,
+    "isolated_node_databases": 3,
+    "os_process_isolation_verified": false
+  }
+}
