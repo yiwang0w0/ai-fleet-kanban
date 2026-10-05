@@ -114,5 +114,6 @@
     "active_relation_recovery": false,
     "formal_accepted_tasks": 0,
     "formal_accepted_stages": 0
-  }
+  },
+  "sources_caliber": "The sha256 values recorded under sources are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
 }

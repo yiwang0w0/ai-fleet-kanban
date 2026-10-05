@@ -6,12 +6,14 @@
   "task_id": "T05.04",
   "formal_acceptance": false,
   "qualification": {
+    "stage": "qualification-smoke",
     "result": "passed",
     "actual_offline_ms": 10780.3449,
     "reconnect_ms": 468.70370000000185,
     "offline_30_minutes_observed": false
   },
   "experiment": {
+    "stage": "experiment",
     "format": "ai-fleet-single-host-offline-soak/v1",
     "started_at": "2026-10-05T02:24:30.650Z",
     "code_sha": "c0f7aced0a9fc4fab4ec472fd6c38a9bd450b73a",
@@ -379,5 +381,6 @@
     "Task finished about 30 seconds into the offline interval; this does not establish a provider running for all 30 minutes.",
     "MCP listening state was observed in runtime status; no real desktop client session was exercised.",
     "No 72-hour soak, physical power failure, independent acceptance or accepted task."
-  ]
+  ],
+  "sources_caliber": "The sha256 values recorded under experiment.sources are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
 }

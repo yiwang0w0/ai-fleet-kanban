@@ -364,5 +364,6 @@
     "No real 30-minute outage, 72-hour observation, operator acceptance or provider calls."
   ],
   "formal_accepted_tasks": 0,
-  "formal_accepted_stages": 0
+  "formal_accepted_stages": 0,
+  "sources_caliber": "The sha256 values recorded under sources (top level and load.sources) are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
 }

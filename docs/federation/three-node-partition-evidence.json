@@ -119,5 +119,6 @@
     "gateway_host_processes": 1,
     "isolated_node_databases": 3,
     "os_process_isolation_verified": false
-  }
+  },
+  "sources_caliber": "The sha256 values recorded under source_sha256 are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
 }

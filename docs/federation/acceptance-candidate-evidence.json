@@ -870,5 +870,6 @@
     "Independent T01.05/T08.05 review and G00/G01/G02/G05 decisions.",
     "B node initialization receipt, physical networking, real desktop and remaining authorized provider trial.",
     "H10 archive migration authorization and implementation, active-contract recovery coordination, reviewed continuous-operation budget and 72-hour observation."
-  ]
+  ],
+  "sources_caliber": "The sha256 values recorded under supporting_evidence (and source_hashes) are Git blob (LF) hashes at the candidate commit, unlike the working-tree (CRLF) caliber recorded inside each experiment evidence file; declared per external audit 2026-10-05."
 }
