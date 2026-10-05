@@ -13,6 +13,7 @@
 //     real cards. Start over with `npm run reset -- --yes` (board stopped) if you mean it.
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { CODE_ROOT, applyConfigDefaults } from "../core/env.mjs";
 
@@ -26,6 +27,7 @@ const PY = process.env.BOARD_PYTHON || process.env.PYTHON || "python";
 const pyEnv = { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1", BOARD_DATA_DIR: DATA, BOARD_URL: BASE };
 const say = (s = "") => console.log(s);
 
+async function main() {
 // ── ① the source gate, first, in its own words ──────────────────────────────
 {
   const code = [
@@ -39,7 +41,7 @@ const say = (s = "") => console.log(s);
   if (g.error || g.status !== 0) {
     say(`跑不了 python(${PY}):${(g.error && g.error.message) || (g.stderr || "").trim()}`);
     say("设 BOARD_PYTHON 指向解释器;node cli/doctor.mjs 会告诉你它找到了谁。");
-    process.exit(1);
+    return 1;
   }
   const verdict = (g.stdout || "").trim();
   if (verdict !== "OK") {
@@ -47,7 +49,7 @@ const say = (s = "") => console.log(s);
     say();
     say("演示走的是同一道源码闸 —— 先接受这棵树:   python cli/board.py bless");
     say("(没有绕闸的演示模式:接受代码是人的动作。)");
-    process.exit(3);
+    return 3;
   }
 }
 
@@ -60,6 +62,12 @@ const listening = () => new Promise((res) => {
 });
 const alive = async () => { try { return (await fetch(BASE + "/api/meta")).ok; } catch { return false; } };
 let srv = null;
+const bail = async (code) => {
+  if (srv && srv.exitCode === null && srv.signalCode === null) {
+    await new Promise((resolve) => { srv.once("exit", resolve); srv.kill(); });
+  }
+  return code;
+};
 if (await listening()) {
   say(`② 复用已经在 ${BASE} 应答的板`);
 } else {
@@ -67,12 +75,11 @@ if (await listening()) {
   srv = spawn(process.execPath, [join(CODE_ROOT, "core", "server.mjs")], { stdio: ["ignore", "inherit", "inherit"], env: process.env, windowsHide: true });
   const t0 = Date.now();
   while (!(await alive())) {
-    if (srv.exitCode != null) { say("板没起来(见上方输出)。"); process.exit(1); }
-    if (Date.now() - t0 > 20000) { say("等了 20 秒板还没应答 —— 放弃。"); srv.kill(); process.exit(1); }
+    if (srv.exitCode != null) { say("板没起来(见上方输出)。"); return 1; }
+    if (Date.now() - t0 > 20000) { say("等了 20 秒板还没应答 —— 放弃。"); return await bail(1); }
     await new Promise((r) => setTimeout(r, 300));
   }
 }
-const bail = (code) => { if (srv) srv.kill(); process.exit(code); };
 
 // ── ③ seed — refuses a non-empty board, and so do we ────────────────────────
 say("③ 种演示链  node examples/seed_demo.mjs");
@@ -81,23 +88,30 @@ if (seed.status !== 0) {
   say();
   say("演示只在空板上跑 —— 板上已有卡,不会拿 mock worker 去碰真实工作。");
   say("确实想重来:先停板,再  npm run reset -- --yes");
-  bail(1);
+  return await bail(1);
 }
 
 // ── ④ one mock cycle, zero tokens ───────────────────────────────────────────
+const boardToken = readFileSync(join(DATA, "board_token"), "utf8").trim();
+const boardGet = async (path) => {
+  const response = await fetch(BASE + path, {headers:{"X-Board-Token":boardToken}});
+  if (!response.ok) throw new Error(`看板查询失败 (${response.status})`);
+  return response.json();
+};
 let line = null;
-try { line = ((await (await fetch(BASE + "/api/workers")).json()).lines || [])[0] || null; } catch {}
-if (!line) { say("看板没有配置任何线。"); bail(1); }
+try { line = ((await boardGet("/api/workers")).lines || [])[0] || null; }
+catch (error) { say(error.message); return await bail(1); }
+if (!line) { say("看板没有配置任何线。"); return await bail(1); }
 say(`④ mock worker 领一张、交一张  python loops/worker_loop.py --as ${line} --once`);
 const mock = spawnSync(PY, [join(CODE_ROOT, "loops", "worker_loop.py"), "--as", line, "--once"], {
   stdio: "inherit", windowsHide: true, cwd: CODE_ROOT,
   env: { ...pyEnv, WORKER_CLI_ARGV: JSON.stringify([PY, join(CODE_ROOT, "examples", "mock_worker_cli.py")]) },
 });
-if (mock.status !== 0) { say(`mock 轮退出码 ${mock.status} —— 上面是它自己的话(exit 3 = 闸拒绝,不是崩溃)。`); bail(mock.status || 1); }
+if (mock.status !== 0) { say(`mock 轮退出码 ${mock.status} —— 上面是它自己的话(exit 3 = 闸拒绝,不是崩溃)。`); return await bail(mock.status || 1); }
 
 // ── ⑤ where you come in ─────────────────────────────────────────────────────
 let waiting = [];
-try { waiting = ((await (await fetch(BASE + "/api/tasks?archived=false")).json()).tasks || []).filter((t) => t.status === "waiting"); } catch {}
+try { waiting = ((await boardGet("/api/tasks?archived=false")).tasks || []).filter((t) => t.status === "waiting"); } catch {}
 say();
 say("完整的一轮到这里为止是机器的;下一步是你的:");
 say(`  面板  ${BASE}`);
@@ -106,6 +120,16 @@ say("  human-gated 的那张 worker 领不到,也不消耗 attempts —— 那�
 if (srv) {
   say();
   say("板继续跑着(Ctrl+C 停)。");
-  for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { srv.kill(); process.exit(0); });
-  srv.on("exit", (c) => process.exit(c || 0));
+  const stop = () => srv.kill();
+  for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, stop);
+  try {
+    if (srv.exitCode !== null || srv.signalCode !== null) return srv.exitCode || 0;
+    return await new Promise((resolve) => srv.once("exit", (code) => resolve(code || 0)));
+  } finally {
+    for (const sig of ["SIGINT", "SIGTERM"]) process.removeListener(sig, stop);
+  }
 }
+return 0;
+}
+// Let pending HTTP handles drain naturally on Windows.
+process.exitCode = await main().catch((error) => { console.error(error.message); return 1; });

@@ -32,6 +32,7 @@ function remote(f,project='demo'){
 }
 const call=(f,name,args={},presentation={})=>callTool(f.db,f.auth,name,args,presentation);
 const snapshot=f=>readDesktopSnapshot(f.db,f.auth,{boardUrl:'http://127.0.0.1:48300/'});
+const revokedFile=f=>{assert.equal(existsSync(f.file),false);assert.throws(()=>authenticatePrincipal(f.db,f.auth),{code:'UNAUTHENTICATED'});};
 function generation(root){const entry=readFileSync(join(root,'ENTRY.md'),'utf8'),id=entry.match(/ai-fleet-context\/v1 ([0-9a-f-]+)/)[1],base=join(root,'snapshots',id),manifest=JSON.parse(readFileSync(join(base,'manifest.json'),'utf8'));return {entry,id,base,manifest};}
 test('observer discovers four read-only tools and cannot assign or mutate',()=>{
  const f=fixture(),t=task(f),tools=listTools(f.db,f.auth).tools;for(const name of ['get_board_overview','list_tasks','get_task_context','get_task_evidence'])assert.equal(tools.find(t=>t.name===name).annotations.readOnlyHint,true);
@@ -88,7 +89,7 @@ test('different principal scope cannot reuse or overwrite an existing context ro
 });
 test('read-only database export never migrates or dispatches and revoked identity preserves last entry',()=>{
  const f=fixture();task(f);const readonly=openContextDatabase(f.dbPath);assert.throws(()=>readonly.exec('CREATE TABLE forbidden(n)'));readonly.close();
- const result=exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root});assert.equal(result.status,'published');const old=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});assert.throws(()=>exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root}),{code:'UNAUTHENTICATED'});assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),old);assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
+ const result=exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root});assert.equal(result.status,'published');const old=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});revokedFile(f);assert.throws(()=>exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root}),{code:'BAD_CREDENTIAL'});assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),old);assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
 });
 test('actual CLI export produces usable entry without exposing credentials',async()=>{
  const f=fixture();task(f);const p=spawn(process.execPath,[join(ROOT,'cli/context.mjs'),'export','--db',f.dbPath,'--credential-file',f.file,'--root',f.root,'--board-url','http://127.0.0.1:48300/','--retain-generations','32','--retain-minutes','60'],{windowsHide:true,stdio:['ignore','pipe','pipe']});let out='',err='';p.stdout.on('data',b=>out+=b);p.stderr.on('data',b=>err+=b);const code=await new Promise((r,j)=>{p.once('error',j);p.once('exit',r);});assert.equal(code,0,err);const receipt=JSON.parse(out);assert.equal(receipt.status,'published');assert.equal(receipt.retention.enabled,true);assert.ok(existsSync(receipt.entry));assert.ok(!out.includes(f.c.token));
@@ -112,8 +113,8 @@ test('watch refreshes after a database change and stops after credential revocat
  const until=async condition=>{const end=Date.now()+25000;while(Date.now()<end){if(condition())return;if(exited)throw Error('watch exited: '+err);await sleep(100);}throw Error('watch condition timed out: '+err);};
  try{
   await until(()=>existsSync(join(f.root,'ENTRY.md')));const first=generation(f.root).id;f.db.prepare('UPDATE tasks SET description=? WHERE id=?').run('watch changed',t.id);
-  await until(()=>generation(f.root).id!==first);const latest=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});
-  await Promise.race([exit,sleep(25000).then(()=>{throw Error('revoked watch did not stop');})]);assert.equal(exitCode,1);assert.match(err,/UNAUTHENTICATED/);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),latest);assert.ok(!out.includes(f.c.token));assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
+  await until(()=>generation(f.root).id!==first);const latest=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});revokedFile(f);
+  await Promise.race([exit,sleep(25000).then(()=>{throw Error('revoked watch did not stop');})]);assert.equal(exitCode,1);assert.match(err,/BAD_CREDENTIAL/);assert.ok(!err.includes(f.file)&&!err.includes(f.c.token));assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),latest);assert.ok(!out.includes(f.c.token));assert.equal(f.db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
  }finally{if(!exited){proc.kill();await exit;}}
 });
 
@@ -175,5 +176,5 @@ test('retention rejects forged current-generation, scope and traversal cleanup i
 
 test('revoked export identity cannot trigger expired generation cleanup',context=>{
  context.mock.timers.enable({apis:['Date'],now:Date.now()});const f=fixture(),t=task(f);manySnapshots(f,t,context,4);context.mock.timers.tick(60001);const before=readdirSync(join(f.root,'snapshots')),entry=generation(f.root).entry;revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});
- assert.throws(()=>exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root,boardUrl:'http://127.0.0.1:48300/',retention:RETAIN}),{code:'UNAUTHENTICATED'});assert.deepEqual(readdirSync(join(f.root,'snapshots')),before);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),entry);
+ revokedFile(f);assert.throws(()=>exportDesktopContext({dbPath:f.dbPath,credentialFile:f.file,root:f.root,boardUrl:'http://127.0.0.1:48300/',retention:RETAIN}),{code:'BAD_CREDENTIAL'});assert.deepEqual(readdirSync(join(f.root,'snapshots')),before);assert.equal(readFileSync(join(f.root,'ENTRY.md'),'utf8'),entry);
 });

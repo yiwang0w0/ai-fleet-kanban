@@ -118,11 +118,16 @@ test('settlement failure preserves journal and blocks another start until explic
  assert.equal(s.reconcile(one.a.assignment_id).launched,false);assert.equal(s.reconcile(one.a.assignment_id).phase,'settled');assert.equal(used(f),1);
  await s.tick();assert.equal(used(f),2);s.close();
 });
-test('prelaunch adapter refusal abandons only the unlaunched reservation and retains its files',async()=>{
+test('prelaunch adapter refusal releases its reservation, revokes credentials and preserves audit files',async()=>{
  const f=fixture();const {t,a}=card(f),s=open(f);writeFileSync(join(f.config.root,'.env'),'fixture marker');
  const r=await s.tick();assert.equal(r.results[0].code,'STARTUP_CONFIG_PRESENT');assert.equal(used(f),0);assert.equal(launches(f),0);
  assert.equal(f.db.prepare('SELECT phase FROM broker_dispatches').get().phase,'abandoned');assert.equal(store.get(f.db,t.id).waiting_for,'decision');
- assert.equal(existsSync(join(f.config.root,a.assignment_id,'private','principal.json')),true);s.close();
+ const d=f.db.prepare('SELECT principal_id,launch_at FROM broker_dispatches').get(),principal=f.db.prepare('SELECT status,secret_hash FROM broker_principals WHERE principal_id=?').get(d.principal_id);
+ assert.equal(existsSync(join(f.config.root,a.assignment_id,'private','principal.json')),false);
+ assert.equal(principal.status,'revoked');assert.equal(principal.secret_hash,'');assert.equal(f.db.prepare('SELECT cleanup_status FROM broker_credential_files WHERE principal_id=?').get(d.principal_id).cleanup_status,'deleted');
+ assert.equal(d.launch_at,null);assert.equal(quotaStatus(f.db,f.q.quota_id).reserved,0);
+ assert.equal(JSON.parse(readFileSync(join(f.config.root,a.assignment_id,'INTENT.json'),'utf8')).assignment_id,a.assignment_id);assert.equal(readFileSync(join(f.config.root,'.env'),'utf8'),'fixture marker');
+ await s.tick();assert.equal(used(f),0);assert.equal(launches(f),0);assert.equal(f.db.prepare('SELECT count(*) n FROM broker_dispatches').get().n,1);s.close();
 });
 test('workspace profile provisions the registered Git baseline and binds its file session to the launch',async()=>{
  const f=fixture({capability:'workspace-files'}),repo=join(f.base,'repository'),pool=join(f.base,'pool');mkdirSync(repo);mkdirSync(pool);mkdirSync(join(repo,'src'));writeFileSync(join(repo,'src','example.txt'),'original');

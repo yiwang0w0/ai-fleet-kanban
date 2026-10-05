@@ -76,7 +76,7 @@ const stubServerFor = (py) => {
     // import.meta.url we just rewrote (createRequire uses that URL; `import` does not).
     // The copy lives in a temp dir with no siblings, so every relative specifier is
     // pointed back at the real core/ — whoever relocates a file rewrites its references.
-    .replace(/from "\.\/([^"]+)"/g, (_, rel) => "from " + JSON.stringify(pathToFileURL(join(dirname(SERVER), rel)).href));
+    .replace(/from\s+(['"])\.\/([^'"]+)\1/g, (_, quote, rel) => "from " + JSON.stringify(pathToFileURL(join(dirname(SERVER), rel)).href));
   const p = join(STUBS, `server-${py.replace(/[^a-z]/gi, "")}.mjs`);
   writeFileSync(p, src, "utf8");
   return p;
@@ -115,7 +115,7 @@ async function board({ script = SERVER, env = {}, dataDir = null, files = {}, co
     env = { ...env, BOARD_CONFIG: join(DATA, "p-fleet.config.json") };
   }
   let out = "";
-  const spawnEnv = { ...process.env, BOARD_PORT: String(PORT), BOARD_DATA_DIR: DATA,
+  const spawnEnv = { ...process.env, BOARD_CODEX_RELEASED: "0", BOARD_CODEX_CMD: "", BOARD_PORT: String(PORT), BOARD_DATA_DIR: DATA,
            BOARD_DB: join(DATA, "t.db"), BOARD_ALLOW_UNPINNED: "1",
            BOARD_POOL_TEST_MODE: "1", BOARD_POOL_TEST_PROBE: "ok",
            ...(PYTHON ? { BOARD_PYTHON: PYTHON } : {}),

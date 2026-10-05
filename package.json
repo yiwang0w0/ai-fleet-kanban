@@ -93,6 +93,7 @@
     "graph:recovery": "node cli/graph-recovery.mjs",
     "test:graph-recovery": "node --test tests/graphrecoverytest.mjs",
     "test:sync-capacity": "node --test tests/sync-capacitytest.mjs",
-    "test:fleet-load": "node tests/fleet-load.mjs"
+    "test:fleet-load": "node tests/fleet-load.mjs",
+    "test:offline-soak": "node tests/offline-soak.mjs"
   }
 }

@@ -1695,18 +1695,25 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_partial_passed",
-        "scope": "source execution while local HTTP gateway unavailable; result sync on reconnect without remote re-claim",
+        "scope": "One Windows host, two isolated authenticated loopback node runtimes: real 30-minute source continuation, native synthetic Job completion, stale remote cache and reconnect once without owner restart or duplicate execution.",
         "pending": [
           "real Tailscale multi-node acceptance",
           "independent phase acceptance",
           "restore epoch activation and complete audit/relationship events"
-        ]
+        ],
+        "candidate_code_sha": "c0f7aced0a9fc4fab4ec472fd6c38a9bd450b73a",
+        "formal_acceptance": false,
+        "offline_ms": 1800903.7158000001,
+        "reconnect_ms": 393.2393999998458
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/sync.md",
         "docs/federation/sync-evidence.json",
-        "tests/synctest.mjs"
+        "tests/synctest.mjs",
+        "tests/offline-soak.mjs",
+        "docs/federation/offline-soak.md",
+        "docs/federation/offline-soak-evidence.json"
       ]
     },
     {

@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn,spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {buildDesktopPackage} from '../core/desktop-package.mjs';
-import {migrateBroker,putRole,issuePrincipal,revokePrincipal} from '../core/mcp/policy.mjs';
+import {migrateBroker,putRole,issuePrincipal,revokePrincipal,authenticatePrincipal} from '../core/mcp/policy.mjs';
 import {enrollTask} from '../core/mcp/tools.mjs';
 import {listenBroker} from '../core/mcp/gateway.mjs';
 const ROOT=fileURLToPath(new URL('../',import.meta.url)),TMP=mkdtempSync(join(tmpdir(),'fleet-desktop-package-')),PS=join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
@@ -92,5 +92,5 @@ test('preflight clearly records explicitly missing runtimes without installing o
 });
 
 test('revoked portable credential returns failure without leaking its content',async()=>{
- revokePrincipal(db,{principalId:principal.principal_id,expectedVersion:1});const result=await run(process.execPath,[join(unpacked,'cli/desktop-check.mjs'),'--url',url,'--credential-file',credential]);assert.equal(result.code,1);const error=JSON.parse(result.stderr);assert.equal(error.status,'failed');assert.equal(error.real_model_called,false);assert.ok(!result.stderr.includes(JSON.parse(readFileSync(credential,'utf8')).token));assert.equal(db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
+ const token=JSON.parse(readFileSync(credential,'utf8')).token;revokePrincipal(db,{principalId:principal.principal_id,expectedVersion:1});assert.equal(existsSync(credential),false);assert.throws(()=>authenticatePrincipal(db,'Bearer '+token),{code:'UNAUTHENTICATED'});const result=await run(process.execPath,[join(unpacked,'cli/desktop-check.mjs'),'--url',url,'--credential-file',credential]);assert.equal(result.code,1);const error=JSON.parse(result.stderr);assert.equal(error.status,'failed');assert.equal(error.real_model_called,false);assert.equal(error.code,'BAD_CREDENTIAL');assert.ok(!result.stderr.includes(token)&&!result.stdout.includes(token));assert.ok(!result.stderr.includes(credential));assert.equal(db.prepare('SELECT count(*) n FROM task_runs').get().n,0);
 });

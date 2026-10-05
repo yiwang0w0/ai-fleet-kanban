@@ -7,7 +7,7 @@ import {join,resolve,relative} from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawnSync} from "node:child_process";
 import {evidenceFixture} from "./helpers/fleet-evidence-fixture.mjs";
-import {putRole,issuePrincipal,revokePrincipal} from "../core/mcp/policy.mjs";
+import {putRole,issuePrincipal,revokePrincipal,authenticatePrincipal} from "../core/mcp/policy.mjs";
 import {enrollTask} from "../core/mcp/tools.mjs";
 import {canonical,digest} from "../core/federation/sync-store.mjs";
 import {readDesktopSnapshot,publishDesktopSnapshot,exportDesktopContext,saveDesktopHandoff} from "../core/desktop-context.mjs";
@@ -57,7 +57,7 @@ test("same handoff ID with changed content cannot overwrite history or the curre
 test("unauthorized task and revoked principal cannot publish a summary",()=>{
  const f=fixture(),id=f.store.add(f.db,{subject:"PRIVATE-TASK"}),task=f.store.get(f.db,id);enrollTask(f.db,{id,projectId:"private",workKind:"implement",capabilities:[],expectedVersion:task.aggregate_version});
  assert.throws(()=>save(f,{taskUid:task.task_uid,expectedVersion:f.store.get(f.db,id).aggregate_version}),{code:"NOT_FOUND"});assert.ok(!existsSync(join(f.root,"ENTRY.md")));
- revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});assert.throws(()=>save(f),{code:"UNAUTHENTICATED"});
+ revokePrincipal(f.db,{principalId:f.principal.principal_id,expectedVersion:1});assert.equal(existsSync(f.credentialFile),false);assert.throws(()=>authenticatePrincipal(f.db,f.auth),{code:"UNAUTHENTICATED"});assert.throws(()=>save(f),{code:"BAD_CREDENTIAL"});assert.ok(!existsSync(join(f.root,"ENTRY.md")));
 });
 test("corrupt or unrecognized note files preserve the last published snapshot",()=>{
  const f=fixture();save(f);const g=generation(f),path=join(f.root,"handoffs",f.handoffId+".json"),raw=JSON.parse(readFileSync(path,"utf8"));raw.record.summary="tamper";writeFileSync(path,JSON.stringify(raw));

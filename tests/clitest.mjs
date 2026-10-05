@@ -34,10 +34,20 @@ console.log(NL + "[① package.json]");
      !pkg.dependencies && !pkg.devDependencies && !pkg.peerDependencies);
   ok("engines.node is declared", pkg.engines?.node === ">=24.0.0", pkg.engines?.node);
   ok("no \"type\":\"module\" (core/store.js is CommonJS; .mjs files are explicit)", pkg.type === undefined);
-  const missing = [];
-  for (const [name, cmd] of Object.entries(pkg.scripts || {}))
-    for (const m of cmd.matchAll(/node\s+([^\s&|;]+)/g))
-      if (!existsSync(join(ROOT, m[1]))) missing.push(`${name}: ${m[1]}`);
+  const missingFiles = (scripts) => {
+    const missing = [];
+    for (const [name, cmd] of Object.entries(scripts)) {
+      for (const match of cmd.matchAll(/\bnode\s+([^&|;]+)/g)) {
+        const args = match[1].trim().split(/\s+/);
+        const files = args[0] === "--test" ? args.slice(1) : args.slice(0, 1);
+        for (const file of files) if (!existsSync(join(ROOT, file))) missing.push(`${name}: ${file}`);
+      }
+    }
+    return missing;
+  };
+  const missing = missingFiles(pkg.scripts || {});
+  ok("node --test checks every file and still detects a missing second target",
+    JSON.stringify(missingFiles({probe:"node --test tests/clitest.mjs tests/absent-fixture-file.mjs"})) === JSON.stringify(["probe: tests/absent-fixture-file.mjs"]));
   ok("every `node <file>` in scripts names an existing file", missing.length === 0, missing.join(", "));
   ok("setup / start / reset / doctor / test all present",
      ["setup", "start", "reset", "doctor", "demo", "test"].every((k) => k in (pkg.scripts || {})));
@@ -130,18 +140,21 @@ console.log(NL + "[⑤ demo]");
   const envB = { ...process.env, ...env, BOARD_ALLOW_UNPINNED: "1", BOARD_TEST_SHUTDOWN_MS: "30000",
                  BOARD_POOL_TEST_MODE: "1", BOARD_POOL_TEST_PROBE: "ok" };
   const child = spawn(process.execPath, [join(ROOT, "cli", "demo.mjs")], { env: envB, windowsHide: true });
+  const childExit = new Promise((resolve) => child.once("exit", (code, signal) => resolve({code, signal})));
   let out = ""; child.stdout.on("data", (b) => out += b); child.stderr.on("data", (b) => out += b);
   const deadline = Date.now() + 26000; let waitingCard = null;
   while (Date.now() < deadline && !waitingCard) {
     try {
-      const j = await (await fetch(base + "/api/tasks?archived=false")).json();
+      const j = await (await fetch(base + "/api/tasks?archived=false", {headers:{"X-Board-Token":readFileSync(join(data,"board_token"),"utf8").trim()}})).json();
       waitingCard = (j.tasks || []).find((t) => t.status === "waiting" && t.waiting_for === "review") || null;
     } catch {}
     if (!waitingCard) await new Promise((r) => setTimeout(r, 400));
   }
   ok("⭐bless 通过 → 起板、种子、mock 一轮:一张卡落在 等待中/待验收(零 token)", !!waitingCard, waitingCard ? `#${waitingCard.id}` : out.slice(-300));
-  const exited = await new Promise((res) => { const t = setTimeout(() => res(null), 40000); child.on("exit", (c) => { clearTimeout(t); res(c); }); });
-  ok("server 到点自停后 demo 也退出(没有留下孤儿进程)", exited !== null, `exit=${exited}`);
+  let exitTimer;
+  const exited = await Promise.race([childExit, new Promise((res) => { exitTimer = setTimeout(() => res(null), 40000); })]);
+  clearTimeout(exitTimer);
+  ok("server 到点自停后 demo 正常退出且端口关闭", exited?.code === 0 && exited?.signal === null && !(await listening(port)), `exit=${JSON.stringify(exited)}`);
   ok("demo 的收尾把面板地址和等待裁定的卡告诉了人", /面板/.test(out) && /等待你裁定/.test(out) && /human-gated/.test(out), out.slice(-200));
   ok("(前提)确实是 mock 跑的:输出里有 worker 的一轮日志", /--once|第 1\/3 次尝试|等待中\/待验收/.test(out));
 }
