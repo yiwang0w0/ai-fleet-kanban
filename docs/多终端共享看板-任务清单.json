@@ -614,7 +614,15 @@
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
+      "verification_result": {
+        "status": "partial_evidence",
+        "evidence": [
+          "docs/federation/gates/baseline.json",
+          "docs/federation/gates/baseline.md"
+        ],
+        "summary": "Read-only A pilot source/configuration/schema snapshot collected. Older pilot SHA is explicitly separate from frozen CI candidate; candidate component baseline and independent review remain pending.",
+        "checked_at": "2026-10-05T05:58:45.253063+00:00"
+      },
       "acceptance_receipt": null
     },
     {

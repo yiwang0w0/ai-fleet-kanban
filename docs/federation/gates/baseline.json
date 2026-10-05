@@ -1,0 +1,98 @@
+{
+  "format": "ai-fleet-implementation-baseline/v1",
+  "checked_at": "2026-10-05T05:58:45.253063+00:00",
+  "development": {
+    "sha": "87b6752eb99de73e24162dfff7f95876a59e8dd7",
+    "branch": "codex/fleet-federation-foundation",
+    "tracked_clean": true,
+    "excluded_untracked": [
+      "docs/federation/artifact-archive-proposal.md"
+    ]
+  },
+  "runtime_candidate": {
+    "sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+    "ci_run": 37258132393,
+    "git_blob_sha256": {
+      ".github/workflows/ci.yml": "a1f4892fca3b83debdee7e52084ab68cc3efd5de5c7ec9a708d1267123489304",
+      "package.json": "3943fe25c1ef31906199cfce936225d76ea3b4a7c4e0cf975f11d96789bad356",
+      "core/store.js": "dd67f63f2ef0b53281e6b7e7c28cc09ce96a6aa72634388fd2a99157c19d4889",
+      "core/federation/protocol.mjs": "32d9184d1ea942de56624b3ac6bfda3670f77e21189c7b5a942c23cf5e57bfcf"
+    }
+  },
+  "physical_A": {
+    "source_sha": "fea7378bfbef422cfdbfee10688fa21e6b04e026",
+    "source_clean": true,
+    "config_sha256": "2918c521b736da8cc7788fedf600339247593dedfffd8c3012ea231ee2ed45ce",
+    "config_matches_receipt": true,
+    "repo_matches_source": true,
+    "configured_lines": 0,
+    "verify_registry_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "verify_registry_entries": 0,
+    "database": {
+      "read_mode": "SQLite mode=ro, query_only=ON, one read transaction; no application imports or migrations",
+      "user_version": 0,
+      "journal_mode": "wal",
+      "schema_sha256": "584cd7f8a31260d52eef9ed907eae0690c3617b8a914cd7d73f66c1c6eb0a21c",
+      "schema_object_count": 34,
+      "component_schema_versions": [],
+      "board_protocol_version": 1,
+      "identity_matches_retained_receipt": true,
+      "row_counts": {
+        "tasks": 0,
+        "task_runs": 0,
+        "operator_requests": 0
+      },
+      "tables": [
+        "board_lifecycle",
+        "board_node",
+        "operator_requests",
+        "task_events",
+        "task_runs",
+        "tasks"
+      ]
+    }
+  },
+  "physical_B": {
+    "board_receipt": "unavailable",
+    "today_online": false,
+    "online_source": "user_report"
+  },
+  "actions": {
+    "database_writes": false,
+    "migrations": false,
+    "providers_called": false,
+    "services_started": false,
+    "production_modified": false,
+    "tailscale_modified": false
+  },
+  "task_id": "T00.05",
+  "assessment": "partial_evidence_not_acceptance",
+  "workspace_boundaries": [
+    {
+      "alias": "development",
+      "purpose": "Dedicated implementation worktree; pinned observed HEAD, tracked clean at observation. One unrelated untracked proposal excluded."
+    },
+    {
+      "alias": "physical-A-source",
+      "purpose": "Dedicated isolated pilot source worktree, matching retained node receipt. No upgrade performed."
+    },
+    {
+      "alias": "physical-A-data",
+      "purpose": "Dedicated pilot database and configuration. Identity and absolute paths retained only in private node receipt."
+    },
+    {
+      "alias": "ci-runtime-candidate",
+      "purpose": "GitHub Actions checkout at immutable candidate SHA; separate from physical A. CI does not attest pilot configuration or deployment."
+    }
+  ],
+  "schema_interpretation": {
+    "user_version": "Observed SQLite PRAGMA value, not an application-wide release/schema version.",
+    "component_schema_versions": "No component _schema tables exist in this initialized base-store database. This is not evidence that all federation components have been migrated.",
+    "schema_sha256": "SHA-256 of UTF-8 JSON of ordered [type,name,tbl_name,sql] rows from sqlite_schema excluding sqlite_% names, ensure_ascii=False, separators=(comma,colon). Includes the WAL-visible schema in one read transaction; not a hash of the main database file alone."
+  },
+  "remaining": [
+    "A pilot SHA differs from immutable runtime review candidate; do not combine their configuration and schema observations into one deployed candidate.",
+    "Runtime candidate component schema/configuration baseline still needs evidence tied to that same SHA, or explicit selection of the older A snapshot as the baseline under review.",
+    "Independent review and required prior decisions are pending. B board receipt is unavailable; no physical multi-node acceptance."
+  ]
+}
