@@ -899,7 +899,9 @@ function cardParts(t){
   if (t.proves_parent) top += `<span class="tag oneof" title="本卡的验证通过即回答了父卡的问题 —— 父卡会跟着通过">验证父卡</span>`;
   if (t.resolved_by === "cascade") top += `<span class="tag casc" title="非人工裁定:同链另一张卡通过机器验证,本卡因此不再需要。理由见卡面裁定记录">联动关闭</span>`;
   if (t.status === "waiting" && t.waiting_for)
-    top += `<span class="tag wf ${t.waiting_for}">${esc(progressWaitLabel(t))}</span>`;
+    // 『外部审计 2026-10-05』waiting_for 拼进 class 也必须过 esc —— 值域今日是服务端
+    // 封闭枚举,但这里是纵深加固:与同文件其余插值保持同一转义纪律,不依赖枚举不破。
+    top += `<span class="tag wf ${esc(t.waiting_for)}">${esc(progressWaitLabel(t))}</span>`;
 
   let meta2 = [];
   if (t.progress_blockers?.length) meta2.push(progressTags(t));
