@@ -501,13 +501,24 @@
         "requirements.md",
         "R 编号映射"
       ],
-      "status": "planned",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "df85ff2d95dda61f86a065f6ef303ff614585267",
+        "scope": "Criterion-by-criterion review packet; no fresh execution, physical-node proof, role confirmation or registered acceptance is claimed.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": null,
+        "formal_acceptance": false
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/gates/acceptance-readiness.json",
+        "docs/federation/requirements.md"
+      ]
     },
     {
       "id": "T00.02",
@@ -749,13 +760,23 @@
       "evidence_required": [
         "fixture 代码与隔离性测试"
       ],
-      "status": "planned",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Criterion-by-criterion review packet; no fresh execution, physical-node proof, role confirmation or registered acceptance is claimed.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/gates/acceptance-readiness.json"
+      ]
     },
     {
       "id": "T01.05",
@@ -883,13 +904,23 @@
         "migration",
         "UID 测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Criterion-by-criterion review packet; no fresh execution, physical-node proof, role confirmation or registered acceptance is claimed.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/gates/acceptance-readiness.json"
+      ]
     },
     {
       "id": "T02.03",
@@ -909,27 +940,38 @@
       "evidence_required": [
         "schema 与角色映射样例"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_passed",
-        "scope": "local dispatch identities and immutable policy snapshots",
-        "pending": [
-          "cross-node executor identity binding",
-          "runtime authorization enforcement",
-          "phase acceptance"
-        ],
-        "tested_commit": "7cc5939643e66801a431b59df1baed8b46acc42f",
-        "ci_run_id": 36532817500
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Criterion-by-criterion review packet; no fresh execution, physical-node proof, role confirmation or registered acceptance is claimed.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/runs.md",
         "docs/federation/runs-evidence.json",
-        "tests/runfencetest.mjs"
+        "tests/runfencetest.mjs",
+        "docs/federation/gates/acceptance-readiness.json"
+      ],
+      "verification_history": [
+        {
+          "result": "local_passed",
+          "scope": "local dispatch identities and immutable policy snapshots",
+          "pending": [
+            "cross-node executor identity binding",
+            "runtime authorization enforcement",
+            "phase acceptance"
+          ],
+          "tested_commit": "7cc5939643e66801a431b59df1baed8b46acc42f",
+          "ci_run_id": 36532817500
+        }
       ]
     },
     {
@@ -951,18 +993,18 @@
       "evidence_required": [
         "权限与并发负向测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_partial_passed",
-        "scope": "local version gates plus authenticated owner projections and isolated non-executable replicas",
-        "pending": [
-          "real Tailscale multi-node acceptance",
-          "independent phase acceptance"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Criterion-by-criterion review packet; no fresh execution, physical-node proof, role confirmation or registered acceptance is claimed.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
@@ -971,7 +1013,18 @@
         "tests/versiontest.mjs",
         "docs/federation/sync.md",
         "docs/federation/sync-evidence.json",
-        "tests/synctest.mjs"
+        "tests/synctest.mjs",
+        "docs/federation/gates/acceptance-readiness.json"
+      ],
+      "verification_history": [
+        {
+          "result": "local_partial_passed",
+          "scope": "local version gates plus authenticated owner projections and isolated non-executable replicas",
+          "pending": [
+            "real Tailscale multi-node acceptance",
+            "independent phase acceptance"
+          ]
+        }
       ]
     },
     {
@@ -994,19 +1047,18 @@
       "evidence_required": [
         "protocol-schema 与版本测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_partial_passed",
-        "scope": "hello v1 capability negotiation plus strict task-projection-sync-v1 batch syntax and semantics",
-        "pending": [
-          "real Tailscale multi-node acceptance",
-          "independent phase acceptance",
-          "cross-version real-node upgrade acceptance"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Criterion-by-criterion review packet; no fresh execution, physical-node proof, role confirmation or registered acceptance is claimed.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
@@ -1015,7 +1067,20 @@
         "tests/peertest.mjs",
         "docs/federation/sync.md",
         "docs/federation/sync-evidence.json",
-        "tests/synctest.mjs"
+        "tests/synctest.mjs",
+        "docs/federation/gates/acceptance-readiness.json",
+        "docs/federation/protocol-compatibility.md"
+      ],
+      "verification_history": [
+        {
+          "result": "local_partial_passed",
+          "scope": "hello v1 capability negotiation plus strict task-projection-sync-v1 batch syntax and semantics",
+          "pending": [
+            "real Tailscale multi-node acceptance",
+            "independent phase acceptance",
+            "cross-version real-node upgrade acceptance"
+          ]
+        }
       ]
     },
     {

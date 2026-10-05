@@ -11,3 +11,6 @@ G00 根据操作者转述重建，未取得最初附件。已记录用户“沿�
 T01.05 与 T08.05 的 [独立签收材料](independent-review.md) 已列出验收条件、测试位置及尚需填写的结论；两项均待非实现者实际签收。
 
 G05 有本机真实计时 30 分钟离线、容量故障和授权投影对照证据。后续 a936951 的三节点分区实验属于独立本地补充，不计入 CI #149；所有这些证据均不替代实体双机 Tailscale 断线、重连和投影哈希验收。
+
+
+2026-10-05 验收材料对齐：补 [九项可交独立审阅清单](acceptance-ready.md)、[逐条断言与摘要](acceptance-readiness.json) 和 [G00 实际缺项](G00-readiness.md)。六项原 planned/in_progress 状态已按现有材料纠正为 implemented_pending_acceptance；这不是独立结论或正式签收。旧候选、回执和历史结果原样保留。
