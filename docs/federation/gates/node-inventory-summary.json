@@ -1,0 +1,38 @@
+{
+  "format": "ai-fleet-node-inventory-summary/v1",
+  "task_id": "T00.02",
+  "prepared_at": "2026-10-05T06:20:40.330589+00:00",
+  "private_inventory_sha256": "b461ba28b01f9852bf8755f1df36437eb2b7bd2858068a35d6189197b2ba3216",
+  "real_identities_published": false,
+  "nodes": [
+    {
+      "alias": "A",
+      "current_os_and_resources_collected": true,
+      "current_tailnet_identity_matches_retained_receipt": true,
+      "board_identity_verified_at": "2026-10-05T05:58:45.253063+00:00",
+      "source_sha": "fea7378bfbef422cfdbfee10688fa21e6b04e026",
+      "maintainer_confirmed": false
+    },
+    {
+      "alias": "B",
+      "supplied_preflight_retained": true,
+      "preflight_checked_at": "2026-10-01T03:24:22.4049056Z",
+      "board_receipt_received": false,
+      "current_os_and_resources_collected": false,
+      "today_online": "user_reported_offline",
+      "maintainer_confirmed": false
+    }
+  ],
+  "unknown_fields": [
+    "A.maintainer_code",
+    "B.board_identity",
+    "B.source_sha",
+    "B.config_sha256",
+    "B.repo_path",
+    "B.windows_build",
+    "B.resources",
+    "B.maintainer_code"
+  ],
+  "formal_acceptance": "pending",
+  "tailnet_ids_distinct_in_retained_materials": true
+}

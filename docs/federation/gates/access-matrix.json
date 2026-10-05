@@ -1,0 +1,237 @@
+{
+  "format": "ai-fleet-access-matrix-proposal/v1",
+  "plan_id": "AFK-FED-001",
+  "prepared_at": "2026-10-05T06:24:40.162674+00:00",
+  "decision": "proposed_not_approved",
+  "deployable": false,
+  "project_id": "physical-pilot",
+  "scope": "Two physical Windows nodes; not a runtime configuration or credential grant",
+  "registrar": {
+    "proposed_alias": "A",
+    "confirmed": false,
+    "offline_behavior": "Existing permitted work continues; new cross-node relations wait for registrar confirmation; no automatic election or owner transfer"
+  },
+  "nodes": [
+    {
+      "alias": "A",
+      "board_node_id": null,
+      "sync_epoch": null,
+      "endpoint": null,
+      "maintainer_code": null,
+      "private_binding_required": true
+    },
+    {
+      "alias": "B",
+      "board_node_id": null,
+      "sync_epoch": null,
+      "endpoint": null,
+      "maintainer_code": null,
+      "private_binding_required": true
+    }
+  ],
+  "network": {
+    "operator_ui": {
+      "bind": "127.0.0.1",
+      "proposed_port": 47924,
+      "remote_access": false
+    },
+    "peer_api": {
+      "bind": "127.0.0.1",
+      "proposed_port": 47925,
+      "transport": "Private tailnet HTTPS via separate Serve entry; G03 must bind actual endpoints and effective access rules"
+    },
+    "enablement_approved": false,
+    "existing_47824_forwarding": "Must remain removed; no restoration is proposed"
+  },
+  "stages": [
+    {
+      "id": "synchronization",
+      "decision": "proposed",
+      "grants": [
+        {
+          "requester": "A",
+          "server": "B",
+          "projects": [
+            "physical-pilot"
+          ],
+          "scopes": [
+            "peer:handshake",
+            "peer:health",
+            "sync:pull",
+            "sync:ack"
+          ],
+          "enabled": false
+        },
+        {
+          "requester": "B",
+          "server": "A",
+          "projects": [
+            "physical-pilot"
+          ],
+          "scopes": [
+            "peer:handshake",
+            "peer:health",
+            "sync:pull",
+            "sync:ack"
+          ],
+          "enabled": false
+        }
+      ]
+    },
+    {
+      "id": "collaboration",
+      "decision": "proposed_after_sync_and_separate_scope_review",
+      "grants": [
+        {
+          "requester": "A",
+          "server": "B",
+          "projects": [
+            "physical-pilot"
+          ],
+          "scopes": [
+            "peer:handshake",
+            "peer:health",
+            "sync:pull",
+            "sync:ack",
+            "delegation:offer",
+            "delegation:status",
+            "delegation:binding",
+            "delegation:control",
+            "delegation:result",
+            "artifact:write",
+            "delegation:complete"
+          ],
+          "enabled": false
+        },
+        {
+          "requester": "B",
+          "server": "A",
+          "projects": [
+            "physical-pilot"
+          ],
+          "scopes": [
+            "peer:handshake",
+            "peer:health",
+            "sync:pull",
+            "sync:ack",
+            "delegation:offer",
+            "delegation:status",
+            "delegation:binding",
+            "delegation:control",
+            "delegation:result",
+            "artifact:write",
+            "delegation:complete",
+            "relations:publish",
+            "relations:approve",
+            "relations:read",
+            "relations:complete"
+          ],
+          "enabled": false
+        }
+      ],
+      "A_registrar_local_actions": "Use the controlled local registrar interface; do not grant A a self-peer credential."
+    }
+  ],
+  "grant_rules": [
+    "Each server issues a distinct credential for its peer and binds endpoint, UUID, epoch, scopes, project and version.",
+    "Stage changes replace that peer credential with explicit version checking; no two-stage credential union is silently enabled.",
+    "Network reachability does not grant application permissions.",
+    "Peer scopes do not directly launch a model. A local MCP principal, run policy and launch permit remain required."
+  ],
+  "logical_roles": [
+    {
+      "role": "ARCH",
+      "allowed_work": [
+        "Read scoped design, tasks and evidence; record architecture findings"
+      ],
+      "forbidden_work": [
+        "Implementation edits",
+        "Operator rulings",
+        "Self acceptance"
+      ]
+    },
+    {
+      "role": "ENG",
+      "allowed_work": [
+        "Claim/heartbeat/report only own valid run",
+        "Modify assigned isolated workspace",
+        "Produce artifacts"
+      ],
+      "forbidden_work": [
+        "Change remote owner",
+        "Grant credentials",
+        "Accept own output"
+      ]
+    },
+    {
+      "role": "TEST",
+      "allowed_work": [
+        "Run explicitly bound verification profiles",
+        "Record verification inputs and results"
+      ],
+      "forbidden_work": [
+        "Arbitrary remote command execution",
+        "Impersonate implementer-independent reviewer"
+      ]
+    },
+    {
+      "role": "REVIEW",
+      "allowed_work": [
+        "Read scoped current artifacts and evidence",
+        "Record an independent review bound to exact delivery"
+      ],
+      "forbidden_work": [
+        "Implement reviewed output",
+        "Approve own implementation",
+        "Operator deployment decision"
+      ]
+    },
+    {
+      "role": "OPS",
+      "allowed_work": [
+        "Execute specifically approved node/network/backup/recovery procedures"
+      ],
+      "forbidden_work": [
+        "Broaden network scopes or budgets without authorization",
+        "Mark remote process stopped without evidence"
+      ]
+    },
+    {
+      "role": "UI",
+      "allowed_work": [
+        "Change assigned UI workspace",
+        "Read permitted projections and freshness information"
+      ],
+      "forbidden_work": [
+        "Issue operator credentials",
+        "Change server-side authority"
+      ]
+    },
+    {
+      "role": "OP",
+      "allowed_work": [
+        "Confirm scope, budgets, gate decisions and release windows"
+      ],
+      "forbidden_work": [
+        "Treat pending proposals or simulated evidence as completed physical acceptance"
+      ]
+    }
+  ],
+  "runtime_role_bindings": {
+    "status": "pending_actual_node_and_principal_mapping",
+    "preserve_existing_charters": true,
+    "charter_refs": [
+      "docs/roles/astra.md",
+      "docs/roles/engine.md"
+    ],
+    "primary_and_fallback_models": null,
+    "agent_instance_ids": null,
+    "note": "Plan roles, local line charters, MCP principals and model vendors are distinct. Existing mappings are not changed by this proposal."
+  },
+  "activation_missing": [
+    "B board UUID/epoch/source/config receipt",
+    "Both node maintainer codes and local role/principal/runtime bindings",
+    "Exact endpoints, existing Serve state and effective tailnet access rules",
+    "Independent review and required operator decision for concrete enablement"
+  ]
+}

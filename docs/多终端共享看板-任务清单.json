@@ -541,8 +541,19 @@
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "partial_materials_prepared_not_accepted",
+        "checked_at": "2026-10-05T06:24:40.162674+00:00",
+        "evidence": [
+          "docs/federation/gates/node-inventory-summary.json"
+        ],
+        "summary": "A current Windows/resources and tailnet ID privately verified; B retained preflight and explicit unknown fields. Complete device registration still pending.",
+        "formal_acceptance": false
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/gates/node-inventory-summary.json"
+      ]
     },
     {
       "id": "T00.03",
@@ -561,13 +572,26 @@
         "decisions.md",
         "access-matrix.json"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "partial_materials_prepared_not_accepted",
+        "checked_at": "2026-10-05T06:24:40.162674+00:00",
+        "evidence": [
+          "docs/federation/gates/decisions.md",
+          "docs/federation/gates/access-matrix.json"
+        ],
+        "summary": "Concrete decision and staged access proposals prepared; required decisions, actual identity bindings and approvals remain pending.",
+        "formal_acceptance": false
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/gates/decisions.md",
+        "docs/federation/gates/access-matrix.json"
+      ]
     },
     {
       "id": "T00.04",
@@ -585,13 +609,24 @@
       "evidence_required": [
         "acceptance-profile.json"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "partial_materials_prepared_not_accepted",
+        "checked_at": "2026-10-05T06:24:40.162674+00:00",
+        "evidence": [
+          "docs/federation/gates/acceptance-profile.json"
+        ],
+        "summary": "Original allowance and proposed plan quality thresholds recorded; continuous budget/model values not invented or approved.",
+        "formal_acceptance": false
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "docs/federation/gates/acceptance-profile.json"
+      ]
     },
     {
       "id": "T00.05",
