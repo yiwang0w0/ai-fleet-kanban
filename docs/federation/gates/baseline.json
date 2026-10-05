@@ -17,6 +17,11 @@
       "package.json": "3943fe25c1ef31906199cfce936225d76ea3b4a7c4e0cf975f11d96789bad356",
       "core/store.js": "dd67f63f2ef0b53281e6b7e7c28cc09ce96a6aa72634388fd2a99157c19d4889",
       "core/federation/protocol.mjs": "32d9184d1ea942de56624b3ac6bfda3670f77e21189c7b5a942c23cf5e57bfcf"
+    },
+    "fixture_baseline": {
+      "path": "docs/federation/gates/candidate-baseline.json",
+      "sha256": "8a50394f29592145a3ce6bbc5c96b887cc7169958f2888502c8b7be9214086eb",
+      "observed_at": "2026-10-05T06:06:47.112Z"
     }
   },
   "physical_A": {
@@ -66,7 +71,7 @@
     "tailscale_modified": false
   },
   "task_id": "T00.05",
-  "assessment": "partial_evidence_not_acceptance",
+  "assessment": "evidence_ready_for_independent_review",
   "workspace_boundaries": [
     {
       "alias": "development",
@@ -91,8 +96,8 @@
     "schema_sha256": "SHA-256 of UTF-8 JSON of ordered [type,name,tbl_name,sql] rows from sqlite_schema excluding sqlite_% names, ensure_ascii=False, separators=(comma,colon). Includes the WAL-visible schema in one read transaction; not a hash of the main database file alone."
   },
   "remaining": [
-    "A pilot SHA differs from immutable runtime review candidate; do not combine their configuration and schema observations into one deployed candidate.",
-    "Runtime candidate component schema/configuration baseline still needs evidence tied to that same SHA, or explicit selection of the older A snapshot as the baseline under review.",
-    "Independent review and required prior decisions are pending. B board receipt is unavailable; no physical multi-node acceptance."
-  ]
+    "Independent review and prerequisite T00.01 remain pending. No acceptance receipt is issued.",
+    "Physical A remains on the older pilot SHA; neither this fixture nor CI proves physical deployment or two-machine acceptance."
+  ],
+  "updated_at": "2026-10-05T06:09:01.831942+00:00"
 }

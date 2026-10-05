@@ -737,6 +737,60 @@
           "G06"
         ]
       }
+    },
+    {
+      "task_id": "T00.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "固定 SHA、工作区、配置摘要、schema 版本",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "同一 SHA 的新隔离源码、实际配置、Node 程序和 20 个组件 schema 版本均固定；完整观察见 candidate-baseline.json。",
+          "references": []
+        },
+        {
+          "criterion": "无其他在途改动混入",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "固定 Git 归档的 460 个文件前后摘要一致且无额外文件；业务记录为零；旧试点和未跟踪提议均未混入。",
+          "references": []
+        }
+      ],
+      "ci_run_id": null,
+      "ci_steps": [],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T00.01"
+        ],
+        "gates": []
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/baseline.md",
+          "sha256": "b00986cb3c6acd369c73ab6b7fa0a78c76c20a1115f784ee34390455e5c489e0",
+          "created_after_runtime_candidate": true
+        },
+        {
+          "path": "docs/federation/gates/baseline.json",
+          "sha256": "d55a4316a5e7e3da1c7d7a97fbcd7486c924172b6c6a1ea92f7c0f32cf34662b",
+          "created_after_runtime_candidate": true
+        },
+        {
+          "path": "docs/federation/gates/candidate-baseline.json",
+          "sha256": "8a50394f29592145a3ce6bbc5c96b887cc7169958f2888502c8b7be9214086eb",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "runtime_observation": {
+        "path": "docs/federation/gates/candidate-baseline.json",
+        "checked_at": "2026-10-05T06:06:47.112Z",
+        "note": "One new Windows isolated baseline setup; not a CI step, full suite or physical-node test."
+      }
     }
   ],
   "ready_task_ids": [
@@ -748,7 +802,8 @@
     "T02.05",
     "T01.03",
     "T01.05",
-    "T08.05"
+    "T08.05",
+    "T00.05"
   ],
   "gating_notes": [
     "G00 is not frozen; dependent tasks cannot count as accepted even after their technical review.",
@@ -763,5 +818,6 @@
     "total_phases": 12,
     "task_completion_percent": 0,
     "phase_completion_percent": 0
-  }
+  },
+  "updated_at": "2026-10-05T06:09:01.831942+00:00"
 }

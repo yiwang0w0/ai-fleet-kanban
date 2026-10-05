@@ -1,0 +1,225 @@
+{
+  "format": "ai-fleet-candidate-baseline/v1",
+  "checked_at": "2026-10-05T06:06:47.112Z",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "git_tree": "3e6103faaaf850ec33359ed606e11553b061b665",
+  "git_archive_sha256": "9ff6bb3becfa92907693a5da026489135ebf03740e9b5f9cdbfb6db03562ac7b",
+  "source_file_count": 460,
+  "source_manifest_sha256": "42ad868496f8cf5165380abd9c4c0e23de1ccea49bcc20a770549a807ab06493",
+  "workspace_kind": "fresh exported immutable Git snapshot; manifest checked before and after",
+  "node_version": "v24.16.0",
+  "node_executable_sha256": "b3094d0b49f9ad602262a9921551737bb97637c05dd357a06ae98188d7290aa3",
+  "fixture_only": true,
+  "config_consumed": true,
+  "config_sha256": "e173b1b563618ba652b40f7fd47711392dfd8dba07783d23336d7b416445de9d",
+  "configured_lines": 0,
+  "verify_registry_sha256": "e3566b3a06430868d71e9287dfd6c6c520a3da027aabea01951d407ee131dc2f",
+  "initializers": [
+    {
+      "path": "core/store.js",
+      "export": "migrate"
+    },
+    {
+      "path": "core/federation/peers.mjs",
+      "export": "migratePeers"
+    },
+    {
+      "path": "core/federation/sync-store.mjs",
+      "export": "migrateSync"
+    },
+    {
+      "path": "core/federation/relations.mjs",
+      "export": "migrateRelations"
+    },
+    {
+      "path": "core/federation/bindings.mjs",
+      "export": "migrateBindings"
+    },
+    {
+      "path": "core/execution/dispatch.mjs",
+      "export": "migrateDispatch"
+    },
+    {
+      "path": "core/artifacts/workspaces.mjs",
+      "export": "migrateWorkspaces"
+    },
+    {
+      "path": "core/federation/completion.mjs",
+      "export": "migrateCompletion"
+    },
+    {
+      "path": "core/federation/cancellation-closure.mjs",
+      "export": "migrateCancellationClosure"
+    },
+    {
+      "path": "core/integration/service.mjs",
+      "export": "migrateIntegration"
+    },
+    {
+      "path": "core/fleet-binding-actions.mjs",
+      "export": "migrateFleetBindings"
+    }
+  ],
+  "database": {
+    "schema_sha256": "82365053c8bc9597e62141960aea784ccdef342e6354007aca0e3f7aa4b3f2c2",
+    "schema_object_count": 449,
+    "table_count": 158,
+    "component_schema_versions": [
+      {
+        "table": "artifact_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "binding_recovery_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "binding_schema",
+        "versions": [
+          4
+        ]
+      },
+      {
+        "table": "broker_dispatch_schema",
+        "versions": [
+          3
+        ]
+      },
+      {
+        "table": "broker_execution_resolution_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "broker_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "cancellation_closure_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "cancellation_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "completion_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "federation_delegation_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "federation_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "federation_sync_schema",
+        "versions": [
+          5
+        ]
+      },
+      {
+        "table": "integration_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "relation_generation_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "relation_schema",
+        "versions": [
+          4
+        ]
+      },
+      {
+        "table": "repository_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "result_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "topology_schema",
+        "versions": [
+          2
+        ]
+      },
+      {
+        "table": "verification_schema",
+        "versions": [
+          1
+        ]
+      },
+      {
+        "table": "workspace_schema",
+        "versions": [
+          2
+        ]
+      }
+    ],
+    "user_version": 0,
+    "protocol_version": 1,
+    "row_counts": {
+      "tasks": 0,
+      "task_runs": 0,
+      "operator_requests": 0,
+      "federation_peers": 0,
+      "broker_principals": 0,
+      "broker_dispatches": 0
+    },
+    "integrity_check": "ok"
+  },
+  "uninitialized_optional_storage": [
+    "auth failure guard",
+    "scheduler and node runtime lifecycle",
+    "operator UI/progress journals created on first use"
+  ],
+  "actions": {
+    "isolated_database_created": true,
+    "physical_database_modified": false,
+    "services_started": false,
+    "providers_called": false,
+    "task_dispatches": 0,
+    "credentials_issued": 0
+  },
+  "acceptance": "pending independent review; not physical deployment or full feature acceptance",
+  "source_files_unchanged": true,
+  "collector_sha256": "122847b4b2ba4931888665ece0d903c490c834b552ccbe8398eee8213a75a517",
+  "configuration_public_view": {
+    "port": 47899,
+    "lines": [],
+    "repo": "<candidate-source>",
+    "gated_subtree": ".",
+    "note": "Path-redacted view; config_sha256 binds the actual private configuration bytes."
+  },
+  "scope": "Fresh Windows baseline setup for T00.05 only. Optional runtime/service journals not initialized are listed separately. This observation is additional to CI #149, not a claim that CI ran this collector."
+}
