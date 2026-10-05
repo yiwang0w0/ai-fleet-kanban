@@ -3,6 +3,7 @@ import {existsSync,realpathSync} from "node:fs";
 import {PeerError,keys,uuid} from "../federation/protocol.mjs";
 import {localIdentity,transaction} from "../federation/peers.mjs";
 import {canonical,digest} from "../federation/sync-store.mjs";
+import {sourceRecoveryLineage} from "../federation/epoch-state.mjs";
 import {resultState} from "../federation/results.mjs";
 import {migrateArtifacts,verifiedArtifactContext,captureVerifiedArtifact} from "../artifacts/transfers.mjs";
 import {repositoryState,workspaceRepositorySource} from "../artifacts/repositories.mjs";
@@ -131,4 +132,27 @@ export function assertVerificationReceiptCurrent(db,{verificationId,receiptDiges
  const r=row(db,verificationId),p=current(db,r,sourceGate),state=verificationState(db,verificationId);
  if(state.phase!=="settled"||state.receipt_digest!==receiptDigest||state.receipt.checks_passed!==true||!successObservation(state.receipt.observation,p.descriptor.definition))fail("VERIFICATION_NOT_PASSED","固定验证回执不再可用");
  return {verification_id:verificationId,binding:state.binding,receipt_digest:receiptDigest};
+}
+
+
+/** Read-only historical byte observation. Never restores an old profile's authority. */
+export function captureRetainedVerificationReceipt(db,{verificationId,nodeId,nodeEpoch,receiptDigest,bindingDigest,sourceGate}){
+ outsideTransaction(db);uuid(verificationId,"verification_id");uuid(nodeId,"node_id");uuid(nodeEpoch,"node_epoch");
+ const take=()=>{
+  const n=localIdentity(db);if(n.node_id!==nodeId)fail("VERIFICATION_RECOVERY_REQUIRED","证据属于其他节点");
+  const lineage=n.sync_epoch===nodeEpoch?null:sourceRecoveryLineage(db,{node_id:nodeId,from_epoch:nodeEpoch,to_epoch:n.sync_epoch});
+  const r=db.prepare("SELECT * FROM verification_attempts WHERE verification_id=?").get(verificationId);if(!r||r.node_id!==nodeId||r.node_epoch!==nodeEpoch)fail("VERIFICATION_CORRUPT","封存验证身份不符");
+  const p=db.prepare("SELECT * FROM verification_profiles WHERE profile_id=?").get(r.profile_id),s=db.prepare("SELECT * FROM verification_receipts WHERE verification_id=?").get(verificationId),l=db.prepare("SELECT * FROM verification_launches WHERE verification_id=?").get(verificationId);
+  if(!p||p.node_id!==nodeId||p.node_epoch!==nodeEpoch||!s||!l)fail("VERIFICATION_NOT_PASSED","缺少封存验证配置、启动或终态");
+  if(db.prepare("SELECT 1 FROM verification_revocations WHERE profile_id=?").get(r.profile_id))fail("VERIFICATION_REVOKED","验证配置已撤销");
+  const b=JSON.parse(r.binding_json),d=JSON.parse(p.descriptor_json),receipt=JSON.parse(s.receipt_json),launch=JSON.parse(l.launch_json),i=input(db,verificationId);
+  if(digest(b)!==r.binding_digest||r.binding_digest!==bindingDigest||digest(d)!==p.descriptor_digest||b.profile_id!==p.profile_id||b.profile_digest!==p.descriptor_digest||b.transfer_id!==r.transfer_id||digest(receipt)!==s.receipt_digest||s.receipt_digest!==receiptDigest||digest(launch)!==l.launch_digest)fail("VERIFICATION_CORRUPT","封存验证摘要不符");
+  const expected={format:"ai-fleet-verification-launch/v1",verification_id:verificationId,binding_digest:r.binding_digest,input_digest:digest(i),profile_digest:p.descriptor_digest,command_sha256:d.definition.command.sha256,python_sha256:d.definition.python.sha256};
+  if(canonical(launch)!==canonical(expected)||receipt.format!=="ai-fleet-verification-receipt/v1"||receipt.verification_id!==verificationId||receipt.binding_digest!==r.binding_digest||receipt.launch_digest!==l.launch_digest||receipt.input_digest!==digest(i)||receipt.checks_passed!==true||receipt.accepted!==false||receipt.after?.error!==null||receipt.after?.input?.inputs_unchanged!==true||!successObservation(receipt.observation,d.definition))fail("VERIFICATION_NOT_PASSED","封存验证缺少完整通过及停止观察");
+  if(canonical(sourceCheck(sourceGate))!==canonical(d.source)||canonical(b.source)!==canonical(d.source))fail("SOURCE_CHANGED","治理代码与原验证配置不同");
+  return {identity:{node_id:n.node_id,node_epoch:n.sync_epoch},lineage,r,p,s,l,i,b,d};
+ };
+ const before=take();definition(before.d.definition);verifyDirectory(before.d.pool);assertVerificationInput(before.i,{allowGenerated:true});
+ const after=take();if(digest(before)!==digest(after))fail("VERIFICATION_STALE","复查期间验证元数据或恢复代次变化");definition(after.d.definition);verifyDirectory(after.d.pool);
+ return {verification_id:verificationId,binding:before.b,receipt_digest:receiptDigest,input_digest:digest(before.i),state_digest:digest(before),inputs_unchanged:true,accepted:false,current_authority:false};
 }

@@ -2816,15 +2816,16 @@
       "execution_authorized": false,
       "verification_result": {
         "result": "local_component_passed",
-        "scope": "Actual registrar backup/restore: stopped contract recovery, explicit pending topology resolution and pending accepted-delegation proposal recovery; retained historical outcomes, held tasks and same-host source/registrar layout.",
+        "scope": "Stopped/pending contract and topology recovery, plus read-only revalidation of sealed completion source evidence after actual restore. Original epoch execution/acceptance guards retained.",
         "evidence": [
           "docs/federation/contract-recovery-evidence.json",
           "docs/federation/pending-topology-recovery-evidence.json",
-          "docs/federation/pending-relation-recovery-evidence.json"
+          "docs/federation/pending-relation-recovery-evidence.json",
+          "docs/federation/completion-evidence-tests.json"
         ],
         "pending": [
           "Remaining AT17-AT20/AT24 physical upgrade and recovery acceptance",
-          "Completion-sealed and member-only contract recovery; missing bilateral evidence remains blocked",
+          "Full completion-sealed and member-only recovery coordination/settlement; retained source observation is not acceptance",
           "Independent review and frozen recovery-time threshold"
         ]
       },
@@ -2844,7 +2845,13 @@
         "cli/pending-relation-recovery.mjs",
         "tests/pendingrelationrecoverytest.mjs",
         "docs/federation/pending-relation-recovery.md",
-        "docs/federation/pending-relation-recovery-evidence.json"
+        "docs/federation/pending-relation-recovery-evidence.json",
+        "core/federation/completion-evidence.mjs",
+        "core/verification/service.mjs",
+        "cli/completion-evidence.mjs",
+        "tests/completiontest.mjs",
+        "docs/federation/completion-evidence.md",
+        "docs/federation/completion-evidence-tests.json"
       ],
       "verification_history": [
         {
@@ -2867,6 +2874,20 @@
           "pending": [
             "Remaining AT17-AT20/AT24 physical upgrade and recovery acceptance",
             "Completion-sealed, unconfirmed relation and all member-only recovery coordination",
+            "Independent review and frozen recovery-time threshold"
+          ]
+        },
+        {
+          "result": "local_component_passed",
+          "scope": "Actual registrar backup/restore: stopped contract recovery, explicit pending topology resolution and pending accepted-delegation proposal recovery; retained historical outcomes, held tasks and same-host source/registrar layout.",
+          "evidence": [
+            "docs/federation/contract-recovery-evidence.json",
+            "docs/federation/pending-topology-recovery-evidence.json",
+            "docs/federation/pending-relation-recovery-evidence.json"
+          ],
+          "pending": [
+            "Remaining AT17-AT20/AT24 physical upgrade and recovery acceptance",
+            "Completion-sealed and member-only contract recovery; missing bilateral evidence remains blocked",
             "Independent review and frozen recovery-time threshold"
           ]
         }
