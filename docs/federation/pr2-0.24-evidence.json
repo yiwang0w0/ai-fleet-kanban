@@ -382,7 +382,7 @@
       },
       "red_excerpt": [
         "not ok 1 - a journal file created during execution cannot suppress settlement or credential revocation",
-        "  error: \"EEXIST: file already exists, open 'C:\\\\Users\\\\彼方\\\\AppData\\\\Local\\\\Temp\\\\fleet-dispatch-3ekJuJ\\\\private-7\\\\execution-observation.json'\"",
+        "  error: \"EEXIST: file already exists, open 'C:\\\\Users\\\\<user>\\\\AppData\\\\Local\\\\Temp\\\\fleet-dispatch-3ekJuJ\\\\private-7\\\\execution-observation.json'\"",
         "  code: 'EEXIST'"
       ],
       "command": [
