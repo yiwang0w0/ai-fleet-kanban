@@ -26,6 +26,7 @@ import {readFleetView,readFleetTask,readFleetEvidencePage} from "./fleet-view.mj
 import {readFleetProgress} from "./fleet-progress.mjs";
 import {openFleetActions,loadFleetActionsConfig} from "./fleet-actions.mjs";
 import {PeerError} from "./federation/protocol.mjs";
+import {writePrivateText} from "./private-json.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require_ = createRequire(import.meta.url);
@@ -2172,12 +2173,24 @@ const TOKEN_FILE = join(store.DATA_DIR, "board_token");
 //                    cannot edit, and cannot impersonate a human ruling.
 //   Endpoints not on a token's list refuse (unknown falls on the refusing side).
 const mintToken = (file) => {
-  let t = "";
-  try { t = readFileSync(file, "utf8").trim(); } catch {}
+  let t = "", present = false;
+  try { t = readFileSync(file, "utf8").trim(); present = true; } catch (e) { if (e.code !== "ENOENT") present = true; }
   // ⭐ 0600 (v0.16.0). Default mode left the operator token world-readable on a multi-user
   //   host — the very neighbour the threat model names (external audit 2026-09-07). Existing
-  //   files are tightened too; Windows ignores POSIX bits (its ACLs come from the folder).
-  if (!t) { t = randomUUID().replace(/-/g, ""); writeFileSync(file, t, { encoding: "utf8", mode: 0o600 }); }
+  //   files are read as-is (升级不重写在跑部署); POSIX platforms still tighten them to 0600.
+  if (!t) {
+    t = randomUUID().replace(/-/g, "");
+    // ⭐ Windows 忽略 POSIX 权限位:新铸令牌改走与联邦/MCP 凭据同一条独占 DACL
+    //   创建路(外部审计 2026-10-05)。保护创建失败即启动失败,不回退到无保护写入。
+    //   独占创建不覆盖:先清掉"存在但读为空白"的残留(旧 writeFileSync 的覆盖语义),
+    //   正常路径(文件本不存在)不经过这一步。
+    if (process.platform === "win32") {
+      if (present) { try { unlinkSync(file); } catch {} }
+      writePrivateText(file, t);
+    } else {
+      writeFileSync(file, t, { encoding: "utf8", mode: 0o600 });
+    }
+  }
   if (process.platform !== "win32") { try { chmodSync(file, 0o600); } catch {} }
   return t;
 };
