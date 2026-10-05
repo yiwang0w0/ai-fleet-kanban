@@ -201,6 +201,16 @@ await new Promise((resolve) => {
       // fine for reading `--help`: no arguments to mangle, and we want the text, not
       // the exit code. Windows cannot spawn .cmd/.bat or an extension-less bash shim
       // directly since Node 20 — those need a shell.
+      // ⭐ The shim path is INTERPOLATED into that shell string, so a path carrying
+      //   `"` closes the quoting and `%VAR%` expands inside cmd's double quotes
+      //   (both demonstrated externally, audit 2026-10-05). The shim path comes from
+      //   WORKER_CLAUDE_CLI or a PATH walk for fixed names — an operator-controlled
+      //   value, so refuse the two shell-active characters instead of escaping them:
+      //   a diagnostic command never needs them.
+      if (CLI_IS_SHIM && /["%]/.test(CLI_PATH))
+        no(`CLI 路径含 shell 活动字符(引号或 %): ${CLI_PATH}`,
+           "换一个不含 \" 和 % 的 claude 入口路径(WORKER_CLAUDE_CLI),doctor 才能安全地经 shell 读它的 --help");
+      else {
       const help = CLI_IS_SHIM
         ? execSync(`"${CLI_PATH}" --help`, { encoding: "utf8", windowsHide: true, timeout: 30000 })
         : execFileSync(CLI_PATH, ["--help"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
@@ -214,6 +224,7 @@ await new Promise((resolve) => {
         if (bad.length)
           wr(`${flag} 的取值 ${bad.join("/")} 没出现在 --help 里`,
              "可能是 CLI 改了值域;fleet.config 里配了它的槽会在启动时才报错");
+      }
       }
     } catch (e) {
       wr(`CLI --help 跑不起来(${String(e.message).slice(0, 50)})`, "参数契约这一项没测成 —— 不是通过,是没测");
