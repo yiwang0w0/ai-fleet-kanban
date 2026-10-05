@@ -43,7 +43,10 @@ function policy(db,input,sourceGate){
   if(p.installation.runtime!==role.runtime||p.installation.version!==ADAPTER_CONTRACTS[role.runtime])fail('ADAPTER_VERSION_UNVERIFIED','需要已核验的原生执行器版本');
   pinned(p.installation.program);pinned(p.python);pinned(p.node);
   if(role.runtime==='zcode'){pinned(p.installation.bundle);pinned(p.installation.builtin_config);}
-  const auth=realpathSync(p.installation.auth_home);
+  // ⭐ auth_home 不可达须走 fail() 协议而非裸 ENOENT(外部审计 2026-10-05):
+  //   与下行 mcp_url 校验同一模式,操作者得到 BAD_INPUT 与修正提示。
+  let auth;try{auth=realpathSync(p.installation.auth_home);}
+  catch{fail('BAD_INPUT','订阅认证目录不可达(auth_home),请核对调度安装记录',400);}
   if(within(auth,root)||within(root,auth))fail('UNSAFE_RUNTIME_PATH','调度私有目录与订阅认证目录须分离');
   let url;try{url=new URL(p.mcp_url);}catch{fail('BAD_INPUT','本机 MCP 地址无效',400);}
   if(url.protocol!=='http:'||url.hostname!=='127.0.0.1'||!url.port||url.username||url.password||url.search||url.hash||url.pathname!=='/')fail('BAD_INPUT','执行器仅连接本机 IPv4 回环代理',400);

@@ -16,7 +16,11 @@ import {uuid} from './federation/protocol.mjs';
 const ROOT=realpathSync.native(fileURLToPath(new URL('../',import.meta.url))),hash=b=>createHash('sha256').update(b).digest('hex');
 const inside=(a,b)=>{const r=relative(a,b);return !r||r!=='..'&&!r.startsWith('..'+sep)&&!isAbsolute(r);};
 function path(value){if(typeof value!=='string'||!isAbsolute(value)||!(/^[a-z]:[\\/]/i.test(value))||/[\x00-\x1f"%]/.test(value)||value.slice(2).includes(':'))fail('BAD_INPUT','启动路径必须是本地磁盘普通绝对路径');checkDirectoryPath(dirname(value));return value;}
-function pin(value){path(value);const s=lstatSync(value);if(!s.isFile()||s.isSymbolicLink())fail('BAD_INPUT','启动文件须为普通文件');return {path:realpathSync.native(value),sha256:hash(readFileSync(value))};}
+function pin(value){path(value);let s;try{s=lstatSync(value);}catch{fail('STARTUP_INPUT_CHANGED','启动文件不存在或不可达');}
+ // ⭐ lstat/realpath 失败走编码错误而不是裸 ENOENT(外部审计 2026-10-05);状态码沿用本码既有语义(409 状态不符)。
+ if(!s.isFile()||s.isSymbolicLink())fail('BAD_INPUT','启动文件须为普通文件');
+ let real;try{real=realpathSync.native(value);}catch{fail('STARTUP_INPUT_CHANGED','启动文件路径无法解析');}
+ return {path:real,sha256:hash(readFileSync(value))};}
 function checkPin(p){exact(p,['path','sha256'],'startup_pin');if(typeof p.sha256!=='string'||!/^[a-f0-9]{64}$/.test(p.sha256)||pin(p.path).sha256!==p.sha256)fail('STARTUP_INPUT_CHANGED','启动文件摘要已变化');}
 export function startupSID(){return execFileSync(join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-Command','[Security.Principal.WindowsIdentity]::GetCurrent().User.Value'],{encoding:'utf8',windowsHide:true,timeout:10000,stdio:['ignore','pipe','pipe']}).trim();}
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));

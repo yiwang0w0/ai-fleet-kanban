@@ -24,7 +24,10 @@ function runGit(root,pin,args){
 /** Trusted host configuration only. Construct once at startup, never per task. */
 export function createSourceGate({codeRoot,approvalFile,git:configuredGit}){
  if(typeof codeRoot!=="string"||typeof approvalFile!=="string"||!isAbsolute(codeRoot)||!isAbsolute(approvalFile))fail("BAD_INPUT","治理目录和验收文件必须使用绝对路径",400);
- const root=realpathSync(codeRoot),approvedFile=realpathSync(approvalFile),pin=Object.freeze(selectedGit(configuredGit,approvedFile)),loadedTree=runGit(root,pin,["rev-parse","HEAD:"]);
+ // ⭐ realpath 失败走编码错误而不是裸 ENOENT(外部审计 2026-10-05)。
+ let root,approvedFile;try{root=realpathSync(codeRoot);approvedFile=realpathSync(approvalFile);}
+ catch{fail("BAD_INPUT","治理目录或验收文件路径不可达,请核对绝对路径",400);}
+ const pin=Object.freeze(selectedGit(configuredGit,approvedFile)),loadedTree=runGit(root,pin,["rev-parse","HEAD:"]);
  if(!TREE.test(loadedTree))fail("SOURCE_UNVERIFIED","无法识别已加载的治理树");
  return Object.freeze({codeRoot:root,loadedTree,git:pin,check(){
   let accepted;try{accepted=readFileSync(approvedFile,"utf8").trim();}catch{fail("SOURCE_UNVERIFIED","无法读取治理代码验收记录");}
