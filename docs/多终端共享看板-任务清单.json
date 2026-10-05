@@ -2106,25 +2106,36 @@
       "evidence_required": [
         "cancel-race/late-result 测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_partial_passed",
-        "scope": "durable source cancellation, target subtree fence, received versus stopped proof, controlled process cancellation and late outcome retention",
-        "pending": [
-          "automatic delivery/deadline scheduling",
-          "source final acceptance versus cancellation ordering and relation retirement",
-          "physical two-computer cancellation and independent G06 acceptance"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Read original criterion assertions and retained CI #149; no new runtime test or acceptance performed. See indexed limitations.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/cancellation.md",
         "docs/federation/cancellation-evidence.json",
-        "tests/cancellationtest.mjs"
+        "tests/cancellationtest.mjs",
+        "docs/federation/gates/delivery-readiness.md"
+      ],
+      "verification_history": [
+        {
+          "result": "local_partial_passed",
+          "scope": "durable source cancellation, target subtree fence, received versus stopped proof, controlled process cancellation and late outcome retention",
+          "pending": [
+            "automatic delivery/deadline scheduling",
+            "source final acceptance versus cancellation ordering and relation retirement",
+            "physical two-computer cancellation and independent G06 acceptance"
+          ]
+        }
       ]
     },
     {
@@ -2148,19 +2159,18 @@
       "evidence_required": [
         "parent-cascade/receipt 测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_component_passed",
-        "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review",
-        "pending": [
-          "exact-commit Windows CI",
-          "Windows OS permission isolation and native provider adapters",
-          "physical two-node Windows integration and independent full-phase acceptance"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Read original criterion assertions and retained CI #149; no new runtime test or acceptance performed. See indexed limitations.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
@@ -2172,7 +2182,19 @@
         "tests/resulttest.mjs",
         "docs/federation/completion.md",
         "docs/federation/completion-evidence.json",
-        "tests/completiontest.mjs"
+        "tests/completiontest.mjs",
+        "docs/federation/gates/delivery-readiness.md"
+      ],
+      "verification_history": [
+        {
+          "result": "local_component_passed",
+          "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review",
+          "pending": [
+            "exact-commit Windows CI",
+            "Windows OS permission isolation and native provider adapters",
+            "physical two-node Windows integration and independent full-phase acceptance"
+          ]
+        }
       ]
     },
     {
@@ -2400,19 +2422,18 @@
       "evidence_required": [
         "verify-receipt/merge 测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_component_passed",
-        "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review; opt-in offline Windows AppContainer source checks with actual token, scoped file access, Job memory/process limits and cleanup-bound receipts",
-        "pending": [
-          "Exact-commit Windows CI and physical source-check profiles/dependencies",
-          "Native model provider OS isolation and disk capacity limits",
-          "Physical two-node Windows integration and independent full-phase acceptance"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Read original criterion assertions and retained CI #149; no new runtime test or acceptance performed. See indexed limitations.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
@@ -2427,7 +2448,19 @@
         "docs/federation/completion-evidence.json",
         "tests/completiontest.mjs",
         "tests/appcontainertest.mjs",
-        "docs/federation/windows-appcontainer-evidence.json"
+        "docs/federation/windows-appcontainer-evidence.json",
+        "docs/federation/gates/delivery-readiness.md"
+      ],
+      "verification_history": [
+        {
+          "result": "local_component_passed",
+          "scope": "Windows actual artifact and source checks, bound Git integration, explicit source acceptance, bilateral relation retirement, atomic endpoint settlement and parent re-review; opt-in offline Windows AppContainer source checks with actual token, scoped file access, Job memory/process limits and cleanup-bound receipts",
+          "pending": [
+            "Exact-commit Windows CI and physical source-check profiles/dependencies",
+            "Native model provider OS isolation and disk capacity limits",
+            "Physical two-node Windows integration and independent full-phase acceptance"
+          ]
+        }
       ]
     },
     {

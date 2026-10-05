@@ -16,3 +16,5 @@ G05 有本机真实计时 30 分钟离线、容量故障和授权投影对照证
 2026-10-05 验收材料对齐：补 [九项可交独立审阅清单](acceptance-ready.md)、[逐条断言与摘要](acceptance-readiness.json) 和 [G00 实际缺项](G00-readiness.md)。六项原 planned/in_progress 状态已按现有材料纠正为 implemented_pending_acceptance；这不是独立结论或正式签收。旧候选、回执和历史结果原样保留。
 
 2026-10-05 基线补充：T00.05 新增固定 864feec 的隔离源码、配置与组件 schema 观察，[待审清单](acceptance-ready.md) 现为十项。仅执行一次新基线初始化；实体 A、旧回执和正式签收状态不变。
+
+2026-10-05 交付条件核对：T06.04/T06.05/T07.05 原标准已有固定候选断言及 CI #149 成功证据，详见 [逐条说明](delivery-readiness.md)。待独立验收增至十三项；保留旧 verification_history，实体复现与正式门禁不变，没有新增运行测试。

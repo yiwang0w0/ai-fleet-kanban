@@ -791,6 +791,472 @@
         "checked_at": "2026-10-05T06:06:47.112Z",
         "note": "One new Windows isolated baseline setup; not a CI step, full suite or physical-node test."
       }
+    },
+    {
+      "task_id": "T06.04",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "取消 ACK 前显示待送达",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "pending 取消意图经关系投影映射为待送达；已执行的目录状态断言区分 received 与 stopped。包括源代码渲染追踪，不冒充本轮浏览器验收。",
+          "references": [
+            {
+              "path": "core/federation/cancellation.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 57,
+              "assertion_anchor": "'pending',NULL,NULL,NULL",
+              "git_blob_sha256": "4b51e108cc48d74bf90f2e3ca3257822276399a4379228be1b4c00182df01bb3",
+              "reference_kind": "source_trace"
+            },
+            {
+              "path": "core/fleet-evidence.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 64,
+              "assertion_anchor": "e.cancellation_state=",
+              "git_blob_sha256": "6f00ce7be3c64022fcde9a2b6b2fd4868648576d8aba99c228cb8cb090f66b60",
+              "reference_kind": "source_trace"
+            },
+            {
+              "path": "core/panel.html",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 3069,
+              "assertion_anchor": "const historyStates={pending:",
+              "git_blob_sha256": "04bd683ac9f97e341a1f3d5e998ef7534dbc9aab65e6970e02da3b110cc3fa9e",
+              "reference_kind": "render_mapping_source"
+            },
+            {
+              "path": "tests/fleetactionstest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 171,
+              "assertion_anchor": "bound cancellation shows received until local quiescence and explicit source polling",
+              "git_blob_sha256": "463023f6e642c7ede8236fb832467b1a53c55480892de8d34077254e7cdd4cab",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 82,
+              "assertion_anchor": "delivery acknowledgement is not a stop acknowledgement",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "晚到结果保留但不覆盖新裁定",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "取消后的成功结果保留待裁定；关闭绑定后的晚到候选不改变来源任务，也不触发新一轮执行。",
+          "references": [
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 122,
+              "assertion_anchor": "late provider completion is retained for decision",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 447,
+              "assertion_anchor": "cancellation closure retains late candidate data after both bindings close",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "超时按业务规则处理且不擅自转主",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "固定执行超时进入 decision、不得接纳；合成进程实际退出；所有权不变，取消退役后来源仍须由原所有者明确放行。",
+          "references": [
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 236,
+              "assertion_anchor": "failure, timeout and cancellation require a decision",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/supervisortest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 73,
+              "assertion_anchor": "timeout kills the running fixture",
+              "git_blob_sha256": "3592acf4187dea37d90d853cc502534357acca67e6fb76fde130a487d9af08eb",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 92,
+              "assertion_anchor": "ownership and UID cannot be forged",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 371,
+              "assertion_anchor": "CLI cancellation closure retires the edge bilaterally",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 439,
+              "assertion_anchor": "cancellation closure and successful completion cannot both win",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "cancellationtest (durable cancel, subtree fences and observed stop receipts)",
+        "fleetactionstest (operator outbox, receipts and idempotent remote commands)",
+        "dispatchtest (native gates, reservations, one-use permits and stale receipts)",
+        "supervisortest (pinned processes, timeout, cancellation and descendants)",
+        "identitytest (node ownership and atomic migration)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T06.03"
+        ],
+        "gates": [
+          "G04",
+          "G05"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/delivery-readiness.md",
+          "sha256": "a019301123a7542cacee612decd1f950f3037cc8a03b1b5fbf6e24b31a912276",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Browser interaction acceptance not performed in this preparation.",
+        "Business-calendar automatic cancellation is not claimed.",
+        "Physical cancellation, provider semantics and independent G06 acceptance remain separate."
+      ]
+    },
+    {
+      "task_id": "T06.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "子任务完成只产生候选交付",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "执行端成功和本地批准只形成来源候选，来源任务不被自动接受或生成虚构 run。",
+          "references": [
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 91,
+              "assertion_anchor": "candidate exports the exact observed run",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 187,
+              "assertion_anchor": "locally reviewed completion remains an unaccepted source candidate",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "授权验收后解除依赖",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "双端当前授权和登记完成后才原子结算任务与活动关系；原生依赖断言验证 done 前后领取条件，父任务仍需独立逐级审阅。",
+          "references": [
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 178,
+              "assertion_anchor": "actual source integration becomes accepted only after bilateral readiness",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 210,
+              "assertion_anchor": "registrar ignores revoked completion votes",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/selftest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 320,
+              "assertion_anchor": "while the dep is not done, the successor cannot be claimed",
+              "git_blob_sha256": "13d0884d7fb8e5168f2c9fff45108d3f7c8d51808fab145de8ea1b97ebf91516",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/selftest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 324,
+              "assertion_anchor": "dep done -> successor claimable immediately",
+              "git_blob_sha256": "13d0884d7fb8e5168f2c9fff45108d3f7c8d51808fab145de8ea1b97ebf91516",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 219,
+              "assertion_anchor": "verified child completion never rubber-stamps parent",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "旧 run/旧证据的回执被拒",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "已拒执行身份不能改名复用；正文摘要、任务版本、授权或恢复 epoch 变化时拒绝沿用旧完成。",
+          "references": [
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 194,
+              "assertion_anchor": "rejected execution identity cannot be relabelled",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 107,
+              "assertion_anchor": "source rejects unauthorized, altered-contract, invalid-digest",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 204,
+              "assertion_anchor": "fixture approval is explicit, malformed or unauthorized",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 234,
+              "assertion_anchor": "actual backup activation retains completion history but cannot consume old-epoch acceptance",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "resulttest (sealed candidates, owner rejection and durable rework)",
+        "completiontest (bilateral acceptance, retirement, parent review and recovery)",
+        "selftest (store)",
+        "treetest (deep ancestry, subtree moves and concurrent cycles)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T06.03",
+          "T06.04"
+        ],
+        "gates": [
+          "G04",
+          "G05"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/delivery-readiness.md",
+          "sha256": "a019301123a7542cacee612decd1f950f3037cc8a03b1b5fbf6e24b31a912276",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Dependency linkage uses complementary completion, native queue and parent-review assertions; not physical end-to-end acceptance.",
+        "Native provider and physical two-node integration remain separately required.",
+        "Complete sealed-contract recovery is not claimed by these normal-operation criteria."
+      ]
+    },
+    {
+      "task_id": "T07.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "在隔离环境验证实际产物",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "固定命令加载实际收到的模块；明确启用的 Windows AppContainer 验证代码能运行而无法读写权威数据库。",
+          "references": [
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 132,
+              "assertion_anchor": "source reconstructs the received Git commit in an independent repository",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 221,
+              "assertion_anchor": "AppContainer source verification executes delivered code while the authority database remains inaccessible",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "回执绑定内容",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "回执固定产物清单、任务、配置和实际 Windows 进程退出；输出零退出不掩盖文件或任务要求变化。",
+          "references": [
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 157,
+              "assertion_anchor": "durable source-owned verification tests actual received code",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 166,
+              "assertion_anchor": "zero command exit cannot approve changed inputs",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "工作节点不能自授最终通过",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "工作候选、来源验证及实际合并均不自行接受任务；完成入口属于来源操作员，工作身份不可通过 MCP 自授最终批准。",
+          "references": [
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 91,
+              "assertion_anchor": "candidate exports the exact observed run",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 204,
+              "assertion_anchor": "fixture approval is explicit, malformed or unauthorized",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 178,
+              "assertion_anchor": "actual source integration becomes accepted only after bilateral readiness",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 154,
+              "assertion_anchor": "actual received objects merge by source CAS",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "合并冲突不强推覆盖",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "源引用改变、被检出或未知合并效果时拒绝重试覆盖；实际合并保持本地 HEAD、索引和脏文件。",
+          "references": [
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 166,
+              "assertion_anchor": "source changes and checked-out branches refuse CAS",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 183,
+              "assertion_anchor": "an unknown launch or an independently moved ref",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 154,
+              "assertion_anchor": "actual received objects merge by source CAS",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "verificationworkspacetest (independent source checks, one-use launch and recovery)",
+        "appcontainertest (Windows token, file/network boundaries and resource limits)",
+        "integrationtest (source ref CAS, bound commits and crash reconciliation)",
+        "completiontest (bilateral acceptance, retirement, parent review and recovery)",
+        "resulttest (sealed candidates, owner rejection and durable rework)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T07.04"
+        ],
+        "gates": [
+          "G02",
+          "G03",
+          "G05"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/delivery-readiness.md",
+          "sha256": "a019301123a7542cacee612decd1f950f3037cc8a03b1b5fbf6e24b31a912276",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "AppContainer proof applies to explicit offline verification profile, not all model adapters.",
+        "Independent source profiles on the second physical PC and T07.06 reproduction remain pending.",
+        "Runtime OS/model containment and actual deployment permissions are not inferred from this packet."
+      ]
     }
   ],
   "ready_task_ids": [
@@ -803,7 +1269,10 @@
     "T01.03",
     "T01.05",
     "T08.05",
-    "T00.05"
+    "T00.05",
+    "T06.04",
+    "T06.05",
+    "T07.05"
   ],
   "gating_notes": [
     "G00 is not frozen; dependent tasks cannot count as accepted even after their technical review.",
@@ -819,5 +1288,5 @@
     "task_completion_percent": 0,
     "phase_completion_percent": 0
   },
-  "updated_at": "2026-10-05T06:09:01.831942+00:00"
+  "updated_at": "2026-10-05T06:40:44.364729+00:00"
 }
