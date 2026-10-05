@@ -69,6 +69,8 @@ jobs:
         run: bash hrun.sh node --test tests/peer-endpointtest.mjs
       - name: synctest (durable projections, replay, lost ACK and offline resume)
         run: bash hrun.sh node tests/synctest.mjs
+      - name: sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)
+        run: bash hrun.sh node --test tests/sync-capacitytest.mjs
       - name: snapshottest (frozen pages, crash resume and retained-history recovery)
         run: bash hrun.sh node tests/snapshottest.mjs
       - name: recoverytest (retirement, reviewed activation and crash rollback)

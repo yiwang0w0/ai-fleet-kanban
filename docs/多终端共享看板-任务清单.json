@@ -412,7 +412,7 @@
     {
       "id": "S09",
       "title": "多机集成、故障注入与负载验收",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "S06",
         "S07",
@@ -2702,13 +2702,29 @@
       "evidence_required": [
         "load/backpressure.json"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Single Windows host: three isolated instances, 10000 tasks / 100000 task_events; 1000-update real HTTP backlog and SQLite FULL recovery for send/incremental/snapshot paths.",
+        "candidate_code_sha": "531cd4939f7ee755a03feb118f749e7abc53e1e3",
+        "formal_acceptance": false,
+        "remaining": [
+          "Frozen G00 limits and dependent gate acceptance",
+          "Physical two-node / actual network conditions",
+          "Host-volume exhaustion or power-loss scope and independent review"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "tests/sync-capacitytest.mjs",
+        "tests/fleet-load.mjs",
+        "docs/federation/single-host-load.md",
+        "docs/federation/single-host-load-evidence.json"
+      ]
     },
     {
       "id": "T09.05",
@@ -3397,7 +3413,7 @@
     }
   ],
   "progress_record": "federation/PROGRESS.md",
-  "updated_date": "2026-10-01",
+  "updated_date": "2026-10-05",
   "platform_scope": {
     "decision_date": "2026-09-30",
     "source": "explicit_user_instruction",
