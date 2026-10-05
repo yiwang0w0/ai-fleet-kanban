@@ -1,0 +1,142 @@
+{
+  "artifact_type": "phase_gate_receipt_draft",
+  "gate_id": "G00",
+  "phase_id": "S00",
+  "plan_id": "AFK-FED-001",
+  "plan_version": "1.3",
+  "decision": "pending",
+  "code_sha": null,
+  "code_selection_rule": "Pin the first resumed candidate with all required Windows CI checks successful; historical runs keep their original SHA.",
+  "schema_version": null,
+  "protocol_version": null,
+  "config_digest": null,
+  "node_aliases": [
+    "A",
+    "B"
+  ],
+  "runtime_versions": {},
+  "accepted_task_ids": [],
+  "test_results": [],
+  "evidence_manifest": null,
+  "evidence_sha256": null,
+  "unresolved_findings": [
+    "Unconfirmed D01-D04/D06-D07/D09-D12 decisions.",
+    "Budget/model/stop policy not frozen.",
+    "Current candidate CI and physical device enrollment not accepted."
+  ],
+  "reviewer_instance_id": null,
+  "operator_decision_ref": null,
+  "verified_at": null,
+  "rollback_ref": null,
+  "prepared_at": "2026-10-05T01:49:23.257252+00:00",
+  "provenance": {
+    "kind": "reconstructed_from_user_supplied_weekly_wrap_up",
+    "original_attachment_obtained": false,
+    "note": "Not a byte-identical copy of the unavailable attachment and not an acceptance signature."
+  },
+  "plan_document": {
+    "path": "docs/多终端共享看板-实施与验收计划.md",
+    "sha256": "23f8649cad6f74701d5c7ec3e801a85ad897195057acddfbe3a8bf87c0f18d34"
+  },
+  "task_manifest": {
+    "path": "docs/多终端共享看板-任务清单.json",
+    "sha256": "4bcfc9c864c2795688270aed74efcc92c7a9b3aa922add74a14ad0bacae8c904"
+  },
+  "decisions": [
+    {
+      "id": "D01",
+      "subject": "单一权威所有者",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D02",
+      "subject": "离线不自动转移或重派",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D03",
+      "subject": "稳定 node_id 与显示别名分离",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D04",
+      "subject": "身份与执行器解耦",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D05",
+      "subject": "两台实体 Windows 电脑",
+      "status": "user_reported_confirmed",
+      "ruling": "两台实体 Windows 电脑"
+    },
+    {
+      "id": "D06",
+      "subject": "按项目授权同步与按需文件传输",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D07",
+      "subject": "每项目指定关系登记节点",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D08",
+      "subject": "私有 tailnet；面板不通过 Serve 代理",
+      "status": "user_reported_confirmed",
+      "ruling": "私有 tailnet；面板不通过 Serve 代理"
+    },
+    {
+      "id": "D09",
+      "subject": "独立工作区与指定合并角色",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D10",
+      "subject": "节点、身份、任务三级预算",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D11",
+      "subject": "未确认取消保持待送达",
+      "status": "pending",
+      "ruling": null
+    },
+    {
+      "id": "D12",
+      "subject": "独立阶段审阅与操作者关键裁定",
+      "status": "pending",
+      "ruling": null
+    }
+  ],
+  "platform_scope": {
+    "requirement": "R08",
+    "status": "user_confirmed",
+    "platforms": [
+      "windows"
+    ],
+    "physical_nodes": 2,
+    "third_node": "isolated Windows protocol fixture only"
+  },
+  "budget": {
+    "status": "pending",
+    "daily_dispatch_limit_per_node": null,
+    "single_task_dispatch_limit": null,
+    "max_concurrent_dispatches_per_node": null,
+    "task_timeout_seconds": null,
+    "max_rounds": null,
+    "allowed_models": null,
+    "daily_cost_or_token_limit": null,
+    "single_task_cost_or_token_limit": null,
+    "stop_conditions": null,
+    "existing_authorization": "Existing per-executor minimal-task authorization is unchanged; failed dispatches consume authorization; no automatic retry or new API spending."
+  },
+  "privacy": "Public records use A/B aliases and hashes. Real hostnames, tailnet endpoints and identity mapping remain in private node inventory."
+}
