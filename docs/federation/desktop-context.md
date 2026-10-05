@@ -71,7 +71,7 @@ Zcode 设置的 MCP 服务入口可选择用户级或工作区级作用域，填
 }
 ~~~
 
-Claude Desktop 当前官方本地 MCP 指引采用 Desktop Extensions，可从高级设置安装自定义 .mcpb。本项目已验证通用 stdio 桥接协议，但尚未制作扩展包、安装或验证实际 Claude Desktop；不能把 Claude CLI 的原生探针当作桌面验收。[Claude Desktop 本地 MCP 指引](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)（2026-09-30 查阅）。
+Claude Desktop 当前官方本地 MCP 指引采用 Desktop Extensions，可从高级设置安装自定义 .mcpb。本项目已验证通用 stdio 桥接协议，并提供可携带 MCPB（见下文接入包说明）；实际 Claude Desktop 安装与对话查询仍待验收，不能把打包测试或 Claude CLI 原生探针当作桌面验收。[Claude Desktop 本地 MCP 指引](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)（2026-09-30 查阅）。
 
 接入后可问“两台实体机各做什么”“哪些任务需要确认”“这个任务的所有者和更新时间是什么”。回复应带任务 UID、所有者、时间依据和看板链接。仅放一个 MD 文件不会使所有新对话自动加载它；客户端工具启用、目录访问和实际查询须逐一验收。原生侧栏内嵌看板没有实现或验证；当前路径是聊天返回任务链接，与看板并排使用。
 
@@ -128,7 +128,7 @@ node cli/context.mjs watch --db C:/board-data/board.db --credential-file C:/boar
 
 隔离浏览器验证首次任务链接、已开详情中切换至远端任务以及浏览器返回；同名终端依稳定身份区分，远端正文仍显示缓存时间，恶意标签标题按字面显示。预览已关闭。
 
-仍需两台 Windows 上分别从实际 Claude、Codex、Zcode 新对话查询相同任务，与各自获准看板版本核对；演练真实断线、重连、撤销、多客户端读取、无秘密输出和长期刷新。原生侧栏嵌入需要另外确认客户端扩展能力。完整阶段通过数仍为 0/12，真实执行器最小调用各 0/1；本地测试不替代这些验收。原始桌面接入证据见 desktop-context-evidence.json。本批保留机制完成完整桌面回归 26 项（原有 17 项和新增 9 项），0 失败、0 跳过，见 context-retention-evidence.json；260 次变化使用加速时钟，实际完成文件读写、摘要核对和清理，不替代 72 小时实测。
+仍需两台 Windows 上分别从实际 Claude、Codex、Zcode 新对话查询相同任务，与各自获准看板版本核对；演练真实断线、重连、撤销、多客户端读取、无秘密输出和长期刷新。原生侧栏嵌入需要另外确认客户端扩展能力。完整阶段通过数仍为 0/12。真实执行器最小调用账本为 Claude 1/1、Codex 1/1（失败也耗用授权）、Zcode 0/1；后者认证入口尚待确认。详见 [真实调用记录](real-provider-probes.md)；本地测试不替代这些验收。原始桌面接入证据见 desktop-context-evidence.json。本批保留机制完成完整桌面回归 26 项（原有 17 项和新增 9 项），0 失败、0 跳过，见 context-retention-evidence.json；260 次变化使用加速时钟，实际完成文件读写、摘要核对和清理，不替代 72 小时实测。
 
 ## 可携带的 Windows 桌面接入包
 

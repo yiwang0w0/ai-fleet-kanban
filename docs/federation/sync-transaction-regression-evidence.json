@@ -1,0 +1,130 @@
+{
+  "format": "ai-fleet-sync-transaction-regression/v1",
+  "prepared_at": "2026-10-05T08:29:13.612392+00:00",
+  "base_code_sha": "ad3c7a47a9ca1344e788f355b251a161499fab47",
+  "scope": "T05.02 exported syncOnce boundary: reject an already active caller transaction before initialization or network sends; no schema or protocol change.",
+  "independent_review": {
+    "reviewer_instance_id": "01a10b09-6187-7ab1-b9f1-04a9bb506a02",
+    "reviewed_at": "2026-10-05T08:12:04.673424+00:00",
+    "code_sha": "ad3c7a47a9ca1344e788f355b251a161499fab47",
+    "source_report_sha256": "0d6b23e22adf972dd0fb889f4d70db4f2ecdd8459d7b3c6bdbe6d6028d328a1a",
+    "retained_private_copy": ".data/review108-independent-review-source.json",
+    "task_decisions": [
+      {
+        "task_id": "T00.01",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T00.05",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T01.03",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T01.04",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T01.05",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T02.02",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T02.03",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T02.04",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T02.05",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T05.02",
+        "decision": "review_failed"
+      },
+      {
+        "task_id": "T05.03",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T05.05",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T06.04",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T06.05",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T07.05",
+        "decision": "review_passed"
+      },
+      {
+        "task_id": "T08.05",
+        "decision": "review_passed"
+      }
+    ],
+    "finding_id": "A01 / SR-01",
+    "affected_task": "T05.02",
+    "decision": "review_failed",
+    "finding": "In an existing outer transaction, real loopback HTTP sync acknowledges seq=1; rollback and reopen leave receiver cursor/inbox/replicas at zero.",
+    "ordinary_cli_or_runtime_trigger_proven": false
+  },
+  "fix": {
+    "error_code": "TRANSACTION_ACTIVE",
+    "implementation_file": "core/federation/sync-client.mjs",
+    "test_file": "tests/synctest.mjs",
+    "caller_transaction_committed_or_rolled_back_by_sync": false,
+    "independent_fix_review": "pending"
+  },
+  "runs": [
+    {
+      "kind": "before_fix",
+      "command": "node --test --test-name-pattern=\"sync rejects an outer transaction\" tests/synctest.mjs",
+      "pass": 0,
+      "fail": 1,
+      "exit_code": 1,
+      "private_log": ".data/review108-sync-red.log",
+      "sha256": "dfe04c3cb24da3b9c3a38e961a4fdf406ed46920c8613feeb70ee77b0fe2ff42"
+    },
+    {
+      "kind": "after_fix",
+      "command": "node --test --test-name-pattern=\"sync rejects an outer transaction|actual HTTP synchronization applies only after validation and ACKs after commit\" tests/synctest.mjs",
+      "pass": 2,
+      "fail": 0,
+      "exit_code": 0,
+      "private_log": ".data/review108-sync-green.log",
+      "sha256": "3d17496dd111e804ef68f2b5a4306ce8b4062151b7ea1d64ba1beacd2038eeaf"
+    }
+  ],
+  "source_sha256": {
+    "core/federation/sync-client.mjs": "e597f545780aa0a695115fc5fe98aab835264e79249e084201bdb2e07783743c",
+    "tests/synctest.mjs": "88ad0714ba34014a6ac7a2a7f83a7f1581ca0451c6938b038df50b2d0d46f429"
+  },
+  "unchanged_suite_evidence": {
+    "code_sha": "167231cf2443cf5b345898cec7919a29389f5bf3",
+    "ci_run": 37275639185,
+    "conclusion": "success",
+    "windows_steps": 80,
+    "gitleaks_steps": 5,
+    "certifies_this_fix": false
+  },
+  "limits": [
+    "Only one new boundary case plus one adjacent normal HTTP case ran locally; no full local regression.",
+    "Temporary SQLite files and real loopback HTTP on one Windows host; no physical peer, production change, model call or new authorization.",
+    "Existing independent conclusions remain tied to ad3c7a4; this implementer record is not independent approval of the fix.",
+    "Formal task and gate acceptance remains separate from technical review."
+  ],
+  "formal_acceptance": false
+}

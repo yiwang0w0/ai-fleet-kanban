@@ -158,6 +158,26 @@ test("actual HTTP synchronization applies only after validation and ACKs after c
   assert.equal(syncStatus(f.a.db).deliveries[0].acked_seq,61);
  });
 });
+test("sync rejects an outer transaction before network sends or acknowledgments",async()=>{
+ const f=pair();
+ await server(f,async url=>{
+  assert.equal((await syncOnce(f.b.db,{url,credentialFile:f.credentialFile,projectId:"demo"})).state,"synced");
+  task(f.a);let error,networkCalls=0,outerStillOpen;
+  f.b.db.exec("BEGIN IMMEDIATE");
+  try{
+   try{await syncOnce(f.b.db,{url,credentialFile:f.credentialFile,projectId:"demo",
+    fetchImpl:(...args)=>{networkCalls++;return fetch(...args);}});}catch(e){error=e;}
+   outerStillOpen=f.b.db.isTransaction;
+  }finally{if(f.b.db.isTransaction)f.b.db.exec("ROLLBACK");}
+  const reopened=new DatabaseSync(f.b.dbPath,{readOnly:true});
+  try{assert.deepEqual({error_code:error?.code??null,network_calls:networkCalls,outer_still_open:outerStillOpen,
+   source_acked_seq:syncStatus(f.a.db).deliveries[0]?.acked_seq??0,
+   durable_cursor:cursor(reopened,f.source.origin,f.source.epoch,f.projectId),
+   durable_inbox:count(reopened,"federation_inbox"),durable_replicas:count(reopened,"federation_replicas")},
+   {error_code:"TRANSACTION_ACTIVE",network_calls:0,outer_still_open:true,source_acked_seq:0,
+    durable_cursor:0,durable_inbox:0,durable_replicas:0});}finally{reopened.close();}
+ });
+});
 test("lost ACK response retries from durable cursor without applying results twice",async()=>{
  const f=pair();task(f.a);
  await server(f,async url=>{

@@ -45,6 +45,7 @@ function initAttempts(db){
 }
 /** The URL is a local operator choice; it is never taken from a remote response or task text. */
 export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,now=Date.now(),maxBatches=10,signal}){
+ if(db.isTransaction)throw new PeerError("TRANSACTION_ACTIVE","同步必须在调用方事务提交后开始",409);
  const started=performance.now();
  const base=endpoint(url),local=localIdentity(db);names([projectId],"project_id",null,1);
  const c=loadCredential(credentialFile,local,projectId,undefined,base);migrateSync(db);initAttempts(db);
