@@ -1718,12 +1718,29 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
  *  killing a worker — no reason to make the board wait 30 minutes for a lease to
  *  expire when the kill was OUR OWN act. */
 function releaseHeldBy(db, worker) {
-  const rows = db.prepare(
-    "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE status='in_progress' AND worker=?"
-  ).all(String(worker));
-  if (!rows.length) return [];
-  db.exec("BEGIN IMMEDIATE");
+  // ⭐ The SELECT lives INSIDE the transaction (external audit 2026-10-05). Outside it,
+  //   a concurrent writer (the lease reaper in another process) could retire a card
+  //   between the SELECT and BEGIN: the guarded UPDATE then correctly changes nothing,
+  //   but the unconditional appendEvent below would still write a `release` event for a
+  //   row this call never touched — a ghost entry in the append-only stream the file
+  //   calls its sole record. Rows are re-read under the write lock, so events are only
+  //   ever written for cards this call actually released. (report() and heartbeat()
+  //   fold their guard into the UPDATE and check changes first — same invariant.)
+  // ⚠ Nesting follows the unit() idiom the federation modules already use: a caller
+  //   already inside a transaction gets a SAVEPOINT, not a nested BEGIN.
+  const own = !db.isTransaction;
+  // ⚠ Braces around each arm: selftest's NO-TX mutant excises the literal
+  //   db.exec("COMMIT"); — a braceless if/else would collapse into
+  //   `if (own) /* no commit */ else …` and the mutant stops compiling.
+  if (own) { db.exec("BEGIN IMMEDIATE"); } else { db.exec("SAVEPOINT release_held"); }
   try {
+    const rows = db.prepare(
+      "SELECT id, line, parent_id, status, kind, released FROM tasks WHERE status='in_progress' AND worker=?"
+    ).all(String(worker));
+    if (!rows.length) {
+      if (own) { db.exec("COMMIT"); } else { db.exec("RELEASE SAVEPOINT release_held"); }
+      return [];
+    }
     for (const r of rows) spanClose(db, r.id);
     db.prepare(
       // dispatch_fp cleared for the same reason as the reaper: a card handed back
@@ -1741,9 +1758,13 @@ function releaseHeldBy(db, worker) {
         action: "release_held", from_status: "in_progress",
       }),
     });
-    db.exec("COMMIT");
-  } catch (e) { try { db.exec("ROLLBACK"); } catch {} throw e; }
-  return rows.map((r) => Number(r.id));
+    if (own) { db.exec("COMMIT"); } else { db.exec("RELEASE SAVEPOINT release_held"); }
+    return rows.map((r) => Number(r.id));
+  } catch (e) {
+    if (own) { try { db.exec("ROLLBACK"); } catch {} }
+    else { try { db.exec("ROLLBACK TO release_held; RELEASE release_held"); } catch {} }
+    throw e;
+  }
 }
 
 /** Heartbeat = liveness report + lease renewal. Without it the panel cannot tell
