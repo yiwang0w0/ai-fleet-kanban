@@ -627,6 +627,39 @@ try {
     ok("⭐J3-5 CLI 不再有自己的标签表(读 /api/meta)", !/^WF\s*=\s*\{/m.test(cli) && !/^LABEL\s*=\s*\{/m.test(cli) && /api\/meta/.test(cli));
   }
 
+  // ══ §J9 the runtime stamp is seat-authoritative, not self-reported ══════════
+  //   last_runtime feeds family rules (machine-evidence prose admission, review
+  //   anti-affinity). For slots the board spawned it must come from the seat the
+  //   server started — a lying claim body cannot flip the family (external audit
+  //   2026-10-05, regression of 83a2d88). Manual claims keep the self report.
+  console.log(NL + "[§J9 last_runtime 由受管席位盖章,自报仅限手工领取]");
+  {
+    const B = await mk({ env: { BOARD_SPAWN_ECHO: "1", BOARD_UNTIL: "2099-01-01T12:00" } });
+    const r0 = await B.worker("alpha");
+    const rev0 = Number(r0?.settings?.rev || 0);
+    const save = await B.api("POST", "/api/workers/alpha/settings",
+                { agents: [{ runtime: "claude", model: "claude-opus-5", effort: "high", window: false }], rev: rev0 });
+    const start = await B.api("POST", "/api/workers/alpha/start", {});
+    ok("J9-0 (前提) spawn-echo 席位已登记", start.status === 200,
+       `save=${save.status} start=${start.status} ${JSON.stringify(start.body?.error || "")}`);
+    await B.api("POST", "/api/tasks", { subject: "seat-stamp fixture", released: 1 });
+    // Lying claim body: supervised slot "alpha" is a claude seat, the body says codex.
+    const lying = await B.api("POST", "/api/claim",
+      { worker: "alpha", runtime: "codex", worker_protocol_version: 2, agent_instance_id: "0f1e2d3c-4b5a-4a78-8976-a5b4c3d2e1f0" });
+    const lyingTask = (await B.api("GET", "/api/tasks/" + lying.body?.task?.id)).body?.task;
+    ok("⭐J9-1 受管席位的 runtime 盖章为席位值,自报谎称 codex 不生效",
+       lying.status === 200 && lyingTask?.last_runtime === "claude",
+       `claim=${lying.status} runtime=${lyingTask?.last_runtime}`);
+    // Control: an unsupervised (manual) worker keeps the allowlist-purified self report.
+    await B.api("POST", "/api/tasks", { subject: "manual-stamp fixture", released: 1 });
+    const manual = await B.api("POST", "/api/claim",
+      { worker: "hand-runner", runtime: "codex", worker_protocol_version: 2, agent_instance_id: "1f2e3d4c-5b6a-4b78-9976-a5b4c3d2e1f0" });
+    const manualTask = (await B.api("GET", "/api/tasks/" + manual.body?.task?.id)).body?.task;
+    ok("J9-2 (对照)手工领取仍采信自报(受控 allowlist)",
+       manual.status === 200 && manualTask?.last_runtime === "codex",
+       `claim=${manual.status} runtime=${manualTask?.last_runtime}`);
+  }
+
   // ══ §J4 token files are 0600 (POSIX) ═══════════════════════════════════════
   //   Default mode left the operator token world-readable on a multi-user host — the
   //   neighbour the threat model names. Windows has no POSIX bits; the section says so.

@@ -2288,6 +2288,20 @@ function guardWrite(req, res, p) {
 
 if (process.env.BOARD_EXTRA_ORIGINS?.trim()) console.warn("⚠ BOARD_EXTRA_ORIGINS 扩大了允许来源；所有任务、节点身份和事件接口仍需认证，不要将管理面板用作 peer 转发。");
 const WORKER_PROTOCOL_VERSION = 2;
+// ⭐ The last_runtime stamp decides security-relevant family rules (machine-evidence
+//   prose admission, review anti-affinity), so it cannot stay a self-report for seats
+//   the board itself spawned: a compromised loop would flip one field and have its
+//   fabricated PASS/rc admitted as machine output (external audit 2026-10-05,
+//   regression of 83a2d88). Where the worker name matches a slot THIS server started,
+//   the seat's snapshotted runtime is authoritative — it is the exact value handed to
+//   the child in WORKER_RUNTIME. Manual/unsupervised claims keep the historical
+//   allowlist-purified self report: a hand-run loop is an operator act, and there is
+//   no server-side seat to consult.
+function stampedRuntime(workerName, selfReported) {
+  const seat = workers.get(String(workerName || ""))?.settings;
+  if (seat && RUNTIME_IDS.includes(seat.runtime)) return seat.runtime;
+  return RUNTIME_IDS.includes(selfReported) ? selfReported : null;
+}
 function claimIdentity(body, role) {
   if (role === "worker" && (body.worker_protocol_version !== WORKER_PROTOCOL_VERSION ||
       typeof body.agent_instance_id !== "string" ||
@@ -2768,9 +2782,11 @@ const server = http.createServer(async (req, res) => {
                                 pools: poolState });
       // ⛔ NO badRoutable here (ruled; reasons at claimMiss above — the harness
       //   watches that stray values do NOT 400).
-      // ⭐ Badge stamping: runtime is PURIFIED (outside the allowlist = "not passed"
-      //   = no stamp; never 400, never a claim criterion).
-      const rt = RUNTIME_IDS.includes(b.runtime) ? b.runtime : null;
+      // ⭐ Badge stamping: the runtime comes from the SEAT the board spawned when the
+      //   worker name matches a supervised slot (stampedRuntime); outside the allowlist
+      //   and outside supervision alike = "not passed" = no stamp; never 400, never a
+      //   claim criterion.
+      const rt = stampedRuntime(b.worker, b.runtime);
       const identity = claimIdentity(b, boardRole);
       const got = store.claim(db, b.worker, b.lease_minutes || store.DEFAULT_LEASE_MIN,
                               { route: b.route, line: b.line, runtime: rt, ...identity, ...fpContext() });
@@ -2840,8 +2856,9 @@ const server = http.createServer(async (req, res) => {
         //   occupy a different card). Refusals come back with the reason named.
         const r = store.claimById(db, { id, worker: b.worker, expectedVersion:b.expected_version, ...claimIdentity(b, boardRole),
                                         leaseMin: b.lease_minutes || store.DEFAULT_LEASE_MIN,
-                                        // badge purification: same allowlist and same never-400 policy as /api/claim
-                                        runtime: RUNTIME_IDS.includes(b.runtime) ? b.runtime : null,
+                                        // badge stamping: seat-authoritative where the
+                                        // board spawned the worker; same never-400 policy
+                                        runtime: stampedRuntime(b.worker, b.runtime),
                                         // ⭐ force = a person saying "run it anyway". Operator-only:
                                         //   guardWrite already restricts this endpoint, and a worker
                                         //   able to force its own re-dispatch would own the brake.
