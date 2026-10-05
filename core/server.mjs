@@ -1327,6 +1327,14 @@ function contextOf(line) {
 }
 
 const runCli = (args, timeout = 600000) => new Promise((resolve) => {
+  // ⭐ The prompt rides argv (-p) on the claude seat, and Windows CreateProcess caps a
+  //   command line at 32767 UTF-16 chars: over budget, execFile dies with an opaque
+  //   spawn error. Same caliber as the zcode gate (zcode-profile.mjs) and the two loop
+  //   scripts — refuse BEFORE spawning, naming the knob to turn (external audit
+  //   2026-10-05). Per arg: UTF-16 length ×2 +3 (quotes + separator), conservative.
+  if (args.reduce((n, a) => n + a.length * 2 + 3, CLAUDE_CLI.length) > 30000)
+    return resolve({ code: 1, stdout: "",
+      stderr: "提示词 argv 超过 Windows 30000 字符预算(32767 上限)—— 调小相应预算后重试,已拒发" });
   execFile(CLAUDE_CLI, args, { timeout, maxBuffer: 8 << 20, windowsHide: true,
                                env: { ...process.env, PYTHONIOENCODING: "utf-8" } },
     (err, stdout, stderr) => resolve({ code: err?.code ?? 0, stdout: stdout || "", stderr: stderr || "" }));

@@ -650,6 +650,11 @@ def review_one(t, vr=None):
                       "--add-dir", REPO, "--add-dir", OUTDIR,
                       # ⭐ v0.17.0:令牌目录与登记簿对审阅模型不可读不可写(verify_lib.cli_deny_rules,实测有效)。
                       "--disallowedTools", *cli_deny_rules(DATA)]
+        # ⭐ 提示词走 argv(-p)的 Windows 32767 天花板:与 worker 侧/zcode 闸同一预算口径,
+        #   超限响亮拒发而不是让 spawn 死于 WinError 206(外部审计 2026-10-05)。
+        if argv and sum(len(a) * 2 + 3 for a in argv) + len(argv[0]) > 30000:
+            log(f"  ⚠审阅提示词 argv 超 Windows 预算(30000/32767)—— 拒发;调小 REVIEWER_VERBATIM 后重试")
+            return None, "(审阅提示词 argv 超过 Windows 30000 字符预算,spawn 前拒发)"
         try:
             r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
                                errors="replace", env=env, timeout=900, cwd=REPO)

@@ -817,6 +817,16 @@ def prompt_selftest():
     ok("必读的纪律段仍然内联,没有被外置成路径",
        "【怎么交付】" in normal and "【发现本卡范围外的工作】" in normal and "【纪律】" in normal)
     ok("cut_to 不截短内容", cut_to("abc", 10, 1) == "abc")
+
+    # ── argv 预算闸(与 zcode-profile.mjs 同口径;外部审计 2026-10-05)─────────────────
+    # spawn 前拒发,而不是让超长 argv 死于 WinError 206 的"spawn 失败"。
+    def argv_budgeted(argv):
+        return sum(len(a) * 2 + 3 for a in argv) + (len(argv[0]) if argv else 0)
+    ok("⭐超预算 argv 被识别(40000 字符的提示词必超 30000)",
+       argv_budgeted(["claude", "-p", "x" * 40000, "--model", "m"]) > 30000)
+    ok("(对照)典型提示词的 argv 远在预算内",
+       argv_budgeted(["claude", "-p", normal, "--model", "claude-opus-5", "--effort", "high"]) < 30000,
+       f"{argv_budgeted(['claude', '-p', normal, '--model', 'claude-opus-5', '--effort', 'high'])}")
     ok("cut_to 截长内容且带指路", cut_to("abcdef", 3, 7).startswith("abc") and "show 7" in cut_to("abcdef", 3, 7))
 
     # ── 已确认的选择必须原样到达 worker(v0.11.3)────────────────────────────
@@ -1559,6 +1569,14 @@ def run_worker(t, worker, evidence_path, prev_tail, attempt, model, effort):
     LAST_ACCT = {"sid": sid_acct,
                  "t0": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")}
     argv = cli_argv(build_prompt(t, worker, evidence_path, prev_tail, attempt), sargs, model, effort)
+    # ⭐ claude 座席的提示词走 argv(-p),Windows CreateProcess 的天花板是 32767 个
+    #   UTF-16 字符 —— 预算 env 调大后超限的 spawn 只会留下 WinError 206 的"spawn 失败"。
+    #   zcode 座席早有同款预算闸(zcode-profile.mjs),claude 这条链现在补齐:超预算就
+    #   **响亮地拒发**,理由指明调哪个预算,不当无声失败烧 attempt(外部审计 2026-10-05)。
+    #   每参数按 UTF-16 长度×2+3(引号+分隔)保守计,与 zcode 闸同一口径。
+    if argv and sum(len(a) * 2 + 3 for a in argv) + len(argv[0]) > 30000:
+        log("  ⚠提示词 argv 超 Windows 预算(30000/32767)—— 拒发;调小 WORKER_DESC_BUDGET/WORKER_ACC_BUDGET 后重试")
+        return -2, "(argv 超长:提示词 argv 超过 Windows 30000 字符预算,spawn 前拒发)"
     env = dict(os.environ); env["PYTHONIOENCODING"] = "utf-8"
     try:
         w = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
