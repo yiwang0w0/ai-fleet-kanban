@@ -1,0 +1,67 @@
+{
+  "format": "ai-fleet-completion-target-evidence-tests/v1",
+  "prepared_at": "2026-10-05T07:26:26.074558+00:00",
+  "base_commit": "167231cf2443cf5b345898cec7919a29389f5bf3",
+  "scope": "One Windows host; isolated real SQLite backup/activation, read-only connection, standalone CLI, actual local source verification and Git integration fixture. Target stop receipts are synthetic test data, not a real provider process observation.",
+  "tests": {
+    "new_cases_passed": 4,
+    "direct_existing_cases_passed": 2,
+    "unique_cases_passed": 6,
+    "remaining_failures": 0,
+    "full_repository_suite_repeated": false,
+    "method": "Previously passed unaffected cases retained. Only failing cases rerun after each correction. The final edit changed only which stop-proof input the negative fixture corrupts."
+  },
+  "logs": [
+    {
+      "name": "review106-before.log",
+      "sha256": "be02d27811a3a76a532d2ad46be3356cd15f7f4e5bc775ad25dcaafc2e187420",
+      "result": "Expected red: target evidence export absent."
+    },
+    {
+      "name": "review106-target.log",
+      "sha256": "f2dd90c17789bfa5d91475c113445fd8732a9a2175130ebb0a07730e43ac9ce8",
+      "result": "First implementation: 1/4 passed; three failed because expanded dispatch receipt was hashed instead of the process-result triple."
+    },
+    {
+      "name": "review106-fixed-and-adjacent.log",
+      "sha256": "bddfbe356a804d4b2b25a50b69d8b078500c3715014403a11d44d8ff86021ec7",
+      "result": "Result digest fixed: 4/5 passed; remaining negative case changed an unused process observation on a fixture-mode run."
+    },
+    {
+      "name": "review106-tamper-fixed.log",
+      "sha256": "c93220f862af6bf0484120baa450c299b9f4fae80e3be5e77ed81a2307979086",
+      "result": "Changed the actual retained fixture stop receipt: final negative case passed 1/1. Product code unchanged from preceding run."
+    }
+  ],
+  "source_hashes": [
+    {
+      "path": "core/federation/completion-evidence.mjs",
+      "worktree_sha256": "24ee6dfe9b6f3a2e8f01f766335e800c71228bea36bde997a92b9907be299628",
+      "git_blob_sha256": "24ee6dfe9b6f3a2e8f01f766335e800c71228bea36bde997a92b9907be299628"
+    },
+    {
+      "path": "cli/completion-evidence.mjs",
+      "worktree_sha256": "34f2ff6b8a82e2f2f0c01a47795111bca157a14dfb89fc90593ce33c5e0c6ec7",
+      "git_blob_sha256": "34f2ff6b8a82e2f2f0c01a47795111bca157a14dfb89fc90593ce33c5e0c6ec7"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "worktree_sha256": "102763e72660121697f7d17d603b3b4fadf9da8a193ab2960b4cee54bbfa1388",
+      "git_blob_sha256": "102763e72660121697f7d17d603b3b4fadf9da8a193ab2960b4cee54bbfa1388"
+    }
+  ],
+  "checks": [
+    "Read-only capture and independent target CLI after actual target restore retain node identity and require continuous epoch lineage.",
+    "Scope JSON, the fixture terminal result digest and actual retained artifact bytes each fail capture when corrupted.",
+    "Prior target settlement remains historical; current task version changes are explicit and cannot authorize execution or acceptance.",
+    "Missing contracts, source-side records and active transactions refuse; CLI errors omit private paths.",
+    "Existing source evidence after source-as-registrar restore and normal bilateral completion still pass."
+  ],
+  "limits": [
+    "No live process-liveness check: retained_stop_proofs_match does not mean process_liveness_verified.",
+    "No current peer/registrar agreement, full completion recovery coordination or new-epoch settlement implemented by this read-only step.",
+    "No physical Tailscale test, desktop-client acceptance or real model calls.",
+    "The 864feec independent-review candidate and pending gate receipts remain fixed."
+  ],
+  "formal_acceptance": false
+}

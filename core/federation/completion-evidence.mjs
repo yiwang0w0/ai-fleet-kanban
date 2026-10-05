@@ -2,7 +2,8 @@ import {PeerError,uuid} from './protocol.mjs';
 import {localIdentity} from './peers.mjs';
 import {canonical,digest} from './sync-store.mjs';
 import {sourceRecoveryLineage} from './epoch-state.mjs';
-import {normalizeCompletionPlan} from './completion-contract.mjs';
+import {normalizeCompletionPlan,completionReady,completionContract,checkCompletionReceipt} from './completion-contract.mjs';
+import {inspectStoppedRuns} from '../execution/stop-proof.mjs';
 import {captureRetainedVerificationReceipt} from '../verification/service.mjs';
 import {verifyDirectory} from '../artifacts/git-workspace.mjs';
 import {repositoryReader} from '../artifacts/git-reader.mjs';
@@ -52,4 +53,62 @@ export function captureCompletionSourceEvidence(db,{completionId,sourceGate}){
  gate();const after=snapshot(db,completionId);if(digest(before)!==digest(after))fail('COMPLETION_EVIDENCE_STALE','复查期间完成证据或恢复代次变化');
  if(db.prepare('SELECT 1 FROM verification_revocations WHERE profile_id=?').get(v.binding.profile_id))fail('VERIFICATION_REVOKED','复查期间验证配置撤销');git.verify();if(git.refValue(b.ref)!==p.source_merge_commit)fail('INTEGRATION_EFFECT_UNCONFIRMED','复查期间来源引用变化');
  return {format:'ai-fleet-completion-source-evidence/v1',completion_id:completionId,plan_digest:c.plan_digest,node_id:c.node_id,original_epoch:c.node_epoch,observed_epoch:before.identity.node_epoch,recovery_lineage:before.lineage,result_id:p.result_id,body_digest:p.body_digest,verification_receipt_digest:p.verification_receipt_digest,verification_state_digest:v.state_digest,integration_receipt_digest:p.integration_receipt_digest,artifact_manifest_digest:p.artifact_manifest_digest,source_merge_commit:p.source_merge_commit,source_tree:p.source_tree,state_digest:digest(before),retained_evidence_matches:true,historical_accepted:!!before.completionSettlement,accepted:false,execution_authorized:false,automatic_release:false,stopped_work_verified:false,peer_or_registrar_recovery_verified:false,observed_at:new Date().toISOString()};
+}
+
+/** Inspect the target's retained contract in one read transaction. This grants no recovery authority. */
+export function captureCompletionTargetEvidence(db,{completionId}){
+ if(db.isTransaction)fail('TRANSACTION_CONTEXT','执行端证据复查须使用独立只读事务');
+ uuid(completionId,'completion_id');db.exec('BEGIN');
+ try{
+  const n=localIdentity(db),c=db.prepare('SELECT * FROM completion_plans WHERE completion_id=?').get(completionId),p=normalizeCompletionPlan(checked(c,'plan'));
+  if(c.side!=='target'||c.node_id!==n.node_id||c.node_id!==p.relation.target_node_id||c.node_epoch!==p.relation.target_epoch||c.result_id!==p.result_id||c.relation_id!==p.relation.relation_id||c.task_version!==p.target_task_version)
+   fail('COMPLETION_EVIDENCE_MISMATCH','仅可复查本机执行端的原完成合同');
+  const lineage=n.sync_epoch===c.node_epoch?null:sourceRecoveryLineage(db,{node_id:n.node_id,from_epoch:c.node_epoch,to_epoch:n.sync_epoch});
+  const ready=checked(db.prepare('SELECT * FROM completion_ready WHERE completion_id=?').get(completionId),'ready');
+  if(!same(ready,completionReady(p)))fail('COMPLETION_EVIDENCE_MISMATCH','执行端就绪回执与原完成合同不同');
+  const binding=db.prepare('SELECT * FROM delegation_bindings WHERE relation_id=?').get(c.relation_id);
+  if(!binding||binding.side!=='target'||binding.node_id!==c.node_id||binding.node_epoch!==c.node_epoch||binding.task_id!==c.task_id||binding.task_uid!==p.relation.target_task_uid||binding.state!=='confirmed'||binding.descriptor_json!==canonical(p.relation)||binding.descriptor_digest!==digest(p.relation))
+   fail('COMPLETION_EVIDENCE_MISMATCH','执行端原绑定不同');
+  const result=db.prepare('SELECT * FROM delegation_results WHERE result_id=?').get(p.result_id),body=checked(result,'body');
+  if(result.side!=='target'||result.node_id!==c.node_id||result.node_epoch!==c.node_epoch||result.relation_id!==c.relation_id||result.task_uid!==p.relation.target_task_uid||result.task_version!==p.target_task_version||result.body_digest!==p.body_digest||!same(body.relation,p.relation)||body.result_id!==p.result_id||body.target_task_version!==p.target_task_version||body.process_result.status!=='success'||body.scope.scope_digest!==p.scope_digest||body.scope.fixture_runs!==p.fixture_runs||digest(body.process_result)!==body.execution.result_digest)
+   fail('COMPLETION_EVIDENCE_MISMATCH','执行端候选与原完成合同不同');
+  const proof=JSON.parse(result.scope_json);
+  if(!proof||!Array.isArray(proof.members)||!Array.isArray(proof.runs)||digest(proof)!==body.scope.proof_digest||digest(proof.members)!==p.scope_digest||proof.members.length!==body.scope.member_count||proof.runs.length!==body.scope.run_count||proof.members.length<1||proof.members.length>10000||proof.runs.length>100000)
+   fail('COMPLETION_EVIDENCE_CORRUPT','原停止范围摘要或数量不符');
+  const members=db.prepare('SELECT task_id,task_uid,task_version FROM result_members WHERE result_id=? ORDER BY task_uid').all(p.result_id);
+  const completionMembers=db.prepare('SELECT task_id,task_uid,task_version FROM completion_members WHERE completion_id=? ORDER BY task_uid').all(completionId);
+  const byUid=new Map(members.map(m=>[m.task_uid,m])),ordered=proof.members.map(m=>byUid.get(m.task_uid));
+  if(new Set(proof.members.map(m=>m.task_uid)).size!==members.length||ordered.some((m,i)=>!m||m.task_version!==proof.members[i].task_version)||!same(members,completionMembers))
+   fail('COMPLETION_EVIDENCE_CORRUPT','原候选与完成子树成员不符');
+  const tasks=ordered.map(m=>db.prepare('SELECT * FROM tasks WHERE id=? AND task_uid=?').get(m.task_id,m.task_uid));
+  if(tasks.some(t=>!t||t.owner_node_id!==c.node_id))fail('COMPLETION_EVIDENCE_MISMATCH','当前任务身份与保留范围不同');
+  const runs=ordered.flatMap(m=>db.prepare('SELECT * FROM task_runs WHERE task_id=? AND task_uid=?').all(m.task_id,m.task_uid));
+  if(runs.length!==body.scope.run_count)fail('STOP_UNCONFIRMED','原停止范围之外出现运行或运行记录缺失');
+  const stop=inspectStoppedRuns(db,{nodeId:c.node_id,nodeEpoch:c.node_epoch,members:ordered,runs});
+  if(stop.blockers.length||stop.fixtureRuns!==p.fixture_runs||!same(stop.proofs,proof.runs))fail('STOP_UNCONFIRMED','保留的运行停止证明与原候选不同');
+  const dispatch=db.prepare('SELECT * FROM broker_dispatches WHERE dispatch_id=?').get(body.execution.dispatch_id);
+  const reported=dispatch?.result_json?JSON.parse(dispatch.result_json):null;
+  if(!dispatch||dispatch.run_id!==result.run_id||dispatch.run_id!==body.execution.run_id||dispatch.node_id!==c.node_id||dispatch.node_epoch!==c.node_epoch||dispatch.result_digest!==body.execution.result_digest||!reported||reported.accepted!==false||reported.execution_mode!==dispatch.execution_mode||reported.real_model_call_confirmed!==false||digest({status:reported.status,evidence:reported.evidence,usage:reported.usage})!==dispatch.result_digest)
+   fail('COMPLETION_EVIDENCE_MISMATCH','保留执行结果与候选不同');
+  const transfer=db.prepare('SELECT * FROM artifact_transfers WHERE result_id=?').get(p.result_id),header=checked(transfer,'header');
+  if(transfer.side!=='target'||transfer.node_id!==c.node_id||transfer.node_epoch!==c.node_epoch||header.transfer_id!==transfer.transfer_id||header.result_id!==p.result_id||header.result_body_digest!==p.body_digest||header.manifest_digest!==p.artifact_manifest_digest||digest(header.manifest)!==p.artifact_manifest_digest||transfer.payload_bytes!==header.payload_bytes)
+   fail('COMPLETION_EVIDENCE_MISMATCH','执行端保留产物与完成合同不同');
+  if(!transfer.payload||transfer.payload.length!==header.payload_bytes||contentHash(transfer.payload)!==header.payload_sha256)fail('ARTIFACT_INCOMPLETE','执行端保留产物字节或长度不符');
+  const settlementRow=db.prepare('SELECT * FROM completion_settlements WHERE completion_id=?').get(completionId),decisionRow=db.prepare('SELECT * FROM result_decisions WHERE result_id=?').get(p.result_id),retirementRow=db.prepare('SELECT * FROM completion_retirements WHERE completion_id=?').get(completionId);
+  const retirement=retirementRow?checked(retirementRow,'receipt'):null;
+  if(retirement)checkCompletionReceipt(retirement,completionContract(p,ready),{registrarNodeId:binding.registrar_node_id,registrarEpoch:binding.registrar_epoch});
+  let settlement=null,decision=null;
+  if(settlementRow){
+   settlement=checked(settlementRow,'receipt');decision=checked(decisionRow,'decision');
+   const closure=checked(db.prepare('SELECT * FROM binding_completions WHERE relation_id=?').get(c.relation_id),'receipt');
+   if(!retirement||!binding.closed||!same(closure,retirement)||settlement.kind!=='completion_settled'||settlement.side!=='target'||settlement.completion_id!==completionId||settlement.plan_digest!==c.plan_digest||settlement.accepted!==true||settlement.task_uid!==p.relation.target_task_uid||settlement.retirement_digest!==retirementRow.receipt_digest||decision.kind!=='result_accepted'||decision.result_id!==p.result_id||decision.completion_id!==completionId||decision.plan_digest!==c.plan_digest||decision.body_digest!==p.body_digest||decision.retirement_digest!==retirementRow.receipt_digest)
+    fail('COMPLETION_EVIDENCE_CORRUPT','执行端历史结案记录不一致');
+  }else if(decisionRow||binding.closed)fail('COMPLETION_EVIDENCE_CORRUPT','历史决定或绑定关闭缺少完成结算');
+  const changed=ordered.flatMap((m,i)=>tasks[i].aggregate_version!==m.task_version?[{task_uid:m.task_uid,sealed_version:m.task_version,observed_version:tasks[i].aggregate_version}]:[]);
+  // Bind current facts separately: recovery quarantine and historical settlement may change task versions.
+  const {payload,...transferMetadata}=transfer;
+  const state={node_id:n.node_id,observed_epoch:n.sync_epoch,c,p,lineage,ready,binding,result,proof,members,completionMembers,tasks,runs,stop,dispatch,transfer:transferMetadata,retirement,settlement,decision};
+  const evidence={format:'ai-fleet-completion-target-evidence/v1',completion_id:completionId,plan_digest:c.plan_digest,node_id:c.node_id,original_epoch:c.node_epoch,observed_epoch:n.sync_epoch,recovery_lineage:lineage,result_id:p.result_id,body_digest:p.body_digest,scope_digest:p.scope_digest,proof_digest:body.scope.proof_digest,artifact_manifest_digest:p.artifact_manifest_digest,payload_sha256:header.payload_sha256,member_count:members.length,run_count:runs.length,fixture_runs:stop.fixtureRuns,state_digest:digest(state),changed_task_versions:changed,task_reconciliation_required:!!lineage||!!settlement||changed.length>0,retained_evidence_matches:true,retained_stop_proofs_match:true,process_liveness_verified:false,historical_accepted:!!settlement,accepted:false,execution_authorized:false,automatic_release:false,peer_or_registrar_recovery_verified:false,observed_at:new Date().toISOString()};
+  db.exec('COMMIT');return evidence;
+ }catch(e){if(db.isTransaction)db.exec('ROLLBACK');throw e;}
 }

@@ -396,11 +396,11 @@ async function completionRecoveryEvidenceAPI(){
  assert.equal(existsSync(path),true,'sealed completion recovery needs actual retained-source evidence capture');
  return import(path.href);
 }
-function restoredCompletionSource(x){
- const {f}=x,evidence=join(f.a.dir,'evidence');if(!existsSync(evidence))mkdirSync(evidence);
- const backup=createBackup({dbPath:f.a.path,evidenceDir:evidence,destination:join(TMP,'sealed-evidence-backup-'+serial++)}),dir=join(TMP,'sealed-evidence-restore-'+serial++);
+function restoredCompletionSource(x,n=x.f.a){
+ const evidence=join(n.dir,'evidence');if(!existsSync(evidence))mkdirSync(evidence);
+ const backup=createBackup({dbPath:n.path,evidenceDir:evidence,destination:join(TMP,'sealed-evidence-backup-'+serial++)}),dir=join(TMP,'sealed-evidence-restore-'+serial++);
  restoreBackup({backupDirectory:backup.destination,destination:dir});const path=join(dir,'board.db'),db=new DatabaseSync(path);dbs.push(db);
- retireNode({dbPath:f.a.path,expectedEpoch:f.a.node.sync_epoch});const plan=prepareRecovery({dbPath:path});
+ retireNode({dbPath:n.path,expectedEpoch:n.node.sync_epoch});const plan=prepareRecovery({dbPath:path});
  activateRecovery({dbPath:path,plan,expectedPlanDigest:plan.plan_digest,attestation:{format:'ai-fleet-retirement-attestation/v1',node_id:plan.node_id,retired_epoch:plan.retired_epoch,plan_digest:plan.plan_digest,original_board_stopped:true,original_agents_stopped:true,original_identity_disabled:true,other_restored_writers_stopped:true,evidence_ref:'isolated source evidence fixture',attested_at:new Date().toISOString()}});
  return {db,path};
 }
@@ -438,4 +438,45 @@ test('sealed completion evidence fails on missing contract, target-side records 
  f.a.db.exec('BEGIN');try{assert.throws(()=>capture(f.a.db,args),{code:'TRANSACTION_CONTEXT'});}finally{f.a.db.exec('ROLLBACK');}
  revokeIntegrationPolicy(f.a.db,{policyId:config.policyId});assert.throws(()=>capture(f.a.db,args),{code:'INTEGRATION_REVOKED'});assert.equal(completionState(f.a.db,completionId).phase,'ready');
  const failed=spawnSync(process.execPath,[join(ROOT,'cli/completion-evidence.mjs'),'source','--db',f.a.path,'--id',completionId,'--accepted-rev',join(TMP,'no-approval')],{encoding:'utf8',windowsHide:true});assert.equal(failed.status,1);const error=JSON.parse(failed.stderr.trim().split('\n').find(s=>s.startsWith('{')));assert.equal(error.status,'failed');assert.equal(failed.stderr.includes(TMP),false);assert.equal(completionState(f.a.db,completionId).phase,'ready');
+});
+
+
+test('sealed target evidence supports actual restore, readonly capture and the target CLI without new acceptance',async()=>{
+ const {captureCompletionTargetEvidence:capture}=await completionRecoveryEvidenceAPI();assert.equal(typeof capture,'function','target recovery needs its own retained-evidence reader');
+ const x=await completionFixture(),{f,completionId}=x;readyBoth(x);const restored=restoredCompletionSource(x,f.b),db=new DatabaseSync(restored.path,{readOnly:true});dbs.push(db);db.exec('PRAGMA query_only=ON');
+ const before=rows(db),changes=db.prepare('SELECT total_changes() n').get().n,e=capture(db,{completionId});
+ assert.equal(e.format,'ai-fleet-completion-target-evidence/v1');assert.equal(e.node_id,f.b.node.node_id);assert.equal(e.original_epoch,f.b.node.sync_epoch);assert.notEqual(e.observed_epoch,e.original_epoch);assert.equal(e.recovery_lineage.transitions.length,1);
+ assert.equal(e.retained_evidence_matches,true);assert.equal(e.retained_stop_proofs_match,true);assert.equal(e.process_liveness_verified,false);assert.equal(e.historical_accepted,false);assert.equal(e.accepted,false);assert.equal(e.execution_authorized,false);assert.equal(e.automatic_release,false);assert.equal(e.task_reconciliation_required,true);
+ assert.equal(rows(db),before);assert.equal(db.prepare('SELECT total_changes() n').get().n,changes);assert.equal(db.prepare('SELECT count(*) n FROM completion_settlements').get().n,0);
+ assert.throws(()=>completionState(db,completionId),{code:'COMPLETION_RECOVERY_REQUIRED'});
+ const child=spawnSync(process.execPath,[join(ROOT,'cli/completion-evidence.mjs'),'target','--db',restored.path,'--id',completionId],{encoding:'utf8',windowsHide:true});assert.equal(child.status,0,child.stderr);const out=JSON.parse(child.stdout);assert.equal(out.state_digest,e.state_digest);assert.equal(out.accepted,false);assert.equal(out.process_liveness_verified,false);
+});
+
+// Corrupt isolated fixture bytes after temporarily removing only this table's UPDATE guards.
+function alterRetained(db,table,column,key,value){
+ const triggers=db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name=? AND upper(sql) LIKE '%BEFORE UPDATE%'").all(table),row=db.prepare('SELECT '+column+' value FROM '+table+' WHERE '+key.column+'=?').get(key.value);
+ for(const t of triggers)db.exec('DROP TRIGGER "'+t.name.replaceAll('"','""')+'"');
+ db.prepare('UPDATE '+table+' SET '+column+'=? WHERE '+key.column+'=?').run(value,key.value);
+ return ()=>{db.prepare('UPDATE '+table+' SET '+column+'=? WHERE '+key.column+'=?').run(row.value,key.value);for(const t of triggers)db.exec(t.sql);};
+}
+test('sealed target evidence rejects altered scope, stop receipt and artifact payload instead of trusting ready',async()=>{
+ const x=await completionFixture(),{f,completionId}=x;readyBoth(x);const {captureCompletionTargetEvidence:capture}=await completionRecoveryEvidenceAPI(),db=f.b.db;
+ assert.equal(capture(db,{completionId}).retained_evidence_matches,true);
+ for(const [table,column,key,value,code] of [
+  ['delegation_results','scope_json',{column:'result_id',value:f.r.result_id},JSON.stringify({members:[],runs:[]}),'COMPLETION_EVIDENCE_CORRUPT'],
+  ['broker_dispatches','result_digest',{column:'dispatch_id',value:f.w.w.dispatch_id},'0'.repeat(64),'STOP_UNCONFIRMED'],
+  ['artifact_transfers','payload',{column:'transfer_id',value:f.t.transfer_id},Buffer.from('changed artifact'),'ARTIFACT_INCOMPLETE']
+ ]){const undo=alterRetained(db,table,column,key,value);try{assert.throws(()=>capture(db,{completionId}),{code});}finally{undo();}}
+ assert.equal(capture(db,{completionId}).retained_evidence_matches,true);assert.equal(db.prepare('SELECT count(*) n FROM result_decisions').get().n,0);
+});
+test('sealed target evidence preserves historical settlement and reports current task version changes after restore',async()=>{
+ const x=await completionFixture(),{f,completionId}=x;readyBoth(x);retireBoth(x);settleCompletion(f.b.db,{completionId});const historical=f.b.db.prepare('SELECT * FROM completion_settlements WHERE completion_id=?').get(completionId);
+ const {db}=restoredCompletionSource(x,f.b),{captureCompletionTargetEvidence:capture}=await completionRecoveryEvidenceAPI(),before=rows(db),e=capture(db,{completionId});
+ assert.equal(e.historical_accepted,true);assert.equal(e.accepted,false);assert.equal(e.automatic_release,false);assert.equal(e.task_reconciliation_required,true);assert.equal(rows(db),before);assert.deepEqual(db.prepare('SELECT * FROM completion_settlements WHERE completion_id=?').get(completionId),historical);assert.equal(db.prepare('SELECT count(*) n FROM result_decisions').get().n,1);assert.equal(store.get(db,f.target.id).released,false);
+});
+test('sealed target evidence refuses missing or source records and active transactions with sanitized CLI errors',async()=>{
+ const x=await completionFixture(),{f,completionId}=x;readyBoth(x);const {captureCompletionTargetEvidence:capture}=await completionRecoveryEvidenceAPI();
+ assert.throws(()=>capture(f.b.db,{completionId:randomUUID()}),{code:'COMPLETION_EVIDENCE_MISSING'});assert.throws(()=>capture(f.a.db,{completionId}),{code:'COMPLETION_EVIDENCE_MISMATCH'});
+ f.b.db.exec('BEGIN');try{assert.throws(()=>capture(f.b.db,{completionId}),{code:'TRANSACTION_CONTEXT'});}finally{f.b.db.exec('ROLLBACK');}
+ const p=spawnSync(process.execPath,[join(ROOT,'cli/completion-evidence.mjs'),'target','--db',f.a.path,'--id',completionId],{encoding:'utf8',windowsHide:true});assert.equal(p.status,1);const e=JSON.parse(p.stderr.trim().split('\n').find(s=>s.startsWith('{')));assert.equal(e.code,'COMPLETION_EVIDENCE_MISMATCH');assert.equal(p.stderr.includes(TMP),false);
 });
