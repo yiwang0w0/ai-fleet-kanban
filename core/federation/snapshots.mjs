@@ -51,8 +51,6 @@ function persistSourceSnapshot(db,projectId,draft,now){
  for(const row of db.prepare("SELECT snapshot_id FROM federation_snapshots WHERE project_id=? ORDER BY rowid DESC LIMIT -1 OFFSET 2").all(projectId))disposeSnapshot(db,row.snapshot_id);
  return manifest;
 }
-// Local history pruning already owns its atomic write operation.
-function sourceSnapshot(db,projectId,minSeq,now){return persistSourceSnapshot(db,projectId,buildSourceSnapshot(db,projectId,minSeq,now),now);}
 export function startSnapshot(db,peer,{project_id:projectId,min_seq:minSeq=0},{now=Date.now(),authorize=()=>peer}={}){
  allowed(peer,projectId,"sync:pull");integer(minSeq,"min_seq");integer(now,"now");
  if(db.isTransaction)fail("TRANSACTION_CONTEXT","对端快照准备必须在独立读快照中进行");
@@ -224,6 +222,15 @@ export function receiveSnapshotPage(db,source,page){
 export function pruneHistory(db,{projectId,throughSeq,expectedHead,allowLagging=false}){
  project(projectId);version(throughSeq);version(expectedHead);
  if(typeof allowLagging!=="boolean")fail("BAD_INPUT","allowLagging 必须为布尔值",400);
+ // ⭐ The draft (full published read up to 10000 records / 32 MiB, canonical + SHA-256
+ //   over the whole event array, up to 10001 inserts) is built in a READ transaction —
+ //   exactly the layering startSnapshot already uses ("对端快照准备必须在独立读快照中
+ //   进行", line above). Building it under BEGIN IMMEDIATE held the process-wide write
+ //   lock for the whole pass (~2 s at the 10k-record cap, measured), stalling every
+ //   other writer against busy_timeout=5000 (external audit 2026-10-05, confirmed).
+ //   Correctness is unchanged: persistSourceSnapshot re-verifies identity/head/floor
+ //   under the write lock and refuses with SNAPSHOT_CHANGED if the world moved.
+ const draft=readTransaction(db,()=>{localIdentity(db);return buildSourceSnapshot(db,projectId,throughSeq,Date.now());});
  return atomic(db,()=>{
   localIdentity(db);
   const head=db.prepare("SELECT seq FROM federation_streams WHERE project_id=?").get(projectId)?.seq??0;
@@ -232,7 +239,7 @@ export function pruneHistory(db,{projectId,throughSeq,expectedHead,allowLagging=
   const peers=db.prepare("SELECT peer_node_id,peer_epoch,projects_json,scopes_json FROM federation_peers WHERE status='active'").all().filter(p=>JSON.parse(p.projects_json).includes(projectId)&&JSON.parse(p.scopes_json).includes("sync:pull"));
   const lagging=peers.filter(p=>(db.prepare("SELECT acked_seq FROM federation_deliveries WHERE peer_node_id=? AND peer_epoch=? AND project_id=?").get(p.peer_node_id,p.peer_epoch,projectId)?.acked_seq??0)<throughSeq);
   if(lagging.length&&!allowLagging)fail("UNACKNOWLEDGED","仍有对端未确认；仅显式允许压缩为快照后才能清理");
-  const snapshot=sourceSnapshot(db,projectId,throughSeq,Date.now());
+  const snapshot=persistSourceSnapshot(db,projectId,draft,Date.now());
   // SQLite transactional DDL: the deletion guard is never absent outside this transaction.
   db.exec("DROP TRIGGER federation_outbox_no_delete");
   const removed=db.prepare("DELETE FROM federation_outbox WHERE project_id=? AND seq<?").run(projectId,throughSeq).changes;
