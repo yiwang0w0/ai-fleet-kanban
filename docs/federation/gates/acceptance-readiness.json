@@ -1257,6 +1257,308 @@
         "Independent source profiles on the second physical PC and T07.06 reproduction remain pending.",
         "Runtime OS/model containment and actual deployment permissions are not inferred from this packet."
       ]
+    },
+    {
+      "task_id": "T05.02",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "接收方落盘后确认",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "接收事务、inbox 与 cursor 一起落盘；实际 SQLITE_FULL 时不发送 ACK，恢复容量并重开后同步成功。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 84,
+              "assertion_anchor": "receiving crash before cursor commit rolls back replicas and inbox together",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/sync-capacitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 37,
+              "assertion_anchor": "receiver SQLITE_FULL never acknowledges a lost batch",
+              "git_blob_sha256": "77e87987525de336ee6abe1a44c99da537ebf83d2970c48b0276b83b142a0e41",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "重复批次不重复应用",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "同一批次第二次应用为零，收件记录保持一份，远端副本不进入本地执行队列。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 74,
+              "assertion_anchor": "duplicates and lost ACK cause no duplicate application or execution",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "ACK 丢失后可重发",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "落盘后 ACK 请求丢失，源端确认游标仍为零；重试不重复应用并最终确认。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 161,
+              "assertion_anchor": "lost ACK response retries from durable cursor without applying results twice",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "重试退避有上限",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "八次网络故障后退避仍不超过约 30 秒，未到 retry_after 不再次请求。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 196,
+              "assertion_anchor": "network retries are persisted, bounded and honor backoff across attempts",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T05.01"
+        ],
+        "gates": [
+          "G02",
+          "G03"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/sync-readiness.md",
+          "sha256": "bb8ed03f50a28606f73c74d2ab56b6c2c82c0116d479933f9e4feb186bf27b87",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Windows CI and isolated local HTTP/SQLite evidence only; no physical two-PC Tailscale acceptance.",
+        "Original task prerequisites and gates remain; T05.01 wording and actual reboot evidence are unresolved."
+      ]
+    },
+    {
+      "task_id": "T05.03",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "按节点 epoch/seq 检测缺口",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "乱序/跳过序号拒绝并保持原游标；未经接纳的来源 epoch 变化也不清空游标。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 217,
+              "assertion_anchor": "out-of-order batches and changed epochs never reset a durable cursor",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "同 ID 异内容隔离",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "同一身份的异内容重放被隔离，接收副本保持最后有效版本；重复隔离不无限增加同类记录。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 93,
+              "assertion_anchor": "gaps, reordering and content conflicts quarantine without overwriting current state",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "时间倒退不覆盖新版本",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "时间倒退到 1900 年的新版本仍按序号接收，旧批次重放不能覆盖新描述。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 114,
+              "assertion_anchor": "backward wall clock does not replace a newer sequence or task version",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T05.02"
+        ],
+        "gates": [
+          "G02",
+          "G03"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/sync-readiness.md",
+          "sha256": "bb8ed03f50a28606f73c74d2ab56b6c2c82c0116d479933f9e4feb186bf27b87",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Windows CI and isolated local HTTP/SQLite evidence only; no physical two-PC Tailscale acceptance.",
+        "Original task prerequisites and gates remain; T05.01 wording and actual reboot evidence are unresolved."
+      ]
+    },
+    {
+      "task_id": "T05.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "新节点从授权快照加增量恢复",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "快照期间源端继续写入，完整安装后应用后续增量；HTTP 分页未完成不暴露半板，跨项目及撤销凭据的分页请求被拒绝。",
+          "references": [
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 72,
+              "assertion_anchor": "a frozen snapshot plus later deltas converges while the source keeps writing",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 186,
+              "assertion_anchor": "HTTP clients join by snapshot and resume a persisted partial download",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 228,
+              "assertion_anchor": "HTTP snapshot pages recheck credentials and project scope before exposing data",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "落后超保留期可重建",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "历史压缩后落后接收端通过快照恢复最新结果；安装后 ACK 丢失再重试时 rebuilt/applied 都为零。",
+          "references": [
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 197,
+              "assertion_anchor": "HTTP clients rebuild after history compaction and recover an ACK lost after snapshot installation",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "备份恢复不复用事件身份",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "实际备份恢复激活后换 epoch 并撤销复制的凭据；重授权导出的 event_id 新建、task_uid 保持；跨 epoch 重用旧快照事件 ID 被拒绝。",
+          "references": [
+            {
+              "path": "tests/recoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 59,
+              "assertion_anchor": "activation rotates epoch, revokes copied credentials, fences runs and retains ownership and audit",
+              "git_blob_sha256": "16c3d106a830ddf5bd51f0e1c188863b3d1eec8428df2707ecdbbde13d473fa9",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/recoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 83,
+              "assertion_anchor": "newly authorized peers receive fresh event identities in the new epoch",
+              "git_blob_sha256": "16c3d106a830ddf5bd51f0e1c188863b3d1eec8428df2707ecdbbde13d473fa9",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/epochrecoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 264,
+              "assertion_anchor": "snapshot event receipts prevent identity reuse across recovery epochs",
+              "git_blob_sha256": "d0298fe4361bc10fbeabf82c338c7c6cfadf7c272fe56491e81eb4c05fce424c",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "snapshottest (frozen pages, crash resume and retained-history recovery)",
+        "recoverytest (retirement, reviewed activation and crash rollback)",
+        "epochrecoverytest (reviewed source epochs, missing results and atomic cutover)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T05.04"
+        ],
+        "gates": [
+          "G02",
+          "G03"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/sync-readiness.md",
+          "sha256": "bb8ed03f50a28606f73c74d2ab56b6c2c82c0116d479933f9e4feb186bf27b87",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Windows CI and isolated local HTTP/SQLite evidence only; no physical two-PC Tailscale acceptance.",
+        "Original task prerequisites and gates remain; T05.01 wording and actual reboot evidence are unresolved.",
+        "Retirement attestation is operator-supplied fixture data, not machine-verified retirement or physical RPO/RTO."
+      ]
     }
   ],
   "ready_task_ids": [
@@ -1272,7 +1574,10 @@
     "T00.05",
     "T06.04",
     "T06.05",
-    "T07.05"
+    "T07.05",
+    "T05.02",
+    "T05.03",
+    "T05.05"
   ],
   "gating_notes": [
     "G00 is not frozen; dependent tasks cannot count as accepted even after their technical review.",
@@ -1288,5 +1593,5 @@
     "task_completion_percent": 0,
     "phase_completion_percent": 0
   },
-  "updated_at": "2026-10-05T06:40:44.364729+00:00"
+  "updated_at": "2026-10-05T16:00:34.140455+09:00"
 }

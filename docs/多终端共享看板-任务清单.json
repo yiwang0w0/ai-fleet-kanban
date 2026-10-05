@@ -1754,25 +1754,36 @@
       "evidence_required": [
         "replay/ack-loss 测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_partial_passed",
-        "scope": "durable inbox/cursor before ACK; bounded pagination, duplicate/lost ACK replay and persisted backoff",
-        "pending": [
-          "real Tailscale multi-node acceptance",
-          "independent phase acceptance",
-          "restore epoch activation and complete audit/relationship events"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Read original criterion assertions and retained successful CI #149; no new runtime test or acceptance performed. See indexed limitations.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/sync.md",
         "docs/federation/sync-evidence.json",
-        "tests/synctest.mjs"
+        "tests/synctest.mjs",
+        "docs/federation/gates/sync-readiness.md"
+      ],
+      "verification_history": [
+        {
+          "result": "local_partial_passed",
+          "scope": "durable inbox/cursor before ACK; bounded pagination, duplicate/lost ACK replay and persisted backoff",
+          "pending": [
+            "real Tailscale multi-node acceptance",
+            "independent phase acceptance",
+            "restore epoch activation and complete audit/relationship events"
+          ]
+        }
       ]
     },
     {
@@ -1795,25 +1806,36 @@
       "evidence_required": [
         "reorder/conflict/clock 测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_partial_passed",
-        "scope": "per-origin/epoch/project ordering, digest conflict quarantine, version and clock rollback refusal",
-        "pending": [
-          "real Tailscale multi-node acceptance",
-          "independent phase acceptance",
-          "restore epoch activation and complete audit/relationship events"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Read original criterion assertions and retained successful CI #149; no new runtime test or acceptance performed. See indexed limitations.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
         "docs/federation/sync.md",
         "docs/federation/sync-evidence.json",
-        "tests/synctest.mjs"
+        "tests/synctest.mjs",
+        "docs/federation/gates/sync-readiness.md"
+      ],
+      "verification_history": [
+        {
+          "result": "local_partial_passed",
+          "scope": "per-origin/epoch/project ordering, digest conflict quarantine, version and clock rollback refusal",
+          "pending": [
+            "real Tailscale multi-node acceptance",
+            "independent phase acceptance",
+            "restore epoch activation and complete audit/relationship events"
+          ]
+        }
       ]
     },
     {
@@ -1885,18 +1907,18 @@
       "evidence_required": [
         "snapshot/restore/epoch 测试"
       ],
-      "status": "in_progress",
+      "status": "implemented_pending_acceptance",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
       "verification_result": {
-        "result": "local_partial_passed",
-        "scope": "reviewed source activation and receiver epoch acceptance, atomic per-project snapshot cutover, prior/missing result retention and old-epoch credential fencing",
-        "pending": [
-          "real single-writer retirement, Tailscale reauthorization, multi-node disaster RPO/RTO and independent acceptance",
-          "owner-side reconciliation of preserved missing task results and final global UI"
-        ]
+        "result": "implementation_evidence_ready_for_independent_review",
+        "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "scope": "Read original criterion assertions and retained successful CI #149; no new runtime test or acceptance performed. See indexed limitations.",
+        "evidence": "docs/federation/gates/acceptance-readiness.json",
+        "required_ci_run": 37258132393,
+        "formal_acceptance": false
       },
       "acceptance_receipt": null,
       "implementation_evidence": [
@@ -1908,7 +1930,18 @@
         "tests/recoverytest.mjs",
         "docs/federation/source-recovery.md",
         "docs/federation/source-recovery-evidence.json",
-        "tests/epochrecoverytest.mjs"
+        "tests/epochrecoverytest.mjs",
+        "docs/federation/gates/sync-readiness.md"
+      ],
+      "verification_history": [
+        {
+          "result": "local_partial_passed",
+          "scope": "reviewed source activation and receiver epoch acceptance, atomic per-project snapshot cutover, prior/missing result retention and old-epoch credential fencing",
+          "pending": [
+            "real single-writer retirement, Tailscale reauthorization, multi-node disaster RPO/RTO and independent acceptance",
+            "owner-side reconciliation of preserved missing task results and final global UI"
+          ]
+        }
       ]
     },
     {
