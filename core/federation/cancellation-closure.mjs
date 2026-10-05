@@ -1,3 +1,4 @@
+import {contractRecoveryState} from './contract-recovery.mjs';
 import {createRequire} from "node:module";
 import {randomUUID} from "node:crypto";
 import {PeerError,version} from "./protocol.mjs";
@@ -26,7 +27,8 @@ export function migrateCancellationClosure(db){return unit(db,()=>{
 function document(db,table,id){if(!has(db,table))return null;const r=db.prepare("SELECT * FROM "+table+" WHERE relation_id=?").get(id);if(!r)return null;const d=JSON.parse(r.receipt_json);if(digest(d)!==r.receipt_digest)fail("CANCELLATION_CORRUPT","取消退役记录摘要改变");return d;}
 export function cancellationClosureState(db,relationId){
  const s=cancellationState(db,relationId),retirement=document(db,"cancellation_retirements",relationId),settlement=document(db,"cancellation_settlements",relationId),attempts=has(db,"cancellation_registrar_attempts")?db.prepare("SELECT request_id,state,error_code FROM cancellation_registrar_attempts WHERE relation_id=? ORDER BY rowid").all(relationId).map(r=>({...r})):[];
- return {...s,closure_phase:settlement?"settled":retirement?"retired":attempts.length?"voting":s.stopped?"stopped":"awaiting_stop",retirement,settlement,attempts,accepted:false,dispatch_started:false};
+ const recovery=contractRecoveryState(db,relationId);
+ return {...s,...(recovery?{recovery}:{}),closure_phase:recovery?'recovered_cancelled':settlement?"settled":retirement?"retired":attempts.length?"voting":s.stopped?"stopped":"awaiting_stop",retirement,settlement,attempts,accepted:false,dispatch_started:false};
 }
 function contract(db,relationId){
  const s=cancellationState(db,relationId),b=bindingState(db,relationId);if(!s.stopped)fail("STOP_UNCONFIRMED","先保存执行端停止证明");

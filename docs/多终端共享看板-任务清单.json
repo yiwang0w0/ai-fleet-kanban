@@ -2809,13 +2809,29 @@
       "evidence_required": [
         "upgrade-recovery.json"
       ],
-      "status": "planned",
+      "status": "in_progress",
       "count_weight": 1,
       "owner_node_id": null,
       "agent_instance_id": null,
       "execution_authorized": false,
-      "verification_result": null,
-      "acceptance_receipt": null
+      "verification_result": {
+        "result": "local_component_passed",
+        "scope": "Actual SQLite backup/restore and registrar epoch change with confirmed stopped contracts; explicit bilateral recovery, held tasks, immutable history and CLI; independent and colocated registrar fixtures.",
+        "evidence": "docs/federation/contract-recovery-evidence.json",
+        "pending": [
+          "Remaining AT17-AT20/AT24 physical upgrade and recovery acceptance",
+          "Completion-sealed and unresolved topology recovery coordination",
+          "Independent review and frozen recovery-time threshold"
+        ]
+      },
+      "acceptance_receipt": null,
+      "implementation_evidence": [
+        "core/federation/contract-recovery.mjs",
+        "cli/contract-recovery.mjs",
+        "tests/contractrecoverytest.mjs",
+        "docs/federation/contract-recovery.md",
+        "docs/federation/contract-recovery-evidence.json"
+      ]
     },
     {
       "id": "T09.06",

@@ -1,3 +1,4 @@
+import {contractRecoveryState} from './contract-recovery.mjs';
 import {migrateBindingRecovery,bindingRecovery} from "./binding-recovery.mjs";
 import {checkCancellationRetirement} from "./cancellation-contract.mjs";
 import {checkCompletionReceipt} from "./completion-contract.mjs";
@@ -82,7 +83,7 @@ function sourceGrant(db,d,peer=null){
  if(db.prepare("SELECT 1 FROM federation_retired_epochs WHERE origin_node_id=? AND origin_epoch=?").get(d.source_node_id,d.source_epoch))fail("RETIRED_EPOCH","来源代次已退役",403);return p;
 }
 export function bindingState(db,id){
- const b=row(db,id);return {relation_id:id,delegation_id:b.delegation_id,project_id:b.project_id,side:b.side,state:guard.outcome(b),task_uid:b.task_uid,task_version:b.task_version,registrar_node_id:b.registrar_node_id,registrar_epoch:b.registrar_epoch,relation:JSON.parse(b.descriptor_json),confirmation:b.confirmation_json?JSON.parse(b.confirmation_json):null,binding_authorized:b.side==="target"&&guard.ready(db,b.task_id),execution_authorized:b.side==="target"&&guard.ready(db,b.task_id)&&topologyGuard.claimable(db,b.task_id)&&!guard.sourceHeld(db,b.task_id),dispatch_started:false,recovery:bindingRecovery(db,id),cancellation:guard.cancellationProjection(db,id),attempts:db.prepare("SELECT request_id,action,state,error_code FROM binding_attempts WHERE relation_id=? ORDER BY rowid").all(id)};
+ const b=row(db,id);return {relation_id:id,delegation_id:b.delegation_id,project_id:b.project_id,side:b.side,state:guard.outcome(b),task_uid:b.task_uid,task_version:b.task_version,registrar_node_id:b.registrar_node_id,registrar_epoch:b.registrar_epoch,relation:JSON.parse(b.descriptor_json),confirmation:b.confirmation_json?JSON.parse(b.confirmation_json):null,binding_authorized:b.side==="target"&&guard.ready(db,b.task_id),execution_authorized:b.side==="target"&&guard.ready(db,b.task_id)&&topologyGuard.claimable(db,b.task_id)&&!guard.sourceHeld(db,b.task_id),dispatch_started:false,recovery:bindingRecovery(db,id),...(contractRecoveryState(db,id)?{cancellation_recovery:contractRecoveryState(db,id)}:{}),cancellation:guard.cancellationProjection(db,id),attempts:db.prepare("SELECT request_id,action,state,error_code FROM binding_attempts WHERE relation_id=? ORDER BY rowid").all(id)};
 }
 export const PROPOSAL_DECLINE_REASONS=Object.freeze(["stale_topology","contract_changed","duplicate","operator_declined"]);
 const hasDecisions=db=>!!db.prepare("SELECT 1 FROM sqlite_master WHERE name='binding_proposal_decisions'").get();

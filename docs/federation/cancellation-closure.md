@@ -48,3 +48,6 @@ MCP `settle_cancellation` 只对同项目 coordinate 开放，参数为 request_
 关系存储升至 schema 3，绑定存储升至 schema 4；取消停止存储仍为 schema 1，退役请求/回执/结算使用独立 cancellation_closure_schema 1。按 [0.24 迁移说明](migration-0.24.md) 停止旧写入者后升级，不混用新旧写入代码。读取历史关系的看板兼容关系 schema 2/3、绑定 schema 3/4；旧节点可继续其既有协议，但不参与新的取消退役。
 
 本地 CLI、HTTP、故障注入及两节点实例证据见 [H4a 验证记录](cancellation-closure-evidence.json)。这些测试不是两台实体 Windows 电脑的验收。自动投递、取消交付物的长期保留/清理、未知进程的人工停止核验及实体联调仍按原计划推进；不删除隔离标记或补写停止证明。
+
+
+登记节点备份恢复换代后，普通旧图退役不能继续。已有双端停止回执时，使用 [合同恢复协调](contract-recovery.md) 的本机显式计划；其人工核对回执与普通 peer 退役分开记录，任务不自动放行。

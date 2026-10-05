@@ -47,7 +47,9 @@
   },
   "task_manifest": {
     "path": "docs/多终端共享看板-任务清单.json",
-    "sha256": "aaffeaa6801aff88ec21c42a99360516d0e5839dd3b67f4cc6a1ab2bafcb5861"
+    "sha256": "aaffeaa6801aff88ec21c42a99360516d0e5839dd3b67f4cc6a1ab2bafcb5861",
+    "code_sha": "dfb8051b180e375254e3465259cf224a46c46986",
+    "note": "Frozen manifest snapshot accompanying the resumed CI candidate; later implementation progress is recorded on the working branch."
   },
   "decisions": [
     {

@@ -1,3 +1,4 @@
+import {recoveredGraphCancellations} from './contract-recovery.mjs';
 // Local administration only. A digest protects transport integrity, not the truth of operator attestations.
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -29,7 +30,8 @@ function graphSnapshot(db,projectId,inputMembers){
  const state={graph:g,members:oldMembers};
  for(const t of ['relation_topologies','relation_proposals','relation_edges','relation_withdrawals','relation_requests','relation_events','relation_completions','relation_cancellations'])state[t]=has(db,t)?db.prepare('SELECT * FROM '+t+' WHERE graph_id=? ORDER BY rowid').all(g.graph_id):[];
  for(const t of ['relation_approvals','relation_completion_proposals','relation_completion_votes','relation_cancellation_proposals','relation_cancellation_votes'])state[t]=has(db,t)?db.prepare('SELECT * FROM '+t+' WHERE relation_id IN(SELECT relation_id FROM relation_proposals WHERE graph_id=?) ORDER BY rowid').all(g.graph_id):[];
- const edges=new Set(state.relation_edges.map(e=>e.relation_id)),withdrawn=new Set(state.relation_withdrawals.map(e=>e.relation_id)),closed=new Set([...state.relation_completions,...state.relation_cancellations].map(e=>e.relation_id)),pending=state.relation_proposals.filter(p=>!edges.has(p.relation_id)&&!withdrawn.has(p.relation_id)),active=state.relation_edges.filter(e=>!closed.has(e.relation_id)),blockers=[];
+ state.contract_recovery_retirements=recoveredGraphCancellations(db,g.graph_id);
+ const edges=new Set(state.relation_edges.map(e=>e.relation_id)),withdrawn=new Set(state.relation_withdrawals.map(e=>e.relation_id)),closed=new Set([...state.relation_completions,...state.relation_cancellations,...state.contract_recovery_retirements].map(e=>e.relation_id)),pending=state.relation_proposals.filter(p=>!edges.has(p.relation_id)&&!withdrawn.has(p.relation_id)),active=state.relation_edges.filter(e=>!closed.has(e.relation_id)),blockers=[];
  if(pending.length)blockers.push({kind:'pending_relations',relation_ids:pending.map(p=>p.relation_id)});if(active.length)blockers.push({kind:'active_relations',relation_ids:active.map(e=>e.relation_id)});
  return {node_id:n.node_id,node_epoch:n.sync_epoch,project_id:projectId,old_graph_id:g.graph_id,old_graph_epoch:g.graph_epoch,old_registrar_epoch:g.registrar_epoch,old_members:membersOf(oldMembers),members,generation:(g.generation??0)+1,state_digest:digest(state),blockers,automatic_release:false};
 }

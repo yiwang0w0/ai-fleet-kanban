@@ -86,7 +86,7 @@ jobs:
       - name: topologytest (local graph commitments, offline transitions and MCP placement)
         run: bash hrun.sh node tests/topologytest.mjs
       - name: graph recovery (append-only generations, member attestations and held tasks)
-        run: bash hrun.sh node --test tests/graphrecoverytest.mjs
+        run: bash hrun.sh node --test tests/graphrecoverytest.mjs tests/contractrecoverytest.mjs
       - name: bindingtest (endpoint contracts, bilateral readiness and scoped release)
         run: bash hrun.sh node tests/bindingtest.mjs
       - name: cancellationtest (durable cancel, subtree fences and observed stop receipts)
