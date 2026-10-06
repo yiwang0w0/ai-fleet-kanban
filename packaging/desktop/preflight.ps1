@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$NodePath='',
   [string]$GitPath='',
   [string]$TailscalePath='',

@@ -631,8 +631,8 @@ try {
   //   last_runtime feeds family rules (machine-evidence prose admission, review
   //   anti-affinity). For slots the board spawned it must come from the seat the
   //   server started — a lying claim body cannot flip the family (external audit
-  //   2026-10-05, regression of 83a2d88). Manual claims keep the self report.
-  console.log(NL + "[§J9 last_runtime 由受管席位盖章,自报仅限手工领取]");
+  //   2026-10-05, regression of 83a2d88). Only operator claims may explicitly attest a manual runtime.
+  console.log(NL + "[§J9 last_runtime 由受管席位盖章,自报仅限操作员领取]");
   {
     const B = await mk({ env: { BOARD_SPAWN_ECHO: "1", BOARD_UNTIL: "2099-01-01T12:00" } });
     const r0 = await B.worker("alpha");
@@ -650,12 +650,12 @@ try {
     ok("⭐J9-1 受管席位的 runtime 盖章为席位值,自报谎称 codex 不生效",
        lying.status === 200 && lyingTask?.last_runtime === "claude",
        `claim=${lying.status} runtime=${lyingTask?.last_runtime}`);
-    // Control: an unsupervised (manual) worker keeps the allowlist-purified self report.
+    // Control: an operator may explicitly attest a manual runtime.
     await B.api("POST", "/api/tasks", { subject: "manual-stamp fixture", released: 1 });
     const manual = await B.api("POST", "/api/claim",
       { worker: "hand-runner", runtime: "codex", worker_protocol_version: 2, agent_instance_id: "1f2e3d4c-5b6a-4b78-9976-a5b4c3d2e1f0" });
     const manualTask = (await B.api("GET", "/api/tasks/" + manual.body?.task?.id)).body?.task;
-    ok("J9-2 (对照)手工领取仍采信自报(受控 allowlist)",
+    ok("J9-2 (对照)操作员手工领取仍采信自报(受控 allowlist)",
        manual.status === 200 && manualTask?.last_runtime === "codex",
        `claim=${manual.status} runtime=${manualTask?.last_runtime}`);
   }

@@ -1512,8 +1512,9 @@ function claim(db, worker, leaseMin = DEFAULT_LEASE_MIN, opts = {}) {
       `UPDATE tasks SET status='in_progress', worker=?, lease_until=?, heartbeat_at=?,
                         attempts=attempts+1, attempts_base=attempts, waiting_for=NULL,
                         dispatch_fp=?, dispatch_fp_at=?,
-                        last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
+                        last_runtime=CASE WHEN ? THEN ? ELSE COALESCE(?, last_runtime) END, updated_at=? WHERE id=?`
     ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
+          opts.resetRuntime ? 1 : 0, opts.runtime ? String(opts.runtime) : null,
           opts.runtime ? String(opts.runtime) : null, now(), pick.id);
     const runId = startRun(db, pick.id, worker, opts);
     spanOpen(db, pick.id, worker);
@@ -1603,7 +1604,7 @@ function reapExpiredInner(db) {
  * Passes ALL the same gates as claim. On refusal, it names WHAT blocked it —
  * a bare "couldn't take it" hides whether it was release, deps, or a lock.
  */
-function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null,
+function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = null, resetRuntime = false,
                          force = false, treeRev = null, extra = null, agentInstanceId = null, runContext = null, runContextForTask = null, expectedVersion }) {
   if (!worker) throw err(ERR.BAD_INPUT, "worker 不能为空");
   leaseMin = clampLease(leaseMin);   // see claim()
@@ -1685,8 +1686,9 @@ function claimById(db, { id, worker, leaseMin = DEFAULT_LEASE_MIN, runtime = nul
       `UPDATE tasks SET status='in_progress', worker=?, lease_until=?, heartbeat_at=?,
                         attempts=attempts+1, attempts_base=attempts, waiting_for=NULL,
                         dispatch_fp=?, dispatch_fp_at=?,
-                        last_runtime=COALESCE(?, last_runtime), updated_at=? WHERE id=?`
+                        last_runtime=CASE WHEN ? THEN ? ELSE COALESCE(?, last_runtime) END, updated_at=? WHERE id=?`
     ).run(String(worker), Date.now() + leaseMin * 60000, Date.now(), dfp, now(),
+          resetRuntime ? 1 : 0, runtime ? String(runtime) : null,
           runtime ? String(runtime) : null, now(), Number(id));
     const runId = startRun(db, Number(id), worker, {runtime, agentInstanceId, runContext, runContextForTask});
     spanOpen(db, Number(id), worker);

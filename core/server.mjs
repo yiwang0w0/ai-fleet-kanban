@@ -1727,6 +1727,9 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
        ...(k > 1 ? ["--worker", key] : []),
        "--route", route, "--interval", "60", ...untilArgs];
   const env = slotEnv(line, k, ag, isReview);
+  // A spawned seat has an identity-bound credential, never a shared runtime assertion.
+  const workerToken = isReview ? null : randomUUID().replace(/-/g, "");
+  env.WORKER_BOARD_TOKEN = workerToken || "";
   // ⭐ The KEY NAMES of the WORKER_*/REVIEWER_* env the child actually receives
   //   (values withheld — WORKER_SESSION is a real conversation id and slot tails go
   //   out over HTTP). Without this, "slot 2 gets no WORKER_SESSION" never appears
@@ -1744,7 +1747,7 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
     // Slot config echoed too — "did each slot really get its own model/effort" is
     // only assertable from here (env does not show in argv).
     workers.set(key, { line, slot: k, echo: true, proc: null, startedAt: Date.now(), route,
-                       settings: ag, log: ["[spawn-echo] " + JSON.stringify([PY, ...args]) +
+                       settings: ag, workerToken, log: ["[spawn-echo] " + JSON.stringify([PY, ...args]) +
                                            " [slot-cfg] " + JSON.stringify({ slot: k, ...ag }) +
                                            " [slot-env] " + JSON.stringify(envKeys)] });
     emit("worker.changed", { line, running: false });
@@ -1761,11 +1764,12 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
     ? spawn("cmd", ["/c", "start", `worker:${key}`, "cmd", "/k", PY, ...args],
             { cwd: __dirname, env, windowsVerbatimArguments: false })
     : spawn(PY, args, { cwd: __dirname, env, detached: process.platform !== "win32" });
-  const w = { line, slot: k, proc, startedAt: Date.now(), route, log: [], settings: ag, detached: ag.window };
+  const w = { line, slot: k, proc, startedAt: Date.now(), route, log: [], settings: ag, workerToken, detached: ag.window };
   // ⚠ Without this handler a spawn failure (interpreter missing, ENOENT) is an
   //   unhandled 'error' event and KILLS THE WHOLE BOARD — the supervisor dying of
   //   one child's absence. Record it like any other unexplained stop.
   proc.on("error", (e) => {
+    w.workerToken = null;
     w.log.push(`[spawn 失败: ${e.message}]`);
     if (w.proc) { w.proc = null; w.exitedAt = Date.now(); w.exitCode = -1; }
     if (!validStop(w.stopReason)) recordStop(line, STOP_REASON.CRASH, [w]);
@@ -1780,6 +1784,8 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
   proc.stdout.on("data", push);
   proc.stderr.on("data", push);
   proc.on("exit", (code) => {
+    // A window launcher may exit while its console loop continues; stop/restart still revokes.
+    if (!w.detached || code !== 0) w.workerToken = null;
     w.log.push(`[进程退出 code=${code}]`);
     w.proc = null; w.exitedAt = Date.now(); w.exitCode = code;
     // If the initiator already put a reason down, the OS's code=1 must not overwrite it
@@ -1869,6 +1875,7 @@ async function workerStop(line, { keepIntent = false,
   if (!keepIntent) setDesired(line, false);   // a human stop stays stopped across restarts
   const lineSlots = slotsOf(line);
   const slots = lineSlots.filter((w) => w.proc || w.echo);
+  for (const w of lineSlots) w.workerToken = null; // revoke before asynchronous tree kill
   // ⭐ Booked BEFORE the tree kill — this ORDER is the mechanism, not a preference: a
   //   kill returns non-zero, and whoever reads the code afterwards would call it a
   //   crash. Written across the line's whole slot set, so a line that was backing off
@@ -2119,8 +2126,16 @@ const readBody = (req) => new Promise((resolve, reject) => {
   // SyntaxError it falls to the untyped-400 fallback, and every mis-send rings the
   // [unclassified] alarm with the same face as a real gap — normalized alarms stop
   // being read.
-  req.on("end", () => { try { resolve(b ? JSON.parse(b) : {}); }
-    catch (e) { reject(store.err(store.ERR.BAD_INPUT, `request body is not valid JSON: ${e.message}`)); } });
+  req.on("end", () => {
+    let body;
+    try { body = b ? JSON.parse(b) : {}; }
+    catch (e) { return reject(store.err(store.ERR.BAD_INPUT, `request body is not valid JSON: ${e.message}`)); }
+    // Covers claim, report, heartbeat and derived-card writes, before state changes.
+    if (req.boardRole === "worker" && body?.worker !== undefined &&
+        (req.workerSeat ? body.worker !== req.workerSeat.worker : workers.get(String(body.worker))?.workerToken))
+      return reject(store.err(store.ERR.CONFLICT, "worker identity does not match its credential"));
+    resolve(body);
+  });
   // ⚠ Transport failures (disconnects) stay untyped — they are not about the
   //   caller's request; if the fallback ever reports one, THAT is when to think.
   req.on("error", reject);
@@ -2283,9 +2298,12 @@ function guardAuthentication(req, res) {
     return null;
   }
   const tok = req.headers["x-board-token"];
+  const bound = [...workers.entries()].find(([,w]) => w.workerToken && tok === w.workerToken);
+  req.workerSeat = bound ? { worker:bound[0], runtime:bound[1].settings.runtime } : null;
   const role = tok === BOARD_TOKEN ? "operator"
-             : tok === WORKER_TOKEN ? "worker"
+             : tok === WORKER_TOKEN || bound ? "worker"
              : tok === REVIEW_TOKEN ? "review" : null;
+  req.boardRole = role;
   if (!role) {
     // ⚠ Echoing TOKEN_FILE raw would hand an unauthenticated caller an absolute
     //   path with the username in it. "Remember to redact at echo time" fails at
@@ -2309,16 +2327,11 @@ function guardWrite(req, res, p) {
 
 if (process.env.BOARD_EXTRA_ORIGINS?.trim()) console.warn("⚠ BOARD_EXTRA_ORIGINS 扩大了允许来源；所有任务、节点身份和事件接口仍需认证，不要将管理面板用作 peer 转发。");
 const WORKER_PROTOCOL_VERSION = 2;
-// ⭐ The last_runtime stamp decides security-relevant family rules (machine-evidence
-//   prose admission, review anti-affinity), so it cannot stay a self-report for seats
-//   the board itself spawned: a compromised loop would flip one field and have its
-//   fabricated PASS/rc admitted as machine output (external audit 2026-10-05,
-//   regression of 83a2d88). Where the worker name matches a slot THIS server started,
-//   the seat's snapshotted runtime is authoritative — it is the exact value handed to
-//   the child in WORKER_RUNTIME. Manual/unsupervised claims keep the historical
-//   allowlist-purified self report: a hand-run loop is an operator act, and there is
-//   no server-side seat to consult.
-function stampedRuntime(workerName, selfReported) {
+// Shared/manual worker credentials attest execution permission, not a runtime family.
+// Only a bound spawned-seat credential or an explicit operator act may stamp runtime.
+function stampedRuntime(req, role, workerName, selfReported) {
+  if (req.workerSeat) return req.workerSeat.runtime;
+  if (role !== "operator") return null;
   const seat = workers.get(String(workerName || ""))?.settings;
   if (seat && RUNTIME_IDS.includes(seat.runtime)) return seat.runtime;
   return RUNTIME_IDS.includes(selfReported) ? selfReported : null;
@@ -2803,14 +2816,12 @@ const server = http.createServer(async (req, res) => {
                                 pools: poolState });
       // ⛔ NO badRoutable here (ruled; reasons at claimMiss above — the harness
       //   watches that stray values do NOT 400).
-      // ⭐ Badge stamping: the runtime comes from the SEAT the board spawned when the
-      //   worker name matches a supervised slot (stampedRuntime); outside the allowlist
-      //   and outside supervision alike = "not passed" = no stamp; never 400, never a
-      //   claim criterion.
-      const rt = stampedRuntime(b.worker, b.runtime);
+      // Runtime is credential-bound; a shared worker token cannot attest a family.
+      // Reset on every server claim so an unknown new run cannot inherit an old badge.
+      const rt = stampedRuntime(req, boardRole, b.worker, b.runtime);
       const identity = claimIdentity(b, boardRole);
       const got = store.claim(db, b.worker, b.lease_minutes || store.DEFAULT_LEASE_MIN,
-                              { route: b.route, line: b.line, runtime: rt, ...identity, ...fpContext() });
+                              { route: b.route, line: b.line, runtime: rt, resetRuntime:true, ...identity, ...fpContext() });
       noteClaim(b.worker, { route: b.route, line: b.line }, !!got);
       if (!got) {
         // ⭐ Empty-handed, but WHY. Same rule the pool gate follows (503 must not wear
@@ -2877,9 +2888,8 @@ const server = http.createServer(async (req, res) => {
         //   occupy a different card). Refusals come back with the reason named.
         const r = store.claimById(db, { id, worker: b.worker, expectedVersion:b.expected_version, ...claimIdentity(b, boardRole),
                                         leaseMin: b.lease_minutes || store.DEFAULT_LEASE_MIN,
-                                        // badge stamping: seat-authoritative where the
-                                        // board spawned the worker; same never-400 policy
-                                        runtime: stampedRuntime(b.worker, b.runtime),
+                                        // Operator-only direct claims remain an explicit trusted act.
+                                        runtime: stampedRuntime(req, boardRole, b.worker, b.runtime), resetRuntime:true,
                                         // ⭐ force = a person saying "run it anyway". Operator-only:
                                         //   guardWrite already restricts this endpoint, and a worker
                                         //   able to force its own re-dispatch would own the brake.

@@ -25,6 +25,15 @@ from a named incident (see `docs/INCIDENTS.md`):
   card text cannot close, re-scope or re-parent anything); `review_token` =
   ruling face, and only as `resolved_by=auto`. All three live in the data
   directory (gitignored) — that directory is **operator territory**.
+  Supervised worker loops receive a short-lived credential bound to their worker
+  name and snapshotted runtime. It is removed from the environment before any
+  model or verifier child starts, and revoked on stop, replacement or loop exit
+  (a separate console launcher exit is not a loop exit). Renaming a request does
+  not change its identity. The shared `worker_token` remains usable for manual
+  execution, but cannot borrow a registered seat or attest a runtime family;
+  a new unbound claim clears the previous runtime stamp. Only an operator may
+  explicitly attest a manual runtime. This prevents a shared token from turning
+  copied `PASS` prose into Codex machine evidence.
   **Measured 2026-09-07 with the real CLI on Windows (nine experiments, positive
   controls included):** a Claude worker in `-p` mode can `Read` any absolute path
   on the machine, inside or outside its working directory — so moving the data

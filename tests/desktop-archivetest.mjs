@@ -18,7 +18,7 @@ import {join,dirname,resolve} from "node:path";
 import {spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {archiveSnapshot} from "../core/desktop-package.mjs";
+import {archiveSnapshot,buildDesktopPackage} from "../core/desktop-package.mjs";
 
 const ROOT=fileURLToPath(new URL("../",import.meta.url));
 const sha256=b=>createHash("sha256").update(b).digest("hex");
@@ -90,4 +90,29 @@ test("the build path spawns nothing: no child_process import, no spawn/exec call
  assert.doesNotMatch(src,/child_process/);
  assert.doesNotMatch(src,/\b(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\s*\(/);
  assert.match(src,/from ['"]node:zlib['"]/);
+});
+
+test("Windows PowerShell 5.1 parses source and packaged preflight as UTF-8 with BOM",{skip:process.platform!=="win32"},()=>{
+ const tmp=mkdtempSync(join(tmpdir(),"fleet-preflight-encoding-")),source=join(ROOT,"packaging","desktop","preflight.ps1");
+ try{
+  const kit=buildDesktopPackage(join(tmp,"kit")),paths=[source,join(kit.output,"bundle","preflight.ps1")];
+  for(const path of paths)assert.deepEqual(readFileSync(path).subarray(0,3),Buffer.from([0xef,0xbb,0xbf]),path+" must retain its UTF-8 BOM");
+  const literals=paths.map(path=>"'"+path.replaceAll("'","''")+"'").join(",");
+  const command=[
+   "$ErrorActionPreference='Stop';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)",
+   "if($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5 -or $PSVersionTable.PSVersion.Minor -ne 1){throw 'Windows PowerShell 5.1 required'}",
+   "$utf8=[Text.UTF8Encoding]::new($false,$true)",
+   "$reports=@(foreach($path in @("+literals+")){",
+   "$tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($path,[ref]$tokens,[ref]$errors)",
+   "$expected=[IO.File]::ReadAllText($path,$utf8)",
+   "$strings=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] -and $n.Value -match '[^\\x00-\\x7F]'},$true))",
+   "[pscustomobject]@{errors=@($errors|ForEach-Object {$_.Message});matches_utf8=($ast.Extent.Text -ceq $expected);unicode_literals=$strings.Count}",
+   "});ConvertTo-Json -InputObject $reports -Depth 4 -Compress"
+  ].join(";");
+  const ps=join(process.env.SystemRoot,"System32","WindowsPowerShell","v1.0","powershell.exe");
+  const r=spawnSync(ps,["-NoLogo","-NoProfile","-NonInteractive","-Command",command],{encoding:"utf8",windowsHide:true,maxBuffer:1024*1024,timeout:10000});
+  assert.equal(r.status,0,r.stderr);
+  const reports=JSON.parse(r.stdout);assert.equal(reports.length,2);
+  for(const report of reports){assert.deepEqual(report.errors,[]);assert.equal(report.matches_utf8,true);assert.ok(report.unicode_literals>0);}
+ }finally{assert.equal(dirname(resolve(tmp)),resolve(tmpdir()));assert.match(tmp,/fleet-preflight-encoding-/);rmSync(tmp,{recursive:true,force:true});}
 });

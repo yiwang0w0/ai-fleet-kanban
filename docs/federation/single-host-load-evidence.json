@@ -365,5 +365,5 @@
   ],
   "formal_accepted_tasks": 0,
   "formal_accepted_stages": 0,
-  "sources_caliber": "The sha256 values recorded under sources (top level and load.sources) are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
+  "sources_caliber": "The sha256 values recorded under sources (top level and load.sources) are unnormalized working-tree bytes captured on Windows. Line endings vary by file; a uniform CRLF caliber is not assumed. Declared commits and historical hashes retain their original values."
 }

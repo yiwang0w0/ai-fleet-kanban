@@ -115,5 +115,22 @@
     "formal_accepted_tasks": 0,
     "formal_accepted_stages": 0
   },
-  "sources_caliber": "The sha256 values recorded under sources are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
+  "sources_caliber": "The sha256 values recorded under sources are unnormalized working-tree bytes captured on Windows. Line endings vary by file; a uniform CRLF caliber is not assumed. Declared commits and historical hashes retain their original values.",
+  "source_recovery_observation": {
+    "checked_at": "2026-10-06",
+    "scope": "Declared original logs, current declared source paths and the previously cited de47d47 Git blobs only; no all-object scan or experiment rerun",
+    "sources": {
+      "cli/graph-recovery.mjs": {
+        "status": "not_reproduced",
+        "line_endings": "unknown",
+        "comparison_commit": "de47d479649209200146ccd8f3f509e3e2804631"
+      },
+      "tests/graphrecoverytest.mjs": {
+        "status": "not_reproduced",
+        "line_endings": "unknown",
+        "comparison_commit": "de47d479649209200146ccd8f3f509e3e2804631"
+      }
+    },
+    "limits": "Declared original logs still match their recorded hashes but contain test/CI output rather than original source bytes. Current source files contain later changes, and the specific Git blobs match neither recorded hash under LF or CRLF. Historical hashes remain unchanged."
+  }
 }

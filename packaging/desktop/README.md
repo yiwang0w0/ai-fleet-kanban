@@ -26,6 +26,8 @@
 
     powershell.exe -NoLogo -NoProfile -File .\preflight.ps1
 
+`preflight.ps1` 使用带 BOM 的 UTF-8，以便 Windows PowerShell 5.1 正确读取中文提示；编辑或重新打包时请保留 BOM。
+
 也可指定已有程序，例如 -NodePath 'D:\tools\node.exe'。脚本遵守本机执行策略，不自动放宽策略或安装软件。报告会包含计算机名、Tailscale 稳定设备 ID 和在线状态，请保存在自己的验收目录，公开分享前检查内容。默认不输出 tailnet IP、DNS、用户列表或凭据。它不向其他节点发任务，不能单凭这个报告证明看板已连通。
 
 准备完本机观察凭据和代理后再检查：

@@ -174,6 +174,8 @@ FORK_FROM = os.environ.get("WORKER_FORK_FROM") or None
 ANCHOR    = os.environ.get("WORKER_ANCHOR") or None
 EFFORT = os.environ.get("WORKER_EFFORT", "high")
 # 运行时座席(allowlist=未知值落在拒绝侧)。
+# Keep the seat credential in the trusted loop, out of all provider/verifier environments.
+_SUPERVISED_BOARD_TOKEN = os.environ.pop("WORKER_BOARD_TOKEN", "")
 RUNTIME = os.environ.get("WORKER_RUNTIME", "claude")
 # ── 线的身份(v0.22.0,fleet.config `lines[].role`,由 server 的 slotEnv 降下来)────────
 #   kind:implement(默认)= 干活;review = 只读、只核对、只判断,评审文本就是交付物。
@@ -316,13 +318,16 @@ def log(m): print(f"[{datetime.datetime.now():%H:%M:%S}] {m}", flush=True)
 
 
 def _board_token():
-    """v0.2 起 worker 持 **worker_token**(只覆盖执行面:claim/report/heartbeat/派生建卡…;
+    """受管循环优先使用启动时绑定的短期凭据,只保留在循环内存。
+    手工循环继续持 **worker_token**(只覆盖执行面:claim/report/heartbeat/派生建卡…;
     裁定/编辑对它 403)。由 server 首次启动时生成在 <DATA>/worker_token。
     ⚠ 不回退到 board_token —— 那是 operator 全权令牌,worker 拿到它就等于拿到裁定权
       (实测事故:一个被授予看板目录的交互 agent 用 board_token 自批了自己的卡)。
       文件读不到 = server 是 v0.2 之前的旧版,发空令牌让 401 响亮落地。
     ⚠ DATA 跟随 BOARD_DATA_DIR —— 要读的是**server 写令牌的那个地方**。
       钉死的话,面对临时板时会读到现役板的令牌而 401。"""
+    if _SUPERVISED_BOARD_TOKEN:
+        return _SUPERVISED_BOARD_TOKEN
     try:
         return io.open(os.path.join(DATA, "worker_token"), encoding="utf-8").read().strip()
     except Exception:

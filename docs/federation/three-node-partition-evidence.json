@@ -120,5 +120,19 @@
     "isolated_node_databases": 3,
     "os_process_isolation_verified": false
   },
-  "sources_caliber": "The sha256 values recorded under source_sha256 are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
+  "sources_caliber": "The sha256 values recorded under source_sha256 are unnormalized working-tree bytes captured on Windows. Line endings vary by file; a uniform CRLF caliber is not assumed. Declared commits and historical hashes retain their original values.",
+  "source_line_endings": {
+    "tests/partitiontest.mjs": "LF"
+  },
+  "source_recovery_observation": {
+    "checked_at": "2026-10-06",
+    "source_origin": "Declared source path in the original development working tree",
+    "sources": {
+      "tests/partitiontest.mjs": {
+        "status": "recorded_bytes_matched",
+        "content_commit": "a9369518b40ef541ef3e79a065d2207b012e1e2e"
+      }
+    },
+    "limits": "Read-only source-byte and specific Git blob comparisons only. The matching later source commit does not change base_commit or independently verify the historical experiment execution."
+  }
 }

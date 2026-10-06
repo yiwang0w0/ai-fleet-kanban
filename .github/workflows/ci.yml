@@ -231,7 +231,7 @@ jobs:
         run: bash hrun.sh node tests/servertest.mjs
       - name: "panel authentication (anonymous boundary, local pairing and authenticated events)"
         if: ${{ !cancelled() }}
-        run: bash hrun.sh node --test tests/panelauth.test.mjs tests/panelclient.test.mjs
+        run: bash hrun.sh node --test tests/panelauth.test.mjs tests/panelclient.test.mjs tests/worker-runtime-boundary.test.mjs
       - name: "reviewtest (auto-reviewer, end to end with a stub CLI)"
         if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/reviewtest.mjs

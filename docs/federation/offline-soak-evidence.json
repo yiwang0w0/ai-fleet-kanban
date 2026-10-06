@@ -382,5 +382,29 @@
     "MCP listening state was observed in runtime status; no real desktop client session was exercised.",
     "No 72-hour soak, physical power failure, independent acceptance or accepted task."
   ],
-  "sources_caliber": "The sha256 values recorded under experiment.sources are working-tree bytes at capture time on Windows (CRLF line endings), not Git blob (LF) hashes; declared per external audit 2026-10-05."
+  "sources_caliber": "The sha256 values recorded under experiment.sources are unnormalized working-tree bytes captured on Windows. Line endings vary by file; a uniform CRLF caliber is not assumed. Declared commits and historical hashes retain their original values.",
+  "source_line_endings": {
+    "core/execution/scheduler.mjs": "LF",
+    "tests/offline-soak.mjs": "mixed LF/CRLF"
+  },
+  "source_recovery_observation": {
+    "checked_at": "2026-10-06",
+    "source_origin": "Declared original working-tree test path and declared experiment Git commit; per-source status identifies the comparison",
+    "original_report": ".data/review93-offline-30min.json",
+    "sources": {
+      "tests/offline-soak.mjs": {
+        "status": "recorded_bytes_matched",
+        "normalized_content_commit": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "crlf_terminated_lines": [
+          72
+        ],
+        "other_terminated_lines": "LF"
+      },
+      "core/execution/scheduler.mjs": {
+        "status": "declared_blob_matched",
+        "content_commit": "c0f7aced0a9fc4fab4ec472fd6c38a9bd450b73a"
+      }
+    },
+    "limits": "Read-only source-byte and specific Git blob comparisons only. A current original working-tree byte match does not independently verify the historical experiment execution; no experiment was rerun."
+  }
 }
