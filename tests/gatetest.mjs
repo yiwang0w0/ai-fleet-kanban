@@ -47,6 +47,8 @@ const X = makeExtractor({ prefixes: ["packages/core", "packages", "src", "docs"]
   ok("dedupe", X.extractPaths("src/a.ts and src/a.ts").length === 1);
   ok("unknown prefix extracts nothing (the B3 blindness this module must expose, not hide)",
      eq(X.extractPaths("changed lib/秘/thing.ts"), []));
+  ok("⭐parent-escaping paths never extract (join would leave the repo root — external audit 2026-10-05)",
+     eq(X.extractPaths("交付了 src/../../elsewhere/README.md 和 docs/../../x.ts"), []));
 }
 
 // ── § named-but-uncommitted (INCIDENT-1) ───────────────────────────────────

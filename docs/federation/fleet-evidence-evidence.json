@@ -1,0 +1,132 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-47-fleet-evidence",
+  "date": "2026-09-30",
+  "base_commit": "3d950fa3654540f648274da437f820ef345c194c",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "files": [
+    {
+      "path": "core/fleet-evidence.mjs",
+      "sha256": "c63fb9d3845eb915e597dd248c47d989a5fb1ee0db0cf16bc820ab5705b1ab77"
+    },
+    {
+      "path": "core/fleet-view.mjs",
+      "sha256": "c85883bc75b46a00bd7513d00a1d3bb4bb0ab827d3c453bcecfece43ff9ab40a"
+    },
+    {
+      "path": "core/mcp/context.mjs",
+      "sha256": "c9fa4bcf9deb7fcae9544af9bcb853a20e6134373862c412ef820cda8f7b9b67"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "fc5408a66d812f4e3bbc94827bd1c242caa67be9a9e618fe4cd109c1bf56560c"
+    },
+    {
+      "path": "tests/fleetevidencetest.mjs",
+      "sha256": "a127071085879965b7ac4e144e502bd57b72b0fd4a6d33190c724228413b8fe0"
+    },
+    {
+      "path": "tests/helpers/fleet-evidence-fixture.mjs",
+      "sha256": "94e518ffa1f250e388dbc418b8ab0fb5339f43c1e08a4109226b16cf639d1b84"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "ba68a49131b973c7a8463b5cebd102c4a11bc9ac5a7bafc2b626f704b8b114b0"
+    },
+    {
+      "path": "package.json",
+      "sha256": "ea4f76962b548ec3515ebe18079198f736124aed28ad3330e7fcb827bcfa3311"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "ccfa9a641cafa59b330155ff9ff142e405d71e6a3f9ffc9687d499779d23ae9a"
+    },
+    {
+      "path": "docs/federation/fleet-evidence.md",
+      "sha256": "b83df2bbcabb4120e39aaa33e28fc4abd72b24e5e5cd32fba47cc3a8af5cbc9d"
+    },
+    {
+      "path": "docs/federation/fleet-view.md",
+      "sha256": "ec491d9cca7ace3844baa2ef313f7b560b3d5d0dc1c849dd83b32d338d31cf76"
+    },
+    {
+      "path": "docs/federation/PROGRESS.md",
+      "sha256": "e21705870451247654f7253cd459809bdf94f27a857a70ef6ef92a355eb2ea51"
+    },
+    {
+      "path": "docs/多终端共享看板-任务清单.json",
+      "sha256": "d149c1b44bfcaf5eb060d22f34f52fe8922436f0f6835a96f83d2e2577bc5854"
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/fleetevidencetest.mjs tests/fleetviewtest.mjs tests/desktopcontexttest.mjs",
+      "pass": 52,
+      "fail": 0,
+      "skip": 0,
+      "duration_ms": 132973.3095,
+      "log": ".data/review47-context-final.log"
+    },
+    {
+      "command": "node --test tests/fleetevidencetest.mjs tests/fleetviewtest.mjs tests/desktopcontexttest.mjs tests/completiontest.mjs",
+      "pass": 64,
+      "fail": 0,
+      "skip": 0,
+      "duration_ms": 378405.5947,
+      "log": ".data/review47-regression.log",
+      "scope": "Full completion suite plus earlier 10-test evidence suite; overlaps final 52. Before final settlement binding hardening."
+    },
+    {
+      "command": "node --test --test-name-pattern=\"actual source integration\" tests/completiontest.mjs",
+      "pass": 1,
+      "fail": 0,
+      "skip": 0,
+      "duration_ms": 25179.2882,
+      "log": ".data/review47-settlement-final.log",
+      "scope": "Final settlement identity/version/fixture binding and corrupted receipt rejection; overlaps the 14-test completion suite."
+    }
+  ],
+  "browser": {
+    "scope": "isolated simulated Windows board",
+    "verified": [
+      "same-name node roots",
+      "filtered-out authorized endpoint remains navigable",
+      "parent subtree delegation trace",
+      "remote cached detail",
+      "literal hostile HTML title",
+      "keyboard entry and endpoint navigation",
+      "narrow default viewport"
+    ],
+    "screenshot": "local-only fleet-relations-preview.png",
+    "preview_stopped": true
+  },
+  "prior_ci": {
+    "cdaeadd": {
+      "run": 36722450876,
+      "conclusion": "cancelled"
+    },
+    "3d950fa": {
+      "run": 36724914725,
+      "conclusion": "success"
+    }
+  },
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "gates": 0,
+    "total_gates": 12,
+    "real_provider_calls": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 0
+    }
+  },
+  "limitations": [
+    "Locally stored history only; no new receipt publication or remote authority",
+    "Result limits do not bound database scans; large-history latency unmeasured",
+    "No full dependency graph, history pagination, receipted remote actions or stage progress",
+    "Full per-task Markdown evidence/handoff summary pending",
+    "Actual clients, two-PC offline recovery, OS isolation and 72-hour acceptance pending"
+  ]
+}

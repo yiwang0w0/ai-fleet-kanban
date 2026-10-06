@@ -1,0 +1,133 @@
+{
+  "format": "ai-fleet-environment-report/v1",
+  "plan_id": "AFK-FED-001",
+  "task_id": "T01.01",
+  "node_alias": "A",
+  "platform": "win32",
+  "scope": "Single-machine S01 dependency/CLI entrypoint inventory; not live provider, desktop MCP, physical peer or G01 acceptance.",
+  "observation_at": "2026-10-05T07:37:44.718613+00:00",
+  "entry_bytes_reverified_at": "2026-10-05T08:48:21.542391+00:00",
+  "repository_head_at_preparation": "08619bfa4be2e8b7612e2a74b6ddf186e1855a47",
+  "private_manifest": {
+    "path": ".data/environment-report-20261005.json",
+    "sha256": "a671ddb4a345ada45c6ea376ab3e152530913fc449d50ca61c77ea79233cc3ee",
+    "contains_actual_absolute_paths": true,
+    "includes_credentials": false
+  },
+  "source_observation": {
+    "path": ".data/review107-local-cli-observation.json",
+    "sha256": "ead1fc55dd08c3f62c78fcabfe55f56a6412933eb4e1c5c88370bec9e6554fa4",
+    "original_help_output_retained": true
+  },
+  "entries": [
+    {
+      "runtime": "node",
+      "version_output": "v24.16.0",
+      "sha256": "b3094d0b49f9ad602262a9921551737bb97637c05dd357a06ae98188d7290aa3",
+      "version_exit_code": 0,
+      "entrypoint_type": "dependency_executable",
+      "path_display": "C:\\Program Files\\nodejs\\node.exe",
+      "path_display_is_not_an_executable_configuration": true,
+      "actual_absolute_entrypoint_recorded_in_private_manifest": true,
+      "launch_form": "absolute native executable"
+    },
+    {
+      "runtime": "python",
+      "version_output": "Python 3.12.14",
+      "sha256": "372c2eae555b344520bf147be0096e009069aeca4e7f78d6aecea6d53158056a",
+      "version_exit_code": 0,
+      "entrypoint_type": "dependency_executable",
+      "path_display": "%USERPROFILE%\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "path_display_is_not_an_executable_configuration": true,
+      "actual_absolute_entrypoint_recorded_in_private_manifest": true,
+      "launch_form": "absolute native executable"
+    },
+    {
+      "runtime": "git",
+      "version_output": "git version 2.54.0.windows.1",
+      "sha256": "81ef35ae005ca9318018d18e3327578ce939fb99feaad6b2d7c8ab15f3de8db5",
+      "version_exit_code": 0,
+      "entrypoint_type": "dependency_executable",
+      "path_display": "C:\\Program Files\\Git\\cmd\\git.exe",
+      "path_display_is_not_an_executable_configuration": true,
+      "actual_absolute_entrypoint_recorded_in_private_manifest": true,
+      "launch_form": "absolute native executable"
+    },
+    {
+      "runtime": "claude",
+      "version_output": "2.1.284 (Claude Code)",
+      "sha256": "0416631e846f743110da5282409776fa1313e65f33a588aae066eaf8db0fda7d",
+      "version_exit_code": 0,
+      "help_exit_code": 0,
+      "help_bytes": 22114,
+      "help_sha256": "f12192d0e60545166396125ff47163f89bcfe4ed0a976771e7fb9bbf7e1ca486",
+      "entrypoint_type": "native_cli",
+      "path_display": "%USERPROFILE%\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe",
+      "path_display_is_not_an_executable_configuration": true,
+      "actual_absolute_entrypoint_recorded_in_private_manifest": true,
+      "launch_form": "absolute native executable"
+    },
+    {
+      "runtime": "codex",
+      "version_output": "codex-cli 0.149.1",
+      "sha256": "a395030b56b126f608f2403036dddb654a9c063213e9c2b5f85d954cf490ebe6",
+      "version_exit_code": 0,
+      "help_exit_code": 0,
+      "help_bytes": 5731,
+      "help_sha256": "e8ecd554e6e3e870a55e540f1a21598c085cfee237f9c735ff9b5ba4ac4cf08a",
+      "entrypoint_type": "native_cli",
+      "path_display": "%USERPROFILE%\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe",
+      "path_display_is_not_an_executable_configuration": true,
+      "actual_absolute_entrypoint_recorded_in_private_manifest": true,
+      "launch_form": "absolute native executable"
+    },
+    {
+      "runtime": "zcode",
+      "version_output": "0.16.9",
+      "sha256": "fad4c35c4c36ec210d8a06d3fa0e77de23c8545e2eb6ff90aea1eb38d1e6275f",
+      "version_exit_code": 0,
+      "help_exit_code": 0,
+      "help_bytes": 3334,
+      "help_sha256": "792f3f9bce61a346181887daa1d8eedf01b7ba47c367f9f44a0e6b73038cf6db",
+      "entrypoint_type": "node_script_cli",
+      "path_display": "C:\\Program Files\\ZCode\\resources\\glm\\zcode.cjs",
+      "path_display_is_not_an_executable_configuration": true,
+      "actual_absolute_entrypoint_recorded_in_private_manifest": true,
+      "launch_form": "pinned node executable + pinned zcode.cjs script"
+    }
+  ],
+  "desktop_distinction": {
+    "zcode_desktop_file_version": "3.14.4.7912",
+    "zcode_cli_version": "0.16.9",
+    "zcode_cli_launched_through_node": true,
+    "claude_and_codex_entries_are_cli_binaries": true,
+    "desktop_mcp_connection_verified": false
+  },
+  "criterion_evidence": [
+    {
+      "criterion": "Node、Python、Git、三类 CLI 实際路径和版本有记录",
+      "finding": "Six actual absolute entrypoints, versions and content digests are preserved in the private manifest; public path displays use a profile placeholder. All six files still match their observed digests."
+    },
+    {
+      "criterion": "区分桌面与独立 CLI",
+      "finding": "Claude/Codex entries are native CLI executables; Zcode is a Node CLI script. Zcode desktop FileVersion is recorded separately; no desktop connection inferred."
+    },
+    {
+      "criterion": "无必需入口失效",
+      "finding": "All six version invocations and all three provider CLI help invocations exited zero. This proves the selected entrypoints start; authentication, task execution and desktop connection have separate pending acceptance."
+    }
+  ],
+  "boundaries": {
+    "providers_called_during_collection": false,
+    "configuration_changed": false,
+    "versions_or_help_reexecuted_for_this_report": false,
+    "functional_regression_tests_run_for_this_report": 0,
+    "physical_multi_pc_acceptance": false,
+    "formal_acceptance": false
+  },
+  "pending": [
+    "Independent review of the three T01.01 criteria and private absolute-path manifest.",
+    "Original T00.06 dependency and G00 gate.",
+    "Provider authentication/execution and actual desktop MCP remain separate S04/S08/S10 work; no spent authorization is reset."
+  ]
+}

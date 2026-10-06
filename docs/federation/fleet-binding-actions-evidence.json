@@ -1,0 +1,171 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-51-fleet-binding-actions",
+  "date": "2026-10-01",
+  "base_commit": "dd93d853caf1f738a5fee0e0e38aa51b36a0aaa7",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "scope": "Panel workflow from accepted delegation through registered topology, reviewed binding, bilateral confirmation, source readiness and explicit target release. Existing explicit deployment setup remains required.",
+  "tests": [
+    {
+      "command": "node --test tests/fleetactionstest.mjs tests/bindingtest.mjs tests/topologytest.mjs tests/relationstest.mjs tests/tltest.mjs",
+      "node_runner_units": 130,
+      "failed": 0,
+      "skipped": 0,
+      "panel_harness_assertions": 23,
+      "duration_ms": 51643.8625,
+      "log": ".data/review51-regression.log",
+      "scope": "Related protocol regression before final released-state summary and UI wording adjustments.",
+      "log_sha256": "3a434d4eb56aeac4bf479e6c76d92e6d6901279e7311d815f780925ff7afbe23"
+    },
+    {
+      "command": "node --test tests/servertest.mjs tests/tltest.mjs tests/desktop-packagetest.mjs",
+      "node_runner_units": 10,
+      "server_harness_assertions": 195,
+      "panel_harness_assertions": 23,
+      "desktop_package_tests": 8,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 93605.4918,
+      "log": ".data/review51-final-server-package.log",
+      "scope": "Server and unchanged desktop packaging; no relaxation of earlier CI timeout.",
+      "log_sha256": "7d55b1aff4d0dbed94bfc89f9a16332744136abf5428a2fb623eaef384d3dc4b"
+    },
+    {
+      "command": "node --test tests/fleetactionstest.mjs tests/tltest.mjs",
+      "node_runner_units": 27,
+      "action_tests": 26,
+      "panel_harness_assertions": 23,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 38834.1251,
+      "log": ".data/review51-final-actions.log",
+      "scope": "Final operation module including explicit released-state receipt. Followed only by protocol-receipt wording and documentation edits; final page checked in actual browser.",
+      "log_sha256": "a690b30e27af9baa1c1fff19c5ce7bca11a904a94f9cedc9c14a03577b8f2f9b"
+    }
+  ],
+  "counts_note": "Overlapping rounds are not added. Legacy server and timeline harnesses count as one Node test unit each.",
+  "checks": [
+    "Both local and independent remote registrar over actual authenticated localhost HTTP",
+    "Registration/task version review conflict refuses stale preview",
+    "Stale target topology rejected by registrar without releasing target",
+    "Lost topology acknowledgement resumes original revision after reopen",
+    "Target refusal followed by source withdrawal",
+    "Prepared binding and broker receipt roll back on queue insertion failure",
+    "Coordinator revocation during handshake prevents status caching",
+    "Registrar identity mismatch rejected; extra response fields discarded",
+    "Prior action queue, scope, origin, cancellation, candidate and replay regression"
+  ],
+  "browser": {
+    "environment": "Two temporary localhost boards on one Windows PC; source also serves as registrar",
+    "preparation": "Accepted offer and fixed graph/membership prepared through existing APIs. Binding workflow then exercised through keyboard UI.",
+    "checked": [
+      "Both current topologies registered",
+      "Authenticated registration refresh and source contract/revision review",
+      "Source approval, proposal delivery, independent target approval",
+      "Release disabled before source-ready proof, enabled after proof",
+      "Explicit target release recorded, with both task run counts still zero",
+      "Final rendered target shows released; contract HTML stays literal",
+      "390px viewport dialog clientWidth and scrollWidth both 358; viewport reset and tabs closed"
+    ],
+    "source_tasks": 1,
+    "target_tasks": 1,
+    "target_released": true,
+    "source_runs": 0,
+    "target_runs": 0,
+    "observations_log": ".data/review51-ui-observed.json",
+    "screenshot_in_repository": false,
+    "physical_two_pc_test": false,
+    "tailscale_test": false,
+    "limitation": "Browser run preceded the final receipt summary mapping from prepared to released; final rendering verified after that fix, and final action tests verify the new summary.",
+    "observations_sha256": "1efa28e24773b26c6b2e8e7dc1cd60b3acd96fecd9f9cf129bb0521812bc79c8"
+  },
+  "prior_ci": {
+    "commit": "dd93d853caf1f738a5fee0e0e38aa51b36a0aaa7",
+    "run_id": 36742251129,
+    "jobs": [
+      {
+        "id": 109979348337,
+        "name": "harness (windows-latest)",
+        "status": "in_progress",
+        "conclusion": null,
+        "active": [
+          "fleetactionstest (operator outbox, receipts and idempotent remote commands)"
+        ]
+      },
+      {
+        "id": 109979348740,
+        "name": "gitleaks",
+        "status": "completed",
+        "conclusion": "success",
+        "active": []
+      }
+    ]
+  },
+  "real_models": {
+    "additional_calls": 0,
+    "claude": {
+      "used": 1,
+      "limit": 1,
+      "result": "success"
+    },
+    "codex": {
+      "used": 1,
+      "limit": 1,
+      "result": "failure_root_cause_unconfirmed"
+    },
+    "zcode": {
+      "used": 0,
+      "limit": 1,
+      "result": "china_login_location_pending"
+    }
+  },
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "remaining": [
+    "Final verification/integration/completion UI",
+    "Full dependency graph and accepted-only phase progress",
+    "Structural editing UI beyond publishing actual current snapshot",
+    "History pagination and operator queue retention",
+    "Physical two-PC Tailscale and executor acceptance",
+    "Windows OS isolation, deployment and long-running stability acceptance"
+  ],
+  "source_files": [
+    {
+      "path": "core/federation/topology-client.mjs",
+      "sha256": "1f86143e8b474b67c8a0cf1d81549c3866d26b666429f7bf7147c841fc21e220"
+    },
+    {
+      "path": "core/fleet-actions.mjs",
+      "sha256": "16ab4c759b63fe625df37dddf0141d279b21082b282a71e5024d85941f40dbfa"
+    },
+    {
+      "path": "core/fleet-binding-actions.mjs",
+      "sha256": "dd13241376de4a13801104874776ed4efb3e6022d667c41e2bdd5d6a3acbe18b"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "5b18123592713e85d9fbcd4e3f96b9093b8b39bdc2d136f995839c4b673e2455"
+    },
+    {
+      "path": "tests/fleetactionstest.mjs",
+      "sha256": "28ea60c58cc547194fdbb9ae89c4f061763773aed7cfd368057dda8b4c26fce3"
+    },
+    {
+      "path": "docs/federation/fleet-actions.md",
+      "sha256": "9b8c765651741e93042fa70951f4a1273a84792118490657a85a252910d45cc0"
+    },
+    {
+      "path": "docs/federation/PROGRESS.md",
+      "sha256": "d28fb764290205848aeb609f4ee07eab26be2352fa646daa2dd34c333e16a66d"
+    },
+    {
+      "path": "docs/多终端共享看板-任务清单.json",
+      "sha256": "2dc977f16d407a916b624f641870290b88eadcb5651d94759cf7001281b1df7d"
+    }
+  ]
+}

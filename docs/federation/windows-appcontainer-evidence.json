@@ -1,0 +1,146 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-61-windows-appcontainer-verification",
+  "date": "2026-10-01",
+  "base_commit": "09452ff1c9e33a65df1274594cd208527c2af999",
+  "platform": "Windows",
+  "scope": "Opt-in offline AppContainer execution for source-owned verification commands; no model-provider capability change or production activation.",
+  "source_files": [
+    {
+      "path": "core/execution/process_host.py",
+      "sha256": "8861e3638e7fb45e5aa2cad325a427da5eb57d5d882c9a0f3891770fee1e938d"
+    },
+    {
+      "path": "core/execution/supervisor.mjs",
+      "sha256": "9bd7c9961753518db7de9601a0c8e888e03349d1110210724b344c5a1118895e"
+    },
+    {
+      "path": "core/verification/service.mjs",
+      "sha256": "3f59fcb9ba63c33c28382a3a8cfe932833e24a8c59e82a626e64e05c67d7d770"
+    },
+    {
+      "path": "tests/appcontainertest.mjs",
+      "sha256": "3c7ec649f6a2b9a2ff40daf63e0a87f72c997a1caa8feebd9888e48c7d4a4db8"
+    },
+    {
+      "path": "tests/verificationworkspacetest.mjs",
+      "sha256": "1f18e81285bf263313473f227e6173b9f34cd40c463e0150e5158adac11255e5"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "9b3b1da46a2e56a6aa9754ff118e46e42fe65df78ce39f420cdf7fa2eeab0fe2"
+    },
+    {
+      "path": "package.json",
+      "sha256": "23a88ac1c825b0249ccffd4a4bba09459d14a762c782c798fa282694e9a6da5c"
+    }
+  ],
+  "contract": {
+    "kind": "windows-appcontainer",
+    "network": "none",
+    "capability_count": 0,
+    "token_sid_checked_before_resume": true,
+    "profile_unique_per_run": true,
+    "explicit_loopback_exemption": false,
+    "workspace": "Package-specific modify ACL on the isolated verification copy only",
+    "pinned_inputs": "Hash-checked independent read/execute copies, 512 MiB actual-byte copy limit",
+    "job_limits": "64 MiB to 2 GiB aggregate memory; 1 to 64 active processes; original timeout and output limits retained",
+    "success_requires": [
+      "original command/check success",
+      "original artifact inputs unchanged",
+      "actual AppContainer token/SID and zero capabilities",
+      "configured memory/process limits",
+      "Windows Job empty",
+      "profile removal and staging cleanup"
+    ],
+    "automatic_unconfined_fallback": false,
+    "ordinary_legacy_config": "Unchanged trusted-host execution; filesystem_sandbox remains false"
+  },
+  "tests": {
+    "command": "node --test tests/appcontainertest.mjs tests/commandsupervisortest.mjs tests/supervisortest.mjs tests/verificationworkspacetest.mjs",
+    "passed": 47,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 172720.6915,
+    "new_units": 7,
+    "log_sha256": "6ad69165a1834741c5364f686c01c249296a5b2e9e7e591205c95d048997d631"
+  },
+  "counts_note": "47 unique units; focused runs and final repetitions overlap and are not added again. Final bounded-copy change is rechecked by the six sandbox tests and one end-to-end source test.",
+  "observed": [
+    "Inside input readable and output writable; outside fixture file and original support script denied; staged support copy rejects writes",
+    "Actual source verification imports received code and checks result42; source authority database read/write rejected; source task unchanged; receipt remains accepted:false",
+    "No-capability process cannot connect to live loopback listener; host positive controls connect before and after with zero guest connections",
+    "One-process Job prevents child output, same child succeeds with two-process Job; inherited stdio is used so pipe-creation failures cannot masquerade as process-limit evidence",
+    "96 MiB Job fails actual post-marker allocation rather than failing before the tested code",
+    "Cancellation empties Job including descendant PID, removes profile and staging",
+    "Junction workspace, invalid limits, requested internet capability and provider entry isolation rejected",
+    "Legacy command/provider supervision and durable verification recovery still pass"
+  ],
+  "initial_findings": [
+    "Minimal Windows environment caused CreateProcess error203; sandbox generates dedicated USERPROFILE/APPDATA/TEMP values and host retains only required Windows profile paths",
+    "Default Node module realpath required root metadata; explicit preserve-symlinks and preserve-symlinks-main args solve this without granting ancestor ACLs",
+    "Loopback denial surfaced as native ETIMEDOUT; proof includes current before/after host connections and no guest connection, not error-name inference alone",
+    "Node child creation with new stdio pipes was unavailable in the container; process-limit contrast uses inherited handles with a confirmed successful two-process control",
+    "Allocation test now asserts an execution marker so early module failures cannot falsely demonstrate a memory limit"
+  ],
+  "security_boundaries": [
+    "No network capabilities are requested; no firewall or Tailscale/global policy changed",
+    "AppContainer can access Windows resources already made public to application packages; claim concerns protected host data, not all system metadata",
+    "Host administrator/current-user integrity remains trusted; other unconstrained model adapters are not isolated by this change",
+    "Old trusted-host verification profiles are not retroactively sandboxed",
+    "Workspace retains data and may retain the deleted unique profile SID ACE; profile names are never reused",
+    "Host crash may retain profile/staging; failed cleanup cannot yield a passing check; no automatic broad cleanup"
+  ],
+  "remaining": [
+    "Native Claude/Codex/Zcode isolation and real subscription/desktop acceptance",
+    "Actual Windows pilot profile and dependency preparation on both physical machines",
+    "Disk quota/capacity enforcement; 50000 entries and512MiB output are post-check bounds only",
+    "Windows service lifecycle, action retention and phase integration acceptance",
+    "Full current-commit CI after push"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "physical_two_pc": false,
+  "models_called": false,
+  "previous_ci": {
+    "commit": "09452ff1c9e33a65df1274594cd208527c2af999",
+    "run_id": 36819192378,
+    "status": "in_progress",
+    "windows_job": 110230850206,
+    "last_observed_step": "mcptest",
+    "gitleaks": "success"
+  },
+  "sources": [
+    {
+      "url": "https://learn.microsoft.com/en-us/windows/win32/secauthz/implementing-an-appcontainer",
+      "checked": "2026-10-01"
+    },
+    {
+      "url": "https://nodejs.org/download/release/v25.9.0/docs/api/cli.html#--preserve-symlinks-main",
+      "checked": "2026-10-01"
+    }
+  ],
+  "final_focused_tests": [
+    {
+      "command": "node --test tests/appcontainertest.mjs",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 4775.9792,
+      "log_sha256": "a44f9c274e9e135e1a5d56a09cf5facdfb86c668b0cd1f6883cd6363860ef69e"
+    },
+    {
+      "command": "node --test --test-name-pattern=\"AppContainer source verification\" tests/verificationworkspacetest.mjs",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 20053.73,
+      "log_sha256": "c3339b428e2c7a6bb06d427eeb2260b24bedf5354450b42e7cb4eca2937837be"
+    }
+  ]
+}

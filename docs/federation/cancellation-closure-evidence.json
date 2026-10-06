@@ -1,0 +1,245 @@
+{
+  "format": "ai-fleet-cancellation-closure-evidence/v1",
+  "recorded_at": "2026-10-01T09:21:42.054707+00:00",
+  "base_commit": "06a6bc76f13fcc1b01047a350171fe9a81cbf69e",
+  "finding": "seven-module/H4a",
+  "status": "implemented_and_locally_verified_not_deployed",
+  "contract": {
+    "capability": "delegation-cancellation-closure-v1",
+    "registrar_permission": "relations:complete",
+    "binding_schema": 4,
+    "relation_schema": 3,
+    "cancellation_closure_schema": 1,
+    "stopped_does_not_unlock": true,
+    "both_current_endpoint_votes_required": true,
+    "same_request_and_stop_proof_required": true,
+    "successful_completion_mutually_exclusive": true,
+    "historical_edges_retained": true,
+    "source_settlement_pauses_before_unlocking": true,
+    "target_scope_remains_held": true,
+    "late_valid_candidates_retained_without_acceptance": true,
+    "automatic_task_restart": false,
+    "arbitrary_network_parameters_exposed_to_MCP": false
+  },
+  "negative_control": {
+    "tests": 1,
+    "expected_failures": 1,
+    "duration_ms": 1923.9217,
+    "observation": "Source claim remained blocked after actual stop receipt; baseline CLI had no retirement operation, so the end-to-end retirement assertion failed"
+  },
+  "incremental_windows_tests": {
+    "first_cli_after_implementation": {
+      "tests": 1,
+      "passed": 0,
+      "failed": 1,
+      "duration_ms": 2855.6207,
+      "cause": "Test expected numeric zero from the task API released boolean; corrected to false"
+    },
+    "first_closure_cases": {
+      "tests": 11,
+      "passed": 10,
+      "failed": 1,
+      "duration_ms": 21677.4066,
+      "cause": "Whole-database assertion incorrectly expected mandatory MCP failure audit/rate receipts to roll back; now separately asserts those persist and all business tables roll back"
+    },
+    "six_related_suites": {
+      "suites": [
+        "cancellationtest",
+        "bindingtest",
+        "relationstest",
+        "resulttest",
+        "fleetevidencetest",
+        "mcptest"
+      ],
+      "tests": 178,
+      "passed": 177,
+      "failed": 1,
+      "skipped": 0,
+      "duration_ms": 93455.5831,
+      "cause": "Initial closure response exposed SQLite null-prototype attempt rows whereas durable JSON replay returned plain objects; product response now normalizes attempt rows"
+    },
+    "closure_cases_after_response_fix": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 31341.67
+    },
+    "core_completion_regressions": {
+      "tests": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 152254.7672,
+      "cases": [
+        "sealed source and target evidence restore",
+        "successful bilateral acceptance",
+        "atomic settlement rollback",
+        "closed binding migration and readiness replay",
+        "v2 binding migration rollback",
+        "two-node successful completion"
+      ]
+    },
+    "strengthened_final_replay_cases": {
+      "tests": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 4305.6721,
+      "cases": [
+        "different stop proof cannot replace agreed cancellation",
+        "old cancellation messages replay after settlement without reopening work"
+      ]
+    },
+    "unique_tests_with_passing_result": 184,
+    "single_all_green_run": false,
+    "repository_full_suite_repeated": false,
+    "coverage": [
+      "Actual CLI and HTTP retirement, stopped versus retired versus settled",
+      "Real two-node layout with registrar on source; no third node required",
+      "Bottom-up downstream cancellation closure",
+      "Lost HTTP ACK, reopened database and failed local retirement persistence",
+      "Graph version conflict, revoked credential generation and required capability refusal",
+      "Authority checked again before persisting returned registrar response",
+      "Exact receipt, task CAS and direct close without proof refusal",
+      "Atomic task/binding/audit/settlement/MCP response rollback and durable replay",
+      "Prepared target with lost original confirmation closes without reviving",
+      "Normal completion and cancellation cannot both obtain registrar lifecycle",
+      "Late valid candidate preparation/delivery remains history without rework or acceptance",
+      "Read-only history distinguishes cancelled bindings and registry edges"
+    ]
+  },
+  "source_binding": "source_hashes use staged Git blob bytes; differing Windows checkout bytes are recorded separately. After the six-suite run, only closure response attempt representation changed; all 11 closure cases passed. Two final assertions were strengthened and rerun successfully.",
+  "source_hashes": [
+    {
+      "path": "cli/cancellation.mjs",
+      "sha256": "8a8ad9fca5a7128d98e60e9b2908ab8a0d37c74176513db3376ea9eaca85f315"
+    },
+    {
+      "path": "core/delegation_guard.js",
+      "sha256": "e4b8b4a7a274cdf705a5ea2e3bcea3cbbf411e92ca0ec28ee5bdaf9bc762b98b"
+    },
+    {
+      "path": "core/federation/bindings.mjs",
+      "sha256": "dadd4b8d5efebede45dcfdd1c6b7debb391b74044125b89e777315a243e380ca"
+    },
+    {
+      "path": "core/federation/cancellation-closure-client.mjs",
+      "sha256": "f33ae8f042e066f7b09c1bd4c83f20e73b7c2b94e781661a259b46bd661fc9e0"
+    },
+    {
+      "path": "core/federation/cancellation-closure.mjs",
+      "sha256": "46cd7aa84b7a0dcd06d38054bdce42d63bca71ecec0f3ba89d84d3e814397ee2"
+    },
+    {
+      "path": "core/federation/cancellation-contract.mjs",
+      "sha256": "94ac9fb8c9baf1ce6a5c345916cb51f98cb91816415b677d5f6431dca309c88d"
+    },
+    {
+      "path": "core/federation/cancellation.mjs",
+      "sha256": "173a45eb730cc23ef0568a04b4e05431b70974719507340017b15719264a4d13"
+    },
+    {
+      "path": "core/federation/gateway.mjs",
+      "sha256": "67af4e91a27ef9079534b2dd33be5cbd2694f2acb30053e1387b6d8e5c98802a"
+    },
+    {
+      "path": "core/federation/protocol.mjs",
+      "sha256": "f4f8bd45a2074f6e76499993bf2cf2ca9f57fe3c1728cb4d0064ef5b05908db9"
+    },
+    {
+      "path": "core/federation/relations.mjs",
+      "sha256": "83717213ed9514acc8243a4ccef70df13142920a5e4a315e61459b54c9fa989d"
+    },
+    {
+      "path": "core/federation/results.mjs",
+      "sha256": "787bb944338cde8e97aa1fca5a9d152ba11d686d31f0c45673c0aea7e6222b04"
+    },
+    {
+      "path": "core/fleet-evidence.mjs",
+      "sha256": "11a8be6da94fd3aba32bf33c2055fd7353f7728e4a434a85dee6ecea8af9cc33"
+    },
+    {
+      "path": "core/mcp/policy.mjs",
+      "sha256": "90510685ece0e5e5e30cf5280585b290cff8e217498afcbd2a12766d015177ef"
+    },
+    {
+      "path": "core/mcp/tools.mjs",
+      "sha256": "aa593d97627b0cea3bbb931e2b0d27d637d692b13496cd884c3696204b48e594"
+    },
+    {
+      "path": "tests/bindingtest.mjs",
+      "sha256": "1426b9ba318958feca326a8eea0260dfaf85393cd1175d00a631f00e34817118"
+    },
+    {
+      "path": "tests/cancellationtest.mjs",
+      "sha256": "1cff0999025a94033ce455ecbc917211b0c911da674923efcd7e87d899b9cc4b"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "62a5c56ebe4c3ebcf440a843b87499af8d99228d4f4178a674e3628dbd50dbb8"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review71-h4a-before.log",
+      "sha256": "7284fe3d3fc311b45a6e578587d7766d750ffd41e80586c8a6af9011b643252a"
+    },
+    {
+      "name": "review71-cli-first.log",
+      "sha256": "6bdd2fa3dfc33894e9f57a7c522600dcb26b97d82eca1d17df27e9ab936b5778"
+    },
+    {
+      "name": "review71-closure-first.log",
+      "sha256": "4f14b04ffeffdd3a42119b077cf661d56d45284aa58ebb59954fcbd70e9f4cc6"
+    },
+    {
+      "name": "review71-regression.log",
+      "sha256": "0eecc9027824c032c4977e67d2ee84f5701999f5168390143fe8921ca3e3267b"
+    },
+    {
+      "name": "review71-closure-final.log",
+      "sha256": "224c3c1c1d8a0c69c53840bbe4cfda7dd9b7247f17f3c5a5e6bb906e689f3159"
+    },
+    {
+      "name": "review71-completion-regression.log",
+      "sha256": "edc7480201ecf60b54d95bb99bf2b8fda6fbded38182bb985b3fb5529b684811"
+    },
+    {
+      "name": "review71-replay-final.log",
+      "sha256": "226ed9fe55d8e8a13187a269dcfe427ce80b96e80214394442813331b1fa3117"
+    }
+  ],
+  "prior_ci": [
+    {
+      "code_sha": "c25d563b0db671d27783c9ca96ece6c7500a8e9b",
+      "run_id": 36836430926,
+      "conclusion": "failure",
+      "failed_step": "nodestartuptest",
+      "observed_error": "STARTUP_BINDING_CHANGED",
+      "gitleaks": "success"
+    },
+    {
+      "code_sha": "06a6bc76f13fcc1b01047a350171fe9a81cbf69e",
+      "run_id": 36838953392,
+      "conclusion": "failure",
+      "failed_step": "nodestartuptest",
+      "observed_error": "STARTUP_BINDING_CHANGED",
+      "gitleaks": "success"
+    }
+  ],
+  "limitations": [
+    "Known node startup CI failure still needs diagnosis and repair; current local lifecycle tests do not resolve it",
+    "Unknown or unmanaged process stop still requires verified evidence; H4c/H4d manual exits not supplied by closure",
+    "Automatic delivery, cancellation artifact retention policy and physical two-PC validation remain incomplete",
+    "H5b skipped intermediate source epochs remains unresolved",
+    "No production or frozen pilot source upgrade, real peer activation or model call",
+    "G01/G02/G05 remain pending at f10f268 and no independent phase sign-off"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "format": "ai-fleet-binding-recovery-evidence/v1",
+  "recorded_at": "2026-10-01T10:37:17.022000+00:00",
+  "batch": 74,
+  "base_commit": "554c7d88426e4086d21a2f956b154f4b3b8c7263",
+  "finding": "seven-module/H4c",
+  "status": "implemented_and_locally_verified_not_deployed",
+  "runtime_experiment": {
+    "registrar_backup_restore_and_activation": true,
+    "old_epoch_actually_retired": true,
+    "registrar_had_committed_before_response_loss": true,
+    "new_registrar_returns": "GRAPH_RECOVERY_REQUIRED",
+    "old_binding_remains_pending_without_operator_exit": true,
+    "old_cli_negative_control": "prepare-recovery unsupported",
+    "both_endpoint_databases_and_cli_real": true,
+    "colocated_registrar_restore_verified": true,
+    "external_model_or_physical_peer": false
+  },
+  "contract": {
+    "local_commands": [
+      "prepare-recovery",
+      "record-recovery",
+      "get-recovery"
+    ],
+    "mcp_or_peer_recording_tool": false,
+    "preview_and_receipt_readonly": true,
+    "new_schema": 1,
+    "binding_schema_unchanged": 4,
+    "resolution_code": "OPERATOR_ATTESTED_REGISTRAR_RETIRED",
+    "authority": "operator_attested_not_machine_verified",
+    "required_statements": [
+      "old_registrar_disabled",
+      "both_endpoint_workers_stopped",
+      "remote_outcome_unknown",
+      "no_automatic_release"
+    ],
+    "plan_binds_current_and_original_epoch": true,
+    "snapshot_cas": true,
+    "request_history_preserved": true,
+    "pending_request_local_terminal": true,
+    "binding_local_state": "cancelled",
+    "binding_closed": false,
+    "fabricated_cancellation_or_completion_receipt": false,
+    "task_human_gated_and_unreleased": true,
+    "same_decision_idempotent": true,
+    "different_decision_rejected": true,
+    "late_confirmed_and_source_messages_rejected": true,
+    "network_error_allowlist_unchanged": true,
+    "remote_outcome_known": false,
+    "automatic_release": false,
+    "graph_recovered": false
+  },
+  "windows_tests": [
+    {
+      "log": "review74-h4c-before.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 1074.7985
+    },
+    {
+      "log": "review74-h4c-red.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 1567.9803
+    },
+    {
+      "log": "review74-h4c-first.log",
+      "tests": 7,
+      "pass": 7,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 7510.9765
+    },
+    {
+      "log": "review74-regression.log",
+      "tests": 161,
+      "pass": 161,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 639138.8186
+    }
+  ],
+  "test_accounting": "The first failure was a test fixture field-name mistake, corrected before the genuine old-CLI negative control. Final five affected suites passed in one serial run; the initial seven-case pass is included and is not added again.",
+  "source_hash_encoding": "UTF-8, LF normalized, as committed",
+  "source_hashes": [
+    {
+      "path": "core/federation/binding-recovery.mjs",
+      "sha256": "285819e8031dfb9a628f2b1db208fa2af8335d371a9639d6f9f324864dd4d782"
+    },
+    {
+      "path": "core/federation/bindings.mjs",
+      "sha256": "920d577ecd1f0dc102f699dad1d7c32fb305b3ab57b6493dae5971b38ddcc676"
+    },
+    {
+      "path": "cli/binding.mjs",
+      "sha256": "1976491f619b4072625d42952e4f2ff76f8ef869c66d55d0a78f80f4650823e1"
+    },
+    {
+      "path": "tests/bindingtest.mjs",
+      "sha256": "b5308700063bd549d015c8bd748fed79247c8a5481b11d4ad67b18bf28d416b5"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review74-h4c-before.log",
+      "sha256": "a2b5cce9bb4a33c3679225d782b96e52d64db347d6d277854f1e38ea20f2ef6a"
+    },
+    {
+      "name": "review74-h4c-red.log",
+      "sha256": "a93577c8dc72acb0483f50084052e0bc3f1690db84de8075713c8f36ed0c1bae"
+    },
+    {
+      "name": "review74-h4c-first.log",
+      "sha256": "b8334370ae3e3bfabb985bd2c90dfeb7738792696e383e3a635c8247ac29405e"
+    },
+    {
+      "name": "review74-regression.log",
+      "sha256": "5b7b4d96e571d0e343b2854e7248d61ad0c1d9a6eed10a99729230a60a0a654b"
+    },
+    {
+      "name": "review74-ci132-jobs.json",
+      "sha256": "b1ef101d503115790c54c27e6c57bfaa2cda9add9a3581ae6221617d1c2fbd11"
+    },
+    {
+      "name": "review74-ci132-job-110310633210.log",
+      "sha256": "3b9bd971771a836be82bb56abaa2f97142132bc72ae4e321cb56823744b5bc36"
+    }
+  ],
+  "prior_ci": {
+    "sha": "175411a9897c25ff344580becabc89210ba3af68",
+    "run_id": 36844303364,
+    "run_number": 132,
+    "conclusion": "failure",
+    "gitleaks": "success",
+    "failed_step": "nodestartuptest",
+    "failure": "database is locked in localIdentity while reading nodeRuntimeStatus",
+    "short_path_identity_mismatch_recurred": false,
+    "cleanup_failure": "EPERM in after-hook removing the temporary startup fixture; causal relation to failed status cleanup still to verify",
+    "follow_up": "Reproduce independent-connection startup/status contention; do not mask lock failures by repeating CI."
+  },
+  "remaining": [
+    "Graph/topology recovery and credential replacement remain separate",
+    "Abandoned scheduler/node instance locks",
+    "H5b skipped intermediate epoch recovery",
+    "CI startup status database contention and remaining seven-module findings",
+    "Independent physical two-PC and provider acceptance"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "tailscale_changed": false,
+  "scheduled_tasks_changed": false,
+  "models_called": false,
+  "physical_two_pc_acceptance": false,
+  "current_commit_ci": "pending_after_push"
+}

@@ -1,0 +1,193 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-49-real-provider-probes",
+  "date": "2026-10-01",
+  "timezone": "Asia/Tokyo",
+  "execution_source_commit": "d63cfba4f2003e445babdb6c69950cd166b362ed",
+  "platform": "Windows",
+  "scope": "Two authorized one-task real attempts on an isolated board; no production deployment; subsequent diagnostic fix tested without provider calls",
+  "provider_tasks": [
+    {
+      "runtime": "claude",
+      "version": "2.1.284",
+      "requested_model": "claude-sonnet-4-6",
+      "effort": "low",
+      "checked_at": "2026-09-30T15:09:50.431Z",
+      "authorized_task_limit": 1,
+      "consumed_tasks": 1,
+      "remaining_reserved": 0,
+      "dispatch_phase": "settled",
+      "subscription_login": "claude.ai / firstParty / max",
+      "actual_executable_sha256": "0416631e846f743110da5282409776fa1313e65f33a588aae066eaf8db0fda7d",
+      "result_status": "success",
+      "diagnostic": "SUCCESS",
+      "protocol_error": null,
+      "observed_model": "claude-sonnet-4-6",
+      "usage": {
+        "input_tokens": 5,
+        "output_tokens": 449
+      },
+      "provider_error_category_recorded": false,
+      "stdout_bytes": 17421,
+      "stdout_events": 11,
+      "stdout_sha256": "f0792ce92e258c0f74c7372d33a88869be26a53a4ca506a845dda5aab596e45d",
+      "process_started": true,
+      "process_exit_code": 0,
+      "process_cleanup": "job_empty",
+      "containment": "windows-job",
+      "authenticated_mcp_requests": [
+        {
+          "operation": "tools/list",
+          "status": 200
+        },
+        {
+          "operation": "tools/list",
+          "status": 200
+        },
+        {
+          "operation": "get_task",
+          "status": 200
+        },
+        {
+          "operation": "report_result",
+          "status": 200
+        }
+      ],
+      "report_count": 1,
+      "expected_result_recorded": true,
+      "credential_status": "revoked",
+      "global_config_fingerprints_unchanged": true,
+      "signed_journal_verified": true,
+      "signed_journal_sha256": "82f8b6dfefccdc1bd2b19000dab1984d7cca2641a18ddfcbcb2dde2816f89bde",
+      "local_result_sha256": "483137ded57598fa5147b723a1d87b159ef17d36fc33cbe5dc03983cce022200",
+      "independent_probe_conclusion": "real_subscription_board_task_succeeded",
+      "automatic_real_model_call_confirmed": false,
+      "formal_acceptance": false
+    },
+    {
+      "runtime": "codex",
+      "version": "0.149.1",
+      "requested_model": "gpt-6-luna",
+      "effort": "low",
+      "checked_at": "2026-09-30T15:10:23.301Z",
+      "authorized_task_limit": 1,
+      "consumed_tasks": 1,
+      "remaining_reserved": 0,
+      "dispatch_phase": "settled",
+      "subscription_login": "ChatGPT; no API key",
+      "actual_executable_sha256": "a395030b56b126f608f2403036dddb654a9c063213e9c2b5f85d954cf490ebe6",
+      "result_status": "failed",
+      "diagnostic": "INVALID_OUTPUT",
+      "protocol_error": "PROVIDER_ERROR",
+      "observed_model": null,
+      "usage": null,
+      "provider_error_category_recorded": false,
+      "stdout_bytes": 734,
+      "stdout_events": 4,
+      "stdout_sha256": "52e804be090b7b79a14a2e41396d3f6c6c559e3f12c61633ecfbdf50229e5bf0",
+      "process_started": true,
+      "process_exit_code": 1,
+      "process_cleanup": "job_empty",
+      "containment": "windows-job",
+      "authenticated_mcp_requests": [
+        {
+          "operation": "tools/list",
+          "status": 200
+        },
+        {
+          "operation": "tools/list",
+          "status": 200
+        }
+      ],
+      "report_count": 0,
+      "expected_result_recorded": false,
+      "credential_status": "revoked",
+      "global_config_fingerprints_unchanged": true,
+      "signed_journal_verified": true,
+      "signed_journal_sha256": "96ca65983dcefbdc65d0fa74f928375bee6e9f4ca479965bd0ae4b43f87a702b",
+      "local_result_sha256": "e403592e98f8f7b627bf78dd3aef66141e5d7f241d0952dfc3686fb9795647da",
+      "independent_probe_conclusion": "real_subscription_dispatch_failed; inference occurrence and root cause unconfirmed",
+      "automatic_real_model_call_confirmed": false,
+      "formal_acceptance": false
+    },
+    {
+      "runtime": "zcode",
+      "version": "0.16.9",
+      "authorized_task_limit": 1,
+      "consumed_tasks": 0,
+      "started": false,
+      "selected_provider": "account:bigmodel-individual-coding-plan",
+      "selected_home_china_oauth_record_found": false,
+      "selected_home_china_plan_record_found": false,
+      "foreign_account_records_found": true,
+      "cached_china_plan_status": "unavailable",
+      "live_entitlement_checked": false,
+      "next_action": "Confirm correct China subscription login home; do not substitute another provider"
+    }
+  ],
+  "diagnostic_repair": {
+    "raw_provider_text_retained": false,
+    "old_receipts_compatible": true,
+    "known_categories_advisory_only": true,
+    "changes_retry_or_budget": false,
+    "original_codex_cause_recovered": false
+  },
+  "local_validation": {
+    "tests": 108,
+    "passed": 108,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 74405.6703,
+    "command": "node --test tests/outputtest.mjs tests/supervisortest.mjs tests/dispatchtest.mjs",
+    "log_sha256": "ae320d48d3020dd5ad9ccc55ea0110b04369915620164ad2cee2a21089ed54e7",
+    "scope": "Synthetic event streams, real Windows process fixtures, isolated databases; no new subscription tasks",
+    "prior_overlapping_passes": [
+      41,
+      107
+    ]
+  },
+  "formal_progress": {
+    "accepted_tasks": 0,
+    "total_tasks": 72,
+    "accepted_phases": 0,
+    "total_phases": 12
+  },
+  "normalization": "UTF-8 LF",
+  "code_and_document_files": [
+    {
+      "path": "core/execution/provider-error.mjs",
+      "sha256": "57a13ac7d29f2baa1f372b2850953c408c5ddd92713d2bd7ab800734a6edf514"
+    },
+    {
+      "path": "core/execution/output.mjs",
+      "sha256": "9bfb3fcb9549922fe07294c60eca46cbd17fb1fedb0e9eb071b8ea5b7fd7bb84"
+    },
+    {
+      "path": "core/execution/receipts.mjs",
+      "sha256": "b42e8d64280086c430e6927d3cb8475a390d532459bccdf4617e62416edcd59d"
+    },
+    {
+      "path": "tests/outputtest.mjs",
+      "sha256": "3978152231c83529f5e271cac3482c05be7f3c602757b69888875ad47627f14a"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "d896d73db958fc16e57f737e7fac096dfe9bd5a90febcb6cec5ed5dfc047f4f2"
+    },
+    {
+      "path": "docs/federation/real-provider-probes.md",
+      "sha256": "d6ab0ab4797e46456603a8422e275c2331e0f1fb6edb187c450f660e3712c0ef"
+    },
+    {
+      "path": "docs/federation/execution.md",
+      "sha256": "676884df1ce1724107e957a94e666ba8c54c45fe70a879c76b32fe93e6600f6e"
+    }
+  ],
+  "remaining": [
+    "Codex provider failure diagnosis and a successful newly authorized task",
+    "Correct Zcode China account home and its unused authorized minimal task",
+    "Two physical PCs, actual desktop clients, offline/reconnect and 72-hour acceptance",
+    "Workspace/OS isolation, full global operations and deployment"
+  ],
+  "privacy": "Public file contains selected metadata and hashes only; no tokens, account identifiers, original stdout, full messages or copied credentials. Private original records remain in their initial local directory."
+}

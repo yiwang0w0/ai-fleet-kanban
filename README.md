@@ -29,7 +29,13 @@ OS process, **not** a subagent. `docs/GLOSSARY.md` maps the two vocabularies, an
 
 ## Status
 
-**v0.23.1.** Extracted, file by file and with a full sanitization audit, from the production deployment where these mechanisms were built and battle-tested. The board, both loops, the gates and all nine harnesses (650+ machine assertions) run here; CI is green on Linux and Windows; the full cycle — claim → deliver → auto-review → **your** ruling — walks end to end on a fresh clone: [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
+**v0.24.0 — unreleased development branch.** Windows-only multi-terminal federation is being built on this branch. See the [implementation and acceptance plan](docs/多终端共享看板-实施与验收计划.md), [measured progress](docs/federation/PROGRESS.md), [artifact transfer](docs/federation/artifact-transfer.md), [independent verification](docs/federation/verification.md), [source Git integration](docs/federation/integration.md), and [bilateral completion](docs/federation/completion.md). Explicit source acceptance, target readiness and registrar confirmation now support atomic local settlement and parent re-review. Windows permission isolation, physical two-machine integration, and provider acceptance remain in progress.
+
+This minor-version development line intentionally changes machine contracts: worker protocol 2, per-claim `run_id`, explicit task `expected_version`, stable node/task identities, scoped peer/MCP credentials, and independent task workspaces. Upgrade the server, panel, CLI and loops together using the [Windows migration guide](docs/federation/migration-0.24.md); an old browser or worker must not keep writing. The two role domains are qualified separately in the [glossary](docs/GLOSSARY.md#federation-contracts-024-development). This is not a published release or deployment approval.
+
+`npm test` currently runs 40 Node harnesses; Windows CI also runs four Python selftests and the page verifier selftest, plus a blocking secret scan. Exact-commit results and remaining acceptance work are recorded in [PROGRESS](docs/federation/PROGRESS.md), not inferred from the default-branch badge above. A fresh local mock cycle is described in [QUICKSTART](docs/QUICKSTART.md); it does not prove real providers or two-PC acceptance.
+
+**Historical baseline: v0.23.1.** Extracted, file by file and with a sanitization audit, from the production deployment where the original single-node mechanisms were built and exercised.
 
 v0.23.1 is what the first remote deployment found on its first day. Its work repo is a second clone, so the board's data dir sits outside the codex worker's workspace — and codex's workspace-write sandbox refuses writes outside the workspace, which would have left every codex delivery without an evidence file. The codex delivery block now names a second road (the same evidence as the final message) and `run_codex` lands that message as the evidence file whenever the model wrote none, saying so on the console; the read-only profile already worked this way. The plan records the anti-affinity corollary the same deployment hit: with the policy on, implement lines must sit in the other family from the auto-review seat (doctor ⑤e says so), and the operator ruled engine/design = codex, review = Claude, coord = Claude. `docs/方案-usage-by-line.md` is the first plan written for the pipeline itself.
 
@@ -62,13 +68,15 @@ gates/     fail-closed source gate, deliverable-existence gate
 probe/     read-only production probe runner (standalone tool)
 cli/       board.py (the sanctioned entry; no raw curl) · doctor · init
 watchers/  the two sentries (SSE event watch · board health watch)
-tests/     seven harnesses (two more run as python selftests) — 570+ machine assertions across all nine; the CI is the product's spine
+tests/     40 Node harnesses; Windows CI adds four Python selftests and one page-verifier selftest
 docs/      QUICKSTART · OPERATE_WITH_CLAUDE · GLOSSARY (frozen vocabulary) · INCIDENTS (the scar manual)
 examples/  fleet config · verify registry · mock runtime adapter · demo seeds · page verifier (CDP, zero-dep) · worker-constraints template
 .claude/   skills auto-discovered by YOUR Claude Code (coordinator seat · add/propose lines · context window · pool/quota) — guardrails over existing entries, never new code
 ```
 
 ## Try it
+
+This development branch targets Windows. Install **Git for Windows >= 2.45.0**; the artifact pipeline verifies support for `--no-lazy-fetch` before accessing repository objects. `npm run doctor` reports an old or unsupported Git build explicitly.
 
 ```
 git clone https://github.com/yiwang0w0/ai-fleet-kanban && cd ai-fleet-kanban

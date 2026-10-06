@@ -1,0 +1,98 @@
+{
+  "format": "ai-fleet-mcp-lifecycle-evidence/v1",
+  "batch": 83,
+  "base_commit": "40a144b7614fb5350c5aea5085237f4444ea36fc",
+  "checked_at": "2026-10-01T13:48:20.664059+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "review_items": [
+    "seven-module/H7a",
+    "seven-module/H7b",
+    "seven-module/H7c"
+  ],
+  "scope": "isolated synthetic Windows tests; no real providers or physical peer activation",
+  "red": {
+    "tests": 4,
+    "failed": 4,
+    "private_log": ".data/review83-red.log",
+    "sha256": "1038411279f9f475161083967b9136202c5ca070ee51388ce341f80b6928a4a3"
+  },
+  "green": [
+    {
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "private_log": ".data/review83-green.log",
+      "sha256": "ade17d4516b06a235f7bf248c3f74c2403f502bc61922566321d473a941fac4a"
+    },
+    {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "private_log": ".data/review83-regression.log",
+      "sha256": "7bfcd8423ddd14a4acf4cae839cc7028e4515c3704b771c54b476dd3832bcd89"
+    }
+  ],
+  "total_distinct_passed": 21,
+  "contracts": [
+    "ended runs have no tool authority except exact previously committed report_result receipt replay",
+    "revoked, replacement-run and changed-policy credentials cannot replay",
+    "revocation database commit precedes filesystem disposal; rollback preserves credential file",
+    "only registered matching revoked files are deleted by the same exclusive Windows handle",
+    "replacement content is preserved; cleanup CLI retries pending records without exposing paths or tokens"
+  ],
+  "limitations": [
+    "legacy unregistered files are not scanned",
+    "nested caller-owned transactions require explicit cleanup after commit",
+    "file deletion does not guarantee physical secure erasure",
+    "real desktop and physical multi-PC acceptance pending"
+  ],
+  "sources": [
+    {
+      "path": "core/mcp/credential.mjs",
+      "sha256": "bbe6cec25071f403b9db4841b47c4d554c10d2ffb5cae0fa19d72fc92a411950"
+    },
+    {
+      "path": "core/mcp/policy.mjs",
+      "sha256": "d6b2f25819babef953c6bc03c18fddc039e021b316482c73822fb56fdcf49949"
+    },
+    {
+      "path": "core/mcp/tools.mjs",
+      "sha256": "c0b8137624ae0905aadfcbd047732d59c9cf813dd296fe8cdf67cbf463aef9b7"
+    },
+    {
+      "path": "core/mcp/gateway.mjs",
+      "sha256": "06e88f1a2b8ac5b3ec51c9292b98e79ef3fdbb68e4ef5421669c4c9e4b1325a9"
+    },
+    {
+      "path": "core/mcp/credential-cleanup.mjs",
+      "sha256": "9552c83ee2a32bba681bd5cc5efa5c7c42ff8dcb67bc608417595de753ae11d3"
+    },
+    {
+      "path": "core/mcp/credential-cleanup.ps1",
+      "sha256": "d6091a85f49a40539b024fa13789fab78c53460df998f71be85aa4d95c3d9654"
+    },
+    {
+      "path": "core/execution/dispatch.mjs",
+      "sha256": "223a47bef6fab70c9fb890669afd015187f02be367182973a5dc0de4f634ba8f"
+    },
+    {
+      "path": "cli/mcp-admin.mjs",
+      "sha256": "c841c66f1d47938989d8e690f8ab3050b2ff16c679f0d95af52470eb18359172"
+    },
+    {
+      "path": "tests/mcptest.mjs",
+      "sha256": "2f3124db23617456df0a34ea8ce9078895af7eb94c06440b3974ce380e6590c5"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "9f7439ec4907d3d7db26c77b45aca3fa0f6651d718591159b1626993d3a0573b"
+    },
+    {
+      "path": "docs/federation/mcp.md",
+      "sha256": "40ac92c1523fd19e4ced39d6622f18e75c1bc1ed834f8969f106fa03f73864bc"
+    }
+  ]
+}

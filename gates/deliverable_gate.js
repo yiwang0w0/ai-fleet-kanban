@@ -92,6 +92,13 @@ function makeExtractor({ prefixes, exts = DEFAULT_EXTS, excluded = DEFAULT_EXCLU
       // Backslash → slash; char-code form survives transcription of the source.
       const p = m[1].split(String.fromCharCode(92)).join("/");
       if (excluded.test(p) || seen.has(p)) continue;
+      // ⭐ A named path must stay INSIDE the repo. `core/../../elsewhere/x.md`
+      //   matches the body charset, but join(REPO_ROOT, p) escapes the root and
+      //   the gate then consults the OUTSIDE filesystem — an existence oracle and
+      //   a source of false positives that wears the gate down (external audit
+      //   2026-10-05). Rejecting here is fail-closed: an escaping path can never
+      //   be a deliverable of THIS card's repo.
+      if (p.split("/").includes("..")) continue;
       seen.add(p);
       out.push(p);
     }

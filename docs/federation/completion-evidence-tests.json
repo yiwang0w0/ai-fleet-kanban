@@ -1,0 +1,91 @@
+{
+  "format": "ai-fleet-completion-source-evidence-tests/v1",
+  "prepared_at": "2026-10-05T05:26:43.701890+00:00",
+  "base_commit": "65e10f5eb2d61b82cc5ed1b5b8c4265ce6c69d80",
+  "scope": "One Windows host with real isolated SQLite backup/activation, Git objects and files, native validation process in fixtures, read-only DB and a separate observation subprocess. No physical peer or model calls.",
+  "tests": {
+    "new_cases_passed": 4,
+    "direct_existing_cases_passed": 3,
+    "unique_cases_passed": 7,
+    "remaining_failures": 0,
+    "full_repository_suite_repeated": false,
+    "cli_note": "Read-only observation API also passed in an independent subprocess. Production CLI refusal and sanitized errors were tested; successful production approval-file CLI path is not claimed as end-to-end verified."
+  },
+  "logs": [
+    {
+      "name": "review99-before.log",
+      "sha256": "16d3ef62e28f5afda4215eb7d5243c51aa278cda16a9d1a605c6ee3287d95f19",
+      "result": "Expected red: new retained-source capture missing after actual source/registrar restore"
+    },
+    {
+      "name": "review99-first.log",
+      "sha256": "86db0cc9b70ce723b91c9989c1c08997eeaf740611b8361efbb4d81f805c5cf4",
+      "result": "Implementation failure: compared approval to nonexistent artifact base_tree; fixed by reading actual Git base tree"
+    },
+    {
+      "name": "review99-new-cases.log",
+      "sha256": "7e0644a31d063ed716a44801086f8d4c2c729cb6b846adbc8231bef43848dcf0",
+      "result": "4/4 new cases passed; actual Git/files, SQLite recovery, readonly independent subprocess and CLI error handling"
+    },
+    {
+      "name": "review99-adjacent.log",
+      "sha256": "ef5b27c43b38eafc3542838c4f21db6c368372873d02d420c733959e96e01b50",
+      "result": "3/3 direct existing completion cases passed"
+    }
+  ],
+  "source_hashes": [
+    {
+      "path": "core/federation/completion-evidence.mjs",
+      "worktree_sha256": "2162f99c05db5ddaacff1d387f8b4d4ae9ff2a250b4c8457419e8fc85abe7219",
+      "git_blob_sha256": "2162f99c05db5ddaacff1d387f8b4d4ae9ff2a250b4c8457419e8fc85abe7219"
+    },
+    {
+      "path": "core/verification/service.mjs",
+      "worktree_sha256": "a5138a0a68a61c83625676ac24c2ff237dc3da137a709872b08c1147b064019a",
+      "git_blob_sha256": "a5138a0a68a61c83625676ac24c2ff237dc3da137a709872b08c1147b064019a"
+    },
+    {
+      "path": "cli/completion-evidence.mjs",
+      "worktree_sha256": "8f697fd96f86fb8bd7de0601810e1deab6c63638d61e2d11a7b0e545f398f21b",
+      "git_blob_sha256": "8f697fd96f86fb8bd7de0601810e1deab6c63638d61e2d11a7b0e545f398f21b"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "worktree_sha256": "beba0d3a0b29a0b729916aebe40e01e27e58ab8cbcc9404cdc9e7a309af701b2",
+      "git_blob_sha256": "beba0d3a0b29a0b729916aebe40e01e27e58ab8cbcc9404cdc9e7a309af701b2"
+    }
+  ],
+  "checks": [
+    "Source-as-registrar real restore preserves old epoch guards while reading retained evidence with SQLite query_only.",
+    "Changed validation input, pinned checker, source ref and governance tree are rejected.",
+    "Late verification revocation before observation return is rejected.",
+    "Previously accepted result stays historical; no second result decision, task release, Git update or acceptance.",
+    "Missing contract, target-side record, transaction context and revoked integration policy refuse capture.",
+    "Normal bilateral completion, current-ref/revocation acceptance gates and old-epoch refusal still pass."
+  ],
+  "limits": {
+    "physical_multi_pc_acceptance": false,
+    "real_desktop_verified": false,
+    "providers_called": false,
+    "configuration_changed": false,
+    "formal_acceptance_changed": false,
+    "historical_evidence_not_current_authority": true,
+    "not_covered": [
+      "Full completion-sealed recovery coordination and settlement",
+      "Current process-stop proof or renewed registrar/peer authority",
+      "Moved or missing original verification/repository files",
+      "Changed governance tree or rerun validation policy",
+      "Physical peer, actual desktop/model and 72-hour acceptance"
+    ]
+  },
+  "prior_published_ci": {
+    "head_sha": "6f97759e50773253f8ee113adcd5313392fec505",
+    "run_id": 37264754923,
+    "run_number": 151,
+    "conclusion": "success",
+    "windows_steps_successful": 80,
+    "gitleaks": "success",
+    "covers_new_code": false,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37264754923"
+  }
+}

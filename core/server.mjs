@@ -1,34 +1,42 @@
+import conflictGuide from './conflicts.js';
+import {readFleetHealth} from './fleet-health.mjs';
+import {inspectionError} from './inspection.mjs';
 // Board HTTP layer — REST + SSE + static hosting. Zero dependencies
 // (node:http / node:sqlite only).
 //
 // Start: node core/server.mjs
 // Panel: http://127.0.0.1:47824
 //
-// ⚠ Binds 127.0.0.1 only. There is no authentication; binding 0.0.0.0 hands write
-//   access to the task queue to the whole LAN. The check at the bottom REFUSES to
-//   start on a non-loopback host — the warning is a gate, not a comment.
+// Binds loopback only and authenticates all operational reads/writes. Anonymous
+// access is limited to the pairing shell, health, and worker protocol discovery.
+// Non-loopback binding remains refused; use the separate peer gateway for federation.
 
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync, renameSync, unlinkSync, mkdirSync, chmodSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { execFile, execFileSync, execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve, relative } from "node:path";
 import { createRequire } from "node:module";
 import { nodeTooOld } from "./env.mjs";
+import {readFleetView,readFleetTask,readFleetEvidencePage} from "./fleet-view.mjs";
+import {readFleetProgress} from "./fleet-progress.mjs";
+import {openFleetActions,loadFleetActionsConfig} from "./fleet-actions.mjs";
+import {PeerError} from "./federation/protocol.mjs";
+import {writePrivateText} from "./private-json.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require_ = createRequire(import.meta.url);
 // ── Preflight: the one failure a newcomer could not read. store.js requires node:sqlite,
-//    which arrived in Node 22.5; on an older Node the require below dies with a module
+//    which requires Node 24 for transaction state; older runtimes can fail with a module
 //    resolution stack trace that names nothing a person can act on. One sentence instead.
 //    (python and git are already checked where they are used — the messages there are
 //    readable; this is the only one that was not.)
 if (nodeTooOld()) {
-  console.error(`需要 Node ≥ 22.5(看板的存储用 node:sqlite),当前 ${process.version} —— 升级 Node 后再启动。`
+  console.error(`需要 Node ≥ 24.0.0(看板需要 SQLite 事务状态接口),当前 ${process.version} —— 升级 Node 后再启动。`
     + " node cli/doctor.mjs 可以一次看全所有前提。");
   process.exit(1);
 }
@@ -163,7 +171,7 @@ const DECISION_CTX = { repoRoot: REPO_ROOT, targets: HANDOFF_TARGETS };
 const GATE_OFF = process.env.BOARD_DELIVERABLE_GATE === "off";
 let extractor = null;
 try {
-  const top = execFileSync("git", ["-C", REPO_ROOT, "ls-tree", "-z", "HEAD"],
+  const top = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "ls-tree", "-z", "HEAD"],
                            { maxBuffer: 8 * 1024 * 1024 }).toString("utf8");
   const prefixes = dgate.topLevelPrefixes(top);
   if (prefixes.length) extractor = dgate.makeExtractor({ prefixes });
@@ -185,7 +193,7 @@ const headFiles = () => {
   let set = null;
   try {
     // ⚠ -z mandatory (same reason as above).
-    const out = execFileSync("git", ["-C", REPO_ROOT, "ls-tree", "-r", "--name-only", "-z", "HEAD"],
+    const out = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "ls-tree", "-r", "--name-only", "-z", "HEAD"],
                              { maxBuffer: 64 * 1024 * 1024 });
     set = new Set(out.toString("utf8").split("\0").filter(Boolean));
   } catch { set = null; }        // no git / not a repo → the gate is silently off (closures not blocked)
@@ -238,7 +246,7 @@ const absentOf = (t) => {
 const dirtyFiles = () => {
   let out;
   try {
-    out = execFileSync("git", ["-C", REPO_ROOT, "status", "--porcelain", "-z"],
+    out = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "status", "--porcelain", "-z"],
                        { maxBuffer: 64 * 1024 * 1024 }).toString("utf8");
   } catch { return null; }        // unmeasurable ⇒ null ⇒ callers pass
   const rows = [];
@@ -282,6 +290,7 @@ const unnamedOf = (t) => {
 // file names, hashes and controlled download endpoints — never source paths.
 const taskOut = (t) => t ? {
   ...t,
+  progress_blockers: store.stuckWhy(db,t),
   decision_package: decision.publicDecisionPackage(t, DECISION_CTX),
   // ⭐ The panel's button captions come FROM the server-side criterion. If the panel
   //   computed its own, that would be a second copy of the formula — able to say
@@ -360,7 +369,7 @@ const fpContext = () => {
   if (Date.now() - fpCache.at < FP_TTL_MS) return { treeRev: fpCache.treeRev, extra: fpCache.extra };
   let treeRev = null, extra = null;
   try {
-    treeRev = execFileSync("git", ["-C", REPO_ROOT, "rev-parse", "HEAD:"],
+    treeRev = execFileSync("git", ["-C", REPO_ROOT, "--no-lazy-fetch", "rev-parse", "HEAD:"],
                            { encoding: "utf8", windowsHide: true }).trim() || null;
   } catch { treeRev = null; }
   const cmd = CFG.fingerprint_extra_cmd;
@@ -389,6 +398,15 @@ const fpContext = () => {
 };
 
 const db = store.open();
+// Opt-in trusted local configuration; ordinary view-only startup performs no new migration.
+const fleetActions = process.env.BOARD_FLEET_ACTIONS_CONFIG
+  ? openFleetActions(db,{config:loadFleetActionsConfig(process.env.BOARD_FLEET_ACTIONS_CONFIG)}) : null;
+const pumpFleetActions=()=>fleetActions?.tick().catch(()=>{}); // each delivery retains a fixed error code
+const fleetActionsTimer=fleetActions?setInterval(pumpFleetActions,5000):null;
+fleetActionsTimer?.unref();
+if(fleetActions)setImmediate(pumpFleetActions);
+async function stopFleetActions(){if(fleetActionsTimer)clearInterval(fleetActionsTimer);await fleetActions?.close();}
+
 
 // ── Worker supervision: one loop child process per line; the panel's switches
 //    drive these.
@@ -483,8 +501,13 @@ function normalizeRole(raw, lineId) {
   }
   return { kind, tools, charter, seat };
 }
-let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT, LINE_ROLE, IMPL_LINES, REVIEW_LINES;
+let LINES, SUPERVISED, LINE_HINT, LINE_LABEL, LINE_ACCEPT, LINE_ROLE, LINE_CHARTER_HASH, IMPL_LINES, REVIEW_LINES;
 function rebuildLines() {
+  // Bind charter bytes to the loaded configuration before publishing any new maps.
+  // Claim runs inside a writer transaction and must not perform filesystem reads.
+  const roles = Object.fromEntries(CFG.lines.map((l) => [l.id, normalizeRole(l.role, l.id)]));
+  const charterHashes = Object.fromEntries(Object.entries(roles).map(([id, role]) => [id,
+    role?.charter ? createHash("sha256").update(readFileSync(resolve(CODE_ROOT, role.charter))).digest("hex") : null]));
   LINES = CFG.lines.map((l) => String(l.id));
   SUPERVISED = [...LINES, ...ROLES];
   LINE_HINT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.hint || ""]));
@@ -495,7 +518,8 @@ function rebuildLines() {
   LINE_LABEL = Object.fromEntries(CFG.lines.map((l) => [l.id, String(l.label || "").trim()]));
   LINE_ACCEPT = Object.fromEntries(CFG.lines.map((l) => [l.id, l.accept === "auto" ? "auto" : "human"]));
   // v0.22: identity (null = a plain line, exactly as before this version).
-  LINE_ROLE = Object.fromEntries(CFG.lines.map((l) => [l.id, normalizeRole(l.role, l.id)]));
+  LINE_ROLE = roles;
+  LINE_CHARTER_HASH = charterHashes;
   IMPL_LINES = LINES.filter((id) => (LINE_ROLE[id]?.kind || "implement") === "implement");
   REVIEW_LINES = LINES.filter((id) => LINE_ROLE[id]?.kind === "review");
 }
@@ -667,7 +691,7 @@ function blessStep() {
   let head = null;
   try {
     const spec = CFG_GATED_SUBTREE === "." ? "" : CFG_GATED_SUBTREE;
-    head = execFileSync("git", ["-C", CODE_ROOT, "rev-parse", `HEAD:${spec}`],
+    head = execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "rev-parse", `HEAD:${spec}`],
                         { encoding: "utf8", windowsHide: true }).trim();
   } catch (e) {
     return { state: "unknown", detail: `读不到代码的版本(${String(e.message).slice(0, 60)})`,
@@ -697,7 +721,7 @@ const gatedTree = () => {
   if (!CFG_GATED_SUBTREE) return { err: "还没配置要盯住的代码范围(gated_subtree)" };
   try {
     const spec = CFG_GATED_SUBTREE === "." ? "" : CFG_GATED_SUBTREE;
-    return { tree: execFileSync("git", ["-C", CODE_ROOT, "rev-parse", `HEAD:${spec}`],
+    return { tree: execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "rev-parse", `HEAD:${spec}`],
                                 { encoding: "utf8", windowsHide: true }).trim() };
   } catch (e) { return { err: String(e.message).slice(0, 60) }; }
 };
@@ -710,7 +734,7 @@ function treeStat(prev, tree) {
   if (!statCache.has(k)) {
     let lines;
     try {
-      lines = execFileSync("git", ["-C", CODE_ROOT, "diff", "--stat=90", prev, tree], { encoding: "utf8", windowsHide: true })
+      lines = execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "diff", "--stat=90", prev, tree], { encoding: "utf8", windowsHide: true })
         .split("\n").map((l) => l.trimEnd()).filter(Boolean);
     } catch (e) { lines = [`(git diff --stat 失败:${String(e.message).slice(0, 60)})`]; }
     if (statCache.size > 32) statCache.clear();
@@ -743,7 +767,7 @@ function acceptTree(confirmTree, who) {
   writeFileSync(acceptedFile(), tree + "\n", "utf8");
   let dirty = 0;
   try {
-    dirty = execFileSync("git", ["-C", CODE_ROOT, "status", "--short", "--", CFG_GATED_SUBTREE === "." ? "." : CFG_GATED_SUBTREE],
+    dirty = execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "status", "--short", "--", CFG_GATED_SUBTREE === "." ? "." : CFG_GATED_SUBTREE],
                          { encoding: "utf8", windowsHide: true }).split("\n").filter((l) => l.trim()).length;
   } catch {}
   console.log(`已接受 ${CFG_GATED_SUBTREE} = ${tree}(${who})` + (prev ? `,上次 ${prev.slice(0, 12)}` : ",首次")
@@ -1304,6 +1328,14 @@ function contextOf(line) {
 }
 
 const runCli = (args, timeout = 600000) => new Promise((resolve) => {
+  // ⭐ The prompt rides argv (-p) on the claude seat, and Windows CreateProcess caps a
+  //   command line at 32767 UTF-16 chars: over budget, execFile dies with an opaque
+  //   spawn error. Same caliber as the zcode gate (zcode-profile.mjs) and the two loop
+  //   scripts — refuse BEFORE spawning, naming the knob to turn (external audit
+  //   2026-10-05). Per arg: UTF-16 length ×2 +3 (quotes + separator), conservative.
+  if (args.reduce((n, a) => n + a.length * 2 + 3, CLAUDE_CLI.length) > 30000)
+    return resolve({ code: 1, stdout: "",
+      stderr: "提示词 argv 超过 Windows 30000 字符预算(32767 上限)—— 调小相应预算后重试,已拒发" });
   execFile(CLAUDE_CLI, args, { timeout, maxBuffer: 8 << 20, windowsHide: true,
                                env: { ...process.env, PYTHONIOENCODING: "utf-8" } },
     (err, stdout, stderr) => resolve({ code: err?.code ?? 0, stdout: stdout || "", stderr: stderr || "" }));
@@ -1695,6 +1727,9 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
        ...(k > 1 ? ["--worker", key] : []),
        "--route", route, "--interval", "60", ...untilArgs];
   const env = slotEnv(line, k, ag, isReview);
+  // A spawned seat has an identity-bound credential, never a shared runtime assertion.
+  const workerToken = isReview ? null : randomUUID().replace(/-/g, "");
+  env.WORKER_BOARD_TOKEN = workerToken || "";
   // ⭐ The KEY NAMES of the WORKER_*/REVIEWER_* env the child actually receives
   //   (values withheld — WORKER_SESSION is a real conversation id and slot tails go
   //   out over HTTP). Without this, "slot 2 gets no WORKER_SESSION" never appears
@@ -1712,7 +1747,7 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
     // Slot config echoed too — "did each slot really get its own model/effort" is
     // only assertable from here (env does not show in argv).
     workers.set(key, { line, slot: k, echo: true, proc: null, startedAt: Date.now(), route,
-                       settings: ag, log: ["[spawn-echo] " + JSON.stringify([PY, ...args]) +
+                       settings: ag, workerToken, log: ["[spawn-echo] " + JSON.stringify([PY, ...args]) +
                                            " [slot-cfg] " + JSON.stringify({ slot: k, ...ag }) +
                                            " [slot-env] " + JSON.stringify(envKeys)] });
     emit("worker.changed", { line, running: false });
@@ -1729,11 +1764,12 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
     ? spawn("cmd", ["/c", "start", `worker:${key}`, "cmd", "/k", PY, ...args],
             { cwd: __dirname, env, windowsVerbatimArguments: false })
     : spawn(PY, args, { cwd: __dirname, env, detached: process.platform !== "win32" });
-  const w = { line, slot: k, proc, startedAt: Date.now(), route, log: [], settings: ag, detached: ag.window };
+  const w = { line, slot: k, proc, startedAt: Date.now(), route, log: [], settings: ag, workerToken, detached: ag.window };
   // ⚠ Without this handler a spawn failure (interpreter missing, ENOENT) is an
   //   unhandled 'error' event and KILLS THE WHOLE BOARD — the supervisor dying of
   //   one child's absence. Record it like any other unexplained stop.
   proc.on("error", (e) => {
+    w.workerToken = null;
     w.log.push(`[spawn 失败: ${e.message}]`);
     if (w.proc) { w.proc = null; w.exitedAt = Date.now(); w.exitCode = -1; }
     if (!validStop(w.stopReason)) recordStop(line, STOP_REASON.CRASH, [w]);
@@ -1748,6 +1784,8 @@ function startSlot(line, k, route, ag, untilArgs, isReview) {
   proc.stdout.on("data", push);
   proc.stderr.on("data", push);
   proc.on("exit", (code) => {
+    // A window launcher may exit while its console loop continues; stop/restart still revokes.
+    if (!w.detached || code !== 0) w.workerToken = null;
     w.log.push(`[进程退出 code=${code}]`);
     w.proc = null; w.exitedAt = Date.now(); w.exitCode = code;
     // If the initiator already put a reason down, the OS's code=1 must not overwrite it
@@ -1837,6 +1875,7 @@ async function workerStop(line, { keepIntent = false,
   if (!keepIntent) setDesired(line, false);   // a human stop stays stopped across restarts
   const lineSlots = slotsOf(line);
   const slots = lineSlots.filter((w) => w.proc || w.echo);
+  for (const w of lineSlots) w.workerToken = null; // revoke before asynchronous tree kill
   // ⭐ Booked BEFORE the tree kill — this ORDER is the mechanism, not a preference: a
   //   kill returns non-zero, and whoever reads the code afterwards would call it a
   //   crash. Written across the line's whole slot set, so a line that was backing off
@@ -2087,8 +2126,16 @@ const readBody = (req) => new Promise((resolve, reject) => {
   // SyntaxError it falls to the untyped-400 fallback, and every mis-send rings the
   // [unclassified] alarm with the same face as a real gap — normalized alarms stop
   // being read.
-  req.on("end", () => { try { resolve(b ? JSON.parse(b) : {}); }
-    catch (e) { reject(store.err(store.ERR.BAD_INPUT, `request body is not valid JSON: ${e.message}`)); } });
+  req.on("end", () => {
+    let body;
+    try { body = b ? JSON.parse(b) : {}; }
+    catch (e) { return reject(store.err(store.ERR.BAD_INPUT, `request body is not valid JSON: ${e.message}`)); }
+    // Covers claim, report, heartbeat and derived-card writes, before state changes.
+    if (req.boardRole === "worker" && body?.worker !== undefined &&
+        (req.workerSeat ? body.worker !== req.workerSeat.worker : workers.get(String(body.worker))?.workerToken))
+      return reject(store.err(store.ERR.CONFLICT, "worker identity does not match its credential"));
+    resolve(body);
+  });
   // ⚠ Transport failures (disconnects) stay untyped — they are not about the
   //   caller's request; if the fallback ever reports one, THAT is when to think.
   req.on("error", reject);
@@ -2121,9 +2168,8 @@ function statusFor(e, where) {
 
 
 // ───────────────────────── The local write-endpoint gate ─────────────────────
-// The board binds loopback only, but "loopback = safe" does not hold against OTHER
-// processes on the same machine. A token lives in .data/; the server injects it
-// into the page. Browser-origin attacks cannot read it, so they fail.
+// Loopback can be forwarded. A token lives in the local data directory; browsers
+// pair explicitly and carry it in headers. No anonymous response contains it.
 // (An adversary who can already execute code on this machine wins regardless —
 //  that is outside this threat model. The target is "pages from other origins" and
 //  "random local scripts without the token".)
@@ -2132,7 +2178,7 @@ const TOKEN_FILE = join(store.DATA_DIR, "board_token");
 //   interactive agent granted the board FOLDER read board_token and self-approved
 //   its own card with resolved_by:'codex'). One token was one capability —
 //   "worker" and "ruler" were the same word. Now:
-//     board_token  = operator, full power (panel injection, board.py, humans)
+//     board_token  = operator, full power (explicit panel pairing, board.py, humans)
 //     worker_token = the EXECUTION face only: claim / report / heartbeat /
 //                    attempt / derived-card create / own-line compact / forked /
 //                    pool report. A worker loop compromised through card text
@@ -2142,12 +2188,24 @@ const TOKEN_FILE = join(store.DATA_DIR, "board_token");
 //                    cannot edit, and cannot impersonate a human ruling.
 //   Endpoints not on a token's list refuse (unknown falls on the refusing side).
 const mintToken = (file) => {
-  let t = "";
-  try { t = readFileSync(file, "utf8").trim(); } catch {}
+  let t = "", present = false;
+  try { t = readFileSync(file, "utf8").trim(); present = true; } catch (e) { if (e.code !== "ENOENT") present = true; }
   // ⭐ 0600 (v0.16.0). Default mode left the operator token world-readable on a multi-user
   //   host — the very neighbour the threat model names (external audit 2026-09-07). Existing
-  //   files are tightened too; Windows ignores POSIX bits (its ACLs come from the folder).
-  if (!t) { t = randomUUID().replace(/-/g, ""); writeFileSync(file, t, { encoding: "utf8", mode: 0o600 }); }
+  //   files are read as-is (升级不重写在跑部署); POSIX platforms still tighten them to 0600.
+  if (!t) {
+    t = randomUUID().replace(/-/g, "");
+    // ⭐ Windows 忽略 POSIX 权限位:新铸令牌改走与联邦/MCP 凭据同一条独占 DACL
+    //   创建路(外部审计 2026-10-05)。保护创建失败即启动失败,不回退到无保护写入。
+    //   独占创建不覆盖:先清掉"存在但读为空白"的残留(旧 writeFileSync 的覆盖语义),
+    //   正常路径(文件本不存在)不经过这一步。
+    if (process.platform === "win32") {
+      if (present) { try { unlinkSync(file); } catch {} }
+      writePrivateText(file, t);
+    } else {
+      writeFileSync(file, t, { encoding: "utf8", mode: 0o600 });
+    }
+  }
   if (process.platform !== "win32") { try { chmodSync(file, 0o600); } catch {} }
   return t;
 };
@@ -2164,10 +2222,8 @@ const REVIEW_WRITES = (p) =>
   p === "/api/pools/exhausted" ||
   /^\/api\/tasks\/\d+\/(?:resolve|autoreview)$/.test(p);
 // Requests with a foreign Origin are refused; no Origin (curl / CLI) is judged by
-// token. ⚠ BOARD_EXTRA_ORIGINS (comma-separated) widens this — the moment a
-// non-loopback origin is added, the write boundary is no longer "this machine":
-// any host on that network that can GET the page can read the token. Add entries
-// only with that understood.
+// token. BOARD_EXTRA_ORIGINS widens the allowed browser origins, never supplies
+// credentials or replaces authentication. Keep the management UI off peer forwards.
 const ALLOWED_ORIGINS = new Set([
   `http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`, `http://[::1]:${PORT}`,
   ...(process.env.BOARD_EXTRA_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean),
@@ -2235,24 +2291,31 @@ function closeGateOrThrow(t) {
         `\n  ⚠若这些改动不属于本卡(共享工作树上别的线在途),在 resolve 时带 allow_uncommitted:true 并写明归属。`);
 }
 
-function guardWrite(req, res, p) {
+function guardAuthentication(req, res) {
   const origin = req.headers.origin;
   if (origin && !ALLOWED_ORIGINS.has(origin)) {
-    json(res, 403, { error: "跨来源的写请求被拒绝", origin });
+    json(res, 403, { error: "跨来源的看板请求被拒绝", origin });
     return null;
   }
   const tok = req.headers["x-board-token"];
+  const bound = [...workers.entries()].find(([,w]) => w.workerToken && tok === w.workerToken);
+  req.workerSeat = bound ? { worker:bound[0], runtime:bound[1].settings.runtime } : null;
   const role = tok === BOARD_TOKEN ? "operator"
-             : tok === WORKER_TOKEN ? "worker"
+             : tok === WORKER_TOKEN || bound ? "worker"
              : tok === REVIEW_TOKEN ? "review" : null;
+  req.boardRole = role;
   if (!role) {
     // ⚠ Echoing TOKEN_FILE raw would hand an unauthenticated caller an absolute
     //   path with the username in it. "Remember to redact at echo time" fails at
     //   exactly one site — this one, once.
-    json(res, 401, { error: "缺少或错误的 X-Board-Token",
-                     hint: `令牌在 ${redact(TOKEN_FILE)};页面由服务端注入,CLI 自行读取` });
+    json(res, 401, { error: "缺少或错误的 X-Board-Token", hint: "请使用本机凭据；管理面板需要先配对。" });
     return null;
   }
+  return role;
+}
+function guardWrite(req, res, p) {
+  const role = guardAuthentication(req, res);
+  if (!role) return null;
   const allowed = role === "operator" || (role === "worker" ? WORKER_WRITES(p) : REVIEW_WRITES(p));
   if (!allowed) {
     json(res, 403, { error: `${role} 令牌无权执行此操作 —— 裁定/编辑/治理动作只属于 operator 令牌(board_token)`,
@@ -2262,32 +2325,101 @@ function guardWrite(req, res, p) {
   return role;
 }
 
+if (process.env.BOARD_EXTRA_ORIGINS?.trim()) console.warn("⚠ BOARD_EXTRA_ORIGINS 扩大了允许来源；所有任务、节点身份和事件接口仍需认证，不要将管理面板用作 peer 转发。");
+const WORKER_PROTOCOL_VERSION = 2;
+// Shared/manual worker credentials attest execution permission, not a runtime family.
+// Only a bound spawned-seat credential or an explicit operator act may stamp runtime.
+function stampedRuntime(req, role, workerName, selfReported) {
+  if (req.workerSeat) return req.workerSeat.runtime;
+  if (role !== "operator") return null;
+  const seat = workers.get(String(workerName || ""))?.settings;
+  if (seat && RUNTIME_IDS.includes(seat.runtime)) return seat.runtime;
+  return RUNTIME_IDS.includes(selfReported) ? selfReported : null;
+}
+function claimIdentity(body, role) {
+  if (role === "worker" && (body.worker_protocol_version !== WORKER_PROTOCOL_VERSION ||
+      typeof body.agent_instance_id !== "string" ||
+      !store.UUID_RE.test(body.agent_instance_id)))
+    throw store.err(store.ERR.BAD_INPUT, "执行器协议需要版本 2 和 agent_instance_id；请先升级 worker，再领取任务");
+  return { agentInstanceId:body.agent_instance_id ?? null, runContextForTask: task => {
+    const roleId = task.line || body.line || body.worker;
+    const role = LINE_ROLE[roleId] || {kind:"implement",tools:"write",charter:null,seat:null};
+    return { role_id:roleId, role_kind:role.kind, tools:role.tools,
+      charter:role.charter, charter_sha256:LINE_CHARTER_HASH[roleId] ?? null,
+      seat:role.seat, enforcement:"unattested", worker_protocol_version:body.worker_protocol_version ?? null };
+  }};
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
   const m = req.method;
 
   try {
-    // Reads pass; EVERY write goes through the gate here. Per-endpoint "remember to
-    // add it" forgets exactly one.
-    let boardRole = "operator";
-    if (m !== "GET" && m !== "HEAD") {
-      boardRole = guardWrite(req, res, p);
-      if (!boardRole) return;
-    }
-
-    // ── static
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cache-Control", "no-store");
+    // Anonymous shell and protocol discovery carry no operational data.
     if (m === "GET" && ["/", "/panel.html"].includes(p)) {
-      let html = String(await readFile(join(__dirname, "panel.html")));
-      // Inject the token so the page's fetches can carry it; the page is only
-      // readable same-origin.
-      html = html.replace("<script>",
-        `<script>window.__BOARD_TOKEN=${JSON.stringify(BOARD_TOKEN)};</script>\n<script>`);
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      const html = String(await readFile(join(__dirname, "panel.html")));
+      const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+        .map(match => "'sha256-" + createHash("sha256").update(match[1]).digest("base64") + "'");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self' " + scripts.join(" ") + "; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       return res.end(html);
     }
+    if (m === "GET" && p === "/panel-auth.js") {
+      res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+      return res.end(await readFile(join(__dirname, "panel-auth.js")));
+    }
     if (m === "GET" && p === "/health") return json(res, 200, { status: "ok", port: PORT });
+    if (m === "GET" && p === "/api/meta" && req.headers["x-board-token"] === undefined)
+      return json(res, 200, { worker_protocol_version: WORKER_PROTOCOL_VERSION });
+    // Authenticate every other request, including SSE and future read endpoints.
+    const boardRole = m === "GET" || m === "HEAD" ? guardAuthentication(req,res) : guardWrite(req,res,p);
+    if (!boardRole) return;
+    if (m === "GET" && p === "/api/auth") {
+      if (boardRole !== "operator") return json(res,403,{error:"管理面板需要操作员身份"});
+      return json(res,200,{role:"operator"});
+    }
 
+    // The new fleet reads require the existing operator credential. No new page
+    // receives an injected credential; the view uses explicit operator pairing.
+    if (m === "GET" && (p === "/api/fleet" || p === "/api/fleet/task" || p === "/api/fleet/evidence")) {
+      if (!guardWrite(req,res,p)) return;
+      try {
+        const value=p.endsWith("/evidence")?readFleetEvidencePage(db,url.searchParams.get("uid"),{section:url.searchParams.get("section"),cursor:url.searchParams.get("cursor"),limit:url.searchParams.has("limit")?Number(url.searchParams.get("limit")):100}):p.endsWith("/task")?readFleetTask(db,url.searchParams.get("uid")):readFleetView(db,{projectId:url.searchParams.get("project"),ownerNodeId:url.searchParams.get("owner"),query:url.searchParams.get("q")??"",limit:url.searchParams.has("limit")?Number(url.searchParams.get("limit")):1000});
+        return json(res,200,value);
+      } catch(e) {return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"FLEET_VIEW_UNAVAILABLE",error:e instanceof PeerError?e.message:"全局视图暂不可读；请检查数据库与升级状态"});}
+    }
+    if (m==="GET"&&p==="/api/fleet/health") {
+      if(!guardWrite(req,res,p))return;
+      try{return json(res,200,readFleetHealth(db));}
+      catch(e){return json(res,503,inspectionError(e));}
+    }
+    if (m==="GET"&&p==="/api/fleet/progress") {
+      if(!guardWrite(req,res,p))return;
+      try{return json(res,200,readFleetProgress(process.env.BOARD_PROGRESS_CONFIG,{projectId:url.searchParams.get("project")}));}
+      catch(e){return json(res,e instanceof PeerError?e.status:503,{code:e instanceof PeerError?e.code:"PROGRESS_UNAVAILABLE",error:e instanceof PeerError?e.message:"阶段进度暂不可读，请检查管理者配置"});}
+    }
+    if ((m==="GET"||m==="POST")&&p==="/api/fleet/actions") {
+      if(m==="GET"&&!guardWrite(req,res,p))return;
+      if(!fleetActions)return json(res,m==="GET"?200:409,{enabled:false,code:"ACTIONS_NOT_CONFIGURED",error:"尚未配置本机协调身份和对端连接，跨端操作未启用"});
+      try {
+        if(m==="GET")return json(res,200,fleetActions.catalog(url.searchParams.get("project")));
+        if(shuttingDown)return json(res,503,{code:"ACTIONS_CLOSED",error:"看板正在停止，请稍后使用同一请求重试"});
+        let body;try{body=await readBody(req);}catch{throw new PeerError("BAD_INPUT","请求必须是有效 JSON",400);}
+        const result=fleetActions.enqueue(body);
+        json(res,["pending","retry_pending"].includes(result.state)?202:200,result);
+        setImmediate(pumpFleetActions);return;
+      } catch(e) {
+        const code=typeof e?.code==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(e.code)?e.code:"ACTION_FAILED";
+        const reasons={BAD_INPUT:"操作参数无效",FORBIDDEN:"协调身份没有所需项目或操作权限",UNAUTHENTICATED:"协调身份已失效，请核对本机配置",POLICY_CHANGED:"角色策略已更新，需要重新授权协调身份",AUTHORIZATION_CHANGED:"权限已变化，旧请求已停止",PEER_NOT_CONFIGURED:"该项目尚未配置此对端",CONFLICT:"任务或回执版本已变化，请刷新后核对",REQUEST_CONFLICT:"请求编号已绑定其他操作",NOT_FOUND:"当前项目没有可操作的对象",CONFIRMATION_REQUIRED:"双方关系和就绪证明尚未满足操作条件",QUEUE_LIMIT:"操作记录已达到上限，需维护后继续"};
+        const conflict=conflictGuide.describeConflict(e,{scope:"federation"});
+        return json(res,e instanceof PeerError?e.status:409,{code,error:conflict?.message||reasons[code]||"操作未获准，请核对当前任务状态与权限",...(conflict?{conflict}:{})});
+      }
+    }
     // ── SSE
     if (m === "GET" && p === "/api/events") {
       res.writeHead(200, {
@@ -2396,6 +2528,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         // Display labels: the one copy lives in store.js; panel and CLI keep none.
         status_labels: store.STATUS_LABEL, wf_labels: store.WF_LABEL,
+        node: store.localNode(db), worker_protocol_version: WORKER_PROTOCOL_VERSION,
         counts: store.counts(db),
         archived_count: store.list(db, { archived: "all" }).tasks.filter((t) => t.archived_at).length,
         uptime_sec: Math.floor((Date.now() - STARTED) / 1000),
@@ -2432,6 +2565,13 @@ const server = http.createServer(async (req, res) => {
       // worker re-scoping the board.
       if (boardRole === "worker" && b.parentId == null && b.parent_id == null)
         return json(res, 403, { error: "worker 令牌只能创建派生卡(必须带 parentId)—— 立根目标是 operator 的动作" });
+      if (b.parentId != null && b.parent_id != null && Number(b.parentId) !== Number(b.parent_id))
+        throw store.err(store.ERR.BAD_INPUT, "parentId 与 parent_id 不一致");
+      b.parentId = b.parentId ?? b.parent_id;
+      if (boardRole === "worker") {
+        b.parentRunId = b.parent_run_id ?? null;
+        b.parentWorker = b.worker ?? null;
+      }
       if (badRoutable(res, b)) return;   // creation entrance for route/line domains (ONE criterion)
       const id = store.add(db, b);
       emit("task.created", { id });
@@ -2676,11 +2816,12 @@ const server = http.createServer(async (req, res) => {
                                 pools: poolState });
       // ⛔ NO badRoutable here (ruled; reasons at claimMiss above — the harness
       //   watches that stray values do NOT 400).
-      // ⭐ Badge stamping: runtime is PURIFIED (outside the allowlist = "not passed"
-      //   = no stamp; never 400, never a claim criterion).
-      const rt = RUNTIME_IDS.includes(b.runtime) ? b.runtime : null;
+      // Runtime is credential-bound; a shared worker token cannot attest a family.
+      // Reset on every server claim so an unknown new run cannot inherit an old badge.
+      const rt = stampedRuntime(req, boardRole, b.worker, b.runtime);
+      const identity = claimIdentity(b, boardRole);
       const got = store.claim(db, b.worker, b.lease_minutes || store.DEFAULT_LEASE_MIN,
-                              { route: b.route, line: b.line, runtime: rt, ...fpContext() });
+                              { route: b.route, line: b.line, runtime: rt, resetRuntime:true, ...identity, ...fpContext() });
       noteClaim(b.worker, { route: b.route, line: b.line }, !!got);
       if (!got) {
         // ⭐ Empty-handed, but WHY. Same rule the pool gate follows (503 must not wear
@@ -2723,11 +2864,15 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    const mt = p.match(/^\/api\/tasks\/(\d+)(?:\/(claim|heartbeat|attempt|report|resolve|update|autoreview|pin|release|archive|reopen))?$/);
+    const mt = p.match(/^\/api\/tasks\/(\d+)(?:\/(claim|heartbeat|attempt|report|resolve|update|autoreview|pin|release|archive|reopen|runs))?$/);
     if (mt) {
       const id = Number(mt[1]);
       const action = mt[2];
 
+      if (m === "GET" && action === "runs") {
+        if (!store.get(db,id)) return json(res,404,{error:"不存在"});
+        return json(res,200,{runs:store.runs(db,id)});
+      }
       if (m === "GET" && !action) {
         const t = store.get(db, id);
         return t ? json(res, 200, { task: taskOut(t) }) : json(res, 404, { error: "不存在" });
@@ -2735,13 +2880,16 @@ const server = http.createServer(async (req, res) => {
       if (m !== "POST") return json(res, 405, { error: "方法不允许" });
       const b = await readBody(req);
 
+      const versioned = new Set(["claim","resolve","autoreview","update","pin","release","reopen","archive"]);
+      if(versioned.has(action)) store.requireExpectedVersion(b.expected_version);
+
       if (action === "claim") {
         // ⭐ This endpoint claims THE GIVEN id (it used to call pick-a-card and
         //   occupy a different card). Refusals come back with the reason named.
-        const r = store.claimById(db, { id, worker: b.worker,
+        const r = store.claimById(db, { id, worker: b.worker, expectedVersion:b.expected_version, ...claimIdentity(b, boardRole),
                                         leaseMin: b.lease_minutes || store.DEFAULT_LEASE_MIN,
-                                        // badge purification: same allowlist and same never-400 policy as /api/claim
-                                        runtime: RUNTIME_IDS.includes(b.runtime) ? b.runtime : null,
+                                        // Operator-only direct claims remain an explicit trusted act.
+                                        runtime: stampedRuntime(req, boardRole, b.worker, b.runtime), resetRuntime:true,
                                         // ⭐ force = a person saying "run it anyway". Operator-only:
                                         //   guardWrite already restricts this endpoint, and a worker
                                         //   able to force its own re-dispatch would own the brake.
@@ -2756,11 +2904,11 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { task: r.task });
       }
       if (action === "heartbeat") {
-        const r = store.heartbeat(db, { id, worker: b.worker, leaseMin: b.lease_minutes });
+        const r = store.heartbeat(db, { id, worker: b.worker, runId: b.run_id, leaseMin: b.lease_minutes });
         return json(res, 200, r);       // no SSE for heartbeats: freshness is client-side
       }
       if (action === "report") {
-        const r = store.report(db, { id, worker: b.worker, outcome: b.outcome, evidence: b.evidence });
+        const r = store.report(db, { id, worker: b.worker, runId: b.run_id, outcome: b.outcome, evidence: b.evidence });
         emit("task.reported", r);
         // ⭐ v0.21 (user ruling 2026-09-09): on a line configured accept:"auto" a delivery completes
         //   without a human click — the operator decided that ONCE, in the config, for the whole
@@ -2786,6 +2934,7 @@ const server = http.createServer(async (req, res) => {
         // green) — the store links only when true; undeclared = no linkage.
         const t = store.get(db, id);
         if (!t) throw store.err(store.ERR.NOT_FOUND, `卡 #${id} 不存在`);
+        store.assertExpectedVersion(db,id,b.expected_version);
         // The handoff archive is an external side effect BEFORE the state change:
         // validate everything store.resolve would refuse FIRST, or "ruling failed"
         // can still have copied SQL = half-application.
@@ -2893,64 +3042,63 @@ const server = http.createServer(async (req, res) => {
         //     closure get the gate itself switched off.
         if (disp === "close" && b.allow_uncommitted !== true) closeGateOrThrow(t);
 
-        // ══ ④ side effects (from here on, no refusals are written) ════════════
-        let receiptBlock = null;
-        if (plan) {
-          const { opt, decisionAction, receipt, outcome } = plan;
-          const extra = said ? `\n补充指示:${said}` : "";
-          if (decisionAction === "request_completion") {
-            resolveNote = `采用方案 ${opt.key} 的方向:${opt.title}。卡内文件尚未补齐;` +
-              `请原 Agent 补齐完整、可下载、符合 handoff 目标准入名形的文件后重新送审。` + extra;
-          } else if (opt.kind === "apply") {
-            try {
-              archive = decision.archiveOptionFiles(t, opt.key, DECISION_CTX);
-            } catch (e) {
-              const msg = String(e.message || e);
-              throw store.err(msg.includes("同名异内容") ? store.ERR.CONFLICT : store.ERR.BAD_INPUT, msg);
+        const r = store.resolveWithPreparation(db, { id, verdict:b.verdict, expectedVersion:b.expected_version,
+          resolvedBy:b.resolved_by || "human", verifyOk:b.verify_ok, selectedOption:b.selected_option,
+          disposition:disp }, ()=>{
+            // Known-stale commands refuse before copying; commit rechecks under the
+            // write lock. File preparation never holds the SQLite writer lock.
+            let receiptBlock = null;
+            if (plan) {
+              const { opt, decisionAction, receipt, outcome } = plan;
+              const extra = said ? `\n补充指示:${said}` : "";
+              if (decisionAction === "request_completion") {
+                resolveNote = `采用方案 ${opt.key} 的方向:${opt.title}。卡内文件尚未补齐;` +
+                  `请原 Agent 补齐完整、可下载、符合 handoff 目标准入名形的文件后重新送审。` + extra;
+              } else if (opt.kind === "apply") {
+                try {
+                  archive = decision.archiveOptionFiles(t, opt.key, DECISION_CTX);
+                } catch (e) {
+                  const msg = String(e.message || e);
+                  throw store.err(msg.includes("同名异内容") ? store.ERR.CONFLICT : store.ERR.BAD_INPUT, msg);
+                }
+                resolveNote = outcome === "failure"
+                  ? `采用方案 ${opt.key}:${opt.title}。用户已实际尝试应用,但执行失败;` +
+                    `本次不视为已应用,禁止沿成功路径继续。请原 Agent 根据下面的原始回执修正文件;` +
+                    `不要覆盖已归档的失败版本,修正版使用下一个序号并重新送审。` +
+                    `\n\n—— 执行回执(失败 · 用户填写)——\n${receipt}` + extra
+                  : `采用方案 ${opt.key}:${opt.title}。文件已由用户应用成功;` +
+                    (disp === "hold_for_review"
+                      ? `**本卡不交回原 Agent** —— 留在等待中,复核通过后方可完成(v0.1 复核由人在面板完成)。`
+                      : `请按该方案继续并根据下面的回执完成验证。`) +
+                    `\n\n—— 执行回执(成功 · 用户填写)——\n${receipt}` + extra;
+                // ⭐ The receipt survives as ONE block. The four existing carriers do
+                //   not live through a cycle (markAutoReviewed erases, the next report
+                //   overwrites) — and a silently vanished "was applied to production"
+                //   is the doorway to a re-run.
+                receiptBlock = { option: opt.key, outcome, receipt, said,
+                                 files: archive || [], at: new Date().toISOString(), consumed_at: null };
+              } else {
+                resolveNote = `采用方案 ${opt.key}:${opt.title}。请按该方案继续。` + extra;
+              }
             }
-            resolveNote = outcome === "failure"
-              ? `采用方案 ${opt.key}:${opt.title}。用户已实际尝试应用,但执行失败;` +
-                `本次不视为已应用,禁止沿成功路径继续。请原 Agent 根据下面的原始回执修正文件;` +
-                `不要覆盖已归档的失败版本,修正版使用下一个序号并重新送审。` +
-                `\n\n—— 执行回执(失败 · 用户填写)——\n${receipt}` + extra
-              : `采用方案 ${opt.key}:${opt.title}。文件已由用户应用成功;` +
-                (disp === "hold_for_review"
-                  ? `**本卡不交回原 Agent** —— 留在等待中,复核通过后方可完成(v0.1 复核由人在面板完成)。`
-                  : `请按该方案继续并根据下面的回执完成验证。`) +
-                `\n\n—— 执行回执(成功 · 用户填写)——\n${receipt}` + extra;
-            // ⭐ The receipt survives as ONE block. The four existing carriers do
-            //   not live through a cycle (markAutoReviewed erases, the next report
-            //   overwrites) — and a silently vanished "was applied to production"
-            //   is the doorway to a re-run.
-            receiptBlock = { option: opt.key, outcome, receipt, said,
-                             files: archive || [], at: new Date().toISOString(), consumed_at: null };
-          } else {
-            resolveNote = `采用方案 ${opt.key}:${opt.title}。请按该方案继续。` + extra;
-          }
-        }
 
-        // ══ ⑤ landing ═════════════════════════════════════════════════════════
-        const r = store.resolve(db, { id, verdict: b.verdict, note: resolveNote,
-                                     resolvedBy: b.resolved_by || "human",
-                                     verifyOk: b.verify_ok,
-                                     selectedOption: b.selected_option,
-                                     sqlArchive: archive,
-                                     disposition: disp, sqlReceipt: receiptBlock });
+            return {note:resolveNote,sqlArchive:archive,sqlReceipt:receiptBlock};
+          });
         emit("task.resolved", r);
         return json(res, 200, { task: taskOut(store.get(db, id)) });
       }
       if (action === "attempt") {
         // Self-retry round n: the card stays in_progress (not released); only
         // attempts advances.
-        const r = store.bumpAttempt(db, { id, worker: b.worker });
+        const r = store.bumpAttempt(db, { id, worker: b.worker, runId: b.run_id });
         emit("task.attempt", r);
         return json(res, 200, r);
       }
       if (action === "autoreview") {
-        // expect_updated_at: the row the reviewer judged. Absent = old reviewer, status
-        // gate only; present = CAS as well (store.markAutoReviewed).
+        // expected_version is mandatory; the older timestamp check is retained
+        // as an additional compatibility guard, never as a replacement.
         const r = store.markAutoReviewed(db, { id, note: b.note,
-                                               decisionPackage: b.decision_package,
+                                               decisionPackage: b.decision_package, expectedVersion:b.expected_version,
                                                expectUpdatedAt: b.expect_updated_at ?? null });
         emit("task.autoreviewed", r);
         return json(res, 200, r);
@@ -2963,17 +3111,17 @@ const server = http.createServer(async (req, res) => {
         // Domain gate at the single mandatory pass (the store does not know
         // LINES/ROUTES — layers do not cross).
         if (badRoutable(res, b)) return;
-        const r = store.update(db, { ...b, id });
+        const r = store.update(db, { ...b, id, expectedVersion:b.expected_version });
         emit("task.updated", { id });
         return json(res, 200, { task: store.get(db, id), ...r });
       }
       if (action === "pin") {
-        const r = store.setPinned(db, { id, pinned: b.pinned !== false });
+        const r = store.setPinned(db, { id, expectedVersion:b.expected_version, pinned: b.pinned !== false });
         emit("task.pinned", r);
         return json(res, 200, { task: store.get(db, id) });
       }
       if (action === "release") {
-        const r = store.setReleased(db, { id, released: b.released !== false });
+        const r = store.setReleased(db, { id, expectedVersion:b.expected_version, released: b.released !== false });
         emit("task.released", r);
         return json(res, 200, { task: store.get(db, id) });
       }
@@ -2982,13 +3130,13 @@ const server = http.createServer(async (req, res) => {
         //   verbatim) — gating only create and update still allowed ghost cards
         //   from here.
         if (badRoutable(res, b)) return;
-        const r = store.reopen(db, { id, line: b.line });
+        const r = store.reopen(db, { id, expectedVersion:b.expected_version, line: b.line });
         emit("task.reopened", r);
         return json(res, 200, { task: store.get(db, id), ...r });
       }
       if (action === "archive") {
         const r = store.archive(db, {
-          id,
+          id, expectedVersion:b.expected_version,
           restore: b.restore === true,
           force: b.force === true,
         });
@@ -3005,7 +3153,8 @@ const server = http.createServer(async (req, res) => {
     // green). The mapping table is store.httpStatusFor, ONE place; the mapping AND
     // the declaration are unified in statusFor() above — calling the raw mapping
     // here would recreate "this road silently 400s".
-    return json(res, statusFor(e, "兜底"), { error: msg });
+    const conflict=conflictGuide.describeConflict(e);
+    return json(res, statusFor(e, "兜底"), { error: msg, ...(conflict?{code:e.code,conflict}:{}), ...(Number.isSafeInteger(e?.current_version) ? {expected_version:e.expected_version,current_version:e.current_version} : {}) });
   }
 });
 
@@ -3172,6 +3321,7 @@ let shuttingDown = false;
 async function stopWithBoard(trigger) {
   if (shuttingDown) return;
   shuttingDown = true;
+  await stopFleetActions();
   const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
   if (live.length) {
     console.log(`退出(${trigger}): 正在停止 worker ${live.join(" ")}(意图保留)…`);
@@ -3188,6 +3338,7 @@ async function stopWithBoard(trigger) {
 async function restartBoard(trigger) {
   if (shuttingDown) return;
   shuttingDown = true;
+  await stopFleetActions();
   const live = SUPERVISED.filter((l) => slotsOf(l).some((w) => w.proc));
   if (live.length) {
     console.log(`重启(${trigger}): 先停 worker ${live.join(" ")}(意图保留,新进程起来后照原样恢复)…`);

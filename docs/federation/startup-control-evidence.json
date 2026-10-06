@@ -1,0 +1,138 @@
+{
+  "format": "ai-fleet-startup-control-evidence/v1",
+  "batch": 75,
+  "recorded_at": "2026-10-01T10:48:27.277177+00:00",
+  "base_commit": "223cb5c81d8c54608c3ef6b68a63ba6514c86f91",
+  "status": "test_harness_fixed_and_locally_verified",
+  "product_code_changed": false,
+  "root_cause": {
+    "ci_runs": [
+      36844303364,
+      36847111646
+    ],
+    "failed_step": "nodestartuptest",
+    "database_error": "SQLITE_BUSY / database is locked",
+    "secondary_after_hook_error": "EPERM on temporary fixture removal",
+    "former_fixture_busy_timeout_ms": 0,
+    "actual_control_entrypoint_busy_timeout_ms": 5000,
+    "read_error_prevented_old_finally_from_requesting_stop": true,
+    "old_parent_process_kill_did_not_prove_child_node_stopped": true,
+    "general_product_contention_fixed": false
+  },
+  "experiments": {
+    "independent_node_process_holds_actual_exclusive_lock": true,
+    "former_observer_read_fails": true,
+    "existing_product_readonly_entrypoint_passes_before_fix": true,
+    "read_only_connection_and_file_hash_verified": true,
+    "former_cleanup_read_fails_under_same_lock": true,
+    "failed_negative_test_still_stops_its_owned_fixture_in_finally": true
+  },
+  "changes": {
+    "fixture_uses_actual_control_opener": true,
+    "cleanup_uses_independent_control_connection": true,
+    "cleanup_checks_node_epoch_and_unique_active_instance": true,
+    "explicit_instance_stop_and_actual_process_close_wait": true,
+    "process_name_or_pid_kill": false,
+    "after_hook_checks_all_owned_launches_before_removal": true,
+    "temporary_directory_removal_bounded_retries": 5,
+    "busy_errors_globally_suppressed": false,
+    "identity_and_terminal_checks_weakened": false
+  },
+  "windows_tests": [
+    {
+      "log": "review75-lock-red.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 2390.1756
+    },
+    {
+      "log": "review75-production-before.log",
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 2447.426
+    },
+    {
+      "log": "review75-cleanup-red.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 6288.347
+    },
+    {
+      "log": "review75-regression.log",
+      "tests": 20,
+      "pass": 20,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 63897.4718
+    }
+  ],
+  "counting": "The final startup and node runtime suites ran once serially; positive control and new negative cases are included, not added to the final count.",
+  "source_hash_encoding": "UTF-8, LF normalized, as committed",
+  "source_hashes": [
+    {
+      "path": "tests/nodestartuptest.mjs",
+      "sha256": "627fa5c359f8d787fc22861d699d1fd3007b2c763fe445e90ffadc1aca6ff0f5"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review75-lock-red.log",
+      "sha256": "4a4e218555a62a97932dc9d25d96e637cb340d2f2efa3379d3484050cb16afe5"
+    },
+    {
+      "name": "review75-production-before.log",
+      "sha256": "90e82fe2d391e7a70407550da6aea49eb507195cab66f8fd23ade6c928c2f576"
+    },
+    {
+      "name": "review75-cleanup-red.log",
+      "sha256": "609050a293c1f96ec31503d92a504c8129802b729e21149a74a9b87e52fc3e3a"
+    },
+    {
+      "name": "review75-regression.log",
+      "sha256": "beb123d5234830ccfaf5f7bdd733eab53a8562d15d505166d10264dad9732667"
+    },
+    {
+      "name": "review75-ci133-jobs.json",
+      "sha256": "8c0473100ddc1f7fea532aa885973cbbf58b2195d016be321b17be7654547abd"
+    },
+    {
+      "name": "review75-ci133-job-110319774723.log",
+      "sha256": "7725407e8b650674e2099a49359d656fa726dad727521336a08cae88fb915a46"
+    }
+  ],
+  "prior_ci": {
+    "132": {
+      "sha": "175411a9897c25ff344580becabc89210ba3af68",
+      "conclusion": "failure",
+      "gitleaks": "success"
+    },
+    "133": {
+      "sha": "554c7d88426e4086d21a2f956b154f4b3b8c7263",
+      "conclusion": "failure",
+      "gitleaks": "success"
+    },
+    "fixed_revision_remote_confirmation": "pending_after_push"
+  },
+  "limitations": [
+    "Does not resolve general H8 database/rate contention",
+    "Does not recover abandoned node/scheduler instance locks",
+    "Does not prove physical login/reboot or two-PC acceptance"
+  ],
+  "production_changed": false,
+  "scheduled_tasks_changed": false,
+  "tailscale_changed": false,
+  "models_called": false,
+  "physical_two_pc_acceptance": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

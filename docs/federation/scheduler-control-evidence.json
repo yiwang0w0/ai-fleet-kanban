@@ -1,0 +1,120 @@
+{
+  "format": "ai-fleet-scheduler-control-evidence/v1",
+  "batch": 78,
+  "recorded_at": "2026-10-01T11:45:13.841417+00:00",
+  "base_commit": "08390d490fe9739944275e88e917e107a3c8fb6e",
+  "status": "test_fixture_fixed_and_locally_verified",
+  "product_code_changed": false,
+  "observed_ci": {
+    "code_sha": "c91174f23fca6bedbafdac8b9696134385c06022",
+    "run_id": 36851466211,
+    "number": 135,
+    "conclusion": "failure",
+    "gitleaks": "success",
+    "startup_tests": {
+      "pass": 13,
+      "fail": 0
+    },
+    "failed_step": "schedulertest",
+    "failed_case": "hard-stopped scheduler remains unconfirmed and its stale control cannot stop a replacement instance",
+    "error": "database is locked",
+    "stack": "localIdentity -> lifecycle.status -> fixture status reader"
+  },
+  "cause": {
+    "former_fixture": "raw DatabaseSync connection",
+    "former_busy_timeout_ms": 0,
+    "existing_control_opener": "openSchedulerControlDatabase",
+    "existing_busy_timeout_ms": 5000,
+    "production_readonly_control_passes_before_fix": true
+  },
+  "experiments": {
+    "actual_independent_node_process_writer": true,
+    "actual_begin_exclusive_and_rollback": true,
+    "writer_ready_proven_by_ipc": true,
+    "former_fixture_reproduces_ci_error_stack": true,
+    "production_readonly_entrypoint_refuses_writes": true,
+    "database_file_hash_unchanged": true,
+    "queries_do_not_initialize_instances_or_start_work": true,
+    "owned_writer_close_awaited_even_on_assertion_failure": true
+  },
+  "change": {
+    "initialization_connection_closed_after_migration": true,
+    "fixture_observer_uses_existing_control_opener": true,
+    "production_busy_wait_changed": false,
+    "lock_errors_globally_suppressed": false,
+    "automatic_instance_unlock_added": false,
+    "stop_evidence_or_credential_checks_changed": false
+  },
+  "windows_tests": [
+    {
+      "log": "review78-lock-before.log",
+      "tests": 2,
+      "pass": 1,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 4457.0462
+    },
+    {
+      "log": "review78-regression.log",
+      "tests": 29,
+      "pass": 29,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 83932.0
+    }
+  ],
+  "regression_command": "node --test tests/schedulertest.mjs",
+  "counting": "One full affected scheduler suite passed 29/29; both real-lock cases are included in that count. The initial run had one expected old-fixture failure and one existing-production positive control. Startup and full repository suites were not repeated.",
+  "coverage": [
+    "Actual supervised synthetic execution and durable queue",
+    "Drain and cancel requests, idempotence and instance version fencing",
+    "Hard-stopped instance remains unconfirmed; old controls cannot stop a replacement",
+    "Read-only status and unchanged database bytes under a real writer lock",
+    "Observation failures stop new claims and retain attention",
+    "Node host drain/cancel propagation with offline sync and in-flight synthetic work"
+  ],
+  "source_hash_encoding": "UTF-8 LF normalized",
+  "source_hashes": [
+    {
+      "path": "tests/schedulertest.mjs",
+      "sha256": "00fb7800dcabc5bf3d951bd4b185b613e784a8cbfd0974531e2bdb0419a0ea2b"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review78-lock-before.log",
+      "sha256": "29dec2787cb231ec73983a795afbd7d7eda270d3bd79fcd56535acb7bb57bcfc"
+    },
+    {
+      "name": "review78-regression.log",
+      "sha256": "a14a317221932f4059e71a73675db53f106ed1a2b9ea9f352a1cb9753f3ee5c7"
+    },
+    {
+      "name": "review77-ci135-jobs.json",
+      "sha256": "7825e24b67f1739b668500f9299335a4a1ec0d9c3c3bf3c80dbbc27db2579033"
+    },
+    {
+      "name": "review77-ci135-job-110333858774.log",
+      "sha256": "4e399fd643509f886108df0a70b8f9bc31cd5e3acf27cdff17e6908068f05454"
+    }
+  ],
+  "limitations": [
+    "Remote CI on the fixed commit still requires confirmation",
+    "Does not resolve general H8 contention or request rate control",
+    "Does not provide recovery for abandoned scheduler/node instance locks",
+    "Does not prove physical two-PC or native provider acceptance"
+  ],
+  "production_changed": false,
+  "scheduled_tasks_changed": false,
+  "tailscale_changed": false,
+  "models_called": false,
+  "synthetic_executor_processes_used": true,
+  "real_peers_enabled": false,
+  "physical_two_pc_acceptance": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

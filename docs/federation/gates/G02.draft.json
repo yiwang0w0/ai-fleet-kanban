@@ -1,0 +1,184 @@
+{
+  "artifact_type": "phase_gate_receipt_draft",
+  "gate_id": "G02",
+  "phase_id": "S02",
+  "plan_id": "AFK-FED-001",
+  "plan_version": "1.3",
+  "decision": "pending",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "schema_version": {
+    "federation_sync": 5,
+    "broker_dispatch": 3
+  },
+  "schema_note": "Code contracts only; no production database schema inspection is claimed. Other components version independently.",
+  "protocol_version": {
+    "worker": 2,
+    "peer": 1
+  },
+  "config_digest": null,
+  "node_aliases": [],
+  "node_note": "The user selected two physical PCs. Stable node aliases are not yet bound in this receipt; temporary test nodes are not physical device enrollment.",
+  "accepted_task_ids": [],
+  "task_assessments": [
+    {
+      "task_id": "T02.01",
+      "acceptance_criteria": [
+        "重启/改名保持 node_id",
+        "重装按恢复规程处理",
+        "同名或复制身份被检测"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/peer-endpoints-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/graph-recovery-evidence.json"
+      ],
+      "remaining": "Stable identity and epoch recovery pass isolated CI; physical enrollment and independent review remain pending.",
+      "ci_steps": [
+        "identitytest (node ownership and atomic migration)",
+        "recoverytest (retirement, reviewed activation and crash rollback)"
+      ]
+    },
+    {
+      "task_id": "T02.02",
+      "acceptance_criteria": [
+        "三个节点各生成至少 10000 个 UID 无冲突",
+        "旧数字 ID 查询兼容",
+        "迁移重跑无重复"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/peer-endpoints-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/graph-recovery-evidence.json"
+      ],
+      "remaining": "UID generation and legacy migration pass current CI; independent review remains pending.",
+      "ci_steps": [
+        "identitytest (node ownership and atomic migration)"
+      ]
+    },
+    {
+      "task_id": "T02.03",
+      "acceptance_criteria": [
+        "owner、executor、role、runtime、agent_instance、run_id 分开",
+        "新 run 不复用旧授权快照"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/peer-endpoints-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/graph-recovery-evidence.json"
+      ],
+      "remaining": "Qualified identities and per-run authorization pass CI; independent review remains pending.",
+      "ci_steps": [
+        "runfencetest (stale dispatch rejection and worker protocol)",
+        "dispatchtest (native gates, reservations, one-use permits and stale receipts)",
+        "review-contracttest (version, qualified terms and safe upgrade instructions)"
+      ]
+    },
+    {
+      "task_id": "T02.04",
+      "acceptance_criteria": [
+        "远端副本不可直接领取或改写",
+        "旧 expected_version 返回冲突",
+        "非所有者不能伪造事件"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/peer-endpoints-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/graph-recovery-evidence.json"
+      ],
+      "remaining": "Owner, stale-version and replica guards pass CI; physical acceptance and independent review remain pending.",
+      "ci_steps": [
+        "versiontest (stale task commands and concurrent edits)",
+        "synctest (durable projections, replay, lost ACK and offline resume)"
+      ]
+    },
+    {
+      "task_id": "T02.05",
+      "acceptance_criteria": [
+        "支持范围有矩阵",
+        "未知必需字段/不兼容版本明确拒绝",
+        "可选扩展不破坏兼容"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/peer-endpoints-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/graph-recovery-evidence.json"
+      ],
+      "remaining": "Protocol negotiation and endpoint binding pass CI; actual device configuration is not accepted.",
+      "ci_steps": [
+        "peertest (credential binding, revocation and protocol negotiation)",
+        "peer endpoints (pre-send address binding and persisted source origin)"
+      ]
+    },
+    {
+      "task_id": "T02.06",
+      "acceptance_criteria": [
+        "存量任务不丢失、ID 不漂移、数据备份可恢复",
+        "状态域没有混用"
+      ],
+      "status": "pending_acceptance",
+      "evidence": [
+        "docs/federation/acceptance-candidate-evidence.json",
+        "docs/federation/peer-endpoints-evidence.json",
+        "docs/federation/source-lineage-evidence.json",
+        "docs/federation/graph-recovery-evidence.json"
+      ],
+      "remaining": "Current migration/recovery CI passes; G01 and independent ARCH/TEST/REVIEW remain pending.",
+      "ci_steps": [
+        "backuptest (WAL snapshots and quarantined restore)",
+        "recoverytest (retirement, reviewed activation and crash rollback)",
+        "epochrecoverytest (reviewed source epochs, missing results and atomic cutover)"
+      ]
+    }
+  ],
+  "evidence_manifest": "docs/federation/acceptance-candidate-evidence.json",
+  "evidence_sha256": "2e744e2abb647daeb874c3d55e56843980de6c75922ec99a6279806f9c8c104a",
+  "evidence_hash_format": "UTF-8 LF, exact committed document bytes",
+  "required_roles": [
+    "ARCH",
+    "TEST",
+    "REVIEW"
+  ],
+  "reviewer_instance_id": null,
+  "operator_decision_ref": null,
+  "verified_at": null,
+  "drafted_at": "2026-10-05T03:49:15.282422+00:00",
+  "rollback_ref": "backup/pr2-before-main-20261001",
+  "rollback_note": "Source recovery reference only. Deployment or database rollback requires the reviewed migration/recovery procedure; do not reset a live database.",
+  "reanchored_at": "2026-10-05T03:49:15.282422+00:00",
+  "runtime_versions": {
+    "ci_node_requested": "24",
+    "ci_python_requested": "3.12",
+    "note": "Requested runner versions from the pinned workflow, not a physical-machine inventory."
+  },
+  "test_results": [
+    {
+      "case": "CI #149 Windows harness and gitleaks",
+      "status": "passed",
+      "run_id": 37258132393,
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/37258132393",
+      "steps": "Every recorded step completed successfully; counts are CI steps, not test assertions."
+    }
+  ],
+  "unresolved_findings": [
+    "G01 is not accepted.",
+    "Physical node identities and duplicate-identity drill are not accepted.",
+    "Independent ARCH/TEST/REVIEW confirmations are missing."
+  ],
+  "historical_draft": {
+    "path": "docs/federation/gates/history/f10f268/G02.draft.json",
+    "code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+    "sha256": "d68b24c6ef406795450ab56a34061ae9354a3c58d5de382aed94210358b6b606",
+    "scope": "Exact previous draft retained, including its original failures and older dfcbc73 evidence. No historical experiment was relabeled as a current rerun."
+  }
+}

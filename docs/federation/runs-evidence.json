@@ -1,0 +1,58 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-03-runs",
+  "date": "2026-09-29",
+  "base_commit": "f97de7a9bd0c1fbb8428a46f20a156ed17662ff4",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/store.js": "4b8d1b13dbcc5d5f48e7c985665776d263742e6bd429a1e4caf4874a41934eaa",
+    "core/server.mjs": "ba74f6319c1270a8cf8a79910c104c2db8e89bfdb0292cc4cbf57694295b3b3b",
+    "loops/worker_loop.py": "af2a3c1827804d329ff8658bdfe0f646aa9dec717447e725048fb6bfc801b2d0",
+    "cli/board.py": "0ad4e8be255f5a1018db5a856984473538f182474ea1f43e76828229c528d572",
+    "tests/runfencetest.mjs": "f630823195a0859489720f48fec513e3d9ef096a222f64e90af2322bac445649",
+    "tests/selftest.mjs": "36e4b8419e1b8bc621aa4d60295293f641b5fb6c2ea0cc5f572d2c5299807e5c",
+    "tests/servertest.mjs": "70f3fab0564967df41076c7582d66ffbfb59905a0c465a9663fe40e2b8fa50fd",
+    "tests/reviewtest.mjs": "aacea1dc1ac969f2d791433ad17ca591930c4d27717c5df825fb1712ee5d38f4",
+    "package.json": "6164e5298d0f541e3a512ed15e544435176ec0a164e3a45f50ebbaa6b5fbf817",
+    ".github/workflows/ci.yml": "ad57cee7b3da3c43660207817fbc8ad892b36fabe0bd1ec89989746db84eb0d1"
+  },
+  "local_validation": {
+    "command": "npm test",
+    "result": "passed",
+    "total_passed": 882,
+    "failed": 0,
+    "skipped": 0,
+    "worker_prompt_selftest": {
+      "passed": 57,
+      "failed": 0
+    },
+    "followup": "Corrected role snapshot for unassigned cards; reran all 17 run-fencing tests including forged-policy input and line/worker separation. Final CI repeats the full suite."
+  },
+  "regression_reproduction": {
+    "base": "f97de7a",
+    "same_worker_reclaim_old_report": "accepted before fix; rejected with CONFLICT after fix"
+  },
+  "ci": {
+    "run_id": 36532817500,
+    "result": "passed",
+    "jobs": {
+      "gitleaks": 109290087526,
+      "ubuntu": 109290087749,
+      "windows": 109290087770
+    }
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "real_multi_node_acceptance": false,
+  "phase_gates_passed": 0,
+  "limitations": [
+    "run IDs are concurrency fences, not credentials",
+    "policy enforcement is unattested",
+    "old model processes and filesystem writes are not terminated by callback rejection",
+    "no federation or offline reconciliation enabled"
+  ],
+  "tested_commit": "7cc5939643e66801a431b59df1baed8b46acc42f"
+}

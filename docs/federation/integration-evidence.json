@@ -1,0 +1,111 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-27-source-integration",
+  "date": "2026-09-30",
+  "supported_platform": "Windows",
+  "base_commit": "e73f0a6a08551cb0438a6f966aa471fa06df1b83",
+  "code_sha256": {
+    ".github/workflows/ci.yml": "ea71aa61dc5cd25086061c599befc3d17774a768e23ccf747218efe19cdbe81d",
+    "package.json": "9e49e3e5d094b5484fd44884aa31b193aad8c9f73e4df3bb6748add8702c5968",
+    "cli/integration.mjs": "f4ac58db8d176db3b89317e6d87c89adbf7662c02710586bd7b1c603ccbe278a",
+    "core/integration/git.mjs": "8e2e8144a90e32f964f86f8f15565eb2730d6b68d2fc3982da03e538453ba919",
+    "core/integration/service.mjs": "48d93fdbb3c754bf3dc3df3831fd2d3e38add141a8cd806818dad7192b56dbb3",
+    "core/verification/service.mjs": "6db3b4f4e14b5bbe6eb3578fd9cc9f1e2feebbe9649f7c604dde95f240276440",
+    "tests/integrationtest.mjs": "2ed7472708c38c97a925e12407fa84c1c862e78344c304295ad60d89bfdf6a2c"
+  },
+  "code_git_blobs": {
+    ".github/workflows/ci.yml": "b53f0d6a340897659976dc647242cbeb7020df32",
+    "package.json": "148ef0dbacc96b885762bbd804b9d4afef9845ad",
+    "cli/integration.mjs": "dbd8eb557e73a805aa67fa0f9ceeb5e5c95bd9a9",
+    "core/integration/git.mjs": "2336a2dc57663be219cca3694545c9e683c92ca0",
+    "core/integration/service.mjs": "af425233302427519c0c24c0078d2a931c17d36e",
+    "core/verification/service.mjs": "22503024f53637b23a9be6a03e744818f17061c6",
+    "tests/integrationtest.mjs": "4f70b06699fd5e0ea81461e5a255d254bc9492c7"
+  },
+  "local_validation": {
+    "initial_integration_tests": {
+      "passed": 7,
+      "failed": 0
+    },
+    "strengthened_boundaries": {
+      "passed": 3,
+      "failed": 0
+    },
+    "linked_worktree_pointer": {
+      "reproduced": true,
+      "fixed_test_passed": 1,
+      "fixed_test_failed": 0
+    },
+    "full_suite": {
+      "status": "passed",
+      "command": "npm test",
+      "exit": 0,
+      "classic_pass": 841,
+      "native_pass": 571,
+      "passed": 1412,
+      "failed": 0,
+      "skipped": 0,
+      "source_files_verified": 7,
+      "source_snapshot": ".data/integration-tested-source.json"
+    },
+    "documentation": {
+      "plan_version": "1.2",
+      "tasks": 72,
+      "source_document_hash_matches": true,
+      "verified_evidence_file_links": 158
+    },
+    "staged_gitleaks": {
+      "version": "8.24.3",
+      "platform": "Windows",
+      "exit": 0,
+      "leaks_found": false
+    }
+  },
+  "exercised": [
+    "actual Git objects and deterministic two-parent merge commit bound to source verification",
+    "source HEAD, staged, unstaged and untracked work retained",
+    "old-value CAS rejects concurrent source commits",
+    "checked-out branches, Windows case aliases and linked worktrees refused",
+    "repository mapping mismatch and explicit local permissions required",
+    "source reference-transaction hooks suppressed using fixed empty hooks directory",
+    "Git success followed by SQLite rollback recovered after database reopen without reapply",
+    "revoked authority records observed applied effect without acceptance",
+    "unknown launch and moved ref never retried or overwritten",
+    "retained failed preparation explicitly abandoned only before launch",
+    "SHA256 repository object identity and post-merge stale verification",
+    "CLI historical receipt reading",
+    "Git plumbing anchored despite linked worktree pointer redirection"
+  ],
+  "ci": {
+    "status": "passed",
+    "commit": "efaad6c33e00b0673b974611e37db48c92161dc7",
+    "run_id": 36676659184,
+    "windows_job_id": 109762972879,
+    "windows_main_pass": 1412,
+    "windows_main_fail": 0,
+    "gitleaks_job_id": 109762973219,
+    "gitleaks": "success",
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36676659184"
+  },
+  "acceptance": {
+    "accepted": false,
+    "accepted_phases": 0,
+    "total_phases": 12,
+    "filesystem_sandbox": false,
+    "physical_two_node_acceptance": false,
+    "real_provider_calls": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 0
+    },
+    "per_provider_authorized_limit": 1
+  },
+  "remaining": [
+    "source positive acceptance, relation retirement and parent advancement",
+    "Windows OS permission isolation and native adapters",
+    "scheduler, global UI and operations",
+    "Zcode Chinese Coding Plan and three actual provider tasks",
+    "two physical Windows nodes over Tailscale",
+    "protected branch publishing and independent full-phase acceptance"
+  ]
+}

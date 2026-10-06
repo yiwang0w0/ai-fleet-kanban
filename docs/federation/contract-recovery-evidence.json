@@ -1,0 +1,110 @@
+{
+  "format": "ai-fleet-contract-recovery-evidence/v1",
+  "prepared_at": "2026-10-05T04:23:02.596420+00:00",
+  "base_commit": "dfb8051b180e375254e3465259cf224a46c46986",
+  "scope": "Single Windows host with real isolated SQLite backups/epoch activation and local administrative CLI; stopped cancellation contracts after registrar recovery. No physical peer or provider call.",
+  "tests": {
+    "unique_passing_cases": 15,
+    "new_recovery_cases": 6,
+    "existing_graph_recovery_cases": 5,
+    "adjacent_binding_cancellation_cases": 4,
+    "failed_final_cases": 0,
+    "full_repository_suite_repeated": false,
+    "count_note": "The strengthened rollback test overlaps the original five recovery cases. Initial happy-path runs are also overlaps, not additional passes.",
+    "source_note": "Final product code was exercised in the related run. Later edits only added a colocated fixture branch and strengthened an audit test; those changed cases were run separately. Current test-file hashes describe the final deliverable, not identical test bytes for every earlier log."
+  },
+  "logs": [
+    {
+      "name": "review96-contract-before.log",
+      "sha256": "8a9d58aa0d834419e485d5095c0cbda19f34bdabaf9b93b992165a4800f3919b",
+      "result": "1 expected failure: missing explicit recovery API; prior assertion reproduced active-relation blocker after actual registrar restore"
+    },
+    {
+      "name": "review96-contract-first.log",
+      "sha256": "2e532d04f457e87c337ccf8ec1df66865775539c9f2acfa6dcd8d558800fa6e8",
+      "result": "1/1 initial new closed loop"
+    },
+    {
+      "name": "review96-contract-related.log",
+      "sha256": "4b5c73c8567c73bf4b355240aa9f942b73065a4e586ee6276f0225fe13cff9f2",
+      "result": "10/10: five new recovery cases plus five existing graph recovery cases"
+    },
+    {
+      "name": "review96-colocated.log",
+      "sha256": "d38bdc807b340b5ad42be6e5a69227bbc69672aec26d4a85ba1c1be639bc02e8",
+      "result": "1/1 additional source-as-registrar two-node shape"
+    },
+    {
+      "name": "review96-regression-final.log",
+      "sha256": "11f8c6ecb502b03d55157b26ebb0e8c3622d3a64e3d6b543c612ff8772de8619",
+      "result": "5/5: strengthened rollback case repeated, plus four adjacent binding/cancellation regressions"
+    }
+  ],
+  "source_hashes": [
+    {
+      "path": "core/federation/contract-recovery.mjs",
+      "worktree_sha256": "a3be756519632c34a7c972101b15c636efa0d98ad967982c03992ef78510d02a",
+      "git_blob_sha256": "a3be756519632c34a7c972101b15c636efa0d98ad967982c03992ef78510d02a"
+    },
+    {
+      "path": "core/federation/graph-recovery.mjs",
+      "worktree_sha256": "7badbcf0ec6ba1395f94e12741faa4175ab9fe777cdd76535e96717447da3992",
+      "git_blob_sha256": "7badbcf0ec6ba1395f94e12741faa4175ab9fe777cdd76535e96717447da3992"
+    },
+    {
+      "path": "core/federation/bindings.mjs",
+      "worktree_sha256": "71ed539d897d36d7cfab9c70a7d25047b5580cf6cd92a49116415211d9d54ead",
+      "git_blob_sha256": "71ed539d897d36d7cfab9c70a7d25047b5580cf6cd92a49116415211d9d54ead"
+    },
+    {
+      "path": "core/federation/cancellation-closure.mjs",
+      "worktree_sha256": "ddb3868c27d15509ca27e1aea0d63ac9c8a5a0b00cf23e126543a4369da3c11c",
+      "git_blob_sha256": "ddb3868c27d15509ca27e1aea0d63ac9c8a5a0b00cf23e126543a4369da3c11c"
+    },
+    {
+      "path": "cli/contract-recovery.mjs",
+      "worktree_sha256": "719f023af0bbf01574a12fbfd5d0b6b009de4fb2a8d6c8b91bd4b3e038f48985",
+      "git_blob_sha256": "6d7f3944b1834373b2d8a9639ca6cb7fe1b3229e4baa18d25fbda933df2d0312"
+    },
+    {
+      "path": "tests/contractrecoverytest.mjs",
+      "worktree_sha256": "3905fd522722e4a54bba7d1d5137da1d99ef032e328bd5f999357c43d95be62e",
+      "git_blob_sha256": "3905fd522722e4a54bba7d1d5137da1d99ef032e328bd5f999357c43d95be62e"
+    },
+    {
+      "path": "tests/graphrecoverytest.mjs",
+      "worktree_sha256": "13f10793572e23d667d10e15d91f304b6ff050619461f4f7d73e5b4e297ca02f",
+      "git_blob_sha256": "7b4700346a1d84066d77121fe1e2114cbb0cc962570733e3f90e5740e7c036ee"
+    },
+    {
+      "path": "tests/bindingtest.mjs",
+      "worktree_sha256": "0a25ed103a9d9079f9e9498e35e659f37d5de27238b937e8f8e985b936060e4b",
+      "git_blob_sha256": "ad316d66144dfc4d8b0603cd7aab6619e79eda97f54dfc8d839da19aedc684bb"
+    },
+    {
+      "path": "tests/cancellationtest.mjs",
+      "worktree_sha256": "4767b0cfa359919be7b819a2d74e35dbb377b0230e787c08365d1914bacc434c",
+      "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60"
+    }
+  ],
+  "invariants": [
+    "Same original registrar UUID; explicit new epoch; both distinct endpoint receipts bind the same contract and original stop proof.",
+    "No task execution, release or acceptance caused by recovery; explicit post-recovery owner release is tested separately.",
+    "Original graph edge, binding identity and confirmation retained; old triggers remain unchanged.",
+    "Missing proof, mismatched endpoint, stale plan and missing attestation refuse before retirement.",
+    "Registrar persistence failure and endpoint audit failure roll back; unchanged plan/attestation retries once.",
+    "New records immutable and retained; no H10 artifact-retention migration."
+  ],
+  "limitations": [
+    "No physical multi-PC acceptance or deployment.",
+    "Unresolved topology requests, completion-sealed contracts and member-only epoch changes still need their own coordinated recovery.",
+    "Imported documents are operator-reviewed local evidence, not cryptographic remote signatures.",
+    "No G gate or independent task acceptance is issued."
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "format": "ai-fleet-workspace-source-evidence/v1",
+  "batch": 86,
+  "base_commit": "83a2d88e1ee8ed0d59c99f8adc7910d6136c1347",
+  "checked_at": "2026-10-01T14:43:00.631461+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "review_items": [
+    "seven-module/H10 partial: stale provisioning and capacity visibility",
+    "seven-module/H11",
+    "CI143 terminal-workspace errors"
+  ],
+  "red": [
+    {
+      "path": ".data/review86-workspace-red.log",
+      "sha256": "62c2adc4e53287b48970a942c0b1e60e346342e182fccf88c6131f1846e13ac4",
+      "tests": 3,
+      "failed": 3
+    },
+    {
+      "path": ".data/review86-capacity-lock-red.log",
+      "sha256": "8bf33d4e07bec1c76c51510596000a21f91a4d62cb2074fe216858d389105858",
+      "tests": 2,
+      "failed": 2
+    },
+    {
+      "path": ".data/review86-git-pin-red.log",
+      "sha256": "5e55ae8aa6c0bdfb2b259fa01e0b19d91c722dde815e7e8ce3903ea195dd6279",
+      "tests": 2,
+      "failed": 2
+    }
+  ],
+  "ci_failure": {
+    "run": 36872760158,
+    "head": "9a09432711c238fd8ee06702957c75ca30ba41ae",
+    "conclusion": "failure",
+    "failed_cases": 2,
+    "log": {
+      "path": ".data/review86-ci143-job-110404431835.log",
+      "sha256": "a4236afa45cbe34a9293874159441f1350ef3cfd09eed2f6e1990820cf1a2b7b"
+    }
+  },
+  "green": [
+    {
+      "path": ".data/review86-ci-fix.log",
+      "sha256": "2c3722ce0f30d3ab90001dc62e7b7480890b03ea3b041c34ae5204c765eaf6dd",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "path": ".data/review86-workspace-green.log",
+      "sha256": "5038abcd29efc49828552b084989f7767f01aa84873d8326debd5af67ce5d5a7",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "path": ".data/review86-capacity-lock-green.log",
+      "sha256": "7307d5b62b09aba7b1432fd5b12f6331577237fdf73db67dda73314ee357aad0",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "path": ".data/review86-git-pin-green.log",
+      "sha256": "32ec5562db29b3b442124d721070b747a4c4e4a15a69d9d4fd28c945e8758fe1",
+      "passed": 7,
+      "failed": 0
+    }
+  ],
+  "total_distinct_passed": 13,
+  "skipped": 0,
+  "overlap_note": "final seven include five already-passed cases rechecked after source pin or read-only CLI changes; distinct count is 13",
+  "sources": [
+    {
+      "path": "cli/artifact.mjs",
+      "sha256": "2db758ce550401739e7b50180fc6e07349c044ec37defea9e47a164b7a8a7ca0"
+    },
+    {
+      "path": "cli/workspace.mjs",
+      "sha256": "7cf4847da09f69e0295776aba35a2c392c6e9e9f0d97a8284e0d7c8d58051546"
+    },
+    {
+      "path": "core/artifacts/transfers.mjs",
+      "sha256": "8b8af9ddc44e89d24a72299b79fb42b8110da09baeca59a155f920fde42653e4"
+    },
+    {
+      "path": "core/artifacts/workspaces.mjs",
+      "sha256": "9b6faf869b0a5aca7be6a11a5c28d207fe5ed7c8b5d4edc1868630a34dc9ba90"
+    },
+    {
+      "path": "core/execution/dispatch.mjs",
+      "sha256": "01d14baf42194b1833f8b71b23770d78fdd7ca6353981042c47b1082708fa015"
+    },
+    {
+      "path": "core/execution/runner.mjs",
+      "sha256": "ed61d9ce33e66689476d86b14d826ee564bd973e7da1a706135db47f7ab473da"
+    },
+    {
+      "path": "core/execution/source-gate.mjs",
+      "sha256": "75916efaf7c35aca3380af0eb77da504a4fa4d14300113e0b2289e9568faf531"
+    },
+    {
+      "path": "core/node-runtime.mjs",
+      "sha256": "03438bea6e599d9a688f8406a0a8cd848c7684cd1a529965265d05110fc0b8a7"
+    },
+    {
+      "path": "tests/artifacttransfertest.mjs",
+      "sha256": "548d5882da0fc9b78f0f7a944752f113ffaec850a9238ba94c369c36ac74b4b1"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "0e73894aa54539ad137ca1f4fa9ff1248ccb30eef119d4d52111b93b2886c15b"
+    },
+    {
+      "path": "tests/noderuntimetest.mjs",
+      "sha256": "4b433bd241bcec40421a22714f824d4dab4d6bcd60e1f49811983bce0c43cad1"
+    },
+    {
+      "path": "tests/workspacefiletest.mjs",
+      "sha256": "706f7a31f2ea69ab69688c6f8fa514cc0cea0781f146f85690932f03b39ea09e"
+    },
+    {
+      "path": "tests/workspacetest.mjs",
+      "sha256": "e7599da0c9d74438da882cf700d565b077c8db55e6cfe59e766e35824a603239"
+    }
+  ],
+  "deferred": [
+    "artifact archival migration and two draft assertions remain unimplemented pending explicit authorization after automatic approval rejection",
+    "H12 endpoint binding",
+    "relation/topology recovery and orphan runtime locks",
+    "real desktop, two physical computers, provider and sustained acceptance"
+  ],
+  "providers_called": false,
+  "production_changed": false,
+  "real_multi_pc_acceptance": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "phases": 0
+  }
+}

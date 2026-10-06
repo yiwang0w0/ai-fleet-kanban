@@ -1,0 +1,1652 @@
+{
+  "format": "ai-fleet-acceptance-readiness/v1",
+  "plan_id": "AFK-FED-001",
+  "prepared_at": "2026-10-05T05:42:48.549344+00:00",
+  "implementation_head": "df85ff2d95dda61f86a065f6ef303ff614585267",
+  "runtime_review_candidate": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "ci_run": 37258132393,
+  "assessment_kind": "implementer_evidence_preparation_not_independent_review",
+  "requirements_document": {
+    "path": "docs/federation/requirements.md",
+    "sha256": "997763b5eb18ab30b5c01054fb5fcaa36cb725ce938ef8598d6bdeb59f1d6d46"
+  },
+  "evidence_method": "Read actual criterion assertions and retained successful pinned CI. No suites rerun. Source hashes refer to Git blob bytes at the stated candidate. Same-file equality at implementation head is informational, not a complete transitive dependency proof.",
+  "assessed_tasks": [
+    {
+      "task_id": "T00.01",
+      "prior_status": "planned",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "df85ff2d95dda61f86a065f6ef303ff614585267",
+      "criteria": [
+        {
+          "criterion": "R01–R07 均有实现落点",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "requirements.md 的 R01–R09 表逐项列出实际源码、说明与测试入口；功能未验收的缺口另列。",
+          "references": []
+        },
+        {
+          "criterion": "明确离线仅继续已领取任务",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "离线合同明确仅继续已取得许可的工作，不自动转移/重派。",
+          "references": []
+        },
+        {
+          "criterion": "扩展项单列",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "多写者、自动选主、公网、Linux、原生侧栏扩展明确单列；不移除原承诺的恢复与安全要求。",
+          "references": []
+        }
+      ],
+      "ci_run_id": null,
+      "ci_steps": [],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [],
+        "gates": []
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/requirements.md",
+          "sha256": "997763b5eb18ab30b5c01054fb5fcaa36cb725ce938ef8598d6bdeb59f1d6d46",
+          "created_after_runtime_candidate": true
+        }
+      ]
+    },
+    {
+      "task_id": "T01.04",
+      "prior_status": "planned",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "桩执行器覆盖领取、报告、租约、重启、失败",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "已有无模型的实际进程夹具覆盖领取/报告/心跳、一次性启动、重连和失败终态。",
+          "references": [
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 309,
+              "assertion_anchor": "a committed dispatch permit feeds a supervised fixture",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174"
+            },
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 134,
+              "assertion_anchor": "a launch permit is single-use across database reconnects",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174"
+            },
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 236,
+              "assertion_anchor": "failure, timeout and cancellation require",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174"
+            },
+            {
+              "path": "tests/runfencetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 110,
+              "assertion_anchor": "reaper ends old run; reclaimed run rejects delayed callbacks",
+              "git_blob_sha256": "04127fd0bb613113631889e9e43a0e0587fcaca77349dd06226530498ea3fecd"
+            },
+            {
+              "path": "tests/supervisortest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 110,
+              "assertion_anchor": "host itself crashes",
+              "git_blob_sha256": "3592acf4187dea37d90d853cc502534357acca67e6fb76fde130a487d9af08eb"
+            }
+          ]
+        },
+        {
+          "criterion": "使用独立端口和临时数据",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "测试创建临时 SQLite/工作目录与独立进程，网络夹具使用动态监听端口。",
+          "references": [
+            {
+              "path": "tests/runfencetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 15,
+              "assertion_anchor": "TMP=mkdtempSync",
+              "git_blob_sha256": "04127fd0bb613113631889e9e43a0e0587fcaca77349dd06226530498ea3fecd"
+            },
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 28,
+              "assertion_anchor": "TMP=mkdtempSync",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174"
+            },
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 206,
+              "assertion_anchor": "the sync CLI performs an actual pull",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589"
+            }
+          ]
+        },
+        {
+          "criterion": "不触及真实任务",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "实际启动固定 Node 夹具，real_model_call_confirmed=false；隔离数据库承载任务，不读写生产任务。",
+          "references": [
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 320,
+              "assertion_anchor": "receipt.result.real_model_call_confirmed,false",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174"
+            },
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 314,
+              "assertion_anchor": "cwd:TMP",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "dispatchtest (native gates, reservations, one-use permits and stale receipts)",
+        "runfencetest (stale dispatch rejection and worker protocol)",
+        "supervisortest (pinned processes, timeout, cancellation and descendants)"
+      ],
+      "source_files": [
+        {
+          "path": "tests/dispatchtest.mjs",
+          "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "tests/runfencetest.mjs",
+          "git_blob_sha256": "04127fd0bb613113631889e9e43a0e0587fcaca77349dd06226530498ea3fecd",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "tests/supervisortest.mjs",
+          "git_blob_sha256": "3592acf4187dea37d90d853cc502534357acca67e6fb76fde130a487d9af08eb",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/execution/dispatch.mjs",
+          "git_blob_sha256": "fec926e534941db25682de33b0961f040f28f214f571cecc58b5ad5518b9354e",
+          "unchanged_at_implementation_head": true
+        }
+      ],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T01.03"
+        ],
+        "gates": [
+          "G00"
+        ]
+      }
+    },
+    {
+      "task_id": "T02.01",
+      "prior_status": "in_progress",
+      "readiness": "criterion_needs_scope_review",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "重启/改名保持 node_id",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "改名/迁移重跑以及独立 CLI 重新打开保持 node_id、epoch 和任务所有权。",
+          "references": [
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 29,
+              "assertion_anchor": "names can change without changing node identity",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            },
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 172,
+              "assertion_anchor": "read-only open preserves persisted identity",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            }
+          ]
+        },
+        {
+          "criterion": "重装按恢复规程处理",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "显式备份恢复保持 owner 并旋转 epoch、撤销复制凭据，缺少退役声明不激活。",
+          "references": [
+            {
+              "path": "tests/recoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 59,
+              "assertion_anchor": "activation rotates epoch",
+              "git_blob_sha256": "16c3d106a830ddf5bd51f0e1c188863b3d1eec8428df2707ecdbbde13d473fa9"
+            },
+            {
+              "path": "tests/recoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 92,
+              "assertion_anchor": "missing or mismatched retirement statements",
+              "git_blob_sha256": "16c3d106a830ddf5bd51f0e1c188863b3d1eec8428df2707ecdbbde13d473fa9"
+            }
+          ]
+        },
+        {
+          "criterion": "同名或复制身份被检测",
+          "assessment": "partial_evidence",
+          "finding": "同名不同节点保持不同 UID；复制本机 node_id 不可登记为 peer。 此证据只覆盖同名、登记自身 UUID 与受控备份复制；peers.md 明确不声称通用克隆检测。独立审阅需确认这是否满足本项复制身份标准，不先升为已实现。",
+          "references": [
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 46,
+              "assertion_anchor": "two nodes with the same display name",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            },
+            {
+              "path": "tests/peertest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 57,
+              "assertion_anchor": "self/clone identity",
+              "git_blob_sha256": "b5f3d818250458953de85e4873c6690fc0342dc1c7a455c3ba3fa469efe8636d"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "identitytest (node ownership and atomic migration)",
+        "recoverytest (retirement, reviewed activation and crash rollback)",
+        "peertest (credential binding, revocation and protocol negotiation)"
+      ],
+      "source_files": [
+        {
+          "path": "core/store.js",
+          "git_blob_sha256": "dd67f63f2ef0b53281e6b7e7c28cc09ce96a6aa72634388fd2a99157c19d4889",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/recovery.mjs",
+          "git_blob_sha256": "1b2283423655932da989e444c9032095df6d9c033c9d4a925da3986101394fd3",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/federation/peers.mjs",
+          "git_blob_sha256": "ed133e8406a57ec5707cf24d100b3ead233293bab89f799e34dd4fdee9cb9cee",
+          "unchanged_at_implementation_head": true
+        }
+      ],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T01.06"
+        ],
+        "gates": [
+          "G01"
+        ]
+      }
+    },
+    {
+      "task_id": "T02.02",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "三个节点各生成至少 10000 个 UID 无冲突",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "三个隔离节点各回填 10000 项并逐项检查，全局集合为 30000；不冒称三台实体机。",
+          "references": [
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 191,
+              "assertion_anchor": "three simulated nodes backfill 10,000 cards each",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            }
+          ]
+        },
+        {
+          "criterion": "旧数字 ID 查询兼容",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "存量数字 ID、父子/依赖和事件保留，旧数字 ID 仍可查询。",
+          "references": [
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 56,
+              "assertion_anchor": "legacy migration preserves IDs",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            },
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 209,
+              "assertion_anchor": "store.get(db, 10000).subject",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            }
+          ]
+        },
+        {
+          "criterion": "迁移重跑无重复",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "再次迁移后 task_uid、行集合与原事件计数不变。",
+          "references": [
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 215,
+              "assertion_anchor": "assert.deepEqual(db.prepare(\"SELECT id,task_uid",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            },
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 85,
+              "assertion_anchor": "eventCount",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "identitytest (node ownership and atomic migration)"
+      ],
+      "source_files": [
+        {
+          "path": "core/store.js",
+          "git_blob_sha256": "dd67f63f2ef0b53281e6b7e7c28cc09ce96a6aa72634388fd2a99157c19d4889",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "tests/identitytest.mjs",
+          "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097",
+          "unchanged_at_implementation_head": true
+        }
+      ],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T02.01"
+        ],
+        "gates": [
+          "G01"
+        ]
+      }
+    },
+    {
+      "task_id": "T02.03",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "owner、executor、role、runtime、agent_instance、run_id 分开",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "本机所有权、运行、agent_instance 与角色/运行时快照分别记录；准备绑定受限身份凭据。",
+          "references": [
+            {
+              "path": "tests/runfencetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 83,
+              "assertion_anchor": "policy is hashed and immutable",
+              "git_blob_sha256": "04127fd0bb613113631889e9e43a0e0587fcaca77349dd06226530498ea3fecd"
+            },
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 66,
+              "assertion_anchor": "preparation binds the native claim, role snapshot",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174"
+            }
+          ]
+        },
+        {
+          "criterion": "新 run 不复用旧授权快照",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "同名重领得到新 run_id，旧回报拒绝；旧策略不可改，新派发记录新工具权限。",
+          "references": [
+            {
+              "path": "tests/runfencetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 31,
+              "assertion_anchor": "same-name reclaim receives a new ID",
+              "git_blob_sha256": "04127fd0bb613113631889e9e43a0e0587fcaca77349dd06226530498ea3fecd"
+            },
+            {
+              "path": "tests/runfencetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 83,
+              "assertion_anchor": "policy is hashed and immutable",
+              "git_blob_sha256": "04127fd0bb613113631889e9e43a0e0587fcaca77349dd06226530498ea3fecd"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "runfencetest (stale dispatch rejection and worker protocol)",
+        "dispatchtest (native gates, reservations, one-use permits and stale receipts)"
+      ],
+      "source_files": [
+        {
+          "path": "core/store.js",
+          "git_blob_sha256": "dd67f63f2ef0b53281e6b7e7c28cc09ce96a6aa72634388fd2a99157c19d4889",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/execution/dispatch.mjs",
+          "git_blob_sha256": "fec926e534941db25682de33b0961f040f28f214f571cecc58b5ad5518b9354e",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/mcp/policy.mjs",
+          "git_blob_sha256": "6452bb2023d9daa1d852f7d21f282fc843c7b36f0980dc5fbf5e34cb76dad536",
+          "unchanged_at_implementation_head": true
+        }
+      ],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T02.02"
+        ],
+        "gates": [
+          "G01"
+        ]
+      }
+    },
+    {
+      "task_id": "T02.04",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "远端副本不可直接领取或改写",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "实际同步只创建 replica，执行队列为空；peer 令牌不能调用普通 UI/任务写入口。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 206,
+              "assertion_anchor": "the sync CLI performs an actual pull",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589"
+            },
+            {
+              "path": "tests/peertest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 130,
+              "assertion_anchor": "all HTTP surfaces authenticate",
+              "git_blob_sha256": "b5f3d818250458953de85e4873c6690fc0342dc1c7a455c3ba3fa469efe8636d"
+            }
+          ]
+        },
+        {
+          "criterion": "旧 expected_version 返回冲突",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "旧版本拒绝且任务/历史不改，独立进程竞争只有一个成功。",
+          "references": [
+            {
+              "path": "tests/versiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 54,
+              "assertion_anchor": "rejects stale versions before mutating",
+              "git_blob_sha256": "99df22db1d98c4d3d2a8af4e7680c326b215af34822ad439ea1d8e580b5402e4"
+            },
+            {
+              "path": "tests/versiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 90,
+              "assertion_anchor": "two independent processes editing the same observed version",
+              "git_blob_sha256": "99df22db1d98c4d3d2a8af4e7680c326b215af34822ad439ea1d8e580b5402e4"
+            }
+          ]
+        },
+        {
+          "criterion": "非所有者不能伪造事件",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "伪造 owner/epoch/version 不可替换副本，HTTP invented events 被拒绝。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 103,
+              "assertion_anchor": "a forged owner, epoch or task version",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589"
+            },
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 227,
+              "assertion_anchor": "HTTP project and message scope reject",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "versiontest (stale task commands and concurrent edits)",
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "peertest (credential binding, revocation and protocol negotiation)"
+      ],
+      "source_files": [
+        {
+          "path": "core/store.js",
+          "git_blob_sha256": "dd67f63f2ef0b53281e6b7e7c28cc09ce96a6aa72634388fd2a99157c19d4889",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/federation/sync-store.mjs",
+          "git_blob_sha256": "721f9d494212332f69579abcc18c3f66a567e44c98bcbb4cf036e44c2f19c2e6",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/federation/protocol.mjs",
+          "git_blob_sha256": "32d9184d1ea942de56624b3ac6bfda3670f77e21189c7b5a942c23cf5e57bfcf",
+          "unchanged_at_implementation_head": true
+        }
+      ],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T02.03"
+        ],
+        "gates": [
+          "G01"
+        ]
+      }
+    },
+    {
+      "task_id": "T02.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "支持范围有矩阵",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "协议兼容矩阵见 protocol-compatibility.md；PROTOCOL 当前为 min=1/max=1，CI 协商选择共同版本。",
+          "references": [
+            {
+              "path": "tests/peertest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 109,
+              "assertion_anchor": "negotiation selects common version",
+              "git_blob_sha256": "b5f3d818250458953de85e4873c6690fc0342dc1c7a455c3ba3fa469efe8636d"
+            }
+          ]
+        },
+        {
+          "criterion": "未知必需字段/不兼容版本明确拒绝",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "不兼容版本、未知必需能力/扩展/字段及伪造身份逐项拒绝。",
+          "references": [
+            {
+              "path": "tests/peertest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 117,
+              "assertion_anchor": "identity/epoch spoofing and incompatible/required extensions",
+              "git_blob_sha256": "b5f3d818250458953de85e4873c6690fc0342dc1c7a455c3ba3fa469efe8636d"
+            }
+          ]
+        },
+        {
+          "criterion": "可选扩展不破坏兼容",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "未知可选 extensions 不改变授权或协商结果。",
+          "references": [
+            {
+              "path": "tests/peertest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 109,
+              "assertion_anchor": "negotiation selects common version",
+              "git_blob_sha256": "b5f3d818250458953de85e4873c6690fc0342dc1c7a455c3ba3fa469efe8636d"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "peertest (credential binding, revocation and protocol negotiation)",
+        "versiontest (stale task commands and concurrent edits)"
+      ],
+      "source_files": [
+        {
+          "path": "docs/federation/peers.md",
+          "git_blob_sha256": "21debe175efe72d9a254eb56bc6bffca680c2c966aec7059688169ecdb151dbe",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "core/federation/protocol.mjs",
+          "git_blob_sha256": "32d9184d1ea942de56624b3ac6bfda3670f77e21189c7b5a942c23cf5e57bfcf",
+          "unchanged_at_implementation_head": true
+        },
+        {
+          "path": "tests/peertest.mjs",
+          "git_blob_sha256": "b5f3d818250458953de85e4873c6690fc0342dc1c7a455c3ba3fa469efe8636d",
+          "unchanged_at_implementation_head": true
+        }
+      ],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T02.02",
+          "T02.04"
+        ],
+        "gates": [
+          "G01"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/protocol-compatibility.md",
+          "sha256": "779bd5bf3f95da4f33c3d8ad862fd1333d01706dff1821511ebba148c276f740",
+          "created_after_runtime_candidate": true
+        }
+      ]
+    },
+    {
+      "task_id": "T01.03",
+      "prior_status": "implemented_pending_acceptance",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        "冻结 SHA 上全部必选回归通过",
+        "Windows 路径断言有定位、修正或经核准的替代测试",
+        "不删测试凑绿"
+      ],
+      "existing_review_packet": "docs/federation/gates/T01.03.review-draft.json",
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T01.02"
+        ],
+        "gates": [
+          "G00"
+        ]
+      }
+    },
+    {
+      "task_id": "T01.05",
+      "prior_status": "implemented_pending_acceptance",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        "运行中数据库使用一致性备份方式",
+        "恢复后任务、事件、证据索引可校验",
+        "恢复副本不连接生产 peers"
+      ],
+      "existing_review_packet": "docs/federation/gates/T01.05.review-draft.json",
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T01.02"
+        ],
+        "gates": [
+          "G00"
+        ]
+      }
+    },
+    {
+      "task_id": "T08.05",
+      "prior_status": "implemented_pending_acceptance",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        "仅 accepted 任务计入完成度",
+        "阻塞、待验收单列",
+        "修改合同后旧门禁失效可见"
+      ],
+      "existing_review_packet": "docs/federation/gates/T08.05.review-draft.json",
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T08.04"
+        ],
+        "gates": [
+          "G05",
+          "G06"
+        ]
+      }
+    },
+    {
+      "task_id": "T00.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "固定 SHA、工作区、配置摘要、schema 版本",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "同一 SHA 的新隔离源码、实际配置、Node 程序和 20 个组件 schema 版本均固定；完整观察见 candidate-baseline.json。",
+          "references": []
+        },
+        {
+          "criterion": "无其他在途改动混入",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "固定 Git 归档的 460 个文件前后摘要一致且无额外文件；业务记录为零；旧试点和未跟踪提议均未混入。",
+          "references": []
+        }
+      ],
+      "ci_run_id": null,
+      "ci_steps": [],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T00.01"
+        ],
+        "gates": []
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/baseline.md",
+          "sha256": "b00986cb3c6acd369c73ab6b7fa0a78c76c20a1115f784ee34390455e5c489e0",
+          "created_after_runtime_candidate": true
+        },
+        {
+          "path": "docs/federation/gates/baseline.json",
+          "sha256": "d55a4316a5e7e3da1c7d7a97fbcd7486c924172b6c6a1ea92f7c0f32cf34662b",
+          "created_after_runtime_candidate": true
+        },
+        {
+          "path": "docs/federation/gates/candidate-baseline.json",
+          "sha256": "8a50394f29592145a3ce6bbc5c96b887cc7169958f2888502c8b7be9214086eb",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "runtime_observation": {
+        "path": "docs/federation/gates/candidate-baseline.json",
+        "checked_at": "2026-10-05T06:06:47.112Z",
+        "note": "One new Windows isolated baseline setup; not a CI step, full suite or physical-node test."
+      }
+    },
+    {
+      "task_id": "T06.04",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "取消 ACK 前显示待送达",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "pending 取消意图经关系投影映射为待送达；已执行的目录状态断言区分 received 与 stopped。包括源代码渲染追踪，不冒充本轮浏览器验收。",
+          "references": [
+            {
+              "path": "core/federation/cancellation.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 57,
+              "assertion_anchor": "'pending',NULL,NULL,NULL",
+              "git_blob_sha256": "4b51e108cc48d74bf90f2e3ca3257822276399a4379228be1b4c00182df01bb3",
+              "reference_kind": "source_trace"
+            },
+            {
+              "path": "core/fleet-evidence.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 64,
+              "assertion_anchor": "e.cancellation_state=",
+              "git_blob_sha256": "6f00ce7be3c64022fcde9a2b6b2fd4868648576d8aba99c228cb8cb090f66b60",
+              "reference_kind": "source_trace"
+            },
+            {
+              "path": "core/panel.html",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 3069,
+              "assertion_anchor": "const historyStates={pending:",
+              "git_blob_sha256": "04bd683ac9f97e341a1f3d5e998ef7534dbc9aab65e6970e02da3b110cc3fa9e",
+              "reference_kind": "render_mapping_source"
+            },
+            {
+              "path": "tests/fleetactionstest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 171,
+              "assertion_anchor": "bound cancellation shows received until local quiescence and explicit source polling",
+              "git_blob_sha256": "463023f6e642c7ede8236fb832467b1a53c55480892de8d34077254e7cdd4cab",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 82,
+              "assertion_anchor": "delivery acknowledgement is not a stop acknowledgement",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "晚到结果保留但不覆盖新裁定",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "取消后的成功结果保留待裁定；关闭绑定后的晚到候选不改变来源任务，也不触发新一轮执行。",
+          "references": [
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 122,
+              "assertion_anchor": "late provider completion is retained for decision",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 447,
+              "assertion_anchor": "cancellation closure retains late candidate data after both bindings close",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "超时按业务规则处理且不擅自转主",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "固定执行超时进入 decision、不得接纳；合成进程实际退出；所有权不变，取消退役后来源仍须由原所有者明确放行。",
+          "references": [
+            {
+              "path": "tests/dispatchtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 236,
+              "assertion_anchor": "failure, timeout and cancellation require a decision",
+              "git_blob_sha256": "0bff85f5e4e7baddbd5fc3d55cb0b560e336a7bcd3772490158473f73f8be174",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/supervisortest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 73,
+              "assertion_anchor": "timeout kills the running fixture",
+              "git_blob_sha256": "3592acf4187dea37d90d853cc502534357acca67e6fb76fde130a487d9af08eb",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/identitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 92,
+              "assertion_anchor": "ownership and UID cannot be forged",
+              "git_blob_sha256": "9aa68de56f139ab1a5d8448888ee909150194abd6d1abaa9a906cc138d86b097",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 371,
+              "assertion_anchor": "CLI cancellation closure retires the edge bilaterally",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/cancellationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 439,
+              "assertion_anchor": "cancellation closure and successful completion cannot both win",
+              "git_blob_sha256": "5aa2ca8553ce4df693e59710dae7b6051ccb1c0c727569c8198fc50adc78ff60",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "cancellationtest (durable cancel, subtree fences and observed stop receipts)",
+        "fleetactionstest (operator outbox, receipts and idempotent remote commands)",
+        "dispatchtest (native gates, reservations, one-use permits and stale receipts)",
+        "supervisortest (pinned processes, timeout, cancellation and descendants)",
+        "identitytest (node ownership and atomic migration)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T06.03"
+        ],
+        "gates": [
+          "G04",
+          "G05"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/delivery-readiness.md",
+          "sha256": "a019301123a7542cacee612decd1f950f3037cc8a03b1b5fbf6e24b31a912276",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Browser interaction acceptance not performed in this preparation.",
+        "Business-calendar automatic cancellation is not claimed.",
+        "Physical cancellation, provider semantics and independent G06 acceptance remain separate."
+      ]
+    },
+    {
+      "task_id": "T06.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "子任务完成只产生候选交付",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "执行端成功和本地批准只形成来源候选，来源任务不被自动接受或生成虚构 run。",
+          "references": [
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 91,
+              "assertion_anchor": "candidate exports the exact observed run",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 187,
+              "assertion_anchor": "locally reviewed completion remains an unaccepted source candidate",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "授权验收后解除依赖",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "双端当前授权和登记完成后才原子结算任务与活动关系；原生依赖断言验证 done 前后领取条件，父任务仍需独立逐级审阅。",
+          "references": [
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 178,
+              "assertion_anchor": "actual source integration becomes accepted only after bilateral readiness",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 210,
+              "assertion_anchor": "registrar ignores revoked completion votes",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/selftest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 320,
+              "assertion_anchor": "while the dep is not done, the successor cannot be claimed",
+              "git_blob_sha256": "13d0884d7fb8e5168f2c9fff45108d3f7c8d51808fab145de8ea1b97ebf91516",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/selftest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 324,
+              "assertion_anchor": "dep done -> successor claimable immediately",
+              "git_blob_sha256": "13d0884d7fb8e5168f2c9fff45108d3f7c8d51808fab145de8ea1b97ebf91516",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 219,
+              "assertion_anchor": "verified child completion never rubber-stamps parent",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "旧 run/旧证据的回执被拒",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "已拒执行身份不能改名复用；正文摘要、任务版本、授权或恢复 epoch 变化时拒绝沿用旧完成。",
+          "references": [
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 194,
+              "assertion_anchor": "rejected execution identity cannot be relabelled",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 107,
+              "assertion_anchor": "source rejects unauthorized, altered-contract, invalid-digest",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 204,
+              "assertion_anchor": "fixture approval is explicit, malformed or unauthorized",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 234,
+              "assertion_anchor": "actual backup activation retains completion history but cannot consume old-epoch acceptance",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "resulttest (sealed candidates, owner rejection and durable rework)",
+        "completiontest (bilateral acceptance, retirement, parent review and recovery)",
+        "selftest (store)",
+        "treetest (deep ancestry, subtree moves and concurrent cycles)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T06.03",
+          "T06.04"
+        ],
+        "gates": [
+          "G04",
+          "G05"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/delivery-readiness.md",
+          "sha256": "a019301123a7542cacee612decd1f950f3037cc8a03b1b5fbf6e24b31a912276",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Dependency linkage uses complementary completion, native queue and parent-review assertions; not physical end-to-end acceptance.",
+        "Native provider and physical two-node integration remain separately required.",
+        "Complete sealed-contract recovery is not claimed by these normal-operation criteria."
+      ]
+    },
+    {
+      "task_id": "T07.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "在隔离环境验证实际产物",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "固定命令加载实际收到的模块；明确启用的 Windows AppContainer 验证代码能运行而无法读写权威数据库。",
+          "references": [
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 132,
+              "assertion_anchor": "source reconstructs the received Git commit in an independent repository",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 221,
+              "assertion_anchor": "AppContainer source verification executes delivered code while the authority database remains inaccessible",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "回执绑定内容",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "回执固定产物清单、任务、配置和实际 Windows 进程退出；输出零退出不掩盖文件或任务要求变化。",
+          "references": [
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 157,
+              "assertion_anchor": "durable source-owned verification tests actual received code",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/verificationworkspacetest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 166,
+              "assertion_anchor": "zero command exit cannot approve changed inputs",
+              "git_blob_sha256": "9aeffbed168401f16d722d450070a1ac8207c5b46a44fce797fda8f648cebb5f",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "工作节点不能自授最终通过",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "工作候选、来源验证及实际合并均不自行接受任务；完成入口属于来源操作员，工作身份不可通过 MCP 自授最终批准。",
+          "references": [
+            {
+              "path": "tests/resulttest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 91,
+              "assertion_anchor": "candidate exports the exact observed run",
+              "git_blob_sha256": "39939c40aa03b7af3402183d18537a2d43d725c84732d20d719f5f9d9edaef8b",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 204,
+              "assertion_anchor": "fixture approval is explicit, malformed or unauthorized",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/completiontest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 178,
+              "assertion_anchor": "actual source integration becomes accepted only after bilateral readiness",
+              "git_blob_sha256": "9ecd678eba31f468a854e2797fdee2657c2b310f99923b04ea8b1cea4e5c2ea0",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 154,
+              "assertion_anchor": "actual received objects merge by source CAS",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "合并冲突不强推覆盖",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "源引用改变、被检出或未知合并效果时拒绝重试覆盖；实际合并保持本地 HEAD、索引和脏文件。",
+          "references": [
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 166,
+              "assertion_anchor": "source changes and checked-out branches refuse CAS",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 183,
+              "assertion_anchor": "an unknown launch or an independently moved ref",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/integrationtest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 154,
+              "assertion_anchor": "actual received objects merge by source CAS",
+              "git_blob_sha256": "3b49490930e3ae83a82ed758eeffabd2ca3f08e3f15769ba54e088347a6324ae",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "verificationworkspacetest (independent source checks, one-use launch and recovery)",
+        "appcontainertest (Windows token, file/network boundaries and resource limits)",
+        "integrationtest (source ref CAS, bound commits and crash reconciliation)",
+        "completiontest (bilateral acceptance, retirement, parent review and recovery)",
+        "resulttest (sealed candidates, owner rejection and durable rework)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T07.04"
+        ],
+        "gates": [
+          "G02",
+          "G03",
+          "G05"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/delivery-readiness.md",
+          "sha256": "a019301123a7542cacee612decd1f950f3037cc8a03b1b5fbf6e24b31a912276",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "AppContainer proof applies to explicit offline verification profile, not all model adapters.",
+        "Independent source profiles on the second physical PC and T07.06 reproduction remain pending.",
+        "Runtime OS/model containment and actual deployment permissions are not inferred from this packet."
+      ]
+    },
+    {
+      "task_id": "T05.02",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "接收方落盘后确认",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "接收事务、inbox 与 cursor 一起落盘；实际 SQLITE_FULL 时不发送 ACK，恢复容量并重开后同步成功。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 84,
+              "assertion_anchor": "receiving crash before cursor commit rolls back replicas and inbox together",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/sync-capacitytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 37,
+              "assertion_anchor": "receiver SQLITE_FULL never acknowledges a lost batch",
+              "git_blob_sha256": "77e87987525de336ee6abe1a44c99da537ebf83d2970c48b0276b83b142a0e41",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "重复批次不重复应用",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "同一批次第二次应用为零，收件记录保持一份，远端副本不进入本地执行队列。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 74,
+              "assertion_anchor": "duplicates and lost ACK cause no duplicate application or execution",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "ACK 丢失后可重发",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "落盘后 ACK 请求丢失，源端确认游标仍为零；重试不重复应用并最终确认。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 161,
+              "assertion_anchor": "lost ACK response retries from durable cursor without applying results twice",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "重试退避有上限",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "八次网络故障后退避仍不超过约 30 秒，未到 retry_after 不再次请求。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 196,
+              "assertion_anchor": "network retries are persisted, bounded and honor backoff across attempts",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)",
+        "sync capacity (real SQLite full, durable refusal and resumed HTTP delivery)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T05.01"
+        ],
+        "gates": [
+          "G02",
+          "G03"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/sync-readiness.md",
+          "sha256": "bb8ed03f50a28606f73c74d2ab56b6c2c82c0116d479933f9e4feb186bf27b87",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Windows CI and isolated local HTTP/SQLite evidence only; no physical two-PC Tailscale acceptance.",
+        "Original task prerequisites and gates remain; T05.01 wording and actual reboot evidence are unresolved."
+      ]
+    },
+    {
+      "task_id": "T05.03",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "按节点 epoch/seq 检测缺口",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "乱序/跳过序号拒绝并保持原游标；未经接纳的来源 epoch 变化也不清空游标。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 217,
+              "assertion_anchor": "out-of-order batches and changed epochs never reset a durable cursor",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "同 ID 异内容隔离",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "同一身份的异内容重放被隔离，接收副本保持最后有效版本；重复隔离不无限增加同类记录。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 93,
+              "assertion_anchor": "gaps, reordering and content conflicts quarantine without overwriting current state",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "时间倒退不覆盖新版本",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "时间倒退到 1900 年的新版本仍按序号接收，旧批次重放不能覆盖新描述。",
+          "references": [
+            {
+              "path": "tests/synctest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 114,
+              "assertion_anchor": "backward wall clock does not replace a newer sequence or task version",
+              "git_blob_sha256": "a3661d7cf1c45349177c61a9928c791000a33c611ba26223f826716ef9ca3589",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "synctest (durable projections, replay, lost ACK and offline resume)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T05.02"
+        ],
+        "gates": [
+          "G02",
+          "G03"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/sync-readiness.md",
+          "sha256": "bb8ed03f50a28606f73c74d2ab56b6c2c82c0116d479933f9e4feb186bf27b87",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Windows CI and isolated local HTTP/SQLite evidence only; no physical two-PC Tailscale acceptance.",
+        "Original task prerequisites and gates remain; T05.01 wording and actual reboot evidence are unresolved."
+      ]
+    },
+    {
+      "task_id": "T05.05",
+      "prior_status": "in_progress",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+      "criteria": [
+        {
+          "criterion": "新节点从授权快照加增量恢复",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "快照期间源端继续写入，完整安装后应用后续增量；HTTP 分页未完成不暴露半板，跨项目及撤销凭据的分页请求被拒绝。",
+          "references": [
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 72,
+              "assertion_anchor": "a frozen snapshot plus later deltas converges while the source keeps writing",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 186,
+              "assertion_anchor": "HTTP clients join by snapshot and resume a persisted partial download",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 228,
+              "assertion_anchor": "HTTP snapshot pages recheck credentials and project scope before exposing data",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "落后超保留期可重建",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "历史压缩后落后接收端通过快照恢复最新结果；安装后 ACK 丢失再重试时 rebuilt/applied 都为零。",
+          "references": [
+            {
+              "path": "tests/snapshottest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 197,
+              "assertion_anchor": "HTTP clients rebuild after history compaction and recover an ACK lost after snapshot installation",
+              "git_blob_sha256": "76e161570664b32c4b07afa3cf87ed39eeac916a7297be104c944bfa542d31a7",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        },
+        {
+          "criterion": "备份恢复不复用事件身份",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "实际备份恢复激活后换 epoch 并撤销复制的凭据；重授权导出的 event_id 新建、task_uid 保持；跨 epoch 重用旧快照事件 ID 被拒绝。",
+          "references": [
+            {
+              "path": "tests/recoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 59,
+              "assertion_anchor": "activation rotates epoch, revokes copied credentials, fences runs and retains ownership and audit",
+              "git_blob_sha256": "16c3d106a830ddf5bd51f0e1c188863b3d1eec8428df2707ecdbbde13d473fa9",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/recoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 83,
+              "assertion_anchor": "newly authorized peers receive fresh event identities in the new epoch",
+              "git_blob_sha256": "16c3d106a830ddf5bd51f0e1c188863b3d1eec8428df2707ecdbbde13d473fa9",
+              "reference_kind": "test_assertion_body"
+            },
+            {
+              "path": "tests/epochrecoverytest.mjs",
+              "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+              "line": 264,
+              "assertion_anchor": "snapshot event receipts prevent identity reuse across recovery epochs",
+              "git_blob_sha256": "d0298fe4361bc10fbeabf82c338c7c6cfadf7c272fe56491e81eb4c05fce424c",
+              "reference_kind": "test_assertion_body"
+            }
+          ]
+        }
+      ],
+      "ci_run_id": 37258132393,
+      "ci_steps": [
+        "snapshottest (frozen pages, crash resume and retained-history recovery)",
+        "recoverytest (retirement, reviewed activation and crash rollback)",
+        "epochrecoverytest (reviewed source epochs, missing results and atomic cutover)"
+      ],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T05.04"
+        ],
+        "gates": [
+          "G02",
+          "G03"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/gates/sync-readiness.md",
+          "sha256": "bb8ed03f50a28606f73c74d2ab56b6c2c82c0116d479933f9e4feb186bf27b87",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Windows CI and isolated local HTTP/SQLite evidence only; no physical two-PC Tailscale acceptance.",
+        "Original task prerequisites and gates remain; T05.01 wording and actual reboot evidence are unresolved.",
+        "Retirement attestation is operator-supplied fixture data, not machine-verified retirement or physical RPO/RTO."
+      ]
+    },
+    {
+      "task_id": "T01.01",
+      "prior_status": "planned",
+      "readiness": "implementation_evidence_ready",
+      "code_sha": "08619bfa4be2e8b7612e2a74b6ddf186e1855a47",
+      "code_sha_scope": "repository head at report preparation; entrypoint observations have separate timestamps and binary digests",
+      "criteria": [
+        {
+          "criterion": "Node、Python、Git、三类 CLI 实際路径和版本有记录",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "Six actual absolute entrypoints, versions and content digests are preserved in the private manifest; public path displays use a profile placeholder. All six files still match their observed digests.",
+          "references": []
+        },
+        {
+          "criterion": "区分桌面与独立 CLI",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "Claude/Codex entries are native CLI executables; Zcode is a Node CLI script. Zcode desktop FileVersion is recorded separately; no desktop connection inferred.",
+          "references": []
+        },
+        {
+          "criterion": "无必需入口失效",
+          "assessment": "evidence_ready_for_independent_review",
+          "finding": "All six version invocations and all three provider CLI help invocations exited zero. This proves the selected entrypoints start; authentication, task execution and desktop connection have separate pending acceptance.",
+          "references": []
+        }
+      ],
+      "ci_run_id": null,
+      "ci_steps": [],
+      "source_files": [],
+      "formal_acceptance": "pending",
+      "reviewer_instance_id": null,
+      "acceptance_receipt": null,
+      "prerequisites": {
+        "tasks": [
+          "T00.06"
+        ],
+        "gates": [
+          "G00"
+        ]
+      },
+      "documentation_artifacts": [
+        {
+          "path": "docs/federation/environment-report.json",
+          "sha256": "338be4173d3e1335a183ac7134573038a1cca9aa6b81f96e63b1fe54821ded84",
+          "created_after_runtime_candidate": true
+        }
+      ],
+      "scope_limits": [
+        "Single-machine S01 entrypoint checks; no physical B environment verification.",
+        "Not part of the completed16-task independent review at ad3.",
+        "Actual absolute paths are in the private manifest, public paths use profile placeholders.",
+        "Existing provider-task failures and unresolved authentication remain separate and do not reset invocation authorization."
+      ]
+    }
+  ],
+  "ready_task_ids": [
+    "T00.01",
+    "T01.04",
+    "T02.02",
+    "T02.03",
+    "T02.04",
+    "T02.05",
+    "T01.03",
+    "T01.05",
+    "T08.05",
+    "T00.05",
+    "T06.04",
+    "T06.05",
+    "T07.05",
+    "T05.02",
+    "T05.03",
+    "T05.05",
+    "T01.01"
+  ],
+  "gating_notes": [
+    "G00 is not frozen; dependent tasks cannot count as accepted even after their technical review.",
+    "Physical enrollment is assessed in T00.02/T03.01; it is not silently added to every S02 component criterion.",
+    "The user-created Sol6.1 fork reviewed the original16 tasks at ad3:15 passed,T05.02 failed and its fix awaits recheck. T01.01 is newly prepared, outside that completed review. No reviewer identity or formal confirmation is prefilled.",
+    "Original 864feec gate/review drafts stay pending. This index does not register a receipt, change accepted_rev or modify live task cards."
+  ],
+  "unchanged_formal_progress": {
+    "accepted_tasks": 0,
+    "total_tasks": 72,
+    "accepted_phases": 0,
+    "total_phases": 12,
+    "task_completion_percent": 0,
+    "phase_completion_percent": 0
+  },
+  "updated_at": "2026-10-05T08:50:05.058627+00:00"
+}

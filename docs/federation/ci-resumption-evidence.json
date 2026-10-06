@@ -1,0 +1,443 @@
+{
+  "format": "ai-fleet-ci-resumption-evidence/v1",
+  "batch": 93,
+  "prepared_at": "2026-10-05T03:05:10.114902+00:00",
+  "base_commit": "c0f7aced0a9fc4fab4ec472fd6c38a9bd450b73a",
+  "remote_failure": {
+    "run_id": 37252986475,
+    "run_number": 148,
+    "code_sha": "531cd4939f7ee755a03feb118f749e7abc53e1e3",
+    "job_id": 111584253457,
+    "step": "schedulertest",
+    "tests_passed": 30,
+    "tests_failed": 1,
+    "gitleaks": "success",
+    "completion_regression": "passed"
+  },
+  "local_result": "all_27_previously_unexecuted_commands_covered_with_targeted_repairs",
+  "full_ci_passed": false,
+  "commands": [
+    {
+      "index": 0,
+      "command": "node tests/decisiontest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 175,
+      "log": ".data/review93-ci-tail-00.log",
+      "log_sha256": "6b7e736c45c86e429a8dc4f6a90d6ae6bc5627a10040a352247b87130188d49e",
+      "assertions": {
+        "passed": 25,
+        "failed": 0
+      }
+    },
+    {
+      "index": 1,
+      "command": "node tests/gatetest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 130,
+      "log": ".data/review93-ci-tail-01.log",
+      "log_sha256": "8b0cd119891536a7d0188e497536a005cc8faab716f5fc2dd809f2c456217531"
+    },
+    {
+      "index": 2,
+      "command": "node tests/decomposetest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 121,
+      "log": ".data/review93-ci-tail-02.log",
+      "log_sha256": "436f759d445d1290d7e50f802b5e3d800a741759a39bd7cfd120c369ea512b56",
+      "assertions": {
+        "passed": 27,
+        "failed": 0
+      }
+    },
+    {
+      "index": 3,
+      "command": "node tests/clitest.mjs",
+      "exit_code": 1,
+      "error": null,
+      "duration_ms": 72252,
+      "log": ".data/review93-ci-tail-03.log",
+      "log_sha256": "952c0b725b09211ebbf39ec18bb14d86406c1c4a3081dbbc44e2a992509c3902",
+      "assertions": {
+        "passed": 40,
+        "failed": 4
+      }
+    },
+    {
+      "index": 4,
+      "command": "python gates/gates_lib.py",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 346,
+      "log": ".data/review93-ci-tail-04.log",
+      "log_sha256": "cdef435d21869f731159f48bd8e3f8ec3e2158d613768ce6c8c7072d5ce9f873"
+    },
+    {
+      "index": 5,
+      "command": "python loops/worker_loop.py --codex-selftest",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 344,
+      "log": ".data/review93-ci-tail-05.log",
+      "log_sha256": "df4fa77b97a443d266ed3d505f3a2e14f1ba6b0a9de24d2ce665caddb831d449"
+    },
+    {
+      "index": 6,
+      "command": "python loops/worker_loop.py --prompt-selftest",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 16448,
+      "log": ".data/review93-ci-tail-06.log",
+      "log_sha256": "e12aeae336a920dc1f4265c0cd5258ddba7ca6018061088ec9b162d0df69bfab"
+    },
+    {
+      "index": 7,
+      "command": "python watchers/board_health_watch.py --selftest",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 173,
+      "log": ".data/review93-ci-tail-07.log",
+      "log_sha256": "deaad2d647ab38e5ca5e01cece66548b0699fbe0f07af59dcd3e0f2443b4fa12"
+    },
+    {
+      "index": 8,
+      "command": "python tests/healthwatchtest.py",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 563,
+      "log": ".data/review93-ci-tail-08.log",
+      "log_sha256": "a710b97c65b98abde7aa34a9feaa7948da12ace06a66f1386e32f13c8efae27e"
+    },
+    {
+      "index": 9,
+      "command": "node examples/verify_page.mjs --selftest",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 114,
+      "log": ".data/review93-ci-tail-09.log",
+      "log_sha256": "8e68ccea7acbe2eca9fdb1b1356a1480f74e58c7b9cdffb264a689c9ce55b16a",
+      "assertions": {
+        "passed": 13,
+        "failed": 0
+      }
+    },
+    {
+      "index": 10,
+      "command": "node tests/looptest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 17540,
+      "log": ".data/review93-ci-tail-10.log",
+      "log_sha256": "2aa80f783a54a0ec5612085a0201c4bbe55675785f25da8bfa9a0beb1e333616",
+      "assertions": {
+        "passed": 72,
+        "failed": 0
+      }
+    },
+    {
+      "index": 11,
+      "command": "node tests/servertest.mjs",
+      "exit_code": 1,
+      "error": null,
+      "duration_ms": 22563,
+      "log": ".data/review93-ci-tail-11.log",
+      "log_sha256": "b380e157e659405b560e41b7e49360c787d67c2489e4df930b6ca2ea4a9d5776",
+      "assertions": {
+        "passed": 8,
+        "failed": 1
+      }
+    },
+    {
+      "index": 12,
+      "command": "node --test tests/panelauth.test.mjs tests/panelclient.test.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 3897,
+      "log": ".data/review93-ci-tail-12.log",
+      "log_sha256": "2660b2696da7d29e158c3a03e5e96a768a1b9200f3d4901feeb8323193495617",
+      "tests": {
+        "total": 11,
+        "passed": 11,
+        "failed": 0
+      }
+    },
+    {
+      "index": 13,
+      "command": "node tests/reviewtest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 3653,
+      "log": ".data/review93-ci-tail-13.log",
+      "log_sha256": "14b389017835f927de79dd9c30a1caff135a7c6b61544621f354a1d3ebb2922c",
+      "assertions": {
+        "passed": 22,
+        "failed": 0
+      }
+    },
+    {
+      "index": 14,
+      "command": "node --test tests/legacy-boundariestest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 2308,
+      "log": ".data/review93-ci-tail-14.log",
+      "log_sha256": "29bc5ea67161e7b8ba68417b48b5a8a6bd5c3c6807db443129750c0dec17e687",
+      "tests": {
+        "total": 6,
+        "passed": 6,
+        "failed": 0
+      }
+    },
+    {
+      "index": 15,
+      "command": "node tests/sentrytest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 2574,
+      "log": ".data/review93-ci-tail-15.log",
+      "log_sha256": "aec66c03458c9b62e3f1fb1311fcc51fe439ebe9eb28eca239a1c052c68ec33c",
+      "assertions": {
+        "passed": 5,
+        "failed": 0
+      }
+    },
+    {
+      "index": 16,
+      "command": "node tests/fleetviewtest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 900,
+      "log": ".data/review93-ci-tail-16.log",
+      "log_sha256": "1166ff682cb5e8e7682b89af87db4d786df0e4f25c32f86f489d0af5edb23777",
+      "tests": {
+        "total": 14,
+        "passed": 14,
+        "failed": 0
+      }
+    },
+    {
+      "index": 17,
+      "command": "node tests/fleetprogresstest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 1086,
+      "log": ".data/review93-ci-tail-17.log",
+      "log_sha256": "b78faefd98bc9d502364dac7ca6914743dfd9bf93f8979a9044a496d470c8501",
+      "tests": {
+        "total": 12,
+        "passed": 12,
+        "failed": 0
+      }
+    },
+    {
+      "index": 18,
+      "command": "node tests/fleetactionstest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 47976,
+      "log": ".data/review93-ci-tail-18.log",
+      "log_sha256": "0b5ccc25ad8ad1277bbaff6d50ec6318f6ea6768271cfc0f0155f1243de30192",
+      "tests": {
+        "total": 27,
+        "passed": 27,
+        "failed": 0
+      }
+    },
+    {
+      "index": 19,
+      "command": "node tests/fleetevidencetest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 1046,
+      "log": ".data/review93-ci-tail-19.log",
+      "log_sha256": "6667ec3ae8381a5a5c38a6eecb0769377fae358480805d96b1482548a0103efb",
+      "tests": {
+        "total": 17,
+        "passed": 17,
+        "failed": 0
+      }
+    },
+    {
+      "index": 20,
+      "command": "node tests/mcpevidencetest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 4404,
+      "log": ".data/review93-ci-tail-20.log",
+      "log_sha256": "c88ad32becfda2e8fabd7a8ebec8f0f0cd59b1d799211f0ce6108502de43f79d",
+      "tests": {
+        "total": 6,
+        "passed": 6,
+        "failed": 0
+      }
+    },
+    {
+      "index": 21,
+      "command": "node tests/desktopcontexttest.mjs",
+      "exit_code": 1,
+      "error": null,
+      "duration_ms": 138873,
+      "log": ".data/review93-ci-tail-21.log",
+      "log_sha256": "ce3c055c88dc69358cb1bf5002da4bce1788951e240efaa4283e86f45cebf75c",
+      "tests": {
+        "total": 26,
+        "passed": 23,
+        "failed": 3
+      }
+    },
+    {
+      "index": 22,
+      "command": "node tests/contextevidencetest.mjs",
+      "exit_code": 1,
+      "error": null,
+      "duration_ms": 19438,
+      "log": ".data/review93-ci-tail-22.log",
+      "log_sha256": "9bc1a4ff4d7e4a4cdb2229c197afbac626a9135ac66ad234bafb486a47382c19",
+      "tests": {
+        "total": 19,
+        "passed": 18,
+        "failed": 1
+      }
+    },
+    {
+      "index": 23,
+      "command": "node tests/desktop-packagetest.mjs",
+      "exit_code": 1,
+      "error": null,
+      "duration_ms": 3657,
+      "log": ".data/review93-ci-tail-23.log",
+      "log_sha256": "447b5efa66dc5a57d64927b9b8c0c418274d558a1957d4aa73c6d94aee2e3320",
+      "tests": {
+        "total": 10,
+        "passed": 9,
+        "failed": 1
+      }
+    },
+    {
+      "index": 24,
+      "command": "node tests/desktop-archivetest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 377,
+      "log": ".data/review93-ci-tail-24.log",
+      "log_sha256": "eb976c89eab1005453cf25c116dc48e61bc746a40307c19fe6f5cecc435dc785",
+      "tests": {
+        "total": 5,
+        "passed": 5,
+        "failed": 0
+      }
+    },
+    {
+      "index": 25,
+      "command": "node tests/review-contracttest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 335,
+      "log": ".data/review93-ci-tail-25.log",
+      "log_sha256": "b4d5ec79ef8dc2d3cccd9efe39c606aede66e754b7d347901aefd686d74da5bb",
+      "tests": {
+        "total": 4,
+        "passed": 4,
+        "failed": 0
+      }
+    },
+    {
+      "index": 26,
+      "command": "node tests/tltest.mjs",
+      "exit_code": 0,
+      "error": null,
+      "duration_ms": 110,
+      "log": ".data/review93-ci-tail-26.log",
+      "log_sha256": "a039b3a4ce997b8774051b34e5c88a20ebd8e35285d26296ffba2f585b8b505f",
+      "assertions": {
+        "passed": 23,
+        "failed": 0
+      }
+    }
+  ],
+  "repairs": [
+    {
+      "scope": "CI148 scheduler refusal",
+      "path": ".data/review93-ci148-final.log",
+      "sha256": "af23e6b303dab8785eceeb280b20a87fc8bd8e637cf38a5030b3a702283e85d9",
+      "passed": 1,
+      "count_unit": "tests",
+      "failed": 0,
+      "exit_code": 0
+    },
+    {
+      "scope": "CLI suite",
+      "path": ".data/review93-cli-final.log",
+      "sha256": "8b3f8065f202e3a7cd0297febafb911e895c8a215b14a5936f2952ce43c894d2",
+      "passed": 45,
+      "count_unit": "assertions",
+      "failed": 0,
+      "exit_code": 0
+    },
+    {
+      "scope": "Server F/Q2 subset after fixture isolation",
+      "path": ".data/review93-server-locked-clean.log",
+      "sha256": "4da1ad0184799dfa15805793ca4afd4e80b877f26efcab8ccc98c6ad173fd00b",
+      "passed": 23,
+      "count_unit": "assertions",
+      "failed": 0,
+      "exit_code": 0
+    },
+    {
+      "scope": "Desktop context three revoked-file cases",
+      "path": ".data/review93-context-final.log",
+      "sha256": "ba80c4c13ee4162578219d773e707c82519b226421d475572eaca1e710e5f902",
+      "passed": 3,
+      "count_unit": "tests",
+      "failed": 0,
+      "exit_code": 0
+    },
+    {
+      "scope": "Handoff and portable credential cases",
+      "path": ".data/review93-desktop-final.log",
+      "sha256": "03dd8ab6cbf1e6ff4001ba36c39524a79db1f0df27d0425c1da9461b8ac66f44",
+      "passed": 2,
+      "count_unit": "tests",
+      "failed": 0,
+      "exit_code": 0
+    }
+  ],
+  "additional_logs": [
+    {
+      "path": ".data/review93-ci148-job-111584253457.log",
+      "sha256": "b9c54f16bf9a6d093b46660a4313bb6fe94aa5e55b86c9e8a01accfa7fe2db61",
+      "result": "remote_ci_failure"
+    },
+    {
+      "path": ".data/review93-server-final.log",
+      "sha256": "ed6d0ede5b99a4503e3b9e7852f6aa4c642edcbb93d21b98375b5fe8cface252",
+      "result": "192_passed_3_environment_failures"
+    },
+    {
+      "path": ".data/review93-server-locked-final.log",
+      "sha256": "4aa0929999c418afe460b2cfdca0ad4fa7e6affb76c24f4428ec939f2a027ae6",
+      "result": "assertions_passed_but_private_subset_cleanup_exit_13"
+    }
+  ],
+  "source_sha256": {
+    "cli/demo.mjs": "9634629685f28e130331566795fe1b2a439e9cd56a487e2e7c6ee48bd155df28",
+    "tests/clitest.mjs": "dfee917af517fd5d34143df5b1ea4d50d12efcf2863c71ef5836b65764d3a534",
+    "tests/schedulertest.mjs": "5d730837354f1dc3c872010253d93660823f367d098f479435ac2008c82002da",
+    "tests/servertest.mjs": "c23af7c49385545fc34f647a7d563170bc4d4c266fd1940bbbbeed289923c3e0",
+    "tests/desktopcontexttest.mjs": "4576164656f97e9cb372fac2285e25cfe2d661129dace5f894e8460959117550",
+    "tests/contextevidencetest.mjs": "b911be0ed4c22dc05aa5207d745a1d34ebc276856be240436ff01cb6f3b844d3",
+    "tests/desktop-packagetest.mjs": "645f7bd0935201470e4cf822f16dff56ccc1657797c816d9a84430758ffd8729",
+    "package.json": "a1fb25be50e8863999eed65f9d5bb7c6b0c3fcde14dd76bb515bf825c28de748"
+  },
+  "count_note": "Commands, Node test cases and custom assertion counts are distinct units. Selective reruns overlap earlier attempts and are not summed. The server full run had 192 passing assertions and 3 environment failures; only F/Q2 (23 assertions) were rerun after fixing that fixture.",
+  "scope": {
+    "platform": "win32",
+    "physical_hosts": 1,
+    "actual_models_called": false,
+    "production_changed": false,
+    "tailscale_changed": false,
+    "formal_acceptance": false
+  }
+}

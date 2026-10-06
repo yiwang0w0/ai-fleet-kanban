@@ -382,13 +382,82 @@
          border-top:1px solid var(--line);padding:7px 16px;color:var(--dim);font-size:var(--fs-sm);
          display:flex;gap:16px;flex-wrap:wrap}
   footer b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+
+  .fleet-dialog{width:min(1400px,96vw);max-width:96vw;height:92vh;max-height:92vh;padding:var(--sp-4);border:1px solid var(--line);border-radius:var(--r-md);background:var(--bg);color:var(--fg);overflow:auto}
+  .fleet-dialog::backdrop{background:rgba(0,0,0,.55)}
+  .fleet-top,.fleet-filters,.fleet-summary{display:flex;gap:var(--sp-3);align-items:center;flex-wrap:wrap;margin-bottom:var(--sp-3)}
+  .fleet-top h2{margin:0;font-size:var(--fs-xl)}.fleet-top button:last-child{margin-left:auto}
+  .fleet-filters label{display:flex;gap:var(--sp-2);align-items:center;font-size:var(--fs-sm)}.fleet-filters input{width:240px;max-width:100%}
+  .fleet-note{font-size:var(--fs-sm);color:var(--dim);margin:var(--sp-2) 0}.fleet-warning{color:var(--warn)}
+  .fleet-nodes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:var(--sp-4);align-items:start}
+  .fleet-node{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:var(--sp-3);min-width:0}
+  .fleet-node>summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center}.fleet-node h3{font-size:var(--fs-lg);margin:0}
+  .fleet-badge{font-size:var(--fs-sm);color:var(--dim);border:1px solid var(--line);border-radius:var(--r-sm);padding:0 var(--sp-1)}
+  .fleet-badge.waiting{color:var(--accent)}.fleet-badge.done{color:var(--ok)}.fleet-badge.in_progress{color:var(--cc)}
+  .fleet-id{font-family:var(--mono);font-size:var(--fs-sm);color:var(--dim);overflow-wrap:anywhere}
+  .fleet-tasks{display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-3)}
+  .fleet-task{display:flex;align-items:start;gap:var(--sp-2);width:calc(100% - var(--indent));margin-left:var(--indent);padding:var(--sp-2);text-align:left;white-space:normal;border-left:3px solid var(--line);background:var(--panel2)}
+  .fleet-task[data-state="waiting"]{border-left-color:var(--accent)}.fleet-task[data-state="in_progress"]{border-left-color:var(--cc)}.fleet-task[data-state="done"]{border-left-color:var(--ok)}
+  .fleet-task-title{flex:1;overflow-wrap:anywhere}.fleet-task-meta{display:block;font-size:var(--fs-sm);color:var(--dim);margin-top:var(--sp-1)}
+  .fleet-detail{width:min(800px,96vw)}.fleet-detail dl{display:grid;grid-template-columns:100px 1fr;gap:var(--sp-2)}.fleet-detail dd{margin:0;overflow-wrap:anywhere}.fleet-detail dt{color:var(--dim)}
+  .fleet-edge,.fleet-trace{border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--sp-3);margin:var(--sp-3) 0;background:var(--panel)}
+  .fleet-edge-path{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)}.fleet-endpoint{white-space:normal;overflow-wrap:anywhere;text-align:left;max-width:100%}.fleet-endpoint small{display:block;color:var(--dim)}.fleet-arrow{font-size:24px;color:var(--accent)}.fleet-trace summary{cursor:pointer}.fleet-trace dl+dl{border-top:1px solid var(--line);padding-top:var(--sp-3)}
+  #fleet-action-body textarea{display:block;box-sizing:border-box;width:100%;font:var(--fs-md) var(--font);background:var(--panel2);color:var(--fg);border:1px solid var(--line);padding:var(--sp-2)}
+  #fleet-actions button{white-space:normal}
+  #fleet-progress progress{accent-color:var(--ok)}
+  .fleet-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--fs-md)/1.6 var(--font);background:var(--panel);padding:var(--sp-3);border:1px solid var(--line);border-radius:var(--r-sm)}
+  @media(max-width:520px){.fleet-filters label{width:100%;justify-content:space-between}.fleet-filters input,.fleet-filters select{max-width:68%}.fleet-dialog{padding:var(--sp-3)}.fleet-detail dl{grid-template-columns:1fr}.fleet-top h2{font-size:var(--fs-lg)}}
 </style>
 </head>
 <body>
+<main id="board-pair" style="max-width:480px;margin:12vh auto;padding:24px">
+ <h1>连接本机看板</h1>
+ <p>从本机看板数据目录的 <code>board_token</code> 文件复制操作员令牌，粘贴后连接。</p>
+ <form id="board-pair-form"><label for="board-pair-token">操作员令牌</label>
+  <input id="board-pair-token" type="password" autocomplete="off" spellcheck="false" required style="display:block;width:100%;box-sizing:border-box;margin:12px 0" />
+  <button type="submit" class="pri">连接看板</button>
+ </form>
+ <p id="board-pair-note" role="status">令牌仅保存在标签页会话中；点击退出连接即可清除。请勿填写到网址中。</p>
+</main>
+<div id="board-shell" hidden>
 <header>
   <h1>AI 舰队看板</h1>
+  <button type="button" id="fleet-open">全局视图</button>
+  <button type="button" id="board-logout">退出连接</button>
   <span class="live"><span class="dot" id="dot"></span><span id="livetxt">连接中</span></span>
 </header>
+
+<dialog id="fleet-dialog" class="fleet-dialog" aria-labelledby="fleet-title">
+  <div class="fleet-top"><h2 id="fleet-title">全局任务视图</h2><span class="fleet-badge">按终端归属</span><button type="button" id="fleet-refresh">刷新</button><button type="button" id="fleet-close" aria-label="关闭全局视图">关闭</button></div>
+  <form id="fleet-filters" class="fleet-filters" role="search">
+    <label>终端<select id="fleet-owner"><option value="">全部终端</option></select></label>
+    <label>项目<select id="fleet-project"><option value="">全部项目</option></select></label>
+    <label>任务<input id="fleet-query" type="search" maxlength="160" placeholder="标题或完整任务 UID"></label>
+    <button type="submit">查找</button>
+  </form>
+  <p id="fleet-notice" class="fleet-note" role="status" aria-live="polite">正在读取全局视图…</p>
+  <div id="fleet-summary" class="fleet-summary"></div>
+  <div id="fleet-nodes" class="fleet-nodes"></div>
+  <section id="fleet-relations" aria-label="跨终端委派"></section>
+  <section id="fleet-progress" aria-label="阶段进度与确认记录"></section>
+  <section id="fleet-actions" aria-label="跨端操作与回执"></section>
+  <button type="button" id="fleet-more" hidden>显示更多</button>
+  <p class="fleet-note">远端显示上次收到的授权数据。同步失败时保留缓存；尚未同步的终端任务数量未知。跨端请求由本机协调身份发出，任务处理仍由所有者终端负责。</p>
+</dialog>
+<dialog id="fleet-detail" class="fleet-dialog fleet-detail" aria-labelledby="fleet-detail-title">
+ <div class="fleet-top"><h2 id="fleet-detail-title">任务详情</h2><button type="button" id="fleet-detail-close">返回视图</button></div>
+ <div id="fleet-detail-body"></div>
+</dialog>
+
+
+<dialog id="fleet-action-dialog" class="fleet-dialog fleet-detail" aria-labelledby="fleet-action-title">
+ <form id="fleet-action-form">
+  <div class="fleet-top"><h2 id="fleet-action-title">核对操作</h2><button type="button" id="fleet-action-close">关闭</button></div>
+  <div id="fleet-action-body"></div>
+  <p id="fleet-action-status" class="fleet-note" role="status" aria-live="polite"></p>
+  <button type="submit" id="fleet-action-submit">确认提交</button>
+ </form>
+</dialog>
 
 <form class="task-find" id="task-find" role="search">
   <label for="task-find-id">按卡号定位</label>
@@ -471,9 +540,12 @@
   <span style="margin-left:auto" id="f-when">–</span>
 </footer>
 
+</div>
+<script src="/panel-auth.js"></script>
 <script>
-// Writes carry the token; the server injects it into the page (readable same-origin only).
-const WH = { "Content-Type":"application/json", "X-Board-Token": window.__BOARD_TOKEN || "" };
+window.boardSession.ready.then(()=>{
+const fetch = window.boardSession.fetch;
+const WH = { "Content-Type":"application/json" };
 // Five columns. Goal is a KIND, not a status — the state machine still has four values.
 const COLS = ["goal", "not_started", "in_progress", "waiting", "done"];
 // ⭐ Labels come from the server (GET /api/meta → status_labels / wf_labels): the ONE
@@ -537,15 +609,28 @@ const verdictDraft = new Map();
 const decisionChoice = new Map();
 const receiptDraft = new Map();
 const outcomeDraft = new Map();
+const draftVersions = new Map();
+let decisionSnapshot = null;
+function taskForView(id,node){
+  return decisionSnapshot?.id === Number(id) && decisionModal.contains(node)
+    ? decisionSnapshot : byId.get(Number(id));
+}
+function captureDraftVersion(id,node){
+  id=Number(id);
+  if(!draftVersions.has(id)) draftVersions.set(id,taskForView(id,node)?.aggregate_version);
+}
 document.addEventListener("input", (e) => {
   const receiptId = e.target.dataset?.handoffReceipt;
   if (receiptId){
+    captureDraftVersion(receiptId,e.target);
     receiptDraft.set(Number(receiptId), e.target.value);
     const scope = e.target.closest("[data-decision-scope]") || e.target.closest(".card");
-    if (scope) syncDecision(scope, byId.get(Number(receiptId)));
+    if (scope) syncDecision(scope, taskForView(receiptId,scope));
     return;
   }
   const id = e.target.dataset?.vin; if (!id) return;
+  captureDraftVersion(id,e.target);
+  if(!e.target.value && !decisionChoice.has(Number(id))) draftVersions.delete(Number(id));
   verdictDraft.set(Number(id), e.target.value);
   const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
   if (scope) syncHandoff(scope);
@@ -553,15 +638,17 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   const outcomeId = e.target.dataset?.handoffOutcome;
   if (outcomeId){
+    captureDraftVersion(outcomeId,e.target);
     outcomeDraft.set(Number(outcomeId), e.target.value);
     const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
-    if (scope) syncDecision(scope, byId.get(Number(outcomeId)));
+    if (scope) syncDecision(scope, taskForView(outcomeId,scope));
     return;
   }
   const id = e.target.dataset?.choice; if (!id) return;
+  captureDraftVersion(id,e.target);
   decisionChoice.set(Number(id), e.target.value);
   const scope = e.target.closest(".card") || e.target.closest("[data-decision-scope]");
-  if (scope) syncDecision(scope, byId.get(Number(id)));
+  if (scope) syncDecision(scope, taskForView(id,scope));
 });
 
 const modal = document.getElementById("modal");
@@ -585,9 +672,12 @@ const closeDecisionModal = () => decisionModal.classList.remove("show");
 document.getElementById("decision-modal-x").addEventListener("click", closeDecisionModal);
 decisionModal.addEventListener("click", (e) => { if (e.target === decisionModal) closeDecisionModal(); });
 function openDecisionModal(t){
+  decisionSnapshot=structuredClone(t);
+  if(!draftVersions.has(t.id)) draftVersions.set(t.id,t.aggregate_version);
+  const staleDraft=draftVersions.get(t.id)!==t.aggregate_version;
   document.getElementById("decision-modal-t").textContent = `#${t.id} 最终裁定 — ${t.subject}`;
   const box = document.getElementById("decision-modal-b");
-  box.innerHTML = decisionPanel(t) +
+  box.innerHTML = (staleDraft ? '<p role="alert">任务已更新，旧裁定草稿不能提交。请先保留需要的文字，再重新载入页面并核对任务。</p>' : "") + decisionPanel(t) +
     `<div class="hf-receipt" data-receipt-wrap="${t.id}" hidden>` +
       `<div class="hf-outcome-title">执行结果(必选)</div>` +
       `<div class="hf-outcomes" role="radiogroup" aria-label="执行结果">` +
@@ -740,6 +830,13 @@ function hbClass(t){
 
 // Returns CONTENT only, no nodes. Node creation/reuse is upsert()'s job — merged,
 // "same card = same node" cannot hold and the thing to animate vanishes each time.
+function progressTags(t) {
+  return (t.progress_blockers || []).map(reason =>
+    '<span class="tag hold" title="'+esc(reason.next_action)+'">'+esc(reason.message)+'</span>').join("");
+}
+function progressWaitLabel(t) {
+  return t.waiting_for === "rearm" && t.progress_blockers?.length ? "重审受阻" : wfLabel(t.waiting_for);
+}
 function cardParts(t){
   const lc = lineColor(t.line);
   const who = t.status === "in_progress" ? (t.worker || t.line) : t.line;
@@ -793,7 +890,7 @@ function cardParts(t){
   }
   // ⭐ Human-gated: out of the queue, attempts unburned — the board must show WHO it
   //   is waiting for.
-  if (t.human_gate) top += `<span class="tag hold">待人工</span>`;
+  if (t.human_gate) top += `<span class="tag hold" title="人工闸保持生效，子任务完成也不会自动解除">待人工 · 不会自动送回</span>`;
   if (t.lock_key) top += `<span class="tag lock">🔒${esc(t.lock_key)}</span>`;
   // ── Linked closure: the declaration is the FORECAST, cascade is the RESULT.
   //   Both show — forecast alone leaves "why did it close" unreadable, result alone
@@ -802,9 +899,12 @@ function cardParts(t){
   if (t.proves_parent) top += `<span class="tag oneof" title="本卡的验证通过即回答了父卡的问题 —— 父卡会跟着通过">验证父卡</span>`;
   if (t.resolved_by === "cascade") top += `<span class="tag casc" title="非人工裁定:同链另一张卡通过机器验证,本卡因此不再需要。理由见卡面裁定记录">联动关闭</span>`;
   if (t.status === "waiting" && t.waiting_for)
-    top += `<span class="tag wf ${t.waiting_for}">${wfLabel(t.waiting_for)}</span>`;
+    // 『外部审计 2026-10-05』waiting_for 拼进 class 也必须过 esc —— 值域今日是服务端
+    // 封闭枚举,但这里是纵深加固:与同文件其余插值保持同一转义纪律,不依赖枚举不破。
+    top += `<span class="tag wf ${esc(t.waiting_for)}">${esc(progressWaitLabel(t))}</span>`;
 
   let meta2 = [];
+  if (t.progress_blockers?.length) meta2.push(progressTags(t));
   if (t.status === "in_progress"){
     meta2.push(`<span class="hb" data-live="hb"></span>`);
     if (t.lease_until) meta2.push(`<span data-live="lease"></span>`);
@@ -1037,7 +1137,7 @@ function syncHandoff(scope){
   if (!vin) return;
   const tid = Number(vin.dataset.vin);
   if (scope.querySelector("[data-decision]")){
-    syncDecision(scope, byId.get(tid));
+    syncDecision(scope, taskForView(tid,scope));
     return;
   }
   const on = vin.value.trim().length > 0;
@@ -2212,6 +2312,7 @@ const epop = document.getElementById("edit");
 function openEdit(anchor, taskId){
   const t = byId.get(Number(taskId));
   if (!t) return;
+  epop.dataset.version=String(t.aggregate_version);
   const ma = Number(t.max_attempts) || 3;
   epop.innerHTML = `
     <h4>编辑 #${t.id}</h4>
@@ -2235,16 +2336,18 @@ function openEdit(anchor, taskId){
     </div>
     <div class="note" id="edit-note">已尝试 ${Number(t.attempts) || 0} 次 —— 改上限不会清空它。</div>`;
   const r = anchor.getBoundingClientRect();
-  epop.style.left = Math.min(r.left - 90, innerWidth - 290) + "px";
-  epop.style.top = (r.bottom + 6) + "px";
+  // Measure after showing: a card near the viewport bottom must not hide errors.
   epop.classList.add("show");
+  epop.style.left = Math.max(8,Math.min(r.left - 90, innerWidth - epop.offsetWidth - 8)) + "px";
+  epop.style.top = Math.max(8,Math.min(r.bottom + 6, innerHeight - epop.offsetHeight - 8)) + "px";
 }
 
 async function saveEdit(id, k, v){
   const n = document.getElementById("edit-note");
-  const body = {}; body[k] = v;
+  const body = {expected_version:Number(epop.dataset.version)}; body[k] = v;
   try{
     const r = await post(`/api/tasks/${id}/update`, body);
+    epop.dataset.version=String(r.task.aggregate_version);
     // ⭐ Reading `changed` is this function's point. 200 ≠ saved — a wrong key name
     //   returns 200 with zero columns. "Accepted" and "applied" are shown apart.
     // A notice (today: an in-progress description append is invisible to the running
@@ -2261,6 +2364,9 @@ async function saveEdit(id, k, v){
     //   no description box, so from here in-progress always means 409; ② the domain gate
     //   is 400 ("unknown route" / "unknown line").
     if (n) n.textContent = "保存失败:" + err.message;
+  } finally {
+    // Refusal text can grow the popup after its initial measurement.
+    epop.style.top=Math.max(8,Math.min(parseFloat(epop.style.top),innerHeight-epop.offsetHeight-8))+"px";
   }
 }
 
@@ -2281,6 +2387,7 @@ const SELF_ACTING = "button, textarea, select, input, a, [data-ev], [data-pick],
 
 function openPick(anchor, taskId){
   const cur = byId.get(Number(taskId));
+  pick.dataset.version=String(cur?.aggregate_version);
   pick.innerHTML = LINES.map((l) =>
     `<button data-assign="${taskId}" data-line="${l}"${cur?.line === l ? " class=\"pri\"" : ""}>${lineLabel(l)}</button>`
   ).join("") + `<button data-assign="${taskId}" data-line="">(不指定线 · 谁都能领)</button>`;
@@ -2491,7 +2598,8 @@ document.addEventListener("click", async (e) => {
   const as = e.target.closest("button[data-assign]");
   if (as){
     pick.classList.remove("show");
-    await post(`/api/tasks/${as.dataset.assign}/update`, { line: as.dataset.line || null });
+    try { await post(`/api/tasks/${as.dataset.assign}/update`, { line: as.dataset.line || null, expected_version:Number(pick.dataset.version) }); }
+    catch(err){ alert("移线失败:" + err.message); }
     await refresh(); return;
   }
 
@@ -2528,7 +2636,7 @@ ${r.memo}`);
   // agent; "nothing further" is the only real close.
   const decide = e.target.closest("button[data-decide]");
   if (decide){
-    const id = Number(decide.dataset.decide), t = byId.get(id);
+    const id = Number(decide.dataset.decide), t = taskForView(id,decide);
     const key = decisionChoice.get(id);
     const opt = t?.decision_package?.options?.find((o) => o.key === key);
     if (!opt) return;
@@ -2546,6 +2654,7 @@ ${r.memo}`);
       return;
     }
     if (decide.dataset.armed !== "1"){
+      captureDraftVersion(id,decide);
       decide.dataset.armed = "1"; decide.dataset.orig = decide.textContent;
       decide.classList.add("armed");
       armSwap(decide, incompleteApply
@@ -2578,6 +2687,7 @@ ${r.memo}`);
   if (finalClose){
     const id = Number(finalClose.dataset.finalClose);
     if (finalClose.dataset.armed !== "1"){
+      captureDraftVersion(id,finalClose);
       finalClose.dataset.armed = "1"; finalClose.dataset.orig = finalClose.textContent;
       finalClose.classList.add("armed"); armSwap(finalClose, "再按=确认无需后续");
       setTimeout(() => { if (finalClose.dataset.armed === "1"){
@@ -2620,6 +2730,10 @@ ${r.memo}`);
   //   "confirm" into a reflex; the armed state at least demands a conscious second
   //   press, and disarming is the default direction (not pressing = nothing).
   if ((a === "approve" || a === "reject" || a === "archive") && b.dataset.armed !== "1") {
+    const version=byId.get(Number(id))?.aggregate_version;
+    if(!Number.isSafeInteger(version)||version<1){await refresh();alert("任务已变化，请刷新后核对再操作");return;}
+    captureDraftVersion(id,b);
+    b.dataset.version=String(version);
     b.dataset.armed = "1";
     b.dataset.orig = b.textContent;
     b.classList.add("armed");
@@ -2652,19 +2766,36 @@ ${r.memo}`);
     //   release" — hence this note.
     else if (a === "release") await post(`/api/tasks/${id}/release`, { released: true });
     else if (a === "hold")    await post(`/api/tasks/${id}/release`, { released: false });
-    else if (a === "archive") await post(`/api/tasks/${id}/archive`, {});
+    else if (a === "archive") await post(`/api/tasks/${id}/archive`, {expected_version:Number(b.dataset.version)});
     await refresh();
   }catch(err){ alert("操作失败:" + err.message); }
   finally{ b.disabled = false; }
 });
 async function post(url, body){
+  const mutation=url.match(/^\/api\/tasks\/(\d+)\/(claim|resolve|autoreview|update|pin|release|reopen|archive)$/);
+  if(mutation && !Object.hasOwn(body,"expected_version")) {
+    const id=Number(mutation[1]);
+    body={...body,expected_version:mutation[2]==="resolve" && draftVersions.has(id)
+      ? draftVersions.get(id) : byId.get(id)?.aggregate_version};
+  }
+  if(mutation && (!Number.isSafeInteger(body.expected_version)||body.expected_version<1)){
+    await refresh();throw new Error("任务版本不可用，已刷新；请核对后重新操作");
+  }
   const r = await fetch(url, { method:"POST", headers: WH,
                                body: JSON.stringify(body) });
   if (!r.ok){
     const b = await r.json().catch(()=>({}));
-    const e = new Error(b.error || r.status); e.status = r.status; e.body = b; throw e;
+    throw operationError(b,r.status);
   }
-  return r.json();
+  const result=await r.json();
+  if(mutation?.[2]==="resolve") draftVersions.delete(Number(mutation[1]));
+  return result;
+}
+function operationError(body,status){
+  const conflict=body?.conflict?.format==="ai-fleet-conflict/v1"&&body.conflict.automatic_retry===false?body.conflict:null;
+  const reason=conflict?.kind==="state"&&body?.error?body.error+"。"+conflict.message:conflict?.message||body?.error||String(status);
+  const e=new Error(reason);
+  e.status=status;e.body=body;e.conflict=conflict;e.retrySameRequest=!conflict&&status>=500;return e;
 }
 // ⭐ v0.19 (self-audit P1-2): a restart refused because cards are in flight (409 needs_force) is a
 //   question for the human, not a dead end. Ask it here — once, same words on every button — and
@@ -2888,7 +3019,7 @@ document.getElementById("line-add").addEventListener("submit", async (e) => {
 
 // SSE: pushed on change only; heartbeat/lease countdowns are computed locally
 // (1s redraw, zero server load)
-const es = new EventSource("/api/events");
+const es = window.boardSession.events("/api/events");
 es.onopen = () => {
   if (restartPending){
     if (hasUnsavedInput()){ showRevBar(null, "看板已重启"); restartPending = null; live(true, "实时"); return; }
@@ -2916,6 +3047,324 @@ es.addEventListener("log", () => {
 refresh();
 setInterval(tick, 1000);        // running numbers update in place (no full redraw = open state survives)
 setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stale screen
+
+// Global read view stays within the existing operator panel. Remote strings are text.
+(()=>{
+ const $=id=>document.getElementById(id),dialog=$("fleet-dialog"),detail=$("fleet-detail"),nodes=$("fleet-nodes"),notice=$("fleet-notice"),owner=$("fleet-owner"),project=$("fleet-project"),query=$("fleet-query");
+ const states={not_started:"未开始",in_progress:"进行中",waiting:"等待处理",done:"已完成"},connections={local:"本机",recent:"最近已同步",stale:"缓存可能过期",failed:"同步失败",syncing:"同步未追平",recovery:"恢复待核对",clock_unknown:"时间待核对",unknown:"尚未取得列表"};
+ const ownerNames=new Map(),projectNames=new Set(),folds=new Map();let generation=0,detailGeneration=0,limit=1000,timer=null,controller=null,last=null;
+ const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
+ const time=v=>{if(!v)return "尚无记录";const d=new Date(v);return Number.isNaN(d.valueOf())?"时间无效":d.toLocaleString();};
+ const request=async(path,signal)=>{const r=await fetch(path,{headers:WH,cache:"no-store",signal});const value=await r.json();if(!r.ok)throw Object.assign(Error(value.error||"读取失败"),{code:value.code,status:r.status});return value;};
+ function choices(){const oldOwner=owner.value,oldProject=project.value;owner.replaceChildren(el("option","全部终端"));owner.firstChild.value="";for(const[id,name]of ownerNames){const option=el("option",name+" · "+id.slice(0,8));option.value=id;owner.append(option);}owner.value=oldOwner;project.replaceChildren(el("option","全部项目"));project.firstChild.value="";for(const name of [...projectNames].sort()){const option=el("option",name);option.value=name;project.append(option);}project.value=oldProject;}
+ function taskRows(tasks,container){
+  const byUid=new Map(tasks.map(t=>[t.task_uid,t])),children=new Map(),roots=[];
+  for(const t of tasks){if(t.parent_uid&&byUid.has(t.parent_uid)&&byUid.get(t.parent_uid).owner_node_id===t.owner_node_id){if(!children.has(t.parent_uid))children.set(t.parent_uid,[]);children.get(t.parent_uid).push(t);}else roots.push(t);}
+  const seen=new Set(),stack=roots.slice().reverse().map(t=>[t,0,false]);
+  function walk(){while(stack.length){const[t,depth,broken]=stack.pop();if(seen.has(t.task_uid))continue;seen.add(t.task_uid);const row=el("button",undefined,"fleet-task");row.type="button";row.dataset.state=t.status;row.style.setProperty("--indent",Math.min(depth,8)*12+"px");row.setAttribute("aria-label",t.subject+"，"+(states[t.status]||t.status));
+   const title=el("span",t.subject,"fleet-task-title"),extra=[t.local_id!==null?"#"+t.local_id:t.task_uid.slice(-8),t.project_id||"未绑定项目",t.read_only?"远端缓存":"本机任务"];
+   if(t.recovery_state)extra.push(t.recovery_state==="missing_review"?"来源恢复后缺失，待核对":"等待新快照");if(t.parent_unavailable)extra.push("父任务不在可见范围");if(t.parent_uid&&!byUid.has(t.parent_uid))extra.push("父任务未在当前筛选中");if(broken)extra.push("父子关系待核对");if(depth>8)extra.push("层级 "+depth);
+   title.append(el("span",extra.join(" · "),"fleet-task-meta"));row.append(title,el("span",states[t.status]||t.status,"fleet-badge "+t.status));row.addEventListener("click",()=>showTask(t.task_uid));container.append(row);for(const child of (children.get(t.task_uid)||[]).slice().reverse())stack.push([child,depth+1,false]);
+  }}walk();for(const t of tasks)if(!seen.has(t.task_uid)){stack.push([t,0,true]);walk();}
+ }
+ const moduleNames={delegation:"委派",binding:"端点绑定",registration:"关系登记",cancellation:"取消",runs:"执行历史",dispatch:"执行分派",results:"交付候选",artifacts:"交付产物",verification:"来源验证",integration:"来源合并",completion:"双端结案"},moduleStates={not_configured:"尚未配置",upgrade_required:"需要升级"};
+ const historyStates={pending:"待送达",received:"已收到",accepted_unconfirmed:"已接收，待确认关系",rejected:"已拒绝",prepared:"已准备",confirmed:"已确认",cancelled:"已取消",proposed:"待登记",withdrawn:"已撤回",completed:"已登记结案",stopped:"已有停止回执",unverified:"记录待核对",observed:"已读取登记状态",applied:"结构已提交",released:"已放行"};
+ function taskButton(t){if(!t)return el("span","端点未共享、不可见或尚未建卡","fleet-note fleet-warning");const b=el("button",t.owner_name+" · "+t.subject,"fleet-endpoint");b.type="button";b.title=t.task_uid;b.addEventListener("click",()=>showTask(t.task_uid));if(!t.in_view)b.append(el("small","（当前列表外）"));return b;}
+ function relationships(value,container){
+  container.replaceChildren();container.append(el("h3","跨终端委派"));
+  if(!value){container.append(el("p","尚无关系视图。","fleet-note"));return;}
+  if(value.unverified_records)container.append(el("p",value.unverified_records+" 条关系记录摘要不一致，未展示其内容。","fleet-note fleet-warning"));
+  const unavailable=Object.entries(value.modules).filter(([,s])=>s!=="available");
+  container.append(el("p","本机保存的关系记录 · "+value.total+" 条"+(value.offset!==undefined?" · 当前 "+(value.items.length?value.offset+1:0)+"–"+(value.offset+value.items.length)+" 条":value.truncated?" · 仅显示前 "+value.items.length+" 条":"")+"。下方箭头表示跨端委派；上方缩进表示终端内父子关系。历史确认不代表当前允许启动。","fleet-note"));
+  if(unavailable.length)container.append(el("p","部分关系信息尚不可用："+unavailable.map(([k,s])=>(moduleNames[k]||k)+"："+(moduleStates[s]||s)).join("，"),"fleet-note fleet-warning"));
+  for(const r of value.items){const card=el("article",undefined,"fleet-edge"),path=el("div",undefined,"fleet-edge-path");path.append(taskButton(r.source),el("span","→","fleet-arrow"),taskButton(r.target));card.append(path);
+   const labels=[r.project_id];for(const[k,label]of [["offer_state","委派"],["binding_state","端点绑定"],["registration_state","关系登记"],["cancellation_state","取消"]])if(r[k])labels.push(label+"："+(historyStates[r[k]]||r[k]));
+   if(r.closed)labels.push("本机绑定已关闭");if(r.identity_current===false)labels.push("旧节点代次记录");card.append(el("p",labels.join(" · "),"fleet-note"),el("p","委派 "+r.delegation_id+(r.relation_id?" · 关系 "+r.relation_id:""),"fleet-id"));container.append(card);
+  }
+  if(!value.items.length)container.append(el("p","当前范围未找到可显示的关系记录；远端未共享的历史不会出现在这里。","fleet-note"));
+ }
+ function evidencePage(initial,uid,key,label,container,draw){
+  const content=el("div"),controls=el("div",undefined,"fleet-edge-path"),status=el("p",undefined,"fleet-note"),previous=el("button","上一页"),next=el("button","下一页"),reset=el("button","返回最新记录");
+  container.dataset.evidenceSection=key;status.setAttribute("role","status");
+  for(const[b,name]of [[previous,"上一页"],[next,"下一页"],[reset,"返回最新记录"]]){b.type="button";b.setAttribute("aria-label",label+name);}
+  controls.append(previous,next,reset);container.append(status,controls,content);
+  let current=initial,cursors=[initial.cursor],index=0,busy=false,failed=false;const detailId=detailGeneration;
+  function buttons(){previous.disabled=busy||failed||index===0;next.disabled=busy||failed||!current.next_cursor;reset.disabled=busy;controls.hidden=!busy&&!failed&&current.total<=current.limit&&index===0;}
+  function render(){draw(current,content);status.textContent=current.total?"第 "+(current.offset+1)+"–"+(current.offset+current.items.length)+" 条，共 "+current.total+" 条":"当前没有可显示的记录。";buttons();}
+  async function load(cursor,to,latest=false){
+   if(busy)return;busy=true;status.textContent="正在读取记录…";buttons();
+   try{const q=new URLSearchParams({uid,section:key});if(cursor)q.set("cursor",cursor);const result=await request("/api/fleet/evidence?"+q);
+    if(detailId!==detailGeneration||!detail.open)return;
+    current=result.page;failed=false;if(latest)cursors=[current.cursor];else cursors[to]=current.cursor;index=latest?0:to;render();
+   }catch(e){if(detailId!==detailGeneration||!detail.open)return;failed=true;content.replaceChildren();status.textContent=e.message;}
+   finally{busy=false;if(detailId===detailGeneration&&detail.open)buttons();}
+  }
+  previous.addEventListener("click",()=>load(cursors[index-1],index-1));next.addEventListener("click",()=>load(current.next_cursor,index+1));reset.addEventListener("click",()=>load(null,0,true));render();
+ }
+ function evidence(value,body){
+  if(!value)return;body.append(el("h3","任务追溯"),el("p","读取于 "+time(value.generated_at)+"。仅展示本机已保存、当前身份可见的记录；远端未同步历史不代表没有执行。验收回执对应其记录的任务版本。","fleet-note"));
+  const family=el("div",undefined,"fleet-edge-path");if(value.parent){family.append(el("span","父任务"),taskButton(value.parent));}body.append(family);
+  const childList=el("section");evidencePage(value.children,value.task_uid,"children","子任务",childList,(page,container)=>{container.replaceChildren();const row=el("div",undefined,"fleet-edge-path");for(const t of page.items)row.append(taskButton(t));container.append(row);});body.append(childList);
+  if(value.scope_truncated)body.append(el("p","任务树范围已截断，请打开具体子任务继续查看。","fleet-note fleet-warning"));
+  const related=el("section");evidencePage(value.relations,value.task_uid,"relations","跨终端委派",related,relationships);body.append(related);
+  const groups=[
+   ["执行记录","runs",r=>[["任务",r.task_uid],["运行",r.run_id],["执行器",r.runtime||"未记录"],["身份",r.role_id],["模型",r.model||"未记录"],["运行状态",r.state],["策略摘要",r.policy_integrity],["分派状态",r.dispatch?.phase||"未记录"],["调用模式",r.dispatch?.execution_mode||"未记录"],["开始",time(r.started_at)],["结束",time(r.ended_at)]]],
+   ["交付候选","results",r=>[["候选",r.result_id],["运行",r.run_id||"不在可见范围"],["执行器",r.execution?.runtime||"未共享"],["调用模式",r.execution?.execution_mode||"未共享"],["进程结果",r.process_status],["记录",time(r.created_at)]]],
+   ["交付产物","artifacts",r=>[["传输",r.transfer_id],["候选",r.result_id],["提交",r.commit||"待核对"],["文件数",r.file_count??"未知"],["字节",r.bytes],["接收回执",r.received_receipt_recorded?"已记录":"尚无"],["内容检查回执",r.content_check_receipt_recorded?"已记录":"尚无"]]],
+   ["验证回执","verifications",r=>[["验证",r.verification_id],["传输",r.transfer_id],["回执",r.receipt_state],["检查",r.checks_passed===null?"未知":r.checks_passed?"通过":"未通过"]]],
+   ["来源合并","integrations",r=>[["合并",r.integration_id],["候选",r.result_id],["回执",r.receipt_state],["写入来源",r.source_applied===null?"未知":r.source_applied?"已记录":"未确认"],["提交",r.merge_commit||"未记录"]]],
+   ["历史验收","completions",r=>[["结案",r.completion_id],["候选",r.result_id],["回执",r.receipt_state],["当时验收",r.historical_accepted?"通过":"未证实"],["任务版本",r.accepted_task_version??"未知"],["模拟运行数",r.fixture_runs??"未知"],["验收时间",time(r.settled_at)]]]
+  ];
+  for(const[label,key,fields]of groups){const valuePage=value[key],section=el("details",undefined,"fleet-trace"),heading=el("summary");section.open=valuePage.items.length>0;section.append(heading);
+   evidencePage(valuePage,value.task_uid,key,label,section,(page,container)=>{heading.textContent=label+" · 本机记录 "+page.total;container.replaceChildren();for(const item of page.items){const dl=el("dl");for(const[k,v]of fields(item))dl.append(el("dt",k),el("dd",String(v??"未记录")));container.append(dl);}});body.append(section);
+  }
+  if(Object.values(value.unverified_records||{}).some(n=>n>0))body.append(el("p","部分候选或产物记录未通过摘要核对，已隐藏；请核查原始回执。","fleet-note fleet-warning"));
+  const unavailable=Object.entries(value.modules).filter(([,s])=>s!=="available");if(unavailable.length)body.append(el("p","未读取的证据模块："+unavailable.map(([k,s])=>(moduleNames[k]||k)+"："+(moduleStates[s]||s)).join("，"),"fleet-note fleet-warning"));
+ }
+
+
+ const actionDialog=$("fleet-action-dialog"),actionBody=$("fleet-action-body"),actionSubmit=$("fleet-action-submit"),actionStatus=$("fleet-action-status");
+ const actionStates={pending:"已保存 · 待处理",applied:"本机已记录",acknowledged:"协议回执已核验",retry_pending:"等待重连重发",blocked:"请求受阻"};
+ const commandNames={prepare_integration:"准备来源合并",apply_integration:"合并到来源引用",reconcile_integration:"核对合并结果",check_integration:"复核来源提交",prepare_completion:"确认候选验收",send_completion:"发送验收决定",register_completion:"提交本端结案确认",poll_completion:"查询双端结案",settle_completion:"完成本端结案",resume_delivery:"恢复原交付操作",register_artifact_target:"授权文件接收",prepare_artifact:"准备实际文件包",send_artifact:"发送或续传文件",verify_artifact:"核验接收内容",prepare_verification:"准备独立检查",run_verification:"执行独立检查",reconcile_verification:"恢复检查回执",create_delegation:"发起委派",decide_delegation:"处理接收委派",resend_delegation:"重发委派",poll_delegation:"查询委派回执",request_cancellation:"请求取消",progress_cancellation:"核对本机停止",resend_cancellation:"重发取消",poll_cancellation:"查询停止回执",prepare_result:"封存并回传候选",reject_result:"要求返工",resend_result:"重传候选",poll_result:"查询验收决定",release_delegation:"放行本机任务",publish_topology:"登记当前结构",refresh_registration:"刷新登记状态",resend_topology:"恢复原结构提交",cancel_topology:"取消结构提交",propose_binding:"准备来源绑定",accept_binding_proposal:"接受绑定提案",decline_binding_proposal:"拒绝绑定提案",approve_binding:"恢复本方确认",poll_binding:"查询双方确认",withdraw_binding:"撤回绑定",cancel_binding:"撤回未确认绑定",send_binding_proposal:"发送绑定提案",send_source_ready:"发送来源就绪证明"};
+ let actionDraft=null,actionBusy=false;const actionFolds=new Map();
+ function actionButton(label,projectId,command,args,review,{note=false,required=false}={}){
+  const b=el("button",label);b.type="button";b.addEventListener("click",()=>openAction(label,projectId,command,args,review,{note,required}));return b;
+ }
+ function openAction(label,projectId,command,args,review,{note=false,required=false}={}){
+  if(actionBusy)return;
+  $("fleet-action-title").textContent=label;actionBody.replaceChildren(el("p","项目："+projectId,"fleet-note"),el("pre",review));
+  let input=null;if(note){const field=el("label","处理说明");input=el("textarea");input.maxLength=["reject_result","prepare_completion"].includes(command)?4096:512;input.required=required;field.append(input);actionBody.append(field);}
+  actionDraft={action_id:crypto.randomUUID(),project_id:projectId,command,arguments:{...args},input,frozen:null};
+  actionStatus.textContent="核对对象和当前版本后提交。请求回执不代表任务已停止或已验收。";actionSubmit.disabled=false;actionSubmit.textContent="确认提交";
+  if(!actionDialog.open)actionDialog.showModal();
+ }
+ $("fleet-action-close").addEventListener("click",()=>{if(!actionBusy)actionDialog.close();});
+ actionDialog.addEventListener("cancel",e=>{if(actionBusy)e.preventDefault();});
+ $("fleet-action-form").addEventListener("submit",async e=>{
+  e.preventDefault();if(actionBusy||!actionDraft)return;
+  if(actionDraft.input?.required&&!actionDraft.input.value.trim()){actionDraft.input.setCustomValidity("请填写处理说明");actionDraft.input.reportValidity();actionDraft.input.setCustomValidity("");return;}
+  const draft=actionDraft;
+  if(!draft.frozen)draft.frozen={action_id:draft.action_id,project_id:draft.project_id,command:draft.command,arguments:{...draft.arguments,...(draft.input?{note:draft.input.value.trim()}: {})}};
+  actionBusy=true;actionSubmit.disabled=true;if(draft.input)draft.input.disabled=true;actionStatus.textContent="正在保存请求…";
+  try{
+   const response=await fetch("/api/fleet/actions",{method:"POST",headers:{...WH,"Content-Type":"application/json"},body:JSON.stringify(draft.frozen),signal:AbortSignal.timeout(15000)});
+   const value=await response.json();if(!response.ok)throw operationError(value,response.status);
+   actionStatus.textContent=(actionStates[value.state]||value.state)+" · 请求 "+value.action_id+"。请在操作回执中查看后续状态。";
+   actionSubmit.textContent="已保存";load();
+  }catch(error){const retry=error.retrySameRequest!==false;actionStatus.textContent=error.message+(retry?"。通信结果未确认，可使用原编号和原内容重试；不会自动提交。":"。请关闭此窗口，刷新并核对后再操作。");actionSubmit.disabled=!retry;actionSubmit.textContent=retry?"重试同一请求":"需关闭并核对";}
+  finally{actionBusy=false;}
+ });
+
+ function renderDelivery(v,box){
+  const section=el("details",undefined,"fleet-trace");section.open=actionFolds.get("文件与独立检查")??false;section.addEventListener("toggle",()=>actionFolds.set("文件与独立检查",section.open));section.append(el("summary","文件与独立检查"));
+  if(!v?.enabled){section.append(el("p","尚未配置本机接收仓库与独立检查。","fleet-note"));box.append(section);return;}
+  for(const a of v.artifacts){
+   const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
+   const state=({prepared:"待发送",receiving:"接收中",received:"文件已收齐",content_verified:"内容已核验",accepted:"已验收",rejected:"已退回",cancel_pending:"等待停止"}[a.state]||a.state);
+   card.append(el("p",a.repo_id+" · "+state,"fleet-task-title"),el("p",a.project_id+" · "+(a.side==="source"?"来源端":"执行端")+" · "+a.bytes+" 字节","fleet-note"),el("p",a.transfer_id,"fleet-id"));
+   const review="项目："+a.project_id+"\n候选："+a.result_id+"\n传输："+a.transfer_id+"\n仓库："+a.repo_id+"\n原始基线："+a.base_commit+"\n大小："+a.bytes+" 字节";
+   if(a.side==="target"&&["prepared","receiving","received","content_verified"].includes(a.state))bar.append(actionButton("发送或续传原文件",a.project_id,"send_artifact",{id:a.transfer_id},review+"\n继续同一文件包；不重新执行任务。"));
+   if(a.side==="source"&&a.state==="received")bar.append(actionButton("核验接收内容",a.project_id,"verify_artifact",{id:a.transfer_id},review+"\n读取本机获准基线，核对实际文件和 Git 内容。此步骤不运行测试。"));
+   if(a.side==="source"&&a.state==="content_verified"){
+    const profiles=v.profiles.filter(p=>p.project_id===a.project_id&&p.mapping_id===a.mapping_id);
+    for(const p of profiles){
+     if(v.verifications.some(x=>x.transfer_id===a.transfer_id&&x.profile_id===p.profile_id))continue;
+     bar.append(actionButton("准备独立检查 · "+(p.check_files[0]||p.command_name),a.project_id,"prepare_verification",{transfer_id:a.transfer_id,profile_id:p.profile_id},review+"\n检查配置："+p.profile_id+"\n固定程序："+p.command_name+"\n检查文件："+p.check_files.join("、")+"\n在独立副本准备输入；下一步再明确启动检查。"));
+    }
+    if(!profiles.length)card.append(el("p","没有与此接收仓库匹配的已批准检查配置。","fleet-note"));
+   }
+   card.append(bar);section.append(card);
+  }
+  for(const vfy of v.verifications){
+   const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
+   const state=vfy.phase==="settled"?(vfy.checks_passed?"检查通过 · 详见合并与验收回执":"检查未通过"):({ready:"输入已准备",preparing:"输入准备未完成",launch_committed:"已启动 · 需核对回执"}[vfy.phase]||vfy.phase);
+   card.append(el("p",state,"fleet-task-title"),el("p",vfy.project_id+" · "+vfy.verification_id,"fleet-id"));
+   const review="项目："+vfy.project_id+"\n检查："+vfy.verification_id+"\n传输："+vfy.transfer_id+"\n固定配置："+vfy.profile_id;
+   if(vfy.phase==="ready")bar.append(actionButton("执行本机独立检查",vfy.project_id,"run_verification",{id:vfy.verification_id},review+"\n将运行本机管理者批准的固定测试程序，并记录实际退出和停止状态；本步骤不批准任务。"));
+   if(vfy.phase==="launch_committed")bar.append(actionButton("恢复已有检查回执",vfy.project_id,"reconcile_verification",{id:vfy.verification_id},review+"\n仅核对已保留的进程观察。缺少观察时保持受阻，不重复启动。"));
+   if(vfy.phase==="settled"&&vfy.checks_passed&&v.closure?.enabled){
+    for(const p of v.closure.policies.filter(p=>p.project_id===vfy.project_id&&p.mapping_id===vfy.mapping_id)){
+     if(v.closure.integrations.some(i=>i.verification_id===vfy.verification_id))continue;
+     bar.append(actionButton("准备合并 · "+p.repo_id,vfy.project_id,"prepare_integration",{verification_id:vfy.verification_id,policy_id:p.policy_id},review+"\n来源仓库："+p.repo_id+"\n获准引用："+p.ref+"\n先保存并准备合并内容；下一步单独确认更新来源引用。"));
+    }
+   }
+   if(vfy.receipt_digest)card.append(el("p","回执摘要："+vfy.receipt_digest,"fleet-id"));
+   if(vfy.diagnostic)card.append(el("p","检查结果："+vfy.diagnostic,"fleet-note"));
+   card.append(bar);section.append(card);
+  }
+  renderClosure(v.closure,section);
+  if(!v.artifacts.length&&!v.verifications.length)section.append(el("p","从交付候选授权接收仓库或准备文件包。","fleet-note"));
+  if(v.truncated)section.append(el("p","文件与检查记录已截断，请缩小项目范围。","fleet-note fleet-warning"));
+  box.append(section);
+ }
+
+
+ function renderClosure(v,section){
+  if(!v?.enabled){section.append(el("p","来源合并和结案尚未配置。","fleet-note"));return;}
+  section.append(el("h4","来源合并与双端结案"));
+  for(const i of v.integrations){
+   const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
+   const state=({ready:"合并内容已准备",preparing:"准备未完成，保留原意图",launch_committed:"合并已启动，待核对",settled:"来源已合并",abandoned:"合并已放弃"}[i.phase]||i.phase);
+   card.append(el("p",state,"fleet-task-title"),el("p",i.project_id+" · "+i.ref,"fleet-note"),el("p",i.integration_id,"fleet-id"));
+   const review="项目："+i.project_id+"\n候选："+i.result_id+"\n合并："+i.integration_id+"\n来源引用："+i.ref+"\n原基线："+i.base_commit+"\n交付提交："+i.artifact_commit;
+   if(i.phase==="ready")bar.append(actionButton("确认合并到来源引用",i.project_id,"apply_integration",{id:i.integration_id},review+"\n仅当引用仍是原基线才更新；本步骤尚不验收任务。"));
+   if(i.phase==="launch_committed")bar.append(actionButton("核对已有合并结果",i.project_id,"reconcile_integration",{id:i.integration_id},review+"\n核对实际引用与已绑定提交，不再次更新引用。"));
+   if(i.merge_commit)card.append(el("p","来源合并提交："+i.merge_commit,"fleet-id"));
+   const completion=v.completions.find(c=>c.result_id===i.result_id);
+   if(i.phase==="settled"&&!completion){
+    bar.append(actionButton("复核当前来源提交",i.project_id,"check_integration",{id:i.integration_id},review+"\n重新核对来源提交、独立检查和当前授权。"));
+    if(i.context_current&&Number.isSafeInteger(i.source_task_version))bar.append(actionButton(i.fixture_runs?"确认模拟候选验收":"确认候选验收",i.project_id,"prepare_completion",{integration_id:i.integration_id,expected_version:i.source_task_version,allow_fixture:i.fixture_runs>0},review+"\n来源当前版本："+i.source_task_version+"\n合并提交："+i.merge_commit+"\n本决定将冻结当前任务范围，发送后还需双方结案确认。"+(i.fixture_runs?"\n含 "+i.fixture_runs+" 次模拟执行：只关闭模拟任务，不属于真实模型或阶段验收。":""),{note:true,required:true}));
+   }
+   if(completion)card.append(el("p",completion.accepted?"本端已按回执结案":"验收决定已保存，等待双端结案。","fleet-note"));
+   card.append(bar);section.append(card);
+  }
+  for(const c of v.completions){
+   const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
+   const state=({prepared:"验收决定已保存，尚未取得对端回执",ready:"执行端已就绪，等待双方登记确认",retired:"双方登记已完成，可结案",settled:"本端已验收结案"}[c.phase]||c.phase);
+   card.append(el("p",state+(c.fixture_runs?" · 模拟任务":""),"fleet-task-title"),el("p",c.project_id+" · "+(c.side==="source"?"来源端":"执行端"),"fleet-note"),el("p",c.completion_id,"fleet-id"),el("p",c.note,"fleet-note"));
+   const review="项目："+c.project_id+"\n候选："+c.result_id+"\n结案："+c.completion_id+"\n来源合并提交："+c.source_merge_commit+"\n验收说明："+c.note;
+   if(c.side==="source"&&c.phase==="prepared")bar.append(actionButton("发送原验收决定",c.project_id,"send_completion",{id:c.completion_id},review));
+   if(c.phase==="ready")bar.append(actionButton("提交本端结案确认",c.project_id,"register_completion",{id:c.completion_id},review+"\n仅登记本端确认；需要双方确认才能关闭关系。"),actionButton("查询双端结案",c.project_id,"poll_completion",{id:c.completion_id},review));
+   if(c.phase==="retired")bar.append(actionButton("完成本端结案",c.project_id,"settle_completion",{id:c.completion_id},review+"\n按已冻结证据关闭本端任务和委派关系；父任务只重新进入审阅。"));
+   card.append(bar);section.append(card);
+  }
+ }
+
+ function renderProgress(v){
+  const box=$("fleet-progress");box.replaceChildren();
+  const section=el("details",undefined,"fleet-trace");section.open=actionFolds.get("阶段进度与确认记录")??false;section.addEventListener("toggle",()=>actionFolds.set("阶段进度与确认记录",section.open));section.append(el("summary","阶段进度与确认记录"));box.append(section);
+  if(!v.enabled){section.append(el("p","尚未登记阶段计划与外部确认记录。","fleet-note"));return;}
+  section.append(el("p","本机管理者登记的计划与确认记录 · 读取于 "+time(v.generated_at)+"。任务已完成或测试通过不会自动计入阶段验收。","fleet-note"));
+  for(const plan of v.plans)projectNames.add(plan.project_id);choices();
+  const labels={accepted:"已验收",pending_acceptance:"待验收",pending:"待确认",rejected:"未通过",stale:"旧确认已失效",invalid:"确认记录无效",not_submitted:"未提交确认",planned:"计划中",ready:"可开始",in_progress:"进行中",verifying:"待验收",blocked:"阻塞"};
+  for(const p of v.plans){
+   const card=el("article",undefined,"fleet-edge"),c=p.counts;card.append(el("h4",p.plan_id+" · "+p.project_id),el("p","任务验收 "+c.accepted_tasks+" / "+c.total_tasks+"（"+c.task_percent+"%） · 阶段验收 "+c.accepted_phases+" / "+c.total_phases+"（"+c.phase_percent+"%）","fleet-task-title"));
+   const meter=el("progress");meter.max=100;meter.value=c.task_percent;meter.setAttribute("aria-label",p.plan_id+" 任务验收百分比");card.append(meter,el("p","阻塞 "+c.blocked_tasks+" · 待验收 "+c.pending_acceptance_tasks+" · 有实现证据 "+c.with_implementation_evidence+" · 有验证记录 "+c.with_verification_records,"fleet-note"));
+   for(const phase of p.phases){const row=el("details",undefined,"fleet-trace"),key="progress:"+p.plan_id+":"+phase.phase_id;row.open=actionFolds.get(key)??false;row.addEventListener("toggle",()=>actionFolds.set(key,row.open));row.append(el("summary",phase.phase_id+" "+phase.title+" · "+phase.gate_id+" · "+(labels[phase.state]||phase.state)));
+    row.append(el("p","需确认角色："+phase.required_roles.join("、"),"fleet-note"));if(phase.blocked_by.length)row.append(el("p","前置阶段尚未验收："+phase.blocked_by.join("、"),"fleet-note fleet-warning"));
+    for(const t of phase.tasks){const item=el("div",undefined,"fleet-edge");item.append(el("p",t.id+" "+t.subject+" · "+(labels[t.state]||t.state),"fleet-task-title"),el("p","实现证据 "+t.implementation_evidence_count+" · 验证记录："+({local_component_passed:"本机组件通过",passed:"通过",failed:"未通过"}[t.verification_result]||t.verification_result||"尚无记录"),"fleet-note"));if(t.blocker)item.append(el("p","阻塞："+t.blocker.reason+"；解除条件："+(t.blocker.release_condition||"待填写")+"；责任角色："+(t.blocker.responsible_role||"待填写")+"；复核："+time(t.blocker.next_review_at),"fleet-note fleet-warning"));row.append(item);}
+    for(const h of phase.history){const note=el("div",undefined,"fleet-edge");note.append(el("p","确认记录 · "+(labels[h.state]||h.state)+" · 登记者 "+h.registered_by+" · "+time(h.registered_at),"fleet-task-title"));if(h.reason)note.append(el("p",h.reason,"fleet-note fleet-warning"));if(h.note)note.append(el("p",h.note,"fleet-note"));for(const x of h.confirmations)note.append(el("p",x.role+" · "+x.instance_id+" · "+time(x.at)+" · "+x.reference,"fleet-note"));note.append(el("p","回执摘要："+h.sha256,"fleet-id"));row.append(note);}
+    if(!phase.history.length)row.append(el("p","尚无确认记录。","fleet-note"));card.append(row);
+   }section.append(card);
+  }
+  if(!v.plans.length)section.append(el("p","当前项目没有登记的阶段计划。","fleet-note"));
+ }
+ async function loadProgress(id,signal){try{const v=await request("/api/fleet/progress"+(project.value?"?project="+encodeURIComponent(project.value):""),signal);if(id===generation)renderProgress(v);}catch(e){if(e.name!=="AbortError"&&id===generation)$("fleet-progress").replaceChildren(el("p","阶段进度不可用："+e.message,"fleet-note fleet-warning"));}}
+
+ function renderActions(v){
+  const box=$("fleet-actions");box.replaceChildren(el("h3","跨端操作与回执"));
+  if(!v.enabled){box.append(el("p",v.error||"尚未配置本机协调身份和对端连接。","fleet-note"));return;}
+  box.append(el("p","此处使用本机协调身份。接收委派只建立待确认任务；关系登记、双方就绪后才能放行。送达回执不等于执行完成。","fleet-note"));
+  const structures=el("details",undefined,"fleet-trace");structures.open=actionFolds.get("项目结构登记")??true;structures.addEventListener("toggle",()=>actionFolds.set("项目结构登记",structures.open));structures.append(el("summary","项目结构登记"));
+  for(const t of v.topologies||[]){const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");card.append(el("p",t.project_id,"fleet-task-title"));
+   if(!t.configured)card.append(el("p","尚未配置本机项目的固定登记节点，请先完成节点部署。 ["+t.error_code+"]","fleet-note"));
+   else{
+    card.append(el("p","本机结构："+({unregistered:"未登记",ready:"已登记",pending:"等待回执"}[t.phase]||t.phase)+" · 修订 "+t.revision+(t.observed?" · 登记状态读取于 "+time(t.observed.observed_at):" · 尚未读取登记状态"),"fleet-note"));
+    const review="项目："+t.project_id+"\n登记节点："+t.registrar_node_id+"\n本机结构修订："+t.revision;
+    if(!t.operation_id&&["unregistered","ready"].includes(t.phase))bar.append(actionButton("登记当前结构",t.project_id,"publish_topology",{expected_revision:t.revision},review+"\n提交本机当前任务树和依赖；取得回执前保持等待。"));
+    if(t.operation_id){bar.append(actionButton("恢复原结构提交",t.project_id,"resend_topology",{id:t.operation_id},review),actionButton("取消未确认结构提交",t.project_id,"cancel_topology",{id:t.operation_id},review+"\n未知结果必须先恢复原请求，不能直接回退。"));}
+    bar.append(actionButton("刷新登记状态",t.project_id,"refresh_registration",{id:t.project_id},review+"\n读取固定登记节点保存的双方结构版本。"));
+   }card.append(bar);structures.append(card);
+  }box.append(structures);
+  const groups=[["待接收委派",v.incoming],["发出的委派",v.outgoing],["待确认绑定",v.proposals||[]],["已绑定任务",v.bindings],["取消回执",v.cancellations],["交付候选",v.results]];
+  for(const[label,items]of groups){
+   const section=el("details",undefined,"fleet-trace");section.open=actionFolds.get(label)??(label==="待接收委派"&&items.some(r=>r.state==="received"));section.addEventListener("toggle",()=>actionFolds.set(label,section.open));section.append(el("summary",label+" · "+items.length));
+   for(const r of items){
+    const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
+    card.append(el("p",r.subject||r.result_id||r.relation_id,"fleet-task-title"),el("p",r.project_id+" · "+(label==="待确认绑定"&&r.state==="pending"?"待本方确认":historyStates[r.state]||({accepted:"已验收",delivered:"已送达 · 待决定"}[r.state])||r.state),"fleet-note"));
+    const review=(r.subject?r.subject+"\n":"")+"项目："+r.project_id+(label==="交付候选"?"\n候选："+r.result_id:"\n对象："+(r.delegation_id||r.relation_id||r.result_id));
+    if(!r.identity_current){card.append(el("p","旧节点代次，仅供查看。","fleet-note fleet-warning"));}
+    else if(label==="待接收委派"){
+     if(r.state==="received")for(const[decision,text]of [["accept","接收为待确认任务"],["reject","拒绝委派"]])bar.append(actionButton(text,r.project_id,"decide_delegation",{delegation_id:r.delegation_id,expected_version:r.version,decision},review+"\n来源终端："+r.source_node_id+"\n任务说明："+r.description+"\n验收条件："+r.acceptance,{note:true}));
+    }else if(label==="发出的委派"){
+     for(const[command,text]of [["resend_delegation","重发原委派"],["poll_delegation","查询对端回执"]])bar.append(actionButton(text,r.project_id,command,{id:r.delegation_id},review+"\n目标终端："+r.target_node_id));
+     if(r.binding_draft){const d=r.binding_draft;if(d.ready)bar.append(actionButton("准备绑定并提交本方确认",r.project_id,"propose_binding",{delegation_id:r.delegation_id,review_digest:d.review_digest},review+"\n目标终端："+d.target_node_id+"\n目标任务："+d.target_task_uid+"\n双方结构修订："+d.source_topology_revision+" / "+d.target_topology_revision+"\n登记状态读取于："+time(d.observed_at)+"\n任务说明："+r.description+"\n验收条件："+r.acceptance+"\n只提交来源方确认；接收端仍须独立核对并确认。"));else if(d.error_code!=="BINDING_EXISTS")card.append(el("p",({REGISTRATION_REQUIRED:"请先刷新登记状态。",TOPOLOGY_NOT_READY:"请先登记本机当前结构。",TOPOLOGY_DIVERGED:"登记状态与本机结构不一致，请刷新后核对。",TARGET_TOPOLOGY_REQUIRED:"等待目标终端登记结构，再刷新登记状态。"}[d.error_code]||"绑定准备条件尚未满足。")+" ["+d.error_code+"]","fleet-note"));}
+    }else if(label==="待确认绑定"){
+     const d=r.relation,contract=review+"\n来源终端："+d.source_node_id+"\n来源任务："+d.source_task_uid+"\n本机任务："+d.target_task_uid+"\n双方结构修订："+d.source_topology_revision+" / "+d.target_topology_revision+"\n任务说明："+r.description+"\n验收条件："+r.acceptance;
+     if(r.task_version)bar.append(actionButton("接受绑定并提交本方确认",r.project_id,"accept_binding_proposal",{relation_id:r.relation_id,descriptor_digest:r.descriptor_digest,expected_version:r.task_version},contract+"\n核对本机任务后提交接收方确认；尚不放行。"));
+     bar.append(actionButton("拒绝绑定提案",r.project_id,"decline_binding_proposal",{relation_id:r.relation_id,expected_descriptor_digest:r.descriptor_digest,reason_code:"operator_declined"},contract+"\n来源端仍须撤回未确认申请。"));
+    }else if(label==="已绑定任务"){
+     if(r.side==="target")card.append(el("p","本机任务："+(r.released?"已放行":"待放行"),"fleet-note"));
+     const relationReview=review+"\n关系："+r.relation_id+"\n来源终端："+r.source_node_id+"\n目标终端："+r.target_node_id;
+     if(r.state==="prepared"){
+      for(const[command,text]of [["approve_binding","恢复本方确认"],["poll_binding","查询双方确认"],["cancel_binding","撤回未确认绑定"]])bar.append(actionButton(text,r.project_id,command,{id:r.relation_id},relationReview+"\n未知结果须先恢复原确认请求。"));
+     }
+     if(r.side==="source"&&["prepared","confirmed"].includes(r.state)){
+      if(r.source_approved)bar.append(actionButton("发送绑定提案",r.project_id,"send_binding_proposal",{id:r.relation_id},relationReview+"\n交给接收端独立核对任务合同。"));
+      if(r.state==="confirmed"&&!r.cancellation_state)bar.append(actionButton("发送来源就绪证明",r.project_id,"send_source_ready",{id:r.relation_id},relationReview+"\n双方已登记确认，接收端取得此证明后可按本地权限放行。"));
+     }
+
+     if(r.state==="confirmed"&&r.task_version){
+      if(r.side==="source"&&!r.cancellation_state)bar.append(actionButton("请求取消委派",r.project_id,"request_cancellation",{relation_id:r.relation_id,expected_version:r.task_version,reason_code:"operator_cancelled"},review+"\n仅发送取消请求，取得停止证明后才显示已停止。"));
+      if(r.side==="target"){
+       if(r.task_status==="not_started"&&!r.released){const b=actionButton("放行本机任务",r.project_id,"release_delegation",{relation_id:r.relation_id,expected_version:r.task_version},review+"\n放行后，本机调度器可按角色和预算领取。");b.disabled=!r.execution_authorized;bar.append(b);if(b.disabled)card.append(el("p","双方就绪、当前权限或本地结构尚未满足放行条件。","fleet-note fleet-warning"));}
+       if(["waiting","done"].includes(r.task_status))bar.append(actionButton("封存并回传候选",r.project_id,"prepare_result",{relation_id:r.relation_id,expected_version:r.task_version},review+"\n封存当前任务版本与实际运行证据。来源端仍须验证和验收。"));
+      }
+     }
+    }else if(label==="取消回执"&&r.state!=="stopped"){
+     if(r.side==="source")for(const[command,text]of [["resend_cancellation","重发原取消"],["poll_cancellation","查询停止回执"]])bar.append(actionButton(text,r.project_id,command,{id:r.relation_id},review));
+     else bar.append(actionButton("核对本机停止证明",r.project_id,"progress_cancellation",{relation_id:r.relation_id},review+"\n核对进程和下游回执，不把请求收到当作停止。"));
+    }else if(label==="交付候选"){
+     if(r.side==="target")for(const[command,text]of [["resend_result","重传原候选"],["poll_result","查询来源决定"]])bar.append(actionButton(text,r.project_id,command,{id:r.result_id},review));
+     else if(r.state==="received"&&r.source_task_version)bar.append(actionButton("要求返工",r.project_id,"reject_result",{result_id:r.result_id,expected_version:r.source_task_version},review+"\n核对任务追溯中的证据后填写退回原因。",{note:true,required:true}));
+     if(v.delivery?.enabled&&r.review_state==="pending_evidence"){
+      if(r.side==="target"&&!v.delivery.artifacts.some(a=>a.result_id===r.result_id))bar.append(actionButton("准备实际文件包",r.project_id,"prepare_artifact",{result_id:r.result_id},review+"\n从本机已结束的文件工作区捕获实际产物。不会重新调用执行器。"));
+      if(r.side==="source"){
+       const target=v.delivery.targets.find(t=>t.result_id===r.result_id);
+       if(target)card.append(el("p","已授权接收基线："+target.base_commit,"fleet-id"));
+       else for(const receiver of v.delivery.receivers.filter(x=>x.project_id===r.project_id))bar.append(actionButton("授权接收文件 · "+receiver.repo_id,r.project_id,"register_artifact_target",{result_id:r.result_id,mapping_id:receiver.mapping_id},review+"\n本机仓库："+receiver.repo_id+"\n映射："+receiver.mapping_id+"\n批准基线："+receiver.base_commit+"\n允许读取完整基线以核对收到的实际内容。"));
+      }
+     }
+     card.append(el("p","最终验收须具备独立验证、合并及双端结案回执。","fleet-note"));
+    }
+    card.append(bar);section.append(card);
+   }
+   box.append(section);
+  }
+  renderDelivery(v.delivery,box);
+  const receipts=el("details",undefined,"fleet-trace");receipts.open=true;receipts.append(el("summary","操作回执 · "+v.actions.length));
+  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({integration_ready:"合并内容已准备",integration_launched:"合并已启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.conflict?.message?" · "+a.conflict.message:a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),el("p",a.action_id,"fleet-id"));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
+  if(!v.actions.length)receipts.append(el("p","从本机任务详情发起委派，或处理收到的委派。","fleet-note"));box.append(receipts);
+  if(v.truncated)box.append(el("p","每类最多显示 100 条；请缩小项目范围。","fleet-note fleet-warning"));
+ }
+ async function loadActions(id,signal){try{const v=await request("/api/fleet/actions"+(project.value?"?project="+encodeURIComponent(project.value):""),signal);if(id===generation)renderActions(v);}catch(e){if(e.name!=="AbortError"&&id===generation)$("fleet-actions").replaceChildren(el("p","操作入口暂不可用："+e.message,"fleet-note fleet-warning"));}}
+ async function taskActions(t,body,id){
+  const section=el("section",undefined,"fleet-edge");section.append(el("h3","任务操作"));body.append(section);
+  if(t.read_only){section.append(el("p","这是远端缓存，请在所属终端处理任务；本机只发送已有委派关系的请求。","fleet-note"));return;}
+  if(!t.project_id){section.append(el("p","先为此任务登记共享项目，才可跨端委派。","fleet-note"));return;}
+  try{
+   const v=await request("/api/fleet/actions?project="+encodeURIComponent(t.project_id));if(id!==detailGeneration||!detail.open)return;
+   if(!v.enabled){section.append(el("p",v.error,"fleet-note"));return;}
+   const peers=v.peers.filter(p=>p.projects.includes(t.project_id));
+   if(!peers.length){section.append(el("p","当前项目尚未配置可委派终端。","fleet-note"));return;}
+   const label=el("label","委派到 "),select=el("select");for(const p of peers){const option=el("option",(ownerNames.get(p.node_id)||"终端")+" · "+p.node_id.slice(0,8));option.value=p.node_id;select.append(option);}label.append(select);
+   const button=el("button","发起跨端委派");button.type="button";button.disabled=t.status==="done";
+   button.addEventListener("click",()=>{const peer=peers.find(p=>p.node_id===select.value);if(peer)openAction("发起跨端委派",t.project_id,"create_delegation",{task_uid:t.task_uid,expected_version:t.aggregate_version,target_node_id:peer.node_id,target_epoch:peer.node_epoch},t.subject+"\n来源任务："+t.task_uid+"\n当前版本："+t.aggregate_version+"\n目标终端："+peer.node_id+"\n任务说明："+(t.description||"")+"\n验收条件："+(t.acceptance||""));});
+   const bar=el("div",undefined,"fleet-edge-path");bar.append(label,button);section.append(bar);
+  }catch(e){if(id===detailGeneration)section.append(el("p","操作入口暂不可用："+e.message,"fleet-note fleet-warning"));}
+ }
+
+ function render(value){last=value;for(const n of value.nodes)ownerNames.set(n.node_id,n.display_name);for(const p of value.projects)projectNames.add(p);choices();nodes.replaceChildren();$("fleet-summary").replaceChildren(el("span",value.nodes.length+" 个终端"),el("span",value.total_matching+" 项匹配任务"),el("span",value.pending_publications+" 项待发布"),el("span",value.pending_acknowledgements+" 项同步待确认"));
+  for(const n of value.nodes){const section=el("details",undefined,"fleet-node");section.open=folds.get(n.node_id)!==false;section.addEventListener("toggle",()=>folds.set(n.node_id,section.open));const heading=el("summary");heading.append(el("h3",n.display_name),el("span",connections[n.connection_state],"fleet-badge"));section.append(heading,el("p",n.node_id,"fleet-id"));
+   if(n.counts)section.append(el("p",(n.local?"当前筛选":"已缓存可见")+" "+n.counts.total+" 项 · 进行中 "+n.counts.in_progress+" · 等待 "+n.counts.waiting+" · 已完成 "+n.counts.done,"fleet-note"));else section.append(el("p","任务数量未知；取得远端列表后才显示数量。","fleet-note fleet-warning"));
+   for(const p of n.projects)section.append(el("p",p.project_id+" · "+connections[p.state]+" · 上次同步 "+time(p.last_sync_at)+(p.error_code?" · "+p.error_code:""),"fleet-note"));
+   const tasks=value.tasks.filter(t=>t.owner_node_id===n.node_id),list=el("div",undefined,"fleet-tasks");if(tasks.length)taskRows(tasks,list);else list.append(el("p",n.counts?"当前筛选没有可显示的已知任务。":"此终端尚无可用任务列表。","fleet-note"));section.append(list);nodes.append(section);
+  }
+  relationships(value.relations,$("fleet-relations"));
+  notice.className="fleet-note";notice.textContent="视图更新于 "+time(value.generated_at)+(value.sync_state==="not_configured"?" · 本机尚未配置联邦同步":value.sync_state==="upgrade_required"?" · 同步存储需要升级，未读取远端数据":"")+(value.truncated?" · 仅显示前 "+value.returned+" 项，请缩小筛选或显示更多":"");$("fleet-more").hidden=!value.truncated||limit>=10000;
+ }
+ async function load(){if(!dialog.open)return;const id=++generation;controller?.abort();controller=new AbortController();const params=new URLSearchParams({limit:String(limit)});if(owner.value)params.set("owner",owner.value);if(project.value)params.set("project",project.value);if(query.value.trim())params.set("q",query.value.trim());notice.textContent="正在更新…";loadActions(id,controller.signal);loadProgress(id,controller.signal);
+  try{const value=await request("/api/fleet?"+params,controller.signal);if(id===generation)render(value);}catch(e){if(e.name==="AbortError")return;if(id===generation){notice.className="fleet-note fleet-warning";notice.textContent=(last?"更新失败，保留上次视图。":"视图读取失败。")+e.message;}}
+ }
+ async function showTask(uid){const id=++detailGeneration;$("fleet-detail-title").textContent="任务详情";detail.showModal();const body=$("fleet-detail-body");body.replaceChildren(el("p","正在读取任务…","fleet-note"));try{const t=await request("/api/fleet/task?uid="+encodeURIComponent(uid));if(id!==detailGeneration||!detail.open)return;$("fleet-detail-title").textContent=t.subject;body.replaceChildren();const dl=el("dl");for(const[label,value]of [["所属终端",t.owner_name],["终端身份",t.owner_node_id],["任务 UID",t.task_uid],["父任务",t.parent_uid||"根任务"],["项目",t.project_id||"未绑定"],["状态",states[t.status]||t.status],["数据来源",t.read_only?"远端缓存 · "+time(t.last_sync_at):"本机"],["运行",t.run_id||"尚无运行"],["更新",time(t.updated_at)]])dl.append(el("dt",label),el("dd",value));body.append(dl);for(const[label,value]of [["任务说明",t.description],["验收条件",t.acceptance],["执行结果",t.result],["裁定",t.verdict_note]])if(value){body.append(el("h3",label),el("pre",value));}evidence(t.evidence,body);taskActions(t,body,id);if(t.local_id!==null){const locate=el("button","在本机面板定位");locate.type="button";locate.addEventListener("click",()=>{detail.close();dialog.close();$("task-find-id").value=String(t.local_id);$("task-find").requestSubmit();});body.append(locate);}}catch(e){if(id===detailGeneration)body.replaceChildren(el("p",e.message,"fleet-note fleet-warning"));}}
+ function openFleet(){if(!dialog.open){dialog.showModal();timer=setInterval(()=>{if(!actionDialog.open&&!$("fleet-actions").contains(document.activeElement))load();},15000);}load();}
+ $("fleet-open").addEventListener("click",openFleet);$("fleet-close").addEventListener("click",()=>dialog.close());dialog.addEventListener("close",()=>{clearInterval(timer);controller?.abort();generation++;});$("fleet-detail-close").addEventListener("click",()=>detail.close());detail.addEventListener("close",()=>{if(!detail.open)detailGeneration++;});
+ $("fleet-refresh").addEventListener("click",load);$("fleet-filters").addEventListener("submit",e=>{e.preventDefault();limit=1000;load();});owner.addEventListener("change",load);project.addEventListener("change",load);$("fleet-more").addEventListener("click",()=>{limit=Math.min(limit*2,10000);load();});
+ function linkedTask(){const uid=new URLSearchParams(location.hash.slice(1)).get("fleet-task");if(!uid)return;openFleet();if(detail.open)detail.close();showTask(uid);}
+ window.addEventListener("hashchange",linkedTask);linkedTask();
+})();
+
+});
 </script>
 </body>
 </html>

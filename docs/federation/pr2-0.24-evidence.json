@@ -1,0 +1,700 @@
+{
+  "format": "ai-fleet-pr2-regression-evidence/v1",
+  "plan_id": "AFK-FED-001",
+  "plan_version": "1.3",
+  "date": "2026-10-01",
+  "platform": "Windows",
+  "code_sha": "dfcbc73cf918aef65ca3f3847f00adc1a6db451a",
+  "git": {
+    "origin_main": "afe1b5a6efccae17ef2a1a44019cff46485e1b7b",
+    "deploy_before": "f0cace97d0a6b4db1f6702a131b687ef2bec206c",
+    "deploy_after": "5f8fa9c07499425b4d99558baae2b35499a426dd",
+    "task_before": "83acc1b4d14c49391b0e57bb18a40620c94eaaa6",
+    "rebased_head": "551f0d303322cf04e555a0d8f538ebce0d4ed9aa",
+    "conflict": "Only worker_loop.py Windows path assertion conflicted; retained upstream assertion and historical comment.",
+    "recovery_refs": [
+      "backup/deploy-before-main-20261001",
+      "backup/pr2-before-main-20261001"
+    ]
+  },
+  "patch": {
+    "filename": "pr2-desktop-archive.patch",
+    "sha256": "8c9e807bb754a0392687371e1df5da2e6567636cca5ae28c7dadea16d0c19563",
+    "apply_check": "passed",
+    "applied": true,
+    "local_adjustments": [
+      "bounded Python decoder timeout",
+      "verify temporary directory cleanup boundary",
+      "label the cold PowerShell start explanation as an unproven hypothesis"
+    ]
+  },
+  "method": "Copy tracked source to a temporary directory, initialize a synthetic Git commit for the existing source gate, run each named test green, restore one reviewed defect, then run the same test red. Restore source after each case. No production database or real model calls.",
+  "runtime_versions": {
+    "node": "24.16.0",
+    "python": "3.12.14"
+  },
+  "cases": [
+    {
+      "issue": "B1",
+      "case": "B1",
+      "test_file": "tests/versiontest.mjs",
+      "test_name_pattern": "HTTP requires versions, rejects stale controls and returns current version",
+      "mutated_file": "core/store.js",
+      "mutation": "Treat version metadata as a forbidden running-task field",
+      "green": {
+        "label": "B1-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "b5f3c4474a442b722db94e97db21c70831e716116660dc824395566f27aa74aa",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "B1-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "db4eaf948d98d58321ecb1fd45cd6c08e7c7d46afd81fa7edbdb832bf6ccd764",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - HTTP requires versions, rejects stale controls and returns current version",
+        "  error: |-",
+        "  code: 'ERR_ASSERTION'",
+        "  expected: 200",
+        "  actual: 409"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=HTTP requires versions, rejects stale controls and returns current version",
+        "tests/versiontest.mjs"
+      ]
+    },
+    {
+      "issue": "B2",
+      "case": "B2-version",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B2 package, desktop manifests",
+      "mutated_file": "packaging/desktop/manifest.json",
+      "mutation": "Restore the old desktop version",
+      "green": {
+        "label": "B2-version-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "5e838bd47cc0d8eed174a5d0c40e585f8ce5e00f2138dd02e9fb79f7adc6e78f",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "B2-version-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "9a96e15b8c49a3b5697ab34054ce3f923e36b49e31f56e9ee22fbb55ad6d2e6d",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - B2 package, desktop manifests and current instructions agree on the review version",
+        "  error: |-",
+        "  code: 'ERR_ASSERTION'",
+        "  expected: '0.24.0'",
+        "  actual: '0.24.0-dev.1'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=B2 package, desktop manifests",
+        "tests/review-contracttest.mjs"
+      ]
+    },
+    {
+      "issue": "B2",
+      "case": "B2-domains",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B2 glossary distinguishes",
+      "mutated_file": "docs/GLOSSARY.md",
+      "mutation": "Remove the qualified legacy role domain",
+      "green": {
+        "label": "B2-domains-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "f1e0cd1adc59b47faf9cb34f5f7d03419746063fff12bed138d2348f11d3fa4c",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "B2-domains-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "4b8364848c9589573d89104defb992202df346418c7439c60ba37c4cfb16c372",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - B2 glossary distinguishes line roles from broker roles and documents wire identity fields",
+        "  error: 'missing qualified glossary row: fleet.config.json: lines[].role.kind'",
+        "  code: 'ERR_ASSERTION'",
+        "  expected: true"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=B2 glossary distinguishes",
+        "tests/review-contracttest.mjs"
+      ]
+    },
+    {
+      "issue": "B3",
+      "case": "B3-doc",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B3 every operator entry",
+      "mutated_file": "docs/OPERATE_WITH_CLAUDE.md",
+      "mutation": "Publish an edit example without its observed version",
+      "green": {
+        "label": "B3-doc-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "23ce4474afc4806d15377d936c74da5d61cb20ef452f5c8ff917406ada0d3e03",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "B3-doc-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "4da919006b4c6f00e93b56b806e2c3516862bcca4a7b3c5aedf6dd77c253c890",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - B3 every operator entry links migration and edit examples carry the observed version",
+        "  error: 'docs/OPERATE_WITH_CLAUDE.md: `python cli/board.py edit <id> --file move-line.json` 移线'",
+        "  code: 'ERR_ASSERTION'",
+        "  expected:",
+        "  actual: '`python cli/board.py edit <id> --file move-line.json` 移线'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=B3 every operator entry",
+        "tests/review-contracttest.mjs"
+      ]
+    },
+    {
+      "issue": "B3",
+      "case": "B3-cli",
+      "test_file": "tests/review-contracttest.mjs",
+      "test_name_pattern": "B3 CLI refuses",
+      "mutated_file": "cli/board.py",
+      "mutation": "Disable the CLI guard before network I/O",
+      "green": {
+        "label": "B3-cli-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "720ceb44a02c08ff94d8ce9dc91eb758d478b0df4f4faaf058e962f57ead6871",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "B3-cli-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "095af70a7f003b38113c5516af3b7004a3c94cb40af0e9d5be55107c3adfa824",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - B3 CLI refuses an unversioned control before any network call",
+        "  error: |-",
+        "  code: 'ERR_ASSERTION'",
+        "  expected:",
+        "  actual: |-"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=B3 CLI refuses",
+        "tests/review-contracttest.mjs"
+      ]
+    },
+    {
+      "issue": "H1",
+      "case": "H1",
+      "test_file": "tests/versiontest.mjs",
+      "test_name_pattern": "migration rebuilds semantic version coverage",
+      "mutated_file": "core/store.js",
+      "mutation": "Keep the stale semantic version trigger",
+      "green": {
+        "label": "H1-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "8f6b4e06130b7e1dae8be87e750f6b278e74c6e9d5f0321637b2cef1c678745c",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H1-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "52dafcd7f5c5cce8b76543973626fb290a3afee9a0654db46debc4d29fe3f9fb",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - migration rebuilds semantic version coverage after columns are added",
+        "  error: |-",
+        "    Expected values to be strictly equal:",
+        "  code: 'ERR_ASSERTION'",
+        "  expected: 2",
+        "  actual: 1"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=migration rebuilds semantic version coverage",
+        "tests/versiontest.mjs"
+      ]
+    },
+    {
+      "issue": "H2",
+      "case": "H2",
+      "test_file": "tests/treetest.mjs",
+      "test_name_pattern": "a broken incoming parent can be repaired",
+      "mutated_file": "core/task_tree.js",
+      "mutation": "Reject repair whenever the replaced old parent chain is invalid",
+      "green": {
+        "label": "H2-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "de7b39a82b5823b91c8967c36e0db70512eb6ede11cb86f1a92d476ba2489ee6",
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H2-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "7eaa1b0fbb8820f4c676ef7108f64a98dbee944dbcc24c9ebe510b70e8ca56e8",
+        "passed": 0,
+        "failed": 2,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - a broken incoming parent can be repaired by detaching",
+        "  error: '无法重新挂接任务子树: missing_parent'",
+        "  code: 'BAD_INPUT'",
+        "not ok 2 - a broken incoming parent can be repaired by reparenting",
+        "  error: '无法重新挂接任务子树: missing_parent'",
+        "  code: 'BAD_INPUT'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=a broken incoming parent can be repaired",
+        "tests/treetest.mjs"
+      ]
+    },
+    {
+      "issue": "H3",
+      "case": "H3-signature",
+      "test_file": "tests/dispatchtest.mjs",
+      "test_name_pattern": "journal tampering, unsigned legacy data",
+      "mutated_file": "core/execution/journal.mjs",
+      "mutation": "Ignore the authenticated journal signature",
+      "green": {
+        "label": "H3-signature-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "90a5b78ab0814212cda50d99537395a3bfc36c1e5fda268906609b76866f2889",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H3-signature-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "29580b76d938e6042f2c2ede142e39ff1d3a4e47e18f682c7cae0545e295e9e1",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - journal tampering, unsigned legacy data and cross-launch signatures cannot settle",
+        "  error: 'Missing expected exception.'",
+        "  code: 'ERR_ASSERTION'",
+        "  expected:",
+        "    code: 'JOURNAL_UNAUTHENTICATED'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=journal tampering, unsigned legacy data",
+        "tests/dispatchtest.mjs"
+      ]
+    },
+    {
+      "issue": "H3",
+      "case": "H3-settlement",
+      "test_file": "tests/dispatchtest.mjs",
+      "test_name_pattern": "a journal file created during execution",
+      "mutated_file": "core/execution/runner.mjs",
+      "mutation": "Allow a secondary journal collision to abort settlement",
+      "green": {
+        "label": "H3-settlement-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "6d2dda64c8024952c8ee312c1fbf1cf1d713477262087180a79253039cadad4a",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H3-settlement-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "1b6c52c314edf68d462b760a220d3f218a44266e35c986f594b2aef2daad1245",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - a journal file created during execution cannot suppress settlement or credential revocation",
+        "  error: \"EEXIST: file already exists, open 'C:\\\\Users\\\\<user>\\\\AppData\\\\Local\\\\Temp\\\\fleet-dispatch-3ekJuJ\\\\private-7\\\\execution-observation.json'\"",
+        "  code: 'EEXIST'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=a journal file created during execution",
+        "tests/dispatchtest.mjs"
+      ]
+    },
+    {
+      "issue": "H4",
+      "case": "H4",
+      "test_file": "tests/mcptest.mjs",
+      "test_name_pattern": "role registration rejects unknown and incompatible",
+      "mutated_file": "core/mcp/policy.mjs",
+      "mutation": "Accept capability names outside the supported executor profiles",
+      "green": {
+        "label": "H4-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "9491a9533760528251832d291d33ed7716f079517bdff15ab0cb9f3a587213bd",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H4-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "d97b0356f6c65575e2194d7562614ee7c5fa98067a5c577f4fefc05d696f25a9",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - role registration rejects unknown and incompatible execution capability profiles before writing",
+        "  error: 'Missing expected exception.'",
+        "  code: 'ERR_ASSERTION'",
+        "  expected:",
+        "    code: 'BAD_INPUT'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=role registration rejects unknown and incompatible",
+        "tests/mcptest.mjs"
+      ]
+    },
+    {
+      "issue": "H5",
+      "case": "H5",
+      "test_file": "tests/repositorytest.mjs",
+      "test_name_pattern": "Git version and required no-lazy-fetch",
+      "mutated_file": "core/git-version.mjs",
+      "mutation": "Skip the required Git version floor",
+      "green": {
+        "label": "H5-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "57b0270dbb98c51e6fb2e08321ac6cfd12682ff1dee271a870fd4c1adff3440c",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H5-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "d67fc23ca3bb3b814cd665d72dc32985a887b728760285249071e222542d27ac",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - Git version and required no-lazy-fetch capability fail early with actionable diagnostics",
+        "  error: 'Missing expected exception.'",
+        "  code: 'ERR_ASSERTION'",
+        "  expected:",
+        "    code: 'GIT_TOO_OLD'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=Git version and required no-lazy-fetch",
+        "tests/repositorytest.mjs"
+      ]
+    },
+    {
+      "issue": "H6",
+      "case": "H6",
+      "test_file": "tests/recoverytest.mjs",
+      "test_name_pattern": "explicit restore upgrade reaches reviewed activation",
+      "mutated_file": "core/backup.mjs",
+      "mutation": "Skip migration of an explicitly upgraded restored backup",
+      "green": {
+        "label": "H6-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "71d560fd357909bfae5e955ebdad4c75ac5848c62b8a9b84272b6838df38559a",
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H6-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "115e6db6a0d05168ff61ff5b08d5ae12cc94fdf6c8ea494a58ba3a1d3d947731",
+        "passed": 0,
+        "failed": 2,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - explicit restore upgrade reaches reviewed activation from pre-federation schema",
+        "  error: |-",
+        "    Expected values to be strictly equal:",
+        "  code: 'ERR_ASSERTION'",
+        "  expected: true",
+        "  actual: false",
+        "not ok 2 - explicit restore upgrade reaches reviewed activation from pre-run identity schema",
+        "  error: |-",
+        "    Expected values to be strictly equal:",
+        "  code: 'ERR_ASSERTION'",
+        "  expected: true",
+        "  actual: false"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=explicit restore upgrade reaches reviewed activation",
+        "tests/recoverytest.mjs"
+      ]
+    },
+    {
+      "issue": "H7",
+      "case": "H7",
+      "test_file": "tests/synctest.mjs",
+      "test_name_pattern": "three nodes isolate event UUIDs",
+      "mutated_file": "core/federation/sync-store.mjs",
+      "mutation": "Restore globally unique inbox event IDs across source nodes",
+      "green": {
+        "label": "H7-green",
+        "exit_code": 0,
+        "error": null,
+        "log_sha256": "cab9784577dbde63cd707de2e48fe74f36e328b098a584de70408517c5bbf870",
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      "red": {
+        "label": "H7-red",
+        "exit_code": 1,
+        "error": null,
+        "log_sha256": "6a4895dfdf31102076c4b932718d786d076b94b1a3350793d4e28452f0c0c980",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 0
+      },
+      "red_excerpt": [
+        "not ok 1 - three nodes isolate event UUIDs by source and preserve same-source conflict checks",
+        "  error: 'UNIQUE constraint failed: federation_inbox.event_id'",
+        "  code: 'ERR_SQLITE_ERROR'"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "--test-name-pattern=three nodes isolate event UUIDs",
+        "tests/synctest.mjs"
+      ]
+    }
+  ],
+  "additional_results": [
+    {
+      "label": "archive-package-contract",
+      "exit_code": 0,
+      "error": null,
+      "log_sha256": "5c313e9354c16aeec02711cce550da1c5ae4a51e5401bb00653e11e287402d9b",
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "label": "worker-prompt-selftest",
+      "exit_code": 0,
+      "error": null,
+      "log_sha256": "cc91604f0ca583594bcdc87ec082be62f8110a5311e40ecb6ed7a24b2c28dae2",
+      "passed": 57,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "counts": {
+    "review_findings": 10,
+    "mutation_controls": 13,
+    "green_test_units": 15,
+    "expected_red_test_units": 15,
+    "package_archive_contract_test_units": 19,
+    "unique_node_test_units": 30,
+    "python_prompt_assertions": 57,
+    "unexpected_final_failures": 0
+  },
+  "initial_failure": {
+    "scope": "validation fixture only",
+    "test": "B1 green",
+    "result": "HTTP resolve 409 instead of 200 because a plain source copy had no Git commit for the source gate",
+    "action": "Initialize a synthetic Git repository in the temporary copy; original test then passes. Not counted as a regression red.",
+    "log_sha256": "bfb4694adbc455fa016baeac795a5938a3cd7f4800239801257a3141f52443ff"
+  },
+  "hash_format": "sha256 of UTF-8 source with LF; test log hashes are raw local bytes",
+  "source_sha256": {
+    "tests/versiontest.mjs": "2135a03c6a027a9f838894ea8e54c1d2bd3a94874918b17397b710b2d5be853c",
+    "core/store.js": "ac79d062584b08d18ae780427370bb02a6b84ad484c797554dd0371441cd4003",
+    "tests/review-contracttest.mjs": "17866885b31a224c47cdfaa25fa1fef1bed611a476e51640057cbb338a47eca2",
+    "packaging/desktop/manifest.json": "afa08355392265d20bd7719e6bbfbfb3a449542212929c566a43c7e849747086",
+    "docs/GLOSSARY.md": "2603c71e72e8b207e02b5409835082198b5df0392cd682ea2be4834e5ccbaef6",
+    "docs/OPERATE_WITH_CLAUDE.md": "a0df0144c1965fadec33b74ea2611097d1d83846ee98da0a86a3a1945f52de33",
+    "cli/board.py": "b0b611c8088c32ce07dcd8867439aab362d042180fdc4cbc8c18ea4a945f0a30",
+    "tests/treetest.mjs": "88ef9301a5f03ccb5b4cd2e3ad56fd4f5a9085dc275d32d5bb81387b257f4b0a",
+    "core/task_tree.js": "cd2551fd39b04e50ae80312f2f37ece3fce6fff7ae9bccd922a89d616a35e469",
+    "tests/dispatchtest.mjs": "d896d73db958fc16e57f737e7fac096dfe9bd5a90febcb6cec5ed5dfc047f4f2",
+    "core/execution/journal.mjs": "1ddb181d43d5a9fda9560bc5c0a7cd8dd7fa2e4b34122c001cad3eb332a1da96",
+    "core/execution/runner.mjs": "42d62d48909f719b8305fdaa3c7c24e6f1472d4aa5d2932af57fb25f667b8ecb",
+    "tests/mcptest.mjs": "cde5b82d4dc5fe542704096dd0ace5e215b627e0e4ee6e4d97b47cc35ba61774",
+    "core/mcp/policy.mjs": "fd54be6ddda25c7031650eb8f9885c420c30283bcadcd2879e3191daca83204d",
+    "tests/repositorytest.mjs": "b91ad1966b164d124a45035dcdf4379bc0f88e1da57bd4e301408c2b5c31c946",
+    "core/git-version.mjs": "36a12dd0a3fdce805b9e2b65d3f1076f58440be27d2ccace026e883c46f1ab4e",
+    "tests/recoverytest.mjs": "1d7fbd1f7ace913fe240a6bb646e0dbab35f733cbd4b1ac4a936b7a13124e24c",
+    "core/backup.mjs": "1855c8d1de764d7a3c61204d43d4dd1500864945bc4d41786aa9213b0c034c7f",
+    "tests/synctest.mjs": "900846d601ab3286f49f896d62de1d9714ddeecbf672664615d3454c24adc48b",
+    "core/federation/sync-store.mjs": "f4fcd456781506eb30f9e7aae428a0de4e81dc1d3db2dc9455cbf7aea71acb98",
+    "core/desktop-package.mjs": "fba3e8450d925d252c7c42c062ef80e525bafbf054aa0fa887dbcc95c6722731",
+    "tests/desktop-archivetest.mjs": "2143ea3d766f6768e3cf3e551685226554df1b0d103cd4e47ded4155e0315149",
+    "tests/desktop-packagetest.mjs": "bf2af6318b6a88abb67a97bce826914b385a516f039ff6104e716a1bcffbee40",
+    "loops/worker_loop.py": "979def27810a6ceb7c443da511629ca3394414f13a1c1d7a48c7b13015c1ab6f",
+    "package.json": "e1aedeeb3e5afdf5887ae58b5b62c9c20e684cfedfb6c1e10985da949fc82e73",
+    ".github/workflows/ci.yml": "11723ea548586bb600ec88c2c8e8d554a715dad2dc059e506521b6ab7d90fab2"
+  },
+  "plan_source_sha256": "6102fe20b0b783b64f2075184817e74542247860a8a44332d40e176c990aae23",
+  "historical_evidence": [
+    {
+      "path": "docs/federation/foundation-evidence.json",
+      "sha256": "0bd0fc05ee130888555b2970ff7b7c1f6394ebedfaaaf27a2f7d3f6a022d86b7",
+      "tested_commit": "98299913aa58e9341c8ec384550616ff972a5a29",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/backup-evidence.json",
+      "sha256": "6c1e2cca47d3bbd4360410823e7467e68397532f3276bba0ad892a794bf05c61",
+      "tested_commit": "f97de7a9bd0c1fbb8428a46f20a156ed17662ff4",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/runs-evidence.json",
+      "sha256": "f2f334ca3d868a9d1447b6d82bbb43336ca8a424da5b7053dbbcbfc52d4271bd",
+      "tested_commit": "7cc5939643e66801a431b59df1baed8b46acc42f",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/versions-evidence.json",
+      "sha256": "2d201fee3521e274c876a1ed554c4bee15ce62d009c2f2964456557796c4e12c",
+      "tested_commit": "939cbd49a2131a59f022ca3e74f6c1dd4a4e95b7",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/peers-evidence.json",
+      "sha256": "5e1bfd3bcabdf11c711e34d5a62a05db4256025af4993b694b1c5259d21911d4",
+      "tested_commit": "77438eb316185d736fec3164d9b1e39edc650e19",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/sync-evidence.json",
+      "sha256": "ddc5b53e02755038017f1e640ec3e541242fa65684f9e8ac7173c6895a0150fe",
+      "tested_commit": "855d1dedf2fc35cd09aada154382b3e41cc0aa2b",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/snapshots-evidence.json",
+      "sha256": "dc85af18b8013cbd1b299f098494e39b7f499b6ec1d2c0a48890368724bcecb8",
+      "tested_commit": "cf78b11570172bfe24c28a1c041558834871ffe1",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/source-recovery-evidence.json",
+      "sha256": "d94a4d3b78e720e0079f5f6a8f2170e700771e5f71b2de1d5d96a2392228cbf4",
+      "tested_commit": "99c72caa7089c14b0b775b996d89035abb564ff6",
+      "scope": "historical evidence; not a rerun on this code SHA"
+    },
+    {
+      "path": "docs/federation/review-recovery-evidence.json",
+      "sha256": "3ff88278878ad15ae68a1f7cc73a6d989f2de1c0dfbed01ec681a3cf4ed2d087",
+      "tested_commit": null,
+      "scope": "historical evidence; not a rerun on this code SHA"
+    }
+  ],
+  "ci": {
+    "status": "pending_new_pr_head",
+    "note": "Local targeted tests do not replace the complete Windows workflow on the pushed PR head."
+  },
+  "local_log_directory": ".data/review55-validation",
+  "formal_acceptance": {
+    "accepted_tasks": 0,
+    "accepted_phases": 0
+  },
+  "limitations": [
+    "No independent reviewer signature or phase acceptance.",
+    "No physical two-PC board protocol/offline acceptance.",
+    "No live deployment configuration digest.",
+    "No model calls, release tag, service restart or production acceptance change."
+  ]
+}

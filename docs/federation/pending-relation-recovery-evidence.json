@@ -1,0 +1,109 @@
+{
+  "format": "ai-fleet-pending-relation-recovery-evidence/v1",
+  "prepared_at": "2026-10-05T05:00:55.993733+00:00",
+  "base_commit": "6f97759e50773253f8ee113adcd5313392fec505",
+  "scope": "One Windows machine with actual isolated SQLite backups/epoch activation, local CLI subprocesses and in-process federation APIs. No physical peer or provider calls.",
+  "tests": {
+    "unique_passing_cases": 12,
+    "new_recovery_cases": 7,
+    "direct_existing_cases": 5,
+    "remaining_failures": 0,
+    "full_repository_suite_repeated": false,
+    "count_note": "Initial single passing case overlaps the seven-case run. The two-node layout case loops two target-delivery states; counted as one case, not two physical PCs.",
+    "source_note": "Final product functions were tested. After the seven-case run only its misleading physical-node test title was clarified and the package default-test command was wired to the already tested file; assertions and product behavior were unchanged."
+  },
+  "logs": [
+    {
+      "name": "review98-pending-before.log",
+      "sha256": "b13ab798ae51008d4f3376cb797f166935e45cc072b75057d6a559decfe9216b",
+      "result": "1 expected missing-coordination API failure after actual registrar restore left a pending proposal blocker"
+    },
+    {
+      "name": "review98-pending-first.log",
+      "sha256": "7bbaffa4d6b71df47e6f7845180f10b5c213013b9207f3713e9815df3be00939",
+      "result": "1 initial passing case, overlaps the final seven"
+    },
+    {
+      "name": "review98-new-cases.log",
+      "sha256": "c37570d065dc66dfc4800dbd74ebda871fcb41c4fe59844192e987f4f84db1b8",
+      "result": "7/7 new cases; all final product functions tested"
+    },
+    {
+      "name": "review98-adjacent-final.log",
+      "sha256": "5b052b7e09a9aaf5653210852a8f9ac780f0a1329df19a699af727c22bf10694",
+      "result": "5/5 direct existing graph/topology/endpoint-exit cases"
+    }
+  ],
+  "source_hashes": [
+    {
+      "path": "core/federation/pending-relation-recovery.mjs",
+      "worktree_sha256": "79cfb9ee03e3638adc5da69f2c3739fce844d58d3e36077f859e000066b236ee",
+      "git_blob_sha256": "e205236843153148a221e33eb2d3dabbc06da33820fc032240a59b7289297490"
+    },
+    {
+      "path": "core/federation/graph-recovery.mjs",
+      "worktree_sha256": "e6528e83d7af25844044ff7ebfdeecf867fb4c34af0cc1e82a137dade6668b66",
+      "git_blob_sha256": "97bde7e95e7e19393d94d2368a6522ac8be83d1a8e3c8b2dfa9b2c9208f10959"
+    },
+    {
+      "path": "cli/pending-relation-recovery.mjs",
+      "worktree_sha256": "87021cd306e1d435d39e3fecba79adf5e0b34120a975301f02f2116ffee10ea6",
+      "git_blob_sha256": "2d754439a5b5be9fa88a93f39d5930f75155d40c7e97bcdf65ff00a961a57638"
+    },
+    {
+      "path": "tests/pendingrelationrecoverytest.mjs",
+      "worktree_sha256": "94daece43dbdc28d8f949fccbc42d694c2b8d1d1a41dbdac66d6739453e8d1f4",
+      "git_blob_sha256": "abff4fa1333cf93cbe58cf6961050317df0c03823c5892d9bffb79ef7ab5e406"
+    },
+    {
+      "path": "tests/graphrecoverytest.mjs",
+      "worktree_sha256": "2cffafe52d50732284c96d7ffe29c5f6ed1b1a1cea9390fe6c8eaa96ccee2125",
+      "git_blob_sha256": "268821c8546398fe83d33fcb3f9f07b96603c7fe066a29063e208c9457c38908"
+    },
+    {
+      "path": "tests/bindingtest.mjs",
+      "worktree_sha256": "0a25ed103a9d9079f9e9498e35e659f37d5de27238b937e8f8e985b936060e4b",
+      "git_blob_sha256": "ad316d66144dfc4d8b0603cd7aab6619e79eda97f54dfc8d839da19aedc684bb"
+    },
+    {
+      "path": "package.json",
+      "worktree_sha256": "6469f3ebdab32c75ecc952daf448c6a319e479fbf67d31035118203af4b160ca",
+      "git_blob_sha256": "c9cdb5b199c022abc1ca30b2c535d076d2d36516b7254aa20ddfada4081beae4"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "worktree_sha256": "81bc92920b6e191754123fcbdcd09010b79969669329fc935c6354c085604dc5",
+      "git_blob_sha256": "9ba2a0930e186dbecfd710a4d9429fd8d4564f34f40dda7a122b859d4eb4c202"
+    }
+  ],
+  "invariants": [
+    "Existing binding recovery remains the local exit authority; no duplicate endpoint settlement protocol.",
+    "Both exported snapshots bind the accepted contract, actual endpoint UID, old graph and observed registrar epoch.",
+    "Registrar confirmation wins over pending recovery even when its acknowledgement was lost.",
+    "Ended unmanaged task rows are rejected as insufficient process-stop proof.",
+    "The source-as-registrar endpoint is re-read at prepare and record; stale local evidence is rejected.",
+    "Retirement audit is atomic and immutable; failed insertion leaves pending graph recovery blocked.",
+    "No normal relation_withdrawn receipt is fabricated and remote_outcome_known stays false.",
+    "Source only claims after new graph publication and explicit human release; target never claims."
+  ],
+  "limits": {
+    "physical_multi_pc_acceptance": false,
+    "real_desktop_verified": false,
+    "providers_called": false,
+    "configuration_changed": false,
+    "formal_acceptance_changed": false,
+    "evidence_authority": "Operator-reviewed files, not signed remote machine proof. Remote changes after export require fresh operator review.",
+    "not_covered": [
+      "completion-sealed contract recovery",
+      "registrar-unchanged member-only recovery",
+      "proposals lacking bilateral accepted-contract or stopped-work evidence",
+      "physical multi-PC and 72-hour acceptance"
+    ]
+  },
+  "ci": {
+    "this_change_verified_by_ci": false,
+    "previous_run_id": 37264754923,
+    "previous_code_sha": "6f97759e50773253f8ee113adcd5313392fec505",
+    "previous_run_covers_this_change": false
+  }
+}

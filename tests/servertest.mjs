@@ -1,3 +1,4 @@
+import { fixtureVersion } from "./http-version-fixture.mjs";
 // Supervisor-layer harness: WHY a line stopped, and who is allowed to restart it.
 // `node tests/servertest.mjs`
 //
@@ -75,7 +76,7 @@ const stubServerFor = (py) => {
     // import.meta.url we just rewrote (createRequire uses that URL; `import` does not).
     // The copy lives in a temp dir with no siblings, so every relative specifier is
     // pointed back at the real core/ — whoever relocates a file rewrites its references.
-    .replace(/from "\.\/([^"]+)"/g, (_, rel) => "from " + JSON.stringify(pathToFileURL(join(dirname(SERVER), rel)).href));
+    .replace(/from\s+(['"])\.\/([^'"]+)\1/g, (_, quote, rel) => "from " + JSON.stringify(pathToFileURL(join(dirname(SERVER), rel)).href));
   const p = join(STUBS, `server-${py.replace(/[^a-z]/gi, "")}.mjs`);
   writeFileSync(p, src, "utf8");
   return p;
@@ -114,7 +115,7 @@ async function board({ script = SERVER, env = {}, dataDir = null, files = {}, co
     env = { ...env, BOARD_CONFIG: join(DATA, "p-fleet.config.json") };
   }
   let out = "";
-  const spawnEnv = { ...process.env, BOARD_PORT: String(PORT), BOARD_DATA_DIR: DATA,
+  const spawnEnv = { ...process.env, BOARD_CODEX_RELEASED: "0", BOARD_CODEX_CMD: "", BOARD_PORT: String(PORT), BOARD_DATA_DIR: DATA,
            BOARD_DB: join(DATA, "t.db"), BOARD_ALLOW_UNPINNED: "1",
            BOARD_POOL_TEST_MODE: "1", BOARD_POOL_TEST_PROBE: "ok",
            ...(PYTHON ? { BOARD_PYTHON: PYTHON } : {}),
@@ -132,11 +133,17 @@ async function board({ script = SERVER, env = {}, dataDir = null, files = {}, co
     await sleep(250);
   }
   try { TOKEN = readFileSync(join(DATA, "board_token"), "utf8").trim(); } catch {}
+  // Fixture client keeps claim receipts; never fetch a replacement ID on report.
+  const receipts = new Map();
   const api = async (m, p, b) => {
+    b=await fixtureVersion(BASE,TOKEN,m,p,b);
+    const mutation = p.match(/^\/api\/tasks\/(\d+)\/(report|heartbeat|attempt)$/);
+    if (mutation) b = {run_id:receipts.get(Number(mutation[1])),...b};
     const r = await fetch(BASE + p, { method: m,
       headers: { "Content-Type": "application/json", "X-Board-Token": TOKEN },
       body: m === "GET" ? undefined : JSON.stringify(b ?? {}) });
     let j = null; try { j = await r.json(); } catch {}
+    if (r.status < 400 && /\/claim$/.test(p) && j?.task) receipts.set(j.task.id,j.task.run_id);
     return { status: r.status, body: j };
   };
   const worker = async (line) =>
@@ -597,6 +604,20 @@ try {
   {
     const B = await mk({});
     const m = (await B.api("GET", "/api/meta")).body || {};
+    // The public response must expose the same identity that the store enforces.
+    const made = await B.api("POST", "/api/tasks", { subject: "identity HTTP fixture", released: 0 });
+    const card = made.body?.task;
+    ok("J3-6 metadata and task responses agree on node ownership and global UID",
+       made.status === 201 && typeof m.node?.node_id === "string" &&
+       card?.owner_node_id === m.node.node_id && card?.task_uid?.startsWith(m.node.node_id + "/"));
+    const forgedAdd = await B.api("POST", "/api/tasks",
+      {subject: "forged owner", owner_node_id: "foreign"});
+    const forgedEdit = await B.api("POST", "/api/tasks/" + card.id + "/update", {task_uid: "foreign"});
+    ok("J3-7 API refuses caller-supplied owner and UID", forgedAdd.status === 400 && forgedEdit.status === 400);
+    const reloaded = await B.api("GET", "/api/tasks/" + card.id);
+    ok("J3-8 rejected mutation preserves the public task identity",
+       reloaded.body?.task?.task_uid === card.task_uid && reloaded.body?.task?.owner_node_id === card.owner_node_id);
+
     ok("J3-1 /api/meta 带 wf_labels 五键", m.wf_labels && ["review", "confirm", "decision", "dep", "rearm"].every((k) => typeof m.wf_labels[k] === "string"), JSON.stringify(m.wf_labels));
     ok("J3-2 /api/meta 带 status_labels 四键", m.status_labels && ["not_started", "in_progress", "waiting", "done"].every((k) => typeof m.status_labels[k] === "string"));
     ok("J3-3 词面是 GLOSSARY 冻结的那几个", m.wf_labels?.confirm === "待确认" && m.wf_labels?.rearm === "等待重审" && m.status_labels?.waiting === "等待中");
@@ -604,6 +625,39 @@ try {
     const cli = readFileSync(join(ROOT, "cli", "board.py"), "utf8");
     ok("⭐J3-4 面板不再有自己的标签表(读 meta)", !/WF_LABEL\s*=\s*\{/.test(panel) && !/"not_started",\s*"未开始"/.test(panel) && /wfLabel\(/.test(panel));
     ok("⭐J3-5 CLI 不再有自己的标签表(读 /api/meta)", !/^WF\s*=\s*\{/m.test(cli) && !/^LABEL\s*=\s*\{/m.test(cli) && /api\/meta/.test(cli));
+  }
+
+  // ══ §J9 the runtime stamp is seat-authoritative, not self-reported ══════════
+  //   last_runtime feeds family rules (machine-evidence prose admission, review
+  //   anti-affinity). For slots the board spawned it must come from the seat the
+  //   server started — a lying claim body cannot flip the family (external audit
+  //   2026-10-05, regression of 83a2d88). Only operator claims may explicitly attest a manual runtime.
+  console.log(NL + "[§J9 last_runtime 由受管席位盖章,自报仅限操作员领取]");
+  {
+    const B = await mk({ env: { BOARD_SPAWN_ECHO: "1", BOARD_UNTIL: "2099-01-01T12:00" } });
+    const r0 = await B.worker("alpha");
+    const rev0 = Number(r0?.settings?.rev || 0);
+    const save = await B.api("POST", "/api/workers/alpha/settings",
+                { agents: [{ runtime: "claude", model: "claude-opus-5", effort: "high", window: false }], rev: rev0 });
+    const start = await B.api("POST", "/api/workers/alpha/start", {});
+    ok("J9-0 (前提) spawn-echo 席位已登记", start.status === 200,
+       `save=${save.status} start=${start.status} ${JSON.stringify(start.body?.error || "")}`);
+    await B.api("POST", "/api/tasks", { subject: "seat-stamp fixture", released: 1 });
+    // Lying claim body: supervised slot "alpha" is a claude seat, the body says codex.
+    const lying = await B.api("POST", "/api/claim",
+      { worker: "alpha", runtime: "codex", worker_protocol_version: 2, agent_instance_id: "0f1e2d3c-4b5a-4a78-8976-a5b4c3d2e1f0" });
+    const lyingTask = (await B.api("GET", "/api/tasks/" + lying.body?.task?.id)).body?.task;
+    ok("⭐J9-1 受管席位的 runtime 盖章为席位值,自报谎称 codex 不生效",
+       lying.status === 200 && lyingTask?.last_runtime === "claude",
+       `claim=${lying.status} runtime=${lyingTask?.last_runtime}`);
+    // Control: an operator may explicitly attest a manual runtime.
+    await B.api("POST", "/api/tasks", { subject: "manual-stamp fixture", released: 1 });
+    const manual = await B.api("POST", "/api/claim",
+      { worker: "hand-runner", runtime: "codex", worker_protocol_version: 2, agent_instance_id: "1f2e3d4c-5b6a-4b78-9976-a5b4c3d2e1f0" });
+    const manualTask = (await B.api("GET", "/api/tasks/" + manual.body?.task?.id)).body?.task;
+    ok("J9-2 (对照)操作员手工领取仍采信自报(受控 allowlist)",
+       manual.status === 200 && manualTask?.last_runtime === "codex",
+       `claim=${manual.status} runtime=${manualTask?.last_runtime}`);
   }
 
   // ══ §J4 token files are 0600 (POSIX) ═══════════════════════════════════════
@@ -871,6 +925,7 @@ try {
     const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
     const WK = tokOf("worker_token"), RV = tokOf("review_token");
     const apiAs = async (t, m, p, b) => {
+      b=await fixtureVersion(B.BASE,t,m,p,b);
       const r = await fetch(B.BASE + p, { method: m,
         headers: { "Content-Type": "application/json", "X-Board-Token": t },
         body: JSON.stringify(b ?? {}) });
@@ -894,7 +949,7 @@ try {
                            { verdict: "approve", note: "", resolved_by: "auto" });
     ok("O3 operator 令牌以 auto 裁定 → 400(auto 专属审阅线)", oa.status === 400, `HTTP ${oa.status}`);
     // ④ worker token: execution face works, ruling/editing face 403s.
-    const wc = await apiAs(WK, "POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
+    const wc = await apiAs(WK, "POST", "/api/claim", { worker_protocol_version:2, agent_instance_id:"11111111-1111-4111-8111-111111111111", worker: "alpha", line: LINE, route: "default" });
     ok("O4 worker 令牌可以认领(执行面放行)", wc.status === 200, `HTTP ${wc.status}`);
     const wr = await apiAs(WK, "POST", `/api/tasks/${card}/resolve`,
                            { verdict: "approve", note: "", resolved_by: "auto" });
@@ -905,7 +960,7 @@ try {
     ok("O7 worker 令牌立根卡(无 parentId)→ 403;派生卡照常",
        wroot.status === 403 &&
        (await apiAs(WK, "POST", "/api/tasks",
-                    { subject: "derived", line: LINE, parentId: card })).status === 201,
+                    { subject: "derived", line: LINE, parentId: card, parent_run_id:wc.body.task.run_id, worker:"alpha" })).status === 201,
        `HTTP ${wroot.status}`);
     // ⑤ review token: ruling face only.
     const rvc = await apiAs(RV, "POST", "/api/claim", { worker: "alpha", line: LINE, route: "default" });
@@ -969,6 +1024,7 @@ try {
     const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
     const WK = tokOf("worker_token");
     const apiAs = async (t, m, p, b) => {
+      b=await fixtureVersion(B.BASE,t,m,p,b);
       const r = await fetch(B.BASE + p, { method: m,
         headers: { "Content-Type": "application/json", "X-Board-Token": t },
         body: JSON.stringify(b ?? {}) });
@@ -979,7 +1035,7 @@ try {
     // stream is open (so a triggered event cannot slip in before we listen).
     const sseCount = async (ms, during = null) => {
       const ctl = new AbortController();
-      const r = await fetch(`${B.BASE}/api/events`, { signal: ctl.signal });
+      const r = await fetch(`${B.BASE}/api/events`, { headers: {"X-Board-Token": readFileSync(join(B.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal });
       const reader = r.body.getReader();
       let buf = "", n = 0;
       const t0 = Date.now();
@@ -1221,6 +1277,7 @@ try {
     const tokOf = (f) => { try { return readFileSync(join(B.DATA, f), "utf8").trim(); } catch { return ""; } };
     const WK = tokOf("worker_token");
     const apiAs = async (t, m, p, b) => {
+      b=await fixtureVersion(B.BASE,t,m,p,b);
       const r = await fetch(B.BASE + p, { method: m,
         headers: { "Content-Type": "application/json", "X-Board-Token": t },
         body: JSON.stringify(b ?? {}) });
@@ -1234,7 +1291,7 @@ try {
     let created = null, seen = 0;
     {
       const ctl = new AbortController();
-      const r = await fetch(`${B.BASE}/api/events`, { signal: ctl.signal });
+      const r = await fetch(`${B.BASE}/api/events`, { headers: {"X-Board-Token": readFileSync(join(B.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal });
       const reader = r.body.getReader();
       const stop = setTimeout(() => ctl.abort(), 1500);
       created = await B.api("POST", "/api/requests", { kind: "propose-lines", params: { days: 14, authorized: true } });
@@ -1328,7 +1385,7 @@ try {
     const D = await mk({ env: { BOARD_GATED_SUBTREE: ".", BOARD_RESTART_MODE: "exit" } });
     const before = (await D.api("GET", "/api/setup")).body.sentries;
     const ctl = new AbortController();
-    const streamed = fetch(`${D.BASE}/api/events?as=sentry`, { signal: ctl.signal })
+    const streamed = fetch(`${D.BASE}/api/events?as=sentry`, { headers: {"X-Board-Token": readFileSync(join(D.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal })
       .then((r) => r.body.getReader().read()).catch(() => null);
     await streamed;
     const during = (await D.api("GET", "/api/setup")).body.sentries;
@@ -1396,7 +1453,7 @@ try {
     const ctl = new AbortController();
     let staleBuf = "";
     try {
-      const rd = (await fetch(`${A.BASE}/api/events?as=sentry&rev=0ldrev`, { signal: ctl.signal })).body.getReader();
+      const rd = (await fetch(`${A.BASE}/api/events?as=sentry&rev=0ldrev`, { headers: {"X-Board-Token": readFileSync(join(A.DATA, "board_token"), "utf8").trim()}, signal: ctl.signal })).body.getReader();
       const t0 = Date.now();
       while (!/sentry\.stale/.test(staleBuf) && Date.now() - t0 < 3000) {
         const { value, done } = await rd.read(); if (done) break;
@@ -1413,7 +1470,7 @@ try {
     ctl.abort();
     await sleep(400);
     const ctl2 = new AbortController();
-    await fetch(`${A.BASE}/api/events?as=sentry&rev=${ua.version}`, { signal: ctl2.signal })
+    await fetch(`${A.BASE}/api/events?as=sentry&rev=${ua.version}`, { headers: {"X-Board-Token": readFileSync(join(A.DATA, "board_token"), "utf8").trim()}, signal: ctl2.signal })
       .then((r) => r.body.getReader().read()).catch(() => null);
     const uc = (await A.api("GET", "/api/setup")).body.upgrade;
     ok("T3 哨也是当前版本 → 再次安静", uc.pending === false, JSON.stringify(uc.steps.map((s) => s.key)));
@@ -1541,7 +1598,7 @@ try {
     const wf = await asWorker("POST", `/api/tasks/${id}/claim`, { worker: LINE, force: true });
     ok("U4 ⭐worker 令牌连点名领取都没有(403)—— force 参数根本到不了判断处",
        wf.status === 403, `HTTP ${wf.status} ${(wf.body?.error || "").slice(0, 40)}`);
-    const wq = await asWorker("POST", "/api/claim", { worker: LINE, line: LINE, force: true });
+    const wq = await asWorker("POST", "/api/claim", { worker_protocol_version:2, agent_instance_id:"11111111-1111-4111-8111-111111111111", worker: LINE, line: LINE, force: true });
     ok("U4b ⭐worker 走队列口带 force 也没用(队列口不认这个字段,照样空手而归)",
        wq.status === 204 || !wq.body?.task, `HTTP ${wq.status}`);
     // A queue emptied by the brake must not read like an empty queue — the same rule

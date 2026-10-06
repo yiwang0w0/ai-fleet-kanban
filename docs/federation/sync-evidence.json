@@ -1,0 +1,76 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-06-task-projection-sync",
+  "date": "2026-09-29",
+  "base_commit": "77438eb316185d736fec3164d9b1e39edc650e19",
+  "hash_format": "sha256 of UTF-8 source bytes with LF line endings",
+  "code_sha256": {
+    "core/federation/protocol.mjs": "388d857efba5243d68ee0bbe88871a47d08755c4ded75731dbe665eda893a120",
+    "core/federation/gateway.mjs": "85a9cab5493b1f4e2baae263cae004660f9e32c937aa25767ef9e100d8192547",
+    "core/federation/sync-store.mjs": "1d834e7cba91e01359583e8d9208fda5f31b5476c8ed3035ae587beb278d2624",
+    "core/federation/sync-client.mjs": "66c49f20a4f033ea6dba8fc2d453fe1607f06195af00918f376a3b47ce74da90",
+    "cli/sync.mjs": "25f44e483daad87e04ec5184b38861b8878e0cc7a068630b796cb5049aba8bbb",
+    "tests/synctest.mjs": "4716ca5f0d46502c9344a0c7663c606370841c3fff3a16188cef688824480056",
+    "docs/federation/sync-batch.schema.json": "99005daa8c6bee2381bdc8a0f043075750efb1b143cd6f9d8386907cd31d12ce",
+    "package.json": "9dc9c61c0076aed6e16ce96ffc7288669cad20b7cb562fa4804b4f122013155c",
+    ".github/workflows/ci.yml": "725c81770c901cf3ea1384e5f9a9c58fc30c1c49ec57c0e665f79c661295987a"
+  },
+  "local_validation": {
+    "full_command": "npm test",
+    "full_result": "passed",
+    "main_suite_before_final_four_tests": 941,
+    "latest_command": "node tests/synctest.mjs",
+    "latest_sync_tests": 26,
+    "failed": 0,
+    "skipped": 0,
+    "expected_final_windows_main_suite": 945,
+    "coverage": [
+      "opt-in project sharing and private structured field exclusion",
+      "transaction and real child process crash before/after task commit",
+      "coalesced immutable outbox and atomic inbox/replica/cursor",
+      "duplicates, lost ACK, out-of-order/gaps, conflicting digests and backward clock",
+      "owner, epoch, project and version authority",
+      "withdrawal/resharing and parent edge visibility",
+      "actual HTTP 61-task pagination and source gateway outage/resume",
+      "CLI pull/watch; authenticated rename; explicit pending state",
+      "bidirectional HTTP convergence by authorized projection hash without queue replication"
+    ]
+  },
+  "ci": {
+    "run_id": 36542280058,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36542280058",
+    "result": "passed",
+    "windows_main_passed": 945,
+    "linux_main_passed": 942,
+    "sync_tests_per_platform": 26,
+    "gitleaks": "passed",
+    "extra_checks": "passed"
+  },
+  "network": {
+    "scope": "temporary localhost only",
+    "tailscale_configuration_changed": false,
+    "real_multi_node_acceptance": false
+  },
+  "real_model_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "phase_gates_passed": 0,
+  "limitations": [
+    "coalesced current-state projections, not every audit/run/relationship event",
+    "all task/child sharing is explicit opt-in; no project inheritance",
+    "withdrawal does not erase retained outbox history or previously received data",
+    "no snapshot/retention/epoch recovery or restore activation yet",
+    "no remote execution/delegation commands, evidence file transfer or global UI yet",
+    "text fields can contain operator-provided private information; no automatic text redaction",
+    "real Tailscale devices, endpoint rules, Windows ACL and three-node acceptance pending",
+    "Node 24 verified; missing SQLite isTransaction rejected"
+  ],
+  "schema_validation": {
+    "json_syntax": "passed",
+    "external_schema_validator": "not_run: bundled Python has no jsonschema module",
+    "runtime_protocol_validation": "26 synchronization tests passed"
+  },
+  "tested_commit": "855d1dedf2fc35cd09aada154382b3e41cc0aa2b"
+}

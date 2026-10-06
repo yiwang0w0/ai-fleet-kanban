@@ -1,0 +1,327 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-57-fleet-completion-actions",
+  "date": "2026-10-01",
+  "base_commit": "fea7378bfbef422cfdbfee10688fa21e6b04e026",
+  "protocol_and_browser_commit": "35d4c6113828013f29b3ad848958306643527c77",
+  "final_code_commit": "89c0b57b2f9e99e2c9eae31a005646eef4aa1f8e",
+  "platform": "Windows",
+  "normalization": "UTF-8 LF",
+  "scope": "Optional approved integration policies connect the existing panel delivery queue to explicit source acceptance and bilateral completion, using existing protocol services and transaction authorization.",
+  "tests": [
+    {
+      "command": "node --test --test-name-pattern=\"panel closure\" tests/completiontest.mjs",
+      "node_runner_units": 4,
+      "passed": 4,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 106237.7835,
+      "log": ".data/review57-closure-targeted.log",
+      "log_sha256": "6ae1a419f64f191cbccb214616f9b4d075489b5f8cb9099a95a04f042feb5b21"
+    },
+    {
+      "command": "node --test --test-reporter=tap --test-concurrency=1 tests/integrationtest.mjs tests/completiontest.mjs tests/fleetactionstest.mjs",
+      "node_runner_units": 57,
+      "passed": 57,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "duration_ms": 842431.2466,
+      "log": ".data/review57-related.log",
+      "log_sha256": "221b54d98b1133ef8956eeb46eb1f85b780ce6de8c1060126a957b1a4abd981f"
+    }
+  ],
+  "counts_note": "Four targeted tests are included in the related suite; overlapping rounds are not summed. Final code only changes two display labels after protocol/browser tests; inline page script parses.",
+  "checks": [
+    "Prepare same integration/acceptance intent reuses its original identifier",
+    "Actual source ref compare-and-swap occurs once; checks and source merge do not accept the task",
+    "Git success followed by receipt failure resumes after controller reopen without another Git update",
+    "Wrong project, unapproved policy, arbitrary reference and revoked policy reject before effects",
+    "Revocation after awaited peer readiness rejects local receipt writes",
+    "Fixture acceptance requires explicit allow_fixture=true and a nonempty decision note",
+    "Each endpoint settles once, preserving the original accepted plan"
+  ],
+  "browser": {
+    "format": "ai-fleet-browser-closure/v1",
+    "passed": true,
+    "browser": "Chrome headless via bundled Playwright; CUA transport unavailable",
+    "real_models": false,
+    "physical_two_pc": false,
+    "actions": [
+      {
+        "label": "准备合并 · app",
+        "receipt": "已保存 · 待处理 · 请求 3e038388-0119-43ab-a51f-a1f86dca4cbe。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "确认合并到来源引用",
+        "receipt": "已保存 · 待处理 · 请求 5f0d8e10-fc2f-4fcf-968f-ec4369ae9e12。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "确认模拟候选验收",
+        "receipt": "已保存 · 待处理 · 请求 b01c10a6-59b3-4f9c-b427-756e64367302。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "发送原验收决定",
+        "receipt": "已保存 · 待处理 · 请求 147e4319-2741-4a34-a315-d24d8fea21ff。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "提交本端结案确认",
+        "receipt": "已保存 · 待处理 · 请求 5196fe66-e200-4fb0-aa69-5f93b5f851b7。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "提交本端结案确认",
+        "receipt": "已保存 · 待处理 · 请求 29fa9b1d-104c-4b8f-8da7-5d6910f44f2b。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "查询双端结案",
+        "receipt": "已保存 · 待处理 · 请求 6046e640-2827-4415-bc48-7fe97ec2327a。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "完成本端结案",
+        "receipt": "已保存 · 待处理 · 请求 722e7f64-b241-4e34-a7a1-e59dda201ab4。请在操作回执中查看后续状态。"
+      },
+      {
+        "label": "完成本端结案",
+        "receipt": "已保存 · 待处理 · 请求 3458c99f-3e73-4709-8141-94568d82da33。请在操作回执中查看后续状态。"
+      }
+    ],
+    "narrow": {
+      "width": 390,
+      "scroll": 390
+    },
+    "page_errors": [],
+    "code_commit": "35d4c6113828013f29b3ad848958306643527c77",
+    "environment": "Two temporary localhost boards on one Windows PC; actual Git files and HTTP, prepared by a synthetic executor fixture before UI actions",
+    "observations": [
+      {
+        "tasks": [
+          {
+            "status": "done",
+            "verdict": "approve"
+          }
+        ],
+        "actions": [
+          {
+            "command": "prepare_integration",
+            "state": "applied",
+            "result": "integration_ready",
+            "accepted": false
+          },
+          {
+            "command": "apply_integration",
+            "state": "applied",
+            "result": "source_applied",
+            "accepted": false
+          },
+          {
+            "command": "prepare_completion",
+            "state": "applied",
+            "result": "completion_prepared",
+            "accepted": false
+          },
+          {
+            "command": "send_completion",
+            "state": "acknowledged",
+            "result": "completion_ready",
+            "accepted": false
+          },
+          {
+            "command": "register_completion",
+            "state": "applied",
+            "result": "completion_ready",
+            "accepted": false
+          },
+          {
+            "command": "poll_completion",
+            "state": "acknowledged",
+            "result": "completion_retired",
+            "accepted": false
+          },
+          {
+            "command": "settle_completion",
+            "state": "applied",
+            "result": "completion_settled",
+            "accepted": true
+          }
+        ],
+        "runs": [],
+        "completion_receipts": [
+          {
+            "accepted": true
+          }
+        ],
+        "verifications": [
+          {
+            "checks_passed": true
+          }
+        ]
+      },
+      {
+        "tasks": [
+          {
+            "status": "done",
+            "verdict": "approve"
+          }
+        ],
+        "actions": [
+          {
+            "command": "register_completion",
+            "state": "acknowledged",
+            "result": "completion_retired",
+            "accepted": false
+          },
+          {
+            "command": "settle_completion",
+            "state": "applied",
+            "result": "completion_settled",
+            "accepted": true
+          }
+        ],
+        "runs": [
+          {
+            "execution_mode": "fixture",
+            "n": 1
+          }
+        ],
+        "completion_receipts": [
+          {
+            "accepted": true
+          }
+        ],
+        "verifications": []
+      }
+    ],
+    "observations_log": ".data/review57-ui-observed.json",
+    "observations_sha256": "c648f88785fe77370341c48d62116578d0019edcd0754041f52a5b6484f490cb",
+    "screenshots": [
+      {
+        "path": ".data/review57-closure-wide.png",
+        "sha256": "6916a236a98f2ff43d9faaf046085e54c6f041317592da6017fed4e0de821865",
+        "committed": false
+      },
+      {
+        "path": ".data/review57-closure-narrow.png",
+        "sha256": "7453f81973ee13ca6073032fe8a3367f3154f131ddb6eaaa03b2decc6248df57",
+        "committed": false
+      },
+      {
+        "path": ".data/review57-closure-detail-wide.png",
+        "sha256": "f6f1af4deff690bc1e54ea0a514af60b3792aea055ccd936f7e4d826157f465c",
+        "committed": false
+      },
+      {
+        "path": ".data/review57-closure-detail-narrow.png",
+        "sha256": "9c05c0cea3f760f752f75a4d3122e9dc1fc90afc7006109c06b1f624eb967a44",
+        "committed": false
+      }
+    ],
+    "cleanup": "Separate headless Chrome and both temporary board/peer services exited successfully.",
+    "limitations": [
+      "CUA transport unavailable; used already installed bundled Playwright and Chrome in a separate headless context",
+      "Screenshots precede a two-label text correction for historical verification and integration cards",
+      "Not a physical two-PC, Tailscale offline, desktop-client or real-model acceptance"
+    ]
+  },
+  "prior_ci": {
+    "commit": "fea7378bfbef422cfdbfee10688fa21e6b04e026",
+    "run_id": 36811796850,
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 110208249786,
+        "name": "gitleaks",
+        "conclusion": "success"
+      },
+      {
+        "id": 110208250035,
+        "name": "harness (windows-latest)",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "current_batch_ci": "Pending push; previous successful CI does not validate this batch",
+  "physical_pilot": {
+    "preflight_comparison": "Node/SQLite/Git supported and distinct reciprocal Tailscale peers at recorded times",
+    "remote_receipt_source": "User supplied JSON, not assistant remote execution",
+    "B_initialization": "pending",
+    "board_handshake_verified": false,
+    "desktop_mcp_verified": false,
+    "real_offline_resume_verified": false
+  },
+  "real_provider_calls": {
+    "claude": {
+      "used": 1,
+      "limit": 1,
+      "result": "success"
+    },
+    "codex": {
+      "used": 1,
+      "limit": 1,
+      "result": "failure_root_cause_unconfirmed"
+    },
+    "zcode": {
+      "used": 0,
+      "limit": 1,
+      "result": "china_login_location_pending"
+    }
+  },
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "remaining": [
+    "Stage progress and manual approval UI, full dependency graph and structural editing",
+    "History pagination and queue retention",
+    "Actual Windows two-PC Tailscale and desktop executor acceptance",
+    "OS isolation, deployment, recovery and 72-hour observation"
+  ],
+  "source_files": [
+    {
+      "path": "core/fleet-completion-actions.mjs",
+      "sha256": "cf53a9814b3c61008aeb406edf941cb5a5b13f294bd82ec4b87a12d2ddbc9d13"
+    },
+    {
+      "path": "core/fleet-delivery-actions.mjs",
+      "sha256": "b3b556ef086d38353596bd8c139585476bbdbe7640da2f150f08fa4014c63eb8"
+    },
+    {
+      "path": "core/fleet-actions.mjs",
+      "sha256": "85415cfbf05077f97cbc22409268b1f46ae2ab677a091e7fb82db13a7af6c86d"
+    },
+    {
+      "path": "core/integration/service.mjs",
+      "sha256": "219012b18b2106b36e21139cf07fcc1c5056a77299da26a1181c9c55e4bef5f6"
+    },
+    {
+      "path": "core/federation/completion.mjs",
+      "sha256": "63aae368812a3240f833cdf0d2418e343a719aa33b6fc10b9ee159cad24ada4f"
+    },
+    {
+      "path": "core/federation/completion-client.mjs",
+      "sha256": "b9e5ae5a30bede5ef5d9c12ba3bd223519dcb21ed69c70b74c3a39c1284d210f"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "d9d987d6fca8c5970b552a00aae4d0635eaa251f3dc8afed41d18dd0cc21c5cd"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "53ce8a03fd8dfc9d61c96402f67e25a826f25f452c69ab44767c3ed6897ecda1"
+    },
+    {
+      "path": "docs/federation/fleet-actions.md",
+      "sha256": "04d88c4fe8038b18592b7f11931685f765c7b538ac2d212f2f97ecb33e69739d"
+    },
+    {
+      "path": "docs/federation/PROGRESS.md",
+      "sha256": "c47b1ac060d437bacfbbfad9a6fb61a76dfde5e0bb66b34d837494e382d1c1d6"
+    },
+    {
+      "path": "docs/多终端共享看板-任务清单.json",
+      "sha256": "86ddb585ea864d09a6590dc314e20822c616052d9a92ba1e44de0bdc7106c3f7"
+    }
+  ]
+}

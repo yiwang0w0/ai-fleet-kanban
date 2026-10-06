@@ -1,0 +1,118 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-31-pr2-review-fixes",
+  "date": "2026-09-30",
+  "platform": "Windows",
+  "code_base_commit": "0f6935e67a2f044aa462ba37eb49910940130f3a",
+  "preceding_documentation_commit": "eb9de5304acaffd19b2f6e2129ff43fe5c80dc7d",
+  "review_baseline": "601890a",
+  "normalization": "UTF-8 LF",
+  "code_sha256": {
+    ".github/workflows/ci.yml": "50a55ed51ba3cb9d4fa1251cfd76dba44d36393fd2e095e3604df275c163b68c",
+    "core/execution/dispatch.mjs": "e4be1e313ecbd7b0f35dbd3331915434139c416ab90c8c8d663421128a5b9193",
+    "core/execution/journal.mjs": "1ddb181d43d5a9fda9560bc5c0a7cd8dd7fa2e4b34122c001cad3eb332a1da96",
+    "core/execution/process_host.py": "3a18da5de411a8dae7f90d713e190858010d0e399723e4d7ec269152141ca2d6",
+    "core/execution/runner.mjs": "42d62d48909f719b8305fdaa3c7c24e6f1472d4aa5d2932af57fb25f667b8ecb",
+    "core/execution/supervisor.mjs": "135e28b6cc447bad57d0aafd04504fcbf15c0940ba23f48e7f2d14f68440adc1",
+    "core/federation/peers.mjs": "a436df0cefd6c957223dffa234dbdd6e8f382e0ec24b0d789e7541d08cc4f9ff",
+    "core/federation/snapshots.mjs": "74f738c2bd4e527b136487693f8f52dbe4f5cc90b2431e06ddc19d21c23e21bd",
+    "core/federation/sync-store.mjs": "f4fcd456781506eb30f9e7aae428a0de4e81dc1d3db2dc9455cbf7aea71acb98",
+    "core/panel.html": "389d1222020106728af601f5063d18e3817bc1ee62c56ed53c879667d7da1fad",
+    "core/store.js": "a26bafeb1862714f13427637c062f554af46951e8e39b4649c24d107db05bf2c",
+    "core/task_tree.js": "cd2551fd39b04e50ae80312f2f37ece3fce6fff7ae9bccd922a89d616a35e469",
+    "tests/dispatchtest.mjs": "f33ee7fa21155477da19e77320967f25f3358c05d3f2261fc0930f880287b761",
+    "tests/mcptest.mjs": "b729751b2b54061ab02df40ea8ae6e577c34aa7d5440fe9dfb7109071833779b",
+    "tests/peertest.mjs": "77b6bba606739e0224511853a0a186bf474309d66c1771e0e18d5f202c9b45e8",
+    "tests/selftest.mjs": "13d0884d7fb8e5168f2c9fff45108d3f7c8d51808fab145de8ea1b97ebf91516",
+    "tests/snapshottest.mjs": "22b1a721679ef89988e1afd21796efc4471766b2137af6a2f9dbb920b32f184d",
+    "tests/supervisortest.mjs": "a258c0f134bc19b01b781851b926d51ac5f1e830dd17997fb5977dd5812dd566",
+    "tests/synctest.mjs": "900846d601ab3286f49f896d62de1d9714ddeecbf672664615d3454c24adc48b",
+    "tests/treetest.mjs": "88ef9301a5f03ccb5b4cd2e3ad56fd4f5a9085dc275d32d5bb81387b257f4b0a",
+    "tests/versiontest.mjs": "79b7770fbd1c2fe56f895b283848796da2c997a321c770658a3829a6e4fc6d98"
+  },
+  "code_git_blobs": {
+    ".github/workflows/ci.yml": "fbbdd4ccba7c9e739f74b8ab6aa8be495dfeabe7",
+    "core/execution/dispatch.mjs": "78555b87a33d7a3290092b01c140edd4dac4c9f0",
+    "core/execution/journal.mjs": "18267d71dd2882c5d0b02c6c372aaf533b4e2a31",
+    "core/execution/process_host.py": "eb69abe0f43452bb1ac21ff58fa6bc1ca736bf9f",
+    "core/execution/runner.mjs": "b504579f44faac1ebbe2c7c85d37d67e57cffb7a",
+    "core/execution/supervisor.mjs": "b98c5d4656a058c599c52a53c987b885a7255aab",
+    "core/federation/peers.mjs": "51202e578b68c85dfb67f70f51caa1822b68c904",
+    "core/federation/snapshots.mjs": "8acf6b506fdbfaf36246ed92c6a124a0d6963e89",
+    "core/federation/sync-store.mjs": "dd09f438cb23b7b0e716342da873b04989cc5cd0",
+    "core/panel.html": "7491b9ad0f5c2b8dd3c82d514f165fd469ba5668",
+    "core/store.js": "d9fe3d734d4caa862f0ec9df0e36a7b50b7f193e",
+    "core/task_tree.js": "4473014b31153182bf9c51eb99124cf006ecef43",
+    "tests/dispatchtest.mjs": "57e17394b9381774530cca51fb85cdcf4d56fc5f",
+    "tests/mcptest.mjs": "df79a64ffb60910c9d482a8a27d546147bcb3149",
+    "tests/peertest.mjs": "675d6e53fdfb336e3cdb1c1f1545063d13ee3253",
+    "tests/selftest.mjs": "fe69d3c7b749b3c18060f3e86bdd2c58a24f561f",
+    "tests/snapshottest.mjs": "5a980a48e3fd8e8d6ac018062b66a19133c79892",
+    "tests/supervisortest.mjs": "d3dc38222b93bc2ea7ef48e99137068e53bbaf4f",
+    "tests/synctest.mjs": "563a1a368771c34504570581206240079ddb717c",
+    "tests/treetest.mjs": "faac6d4e1bd13ca1d63b561769eb1c978e21e4a3",
+    "tests/versiontest.mjs": "f000393f3bbde96a3fb6c4991385bd9eca12864d"
+  },
+  "local_validation": {
+    "node_test_files": [
+      "dispatchtest",
+      "synctest",
+      "snapshottest",
+      "peertest",
+      "versiontest",
+      "treetest",
+      "mcptest",
+      "supervisortest"
+    ],
+    "node_pass": 205,
+    "store_pass": 402,
+    "total_pass": 607,
+    "new_cases": 15,
+    "failed": 0,
+    "skipped": 0,
+    "no_transaction_mutant": {
+      "successful_claims": 1,
+      "errors": 11,
+      "late": 0,
+      "committed_attempts": 12,
+      "detected_partial_writes": true
+    },
+    "logs_sha256": {
+      ".data/review31-final.log": "2d30f1169213621696e4a1aa03fc9e68baff2dba09a09183a34d3e6b1c29620b",
+      ".data/review31-selftest.log": "ef1ed205f6a56642852c348600a39e2d0cbade32771163fe7475fc930901c5bf"
+    }
+  },
+  "new_commit_ci": "failure",
+  "complete_phase_gates": 0,
+  "total_phase_gates": 12,
+  "real_provider_calls": {
+    "claude": 0,
+    "codex": 0,
+    "zcode": 0
+  },
+  "runtime_deployed": false,
+  "global_mcp_changed": false,
+  "limitations": [
+    "Review ledger contains unresolved B/H/M/N issues; PR remains draft.",
+    "Local fixture success is not physical two-PC or model acceptance.",
+    "Journal signing trusts the local database; Windows OS credential isolation is incomplete.",
+    "Legacy unsigned execution journals cannot be imported or automatically retried."
+  ],
+  "secret_scan": {
+    "tool": "Windows gitleaks 8.24.3",
+    "scope": "staged diff",
+    "exit_code": 0,
+    "findings": 0
+  },
+  "exact_commit_ci": {
+    "commit": "1eb105650eb7fde221427eccc92542b4feacbcfd",
+    "run_id": 36690834566,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36690834566",
+    "windows_job_id": 109807397164,
+    "windows": "failure",
+    "gitleaks_job_id": 109807396855,
+    "gitleaks": "success",
+    "failed_step": "recoverytest",
+    "cause": "Revoked credentials now return UNAUTHENTICATED before lifecycle state; old retirement test expected NODE_RETIRED. Corrected in batch 32. Later steps were skipped."
+  }
+}

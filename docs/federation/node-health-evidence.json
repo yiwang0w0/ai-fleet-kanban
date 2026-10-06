@@ -1,0 +1,110 @@
+{
+  "format": "ai-fleet-node-health-evidence/v1",
+  "batch": 90,
+  "base_commit": "de47d479649209200146ccd8f3f509e3e2804631",
+  "checked_at": "2026-10-01T16:04:14.557441+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "red": [
+    {
+      "path": ".data/review90-health-red.log",
+      "sha256": "9dbe5fe6bac2ab79ea484426d237e85ca4358dbed07ba6cd720776b5fd596e5d",
+      "failed": 3
+    },
+    {
+      "path": ".data/review90-clock-red.log",
+      "sha256": "cbc7c1386362bb7b0916010a9b453113b8aea396b76d5f807349dece65fab98f",
+      "failed": 1,
+      "overlap": 1
+    }
+  ],
+  "runs": [
+    {
+      "path": ".data/review90-health-green.log",
+      "sha256": "4df7531be9bec20236a31a153da7d89819c02b12a25df976ae164a025c72436d",
+      "passed": 5,
+      "failed": 0,
+      "overlap": 0
+    },
+    {
+      "path": ".data/review90-watcher.log",
+      "sha256": "834763a25c432bb84da665612c7a943c02bc727a69e6cbc6faf980dbcf3f5ed8",
+      "passed": 2,
+      "failed": 1,
+      "overlap": 0
+    },
+    {
+      "path": ".data/review90-health-integration.log",
+      "sha256": "3ed6b0a23ada526b923d682e7c5671b289808f0c344e8e8b7a66852e44e4dff5",
+      "passed": 2,
+      "failed": 1,
+      "overlap": 0
+    },
+    {
+      "path": ".data/review90-watcher-fix.log",
+      "sha256": "1c514f759d9592853ef08df870c2f0d19fcbcc5f02f954d097c6bfb5957c5f6d",
+      "passed": 1,
+      "failed": 0,
+      "overlap": 0
+    },
+    {
+      "path": ".data/review90-health-http-fix.log",
+      "sha256": "5a394905b23be49b3da689f7bfe0873fd04c516dbf1f2f3b8024c6c95ddd3315",
+      "passed": 1,
+      "failed": 0,
+      "overlap": 0
+    },
+    {
+      "path": ".data/review90-clock-green.log",
+      "sha256": "d253338b140b84d034c2a243da66cf888251232382771291f12b0cec7a8e8e37",
+      "passed": 1,
+      "failed": 0,
+      "overlap": 1
+    }
+  ],
+  "total_distinct_passed": 11,
+  "skipped": 0,
+  "initial_failure_notes": [
+    "Watcher assertion used recovered instead of the existing clear signal; corrected test name only.",
+    "Authenticated Python integration command lacked PYTHON on Windows; reran just that case with the existing absolute interpreter."
+  ],
+  "sources": [
+    {
+      "path": "core/fleet-health.mjs",
+      "sha256": "2f3a2cf4bf8c82887c5c7d0e3f5c39ec7331175b98765cb4596e71071be10f02"
+    },
+    {
+      "path": "watchers/board_health_watch.py",
+      "sha256": "26607ed1bb00fe004f335d7dcac182baeef16966b2be14dbc54a31bb08049a0f"
+    },
+    {
+      "path": "tests/fleethealthtest.mjs",
+      "sha256": "dd185d841c05960971c40f03eb9d66451ab7812b221426bf0d0ac0379d8998b2"
+    },
+    {
+      "path": "tests/healthwatchtest.py",
+      "sha256": "2b1b0e0febf99323456d05a45ad75fdecd2a6749daa77869344c55959b878581"
+    },
+    {
+      "path": "tests/noderuntimetest.mjs",
+      "sha256": "8d484ece0a49f3a4a2d78ca8742e1d4bfbc258adc77a1042f31584455bae95c0"
+    },
+    {
+      "path": "tests/panelauth.test.mjs",
+      "sha256": "7e1181a03d5f47377a6185e6dfb4a2337d606680773401717c3c821adc7b59c6"
+    }
+  ],
+  "scope": {
+    "new_synthetic_health_cases": 3,
+    "actual_temporary_node_runtime": true,
+    "authenticated_http_to_python_watcher": true,
+    "read_only": true,
+    "remote_queries": false,
+    "models_called": false,
+    "production_deployed": false,
+    "real_multi_pc_acceptance": false,
+    "T11_02_accepted": false,
+    "formal_accepted_tasks": 0,
+    "formal_accepted_stages": 0
+  }
+}

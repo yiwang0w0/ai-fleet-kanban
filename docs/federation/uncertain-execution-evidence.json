@@ -1,0 +1,225 @@
+{
+  "format": "ai-fleet-uncertain-execution-evidence/v1",
+  "recorded_at": "2026-10-01T10:05:47.937706+00:00",
+  "base_commit": "175411a9897c25ff344580becabc89210ba3af68",
+  "batch": 73,
+  "finding": "seven-module/H4d",
+  "status": "implemented_and_locally_verified_not_deployed",
+  "contract": {
+    "local_commands": [
+      "prepare-uncertain",
+      "record-uncertain"
+    ],
+    "local_operator_only": true,
+    "mcp_or_peer_recording_tool": false,
+    "plan_readonly_connection": true,
+    "plan_binds_current_node_epoch_run_launch_task_and_principals": true,
+    "operator_attestation_required": [
+      "supervisor_stopped",
+      "process_tree_stopped",
+      "remote_session_stopped",
+      "no_automatic_retry"
+    ],
+    "resolution_code": "OPERATOR_ATTESTED_LOST",
+    "stop_evidence": "operator_attested_not_machine_verified",
+    "new_resolution_schema": 1,
+    "existing_dispatch_schema": 3,
+    "original_observation_preserved": true,
+    "fabricated_supervisor_observation": false,
+    "quota_refunded": false,
+    "automatic_retry": false,
+    "task_accepted": false,
+    "original_run_task_human_gated_and_unreleased": true,
+    "replacement_run_preserved": true,
+    "run_principals_revoked_atomically": true,
+    "task_and_dispatch_history_atomic": true,
+    "same_decision_idempotent": true,
+    "different_decision_rejected": true,
+    "late_authenticated_journal_retained": true
+  },
+  "cancellation": {
+    "operator_stop_receipt_schema": 2,
+    "ordinary_stop_receipt_schema": 1,
+    "outer_registrar_receipt_schema": 1,
+    "operator_attested_runs_counts_local_runs": true,
+    "stop_evidence": "includes_operator_attestation",
+    "downstream_operator_evidence_propagated": true,
+    "registrar_required_capability": "delegation-operator-stop-v1",
+    "unsupported_registrar_rejected_before_submit": true,
+    "status_endpoint_still_readonly": true,
+    "explicit_progress_and_bilateral_retirement_still_required": true,
+    "automatic_scheduler_stop_accepts_operator_attestation": false
+  },
+  "negative_control": {
+    "command": "node --test --test-name-pattern=\"operator recovery plan exists\" tests/dispatchtest.mjs",
+    "base_commit": "175411a9897c25ff344580becabc89210ba3af68",
+    "passed": 0,
+    "failed": 1,
+    "skipped": 0,
+    "duration_ms": 1645.0993,
+    "observed": "Existing CLI has no reviewed plan or record-uncertain exit after a consumed permit."
+  },
+  "incremental_windows_tests": [
+    {
+      "name": "initial local recovery cases",
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 8137.123
+    },
+    {
+      "name": "actual post-permit process exit and HTTP/nested cancellation",
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 7448.7596
+    },
+    {
+      "name": "dispatch, cancellation, scheduler and peer full related suites",
+      "passed": 146,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 240973.3759,
+      "command": "node --test --test-concurrency=1 tests/dispatchtest.mjs tests/cancellationtest.mjs tests/schedulertest.mjs tests/peertest.mjs"
+    },
+    {
+      "name": "final recovery boundaries",
+      "passed": 11,
+      "failed": 1,
+      "skipped": 0,
+      "duration_ms": 16464.9587,
+      "failure": "Fixture directly changed an immutable node identity. Product guard correctly rejected it before the intended epoch assertion."
+    },
+    {
+      "name": "corrected epoch boundary through actual backup, restore and activation",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 1663.0034,
+      "product_guard_relaxed": false
+    },
+    {
+      "name": "final strict outer-v1 / nested-stop-v2 HTTP receipt contract",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 2263.8162
+    }
+  ],
+  "unique_cases_with_passing_record": 148,
+  "one_combined_final_green_run": false,
+  "whole_repository_suite_repeated": false,
+  "real_runtime_experiments": {
+    "separate_node_process_commits_permit_then_exits_73": true,
+    "cli_records_recovery_in_explicit_fixture_database": true,
+    "actual_loopback_http_cancel_poll_and_registrar_votes": true,
+    "actual_three_node_instance_bottom_up_cancellation": true,
+    "actual_backup_restore_and_epoch_activation": true,
+    "native_provider_called": false,
+    "provider_mode_records": "synthetic fixture launch metadata only; no external model connection"
+  },
+  "final_change_notes": [
+    "Read-only resolution reader rejects unknown schema.",
+    "Malformed nested stopped=null rejects through protocol validation.",
+    "Outer registrar schema remains exactly 1; only nested operator stop receipt is schema 2.",
+    "Final corrections reran affected cases only."
+  ],
+  "source_hashes": [
+    {
+      "path": "cli/dispatch.mjs",
+      "sha256": "db4141ff82b1ceaa5622374901a3f51b217bcd762bf32bd0883cdd2803c57b0f"
+    },
+    {
+      "path": "core/execution/dispatch.mjs",
+      "sha256": "9f18334322c294d202206f5ca132d64f2d6969c5a194edc7173d60cb14420977"
+    },
+    {
+      "path": "core/execution/resolutions.mjs",
+      "sha256": "b9fcd7fe90e5857c4b06769c0f59518f52b0d89c74ce79d61c42af15ae5ba686"
+    },
+    {
+      "path": "core/execution/stop-proof.mjs",
+      "sha256": "88fef1bf799d5e5a62695c312235e5680fbdd294d2427619426b9d2b35c03947"
+    },
+    {
+      "path": "core/execution/runner.mjs",
+      "sha256": "42d62d48909f719b8305fdaa3c7c24e6f1472d4aa5d2932af57fb25f667b8ecb"
+    },
+    {
+      "path": "core/execution/scheduler.mjs",
+      "sha256": "8c5629b5df188d3bdea0fe288baaec33d0d24a92aaf6803b65976cb60bc73b1d"
+    },
+    {
+      "path": "core/federation/cancellation.mjs",
+      "sha256": "4b51e108cc48d74bf90f2e3ca3257822276399a4379228be1b4c00182df01bb3"
+    },
+    {
+      "path": "core/federation/cancellation-contract.mjs",
+      "sha256": "131b9cc5957d8efa3d8f711177a3865fc17d74a68455e6241fa073c5d43d7488"
+    },
+    {
+      "path": "core/federation/cancellation-closure-client.mjs",
+      "sha256": "f884a05acc85d40e83d0ec877d51c98ba32424642fb56049269b032084246976"
+    },
+    {
+      "path": "core/federation/protocol.mjs",
+      "sha256": "108e18e5d1303260cf37f16a435b9576313f7a182a97387840488e1ac02c1ab6"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "be6a979c45eb67c52438a53db9399f19e2a918da1432ff78ac31ac98207eaa1f"
+    },
+    {
+      "path": "tests/cancellationtest.mjs",
+      "sha256": "806fefb46753a8fb02411481cd049d148523f838aac03e2b3aacaab9975cfa3b"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review73-h4d-before.log",
+      "sha256": "bf2be6bed06d3d4305347d32b46afdf7735cf55dc9bc05c775a4b853a14a00c2"
+    },
+    {
+      "name": "review73-recovery-first.log",
+      "sha256": "7f10e7f1ca0a47ad181076fd850bdbf7852ce7bd3f8a33e4ba7c01616e054a9f"
+    },
+    {
+      "name": "review73-closure-first.log",
+      "sha256": "4989f6d2760cbebb9b33a89cf8e883184a1302177fdf3dd114827f31a0657693"
+    },
+    {
+      "name": "review73-regression.log",
+      "sha256": "5076ebd8c2436e527e39cae2d71bdacecde41909d08f16fe8bc778fc609734d6"
+    },
+    {
+      "name": "review73-recovery-final.log",
+      "sha256": "e235466f00d1c3956214c1a3cde78f70a414803b2404e1fb525dccc959d5290d"
+    },
+    {
+      "name": "review73-epoch-final.log",
+      "sha256": "23f44c76f122a6000f0687025889dc6c7e378b9c9d60b32b3629ab79a56474fa"
+    },
+    {
+      "name": "review73-wire-final.log",
+      "sha256": "a748dbf3ac33a693e394cd6d86d034496e82255964c60564484a011314facb8d"
+    }
+  ],
+  "remaining": [
+    "H4c explicit recovery of an uncertain binding attempt after registrar epoch change",
+    "Manual recovery of abandoned scheduler/node instance locks remains separate; no automatic lock takeover",
+    "H5b skipped intermediate epoch recovery",
+    "Remaining seven-module findings and physical two-machine/provider acceptance"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "tailscale_changed": false,
+  "scheduled_tasks_changed": false,
+  "models_called": false,
+  "physical_two_pc_acceptance": false,
+  "current_commit_ci": "pending_after_push"
+}

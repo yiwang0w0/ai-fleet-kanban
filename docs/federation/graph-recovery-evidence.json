@@ -1,0 +1,136 @@
+{
+  "format": "ai-fleet-graph-recovery-evidence/v1",
+  "batch": 89,
+  "base_commit": "8d5e326df9dec2aceb24cddbaeb1fe6b2c0004c1",
+  "checked_at": "2026-10-01T15:47:57.882436+00:00",
+  "platform": "win32",
+  "node_version": "24.16.0",
+  "red": [
+    {
+      "path": ".data/review89-graph-red.log",
+      "sha256": "c0f06256eed177bb5a56de3d17c2f10a20cb9132e8c809c19ca07495e4287ffc",
+      "failed": 3
+    },
+    {
+      "path": ".data/review89-stop-red.log",
+      "sha256": "9d40a296c691e6a5775ad873a8de5a488d9b31117fde97df9bbd4a816e1fa4ca",
+      "failed": 1
+    }
+  ],
+  "runs": [
+    {
+      "path": ".data/review89-graph-final.log",
+      "sha256": "05dd61a84a7ed0b0b040da4959a2a2117f86edc065b971ad7f1a6061cdc126ce",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "path": ".data/review89-direct.log",
+      "sha256": "cba4d8f7eccf6d172989ffa03802140d71dd2b52e303415e2be1b604c16704b1",
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "path": ".data/review89-ci146-green.log",
+      "sha256": "640b68492452b5a425aadb698e15ba58f48fb373fb431b9bfd5ca5a9322d55bc",
+      "passed": 1,
+      "failed": 0
+    }
+  ],
+  "total_distinct_passed": 13,
+  "skipped": 0,
+  "ci_failure": {
+    "run": 36883759463,
+    "head": "8d5e326df9dec2aceb24cddbaeb1fe6b2c0004c1",
+    "log": {
+      "path": ".data/review89-ci146-job-110441757132.log",
+      "sha256": "617a02ef3a9b800936e15f0d86fce4eaaa6b31dbcc02696ec593816990184f27"
+    },
+    "observed_error": "ECONNRESET in another recovery supersedes unfinished project staging",
+    "fix": "Fresh HTTP connections for the explicit restart fixture; pinned origin and original assertions retained"
+  },
+  "sources": [
+    {
+      "path": "core/federation/graph-recovery.mjs",
+      "sha256": "719261069180a5c19b4e8cf0ed106d68dbcc6c0881f3ddc70a464335b7adc1e8"
+    },
+    {
+      "path": "core/federation/graph-generations.mjs",
+      "sha256": "6730fc0c00ecb9e0e6f58b2101bf4d749a5752cc10e9ff381ec44b4354eebf3d"
+    },
+    {
+      "path": "core/federation/topology-generations.mjs",
+      "sha256": "cfdc18f76f199ccd2ff93dd38acff61df80a22896639de1570468d7dcc5a2a28"
+    },
+    {
+      "path": "core/federation/relations.mjs",
+      "sha256": "66acfb16a48eec8f82925e28267a6fbfbfa1d73010facd8609c835510e8ec9c1"
+    },
+    {
+      "path": "core/federation/topology.mjs",
+      "sha256": "e80acbd0d25cde29a75252f77aaf472f26c2a3cc3334ba75e2a0503cdfd3bec3"
+    },
+    {
+      "path": "core/federation/binding-recovery.mjs",
+      "sha256": "770a9f7b778129197d2d4ed327f2ab0a54fda38a3743dfc5d2b605b166a79a25"
+    },
+    {
+      "path": "core/mcp/tools.mjs",
+      "sha256": "eec2f0108b319b67a6e86d37bf72fcb0a11fde09a6eea248dfec27ab98c04a29"
+    },
+    {
+      "path": "core/topology_guard.js",
+      "sha256": "714001a643f98892ae5c0e96efd034987b4ba07815f95d9df6d73a06a13f0a22"
+    },
+    {
+      "path": "core/inspection.mjs",
+      "sha256": "1d2d10c257e0bf69de3b410858f37ca9c44444a43861fcec8d4d0b8a3cf780c6"
+    },
+    {
+      "path": "core/fleet-evidence.mjs",
+      "sha256": "d1adb8847079d0624c9abfb821eb2400467cde49b4bb3d3483c26d7098ad5086"
+    },
+    {
+      "path": "cli/graph-recovery.mjs",
+      "sha256": "aa85a51879b98e62ab8ef551f8a2d7d073e975d762c728fe4a78622ccc67da04"
+    },
+    {
+      "path": "tests/graphrecoverytest.mjs",
+      "sha256": "13f10793572e23d667d10e15d91f304b6ff050619461f4f7d73e5b4e297ca02f"
+    },
+    {
+      "path": "tests/epochrecoverytest.mjs",
+      "sha256": "4f06bb0eb98f7daad5ff57b00f346ee8308307d8a1759e6320ca16802ff632f9"
+    }
+  ],
+  "scope": {
+    "real_backup_restore": true,
+    "loopback_http": true,
+    "independent_cli": true,
+    "operator_attestation_fixture": true,
+    "real_providers": false,
+    "production_changed": false,
+    "real_multi_pc_acceptance": false,
+    "active_relation_recovery": false,
+    "formal_accepted_tasks": 0,
+    "formal_accepted_stages": 0
+  },
+  "sources_caliber": "The sha256 values recorded under sources are unnormalized working-tree bytes captured on Windows. Line endings vary by file; a uniform CRLF caliber is not assumed. Declared commits and historical hashes retain their original values.",
+  "source_recovery_observation": {
+    "checked_at": "2026-10-06",
+    "scope": "Declared original logs, current declared source paths and the previously cited de47d47 Git blobs only; no all-object scan or experiment rerun",
+    "sources": {
+      "cli/graph-recovery.mjs": {
+        "status": "not_reproduced",
+        "line_endings": "unknown",
+        "comparison_commit": "de47d479649209200146ccd8f3f509e3e2804631"
+      },
+      "tests/graphrecoverytest.mjs": {
+        "status": "not_reproduced",
+        "line_endings": "unknown",
+        "comparison_commit": "de47d479649209200146ccd8f3f509e3e2804631"
+      }
+    },
+    "limits": "Declared original logs still match their recorded hashes but contain test/CI output rather than original source bytes. Current source files contain later changes, and the specific Git blobs match neither recorded hash under LF or CRLF. Historical hashes remain unchanged."
+  }
+}

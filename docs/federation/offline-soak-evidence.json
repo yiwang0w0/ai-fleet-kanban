@@ -1,0 +1,410 @@
+{
+  "format": "ai-fleet-offline-soak-evidence/v1",
+  "batch": 93,
+  "prepared_at": "2026-10-05T02:56:28.220736+00:00",
+  "base_commit": "c0f7aced0a9fc4fab4ec472fd6c38a9bd450b73a",
+  "task_id": "T05.04",
+  "formal_acceptance": false,
+  "qualification": {
+    "stage": "qualification-smoke",
+    "result": "passed",
+    "actual_offline_ms": 10780.3449,
+    "reconnect_ms": 468.70370000000185,
+    "offline_30_minutes_observed": false
+  },
+  "experiment": {
+    "stage": "experiment",
+    "format": "ai-fleet-single-host-offline-soak/v1",
+    "started_at": "2026-10-05T02:24:30.650Z",
+    "code_sha": "c0f7aced0a9fc4fab4ec472fd6c38a9bd450b73a",
+    "requested_offline_ms": 1800000,
+    "scope": {
+      "physical_hosts": 1,
+      "isolated_nodes": 2,
+      "tailscale": false,
+      "providers_called": false,
+      "executor": "synthetic Zcode-shaped program in actual Windows Job",
+      "formal_acceptance": false
+    },
+    "sources": {
+      "tests/offline-soak.mjs": "30be2418732679f6550b5b0deb85b4a9e810bb144d7ed59be8ef9dac448455ff",
+      "core/node-runtime.mjs": "8a5f50f3acd7df63fbe3ad716482738c2963aefdc7d2147b825eb072f8d847e8",
+      "core/execution/scheduler.mjs": "83022d6a758f1d444b7843d07177cd433d5ea36802cebb12cd7f3422abb2a072",
+      "core/execution/runner.mjs": "ed61d9ce33e66689476d86b14d826ee564bd973e7da1a706135db47f7ab473da",
+      "core/federation/sync-client.mjs": "20e02f8c86ce233aa8ec692a78d4239043e0fb842f746427306721ec38193f51"
+    },
+    "samples": [
+      {
+        "elapsed_ms": 2,
+        "local_status": "in_progress",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "synced"
+        ]
+      },
+      {
+        "elapsed_ms": 60326,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 120757,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 180194,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 240569,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 301009,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 360204,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 420131,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 480396,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 540650,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 600817,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 661024,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 720068,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 780416,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 840720,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 900909,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 960033,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1020284,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1080607,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1140940,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1200026,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1260350,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1320779,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1381066,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1440181,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1500761,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1560266,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1620440,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1680623,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      },
+      {
+        "elapsed_ms": 1740798,
+        "local_status": "waiting",
+        "remote_cached_status": "in_progress",
+        "dispatch_count": 1,
+        "used": 1,
+        "sync_states": [
+          "error"
+        ]
+      }
+    ],
+    "offline_started_at": "2026-10-05T02:24:38.076Z",
+    "completed_while_offline_ms": 30328.045000000002,
+    "actual_offline_ms": 1800903.7158000001,
+    "reconnect_ms": 393.2393999998458,
+    "result": "passed",
+    "offline_30_minutes_observed": true,
+    "final": {
+      "owner_task_status": "waiting",
+      "remote_task_status": "waiting",
+      "local_runs": 1,
+      "remote_runs": 0,
+      "accepted": false,
+      "job_empty": true,
+      "hosts_stopped": true
+    },
+    "finished_at": "2026-10-05T02:54:39.417Z"
+  },
+  "logs": [
+    {
+      "path": ".data/review93-offline-smoke.log",
+      "sha256": "404b8459dea02409e1ef60c477c29afdb513caf84a94501c32a85805a3649a46"
+    },
+    {
+      "path": ".data/review93-offline-smoke.json",
+      "sha256": "61073c995a3e90ed17a433e88e0736e7004f4388318b6e742cd03354bb1ea8c7"
+    },
+    {
+      "path": ".data/review93-offline-30min.log",
+      "sha256": "903126880c1fa77d45e69f264bec00fe9b752b13830875a9a8128387e7c49714"
+    },
+    {
+      "path": ".data/review93-offline-30min.json",
+      "sha256": "d3330a5c0b55e6019f29b38c892df0b7d8a9a53d03f1d4f944ee9bf9e296ee6a"
+    }
+  ],
+  "cleanup": {
+    "process_exit_code": 0,
+    "owned_hosts_stopped": true,
+    "temporary_fixture_cleanup_completed": true
+  },
+  "limits": [
+    "One physical Windows host and two isolated loopback nodes; not actual Tailscale or physical two-PC acceptance.",
+    "Synthetic program ran under a real Windows Job; no actual provider login, model request or native provider MCP tool use.",
+    "Task finished about 30 seconds into the offline interval; this does not establish a provider running for all 30 minutes.",
+    "MCP listening state was observed in runtime status; no real desktop client session was exercised.",
+    "No 72-hour soak, physical power failure, independent acceptance or accepted task."
+  ],
+  "sources_caliber": "The sha256 values recorded under experiment.sources are unnormalized working-tree bytes captured on Windows. Line endings vary by file; a uniform CRLF caliber is not assumed. Declared commits and historical hashes retain their original values.",
+  "source_line_endings": {
+    "core/execution/scheduler.mjs": "LF",
+    "tests/offline-soak.mjs": "mixed LF/CRLF"
+  },
+  "source_recovery_observation": {
+    "checked_at": "2026-10-06",
+    "source_origin": "Declared original working-tree test path and declared experiment Git commit; per-source status identifies the comparison",
+    "original_report": ".data/review93-offline-30min.json",
+    "sources": {
+      "tests/offline-soak.mjs": {
+        "status": "recorded_bytes_matched",
+        "normalized_content_commit": "864feec033f4be38c929ae2d29cf683fb266516d",
+        "crlf_terminated_lines": [
+          72
+        ],
+        "other_terminated_lines": "LF"
+      },
+      "core/execution/scheduler.mjs": {
+        "status": "declared_blob_matched",
+        "content_commit": "c0f7aced0a9fc4fab4ec472fd6c38a9bd450b73a"
+      }
+    },
+    "limits": "Read-only source-byte and specific Git blob comparisons only. A current original working-tree byte match does not independently verify the historical experiment execution; no experiment was rerun."
+  }
+}

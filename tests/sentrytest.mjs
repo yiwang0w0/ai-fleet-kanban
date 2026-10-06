@@ -5,6 +5,9 @@
 // SSE server stands in for the board: it tells any sentry whose rev is not NEWREV that it is
 // stale, and records when each connection opened and closed. Dead port, no board touched.
 import { spawn, spawnSync } from "node:child_process";
+import {mkdtempSync,writeFileSync,rmSync,rmdirSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {randomUUID} from "node:crypto";
 import { createServer } from "node:http";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,9 +22,12 @@ const ok = (name, cond, detail = "") => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PY = process.env.PYTHON || process.env.BOARD_PYTHON || (process.platform === "win32" ? "python" : "python3");
 const NEWREV = "n3wrev";
+const DATA=mkdtempSync(join(tmpdir(),"fleet-sentry-auth-")),TOKEN=randomUUID();
+writeFileSync(join(DATA,"board_token"),TOKEN);
 const conns = [];   // { as, rev, opened, closed }
 
 const srv = createServer((req, res) => {
+  if(req.headers["x-board-token"]!==TOKEN){res.writeHead(401);res.end();return;}
   const url = new URL(req.url, "http://x");
   if (url.pathname !== "/api/events") { res.writeHead(404); res.end(); return; }
   const c = { as: url.searchParams.get("as"), rev: url.searchParams.get("rev") || "", opened: Date.now(), closed: null };
@@ -38,7 +44,7 @@ await new Promise((r) => srv.listen(0, "127.0.0.1", r));
 const PORT = srv.address().port;
 console.log(`[sentrytest] stub board on 127.0.0.1:${PORT}  python=${PY}`);
 
-const env = { ...process.env, BOARD_URL: `http://127.0.0.1:${PORT}`, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" };
+const env = { ...process.env, BOARD_DATA_DIR:DATA, BOARD_URL: `http://127.0.0.1:${PORT}`, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" };
 delete env.SSE_WATCH_REEXECED;   // a fresh sentry, never re-run
 let out = "";
 const child = spawn(PY, [join(ROOT, "watchers", "sse_watch.py")],
@@ -71,6 +77,8 @@ try {
 } finally {
   killTree();
   srv.close();
+  rmSync(join(DATA,"board_token"),{force:true});
+  rmdirSync(DATA);
 }
 console.log(`${NL}${"─".repeat(56)}${NL}result: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

@@ -1,0 +1,140 @@
+{
+  "format": "ai-fleet-cancellation-status-evidence/v1",
+  "recorded_at": "2026-10-01T08:25:53.899970+00:00",
+  "base_commit": "f729780bf96eaf149815b9810b3f611e8b5e95f8",
+  "finding": "seven-module/H4b",
+  "status": "implemented_and_locally_verified_not_deployed",
+  "behavior": {
+    "status_does_not_advance_cancellation": true,
+    "existing_local_progress_required": true,
+    "source_poll_persists_existing_receipt": true,
+    "readonly_capability": "delegation-cancellation-status-readonly-v1",
+    "old_peer_status_request_sent": false,
+    "automatic_retries_added": false,
+    "new_endpoints_added": false
+  },
+  "negative_controls": {
+    "H4b_tests": 2,
+    "H4b_expected_failures": 2,
+    "helper_diagnostic_tests": 1,
+    "helper_diagnostic_expected_failures": 1,
+    "baseline": "f729780",
+    "mutating_legacy_status_observed": true
+  },
+  "incremental_windows_tests": {
+    "first_cancellation_and_peer": {
+      "passed": 53,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 39736.1062
+    },
+    "final_peer_after_helper_change": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 15479.3749
+    },
+    "unique_tests": 54,
+    "full_suite_repeated": false,
+    "coverage": [
+      "actual HTTP status before/after explicit CLI progress preserves target database contents",
+      "wrong credential/project/cancel identity refused without advancing work",
+      "prepared permit remains fenced and quota unused",
+      "missing read-only capability or HTTP 426 stops before status request",
+      "lost ACK and source persistence replay retain one immutable stop proof",
+      "actual Windows protected owner-only credential ACL and grant rollback",
+      "isolated mock helper timeout/spawn/exit/output failures return no paths, payload or stderr"
+    ]
+  },
+  "prior_ci": {
+    "code_sha": "f729780bf96eaf149815b9810b3f611e8b5e95f8",
+    "run_id": 36835050768,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36835050768",
+    "conclusion": "failure",
+    "peer_passed": 25,
+    "peer_failed": 2,
+    "gitleaks": "success",
+    "observed_error": "PRIVATE_FILE_FAILED",
+    "timeout_cause_confirmed": false,
+    "inference": "First failures near the old 10 second helper limit; the old error discarded the underlying reason."
+  },
+  "helper_mitigation": {
+    "timeout_ms": 30000,
+    "acl_rules_unchanged": true,
+    "exclusive_creation_unchanged": true,
+    "automatic_retry": false,
+    "safe_reason_values": [
+      "helper_timeout",
+      "helper_unavailable",
+      "helper_failed",
+      "unverified_response"
+    ],
+    "remote_ci_resolution": "pending_new_commit_run"
+  },
+  "source_hashes": [
+    {
+      "path": "core/federation/gateway.mjs",
+      "sha256": "ce2c1c3e6fde05248c725d209dbf89c438518ef780f771c5f93eb0b18b27be5d"
+    },
+    {
+      "path": "core/federation/cancellation-client.mjs",
+      "sha256": "a07688f194d97ab730cfb599d2d7b8a795f4cc34a1a24d194849c2254750421a"
+    },
+    {
+      "path": "core/federation/protocol.mjs",
+      "sha256": "17de76f86c7740d12bf021899bb28c2c1f183fd9c7566f768e2cf8e2a00d5c8f"
+    },
+    {
+      "path": "cli/cancellation.mjs",
+      "sha256": "5e404304eff38041fd4c66da8f373b6b1b2c90aa6285fd15c76ee9a1ca1e5c9b"
+    },
+    {
+      "path": "core/private-json.mjs",
+      "sha256": "cb08301ad5a51d5643d1b28216bcc7916a84be3a6403615003ed318fc50907af"
+    },
+    {
+      "path": "core/private-json.ps1",
+      "sha256": "f54a9f756f3f79c77fed48f0744bc4d93699ee6c52acfe52614588e922f3d44d",
+      "tested_worktree_sha256": "aa33bd2a64215fd748ba7e1e0fadbdcce711e1756a9b026ee55062115b345bba"
+    },
+    {
+      "path": "tests/cancellationtest.mjs",
+      "sha256": "fa93b8c4e5a814e91534f4e864d2be91105c134c68cce8d5cfb35cf9ec508a0b"
+    },
+    {
+      "path": "tests/peertest.mjs",
+      "sha256": "24e90deba1f86c864a005465c4498971d6a1ee5d5d366852fd2e4e79864861e3"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review69-h4b-before.log",
+      "sha256": "7c0ad6c8478af7e8df3714e92f2a933a3ed92c2c39dd7e389a3ccb9016f0b552"
+    },
+    {
+      "name": "review69-h4b-tests.log",
+      "sha256": "f68a7b3facbfade67b1d3b09145403004e7a43c989bd891a3e6856ea2fc69f1e"
+    },
+    {
+      "name": "review69-helper-before.log",
+      "sha256": "e25c6b1ddddc25843c071aad57f7c62592ff937158f77d30df237cfdeab56524"
+    },
+    {
+      "name": "review69-peer-final.log",
+      "sha256": "d546dc84d531e797b641226e47ea53ba552fa24527ad92d7333342a54908af7e"
+    }
+  ],
+  "limitations": [
+    "H4a binding/registrar cancellation closure remains unresolved; stopped does not authorize source restart",
+    "H5a sealed-candidate restore relocation remains unresolved",
+    "No production or frozen physical pilot source upgrade",
+    "No physical multi-PC acceptance or real provider calls"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "source_binding": "source_hashes use staged Git blob bytes; differing Windows checkout bytes are separately recorded as tested_worktree_sha256."
+}

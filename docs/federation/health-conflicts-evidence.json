@@ -1,0 +1,259 @@
+{
+  "format": "ai-fleet-health-and-conflicts-evidence/v1",
+  "batch": 80,
+  "base_commit": "c45b9e764cb82a53f26993f50b5f770b8084937f",
+  "recorded_at": "2026-10-01T12:39:05.536854+00:00",
+  "review_items": [
+    "seven-module/H3a remaining conflict explanations",
+    "seven-module/H3d health watcher"
+  ],
+  "status": "implemented_with_local_windows_evidence_not_formally_accepted",
+  "health": {
+    "operator_only_endpoint": "/api/fleet/health",
+    "readonly_database_and_lock_observation": true,
+    "no_peer_query": true,
+    "no_lock_removal_or_process_termination": true,
+    "threshold_ms": {
+      "broker_prepared": 300000,
+      "delivery_retry": 1800000,
+      "scheduler_heartbeat": 60000
+    },
+    "retry_is_notice_not_offline_failure": true,
+    "pid_presence_does_not_prove_identity_or_executor_stop": true,
+    "stable_issue_fingerprint_excludes_age_and_attempt_counter": true,
+    "unavailable_or_unknown_observation_does_not_clear_alarm": true,
+    "existing_alarm_throttle_reused": true,
+    "scan_limit": 10000,
+    "max_sample_ids_per_issue": 3,
+    "durable_delivery_source": "fleet_operator_actions",
+    "ephemeral_cli_delivery_failures_not_invented": true
+  },
+  "conflicts": {
+    "shared_description": "core/conflicts.js",
+    "task_version": true,
+    "run_identity": true,
+    "request_identity": true,
+    "registrar_graph_version": true,
+    "generic_protocol_state_not_mislabeled_as_task_version": true,
+    "concrete_local_refusal_preserved": true,
+    "known_conflict_retry_disabled_in_dialog": true,
+    "uncertain_transport_allows_manual_same_payload_retry_only": true,
+    "run_replacement_or_automatic_retry_added": false
+  },
+  "node_runs": [
+    {
+      "log": "review80-red.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 541.3046
+    },
+    {
+      "log": "review80-conflict-red.log",
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "skipped": 0,
+      "duration_ms": 641.5404
+    },
+    {
+      "log": "review80-health-http.log",
+      "tests": 16,
+      "pass": 16,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 4172.7728
+    },
+    {
+      "log": "review80-protocol.log",
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 7688.8952
+    },
+    {
+      "log": "review80-conflict-regression.log",
+      "tests": 75,
+      "pass": 75,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 38586.4872
+    },
+    {
+      "log": "review80-conflict-final.log",
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "skipped": 0,
+      "duration_ms": 3803.0986
+    }
+  ],
+  "distinct_passing_node_cases": 94,
+  "python_tests": {
+    "unit_cases": 8,
+    "unit_result": "OK",
+    "existing_selftest_pass": 20,
+    "existing_selftest_fail": 0
+  },
+  "counting": "Four green Node invocations contain 103 executions but 94 distinct cases. The final 8 are an affected subset after retaining concrete generic-state refusal text. Python unit and existing selftest counts are separate.",
+  "runtime_evidence": [
+    "Actual authenticated HTTP board to Python --once watcher",
+    "Actual lost-ACK delivery and coordinator revocation",
+    "Owned scheduler child termination leaves its real lock visible",
+    "Actual dispatch interruption and explicit local resolution",
+    "Actual stale task-version and run HTTP fences",
+    "Actual conflicting fleet action ID over HTTP",
+    "Production dialog callback executed with conflict, server-error and network-unknown responses"
+  ],
+  "source_hash_encoding": "UTF-8 LF normalized",
+  "source_hashes": [
+    {
+      "path": "core/fleet-health.mjs",
+      "sha256": "6982fc9f7b4d2c39a6f6275b48519e389395718163161889407c62d07f663e0f"
+    },
+    {
+      "path": "core/conflicts.js",
+      "sha256": "9958564d89f9b6be17314dd4d5761d2b5108aaa749588b55b6b458543e63bc22"
+    },
+    {
+      "path": "core/server.mjs",
+      "sha256": "2bcd855f84c27b63336ec3276f000dcd20279238a00bca39c78ff7e5823629b7"
+    },
+    {
+      "path": "core/store.js",
+      "sha256": "dd67f63f2ef0b53281e6b7e7c28cc09ce96a6aa72634388fd2a99157c19d4889"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "04bd683ac9f97e341a1f3d5e998ef7534dbc9aab65e6970e02da3b110cc3fa9e"
+    },
+    {
+      "path": "core/fleet-actions.mjs",
+      "sha256": "4a47d1da5b25a8ce3e6b271b5b16f314b730ab4fcf6e3464059519c3272aaa58"
+    },
+    {
+      "path": "watchers/board_health_watch.py",
+      "sha256": "120e9e6a8aa20b986d5383c73bf480f481644cff7959b004a66c248f5de7be3a"
+    },
+    {
+      "path": "tests/fleethealthtest.mjs",
+      "sha256": "013c8a39084b45c3ea9ec8ece78b2a67205d7ebe03ea5103812088fe174f77d9"
+    },
+    {
+      "path": "tests/healthwatchtest.py",
+      "sha256": "9b74c946d76447dcffebeebc8ad60f1114dee212a5df75255f6e1849b2334365"
+    },
+    {
+      "path": "tests/conflicttest.mjs",
+      "sha256": "3c4712fd1fbc24846e7ce3054f9a375d44412c6dffea97c48761a82098db2b9c"
+    },
+    {
+      "path": "tests/panelauth.test.mjs",
+      "sha256": "e444e9ebbc1e8242613ff17cadb1eb4a91427e3ab917e075cdedce4f5fad76b9"
+    },
+    {
+      "path": "tests/dispatchtest.mjs",
+      "sha256": "859d268d1e0660a3691446e37f071998ecbcb287eca9afe5635ea420b7181c03"
+    },
+    {
+      "path": "tests/fleetactionstest.mjs",
+      "sha256": "a7f7c4c73361f04b13538ade99c49971d6cd5ab39ffac7ff565dcf6141aadf08"
+    },
+    {
+      "path": "tests/schedulertest.mjs",
+      "sha256": "a4d9f87e80a7b6f9aa39510bd9fa5d2df6e8fdc0cdeb46019be22457811b3821"
+    },
+    {
+      "path": "tests/versiontest.mjs",
+      "sha256": "99df22db1d98c4d3d2a8af4e7680c326b215af34822ad439ea1d8e580b5402e4"
+    },
+    {
+      "path": "package.json",
+      "sha256": "c3a9dc1664b8838cee35e8c19c1c089cde578d26a756248afeac72af5e6e743a"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "8cdfc0a68ca555e90bdf2e8d2a9534d0e753e752e5b91b60072d03c007fcbfa8"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review80-red.log",
+      "sha256": "8c98ccf37c92f6f9d9ea0bb0807408dc147de74fe827a2212812182c829ed19a"
+    },
+    {
+      "name": "review80-conflict-red.log",
+      "sha256": "dc2508e5315ac201bb9981265d96c893cc0176804f5bde7e658d63f17b32f89b"
+    },
+    {
+      "name": "review80-health-http.log",
+      "sha256": "08d9fe7f22a17811fbbe8fe7375f7e77800068bf6f2c3d8be098e38dfd41561e"
+    },
+    {
+      "name": "review80-protocol.log",
+      "sha256": "585200f0e04ea35414bf445f63f9027b3d7625efd7d99e8ac841da63c283b9e1"
+    },
+    {
+      "name": "review80-conflict-regression.log",
+      "sha256": "ca1e8ffe474746611ed936442062e852efe5cb24a4754727438e1cf4763bf14d"
+    },
+    {
+      "name": "review80-conflict-final.log",
+      "sha256": "9465c11a14095a70c91acbc432670454d2c8fe22e54fdd20f883eb8226a4e2f9"
+    },
+    {
+      "name": "review80-watch-unit.log",
+      "sha256": "bee5bb4e0fc27ff52ca91d15104dbc3e8da5c8d4db6e57cc2f22c7cebe61b09c"
+    },
+    {
+      "name": "review80-watch-selftest.log",
+      "sha256": "deaad2d647ab38e5ca5e01cece66548b0699fbe0f07af59dcd3e0f2443b4fa12"
+    },
+    {
+      "name": "review80-ci138-jobs.json",
+      "sha256": "331f285db657a9c718e99b95ddfd882237fc5fb47da24bcc5d96c837a639855e"
+    },
+    {
+      "name": "review80-ci138-job-110353067611.log",
+      "sha256": "c1bc0bce7b40c7634c304bd51ebd54c4654519704ceecd5af9be63767067f390"
+    }
+  ],
+  "prior_ci": {
+    "sha": "908b8796f59793d16db66f6ee777e3df63cb9598",
+    "run": 36857397882,
+    "number": 138,
+    "harness_conclusion": "cancelled",
+    "started_at": "2026-10-01T11:45:54Z",
+    "completed_at": "2026-10-01T12:21:12Z",
+    "former_job_timeout_minutes": 35,
+    "no_completed_failed_steps": true,
+    "cancelled_step": "schedulertest",
+    "gitleaks": "success",
+    "later_suites_skipped": true,
+    "new_job_timeout_minutes": 60,
+    "assertions_removed": false,
+    "individual_harness_timeouts_changed": false,
+    "remote_validation_pending": true
+  },
+  "limitations": [
+    "No physical multi-PC or real desktop/provider acceptance",
+    "Health is local observation, not remote liveness or stop proof",
+    "Unpersisted CLI return values cannot be reconstructed by the watcher",
+    "DB and lock observations are not a single OS transaction; reported mismatch needs verification",
+    "Generic protocol CONFLICT does not prove which version changed",
+    "No 72-hour monitoring acceptance or automatic orphan-lock recovery"
+  ],
+  "production_changed": false,
+  "models_called": false,
+  "real_peers_enabled": false,
+  "scheduled_tasks_changed": false,
+  "tailscale_changed": false,
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

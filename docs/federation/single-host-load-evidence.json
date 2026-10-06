@@ -1,0 +1,369 @@
+{
+  "format": "ai-fleet-single-host-acceptance-evidence/v1",
+  "batch": 92,
+  "prepared_at": "2026-10-05T02:17:07.488084+00:00",
+  "base_commit": "531cd4939f7ee755a03feb118f749e7abc53e1e3",
+  "task_id": "T09.04",
+  "scope": {
+    "physical_hosts": 1,
+    "isolated_instances": 3,
+    "tailscale": false,
+    "providers_called": false,
+    "real_72_hours": false,
+    "write_durability": "WAL synchronous=FULL",
+    "proposed_thresholds_frozen": false
+  },
+  "environment": {
+    "platform": "win32",
+    "os_release": "10.0.22621",
+    "node": "v24.16.0",
+    "logical_cpus": 16,
+    "memory_bytes": 42312429568
+  },
+  "runs": [
+    {
+      "path": ".data/review92-capacity-first.log",
+      "sha256": "ab7fe30f1178c8040574229772936d133f612edcc5e3a7227b9cc310070b563b",
+      "result": "passed",
+      "passed": 2,
+      "failed": 0
+    },
+    {
+      "path": ".data/review92-capacity-receiver-final.log",
+      "sha256": "9462e4ff70922b126efc4749ac188fcf02850d962087b35e914f8363c475d53f",
+      "result": "passed",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "path": ".data/review92-capacity-snapshot.log",
+      "sha256": "c46d39f56656f9923ce298cfebc69407e38ce03241fc1d789ad38389d77a6d6b",
+      "result": "failed_fixture_setup",
+      "passed": 0,
+      "failed": 1
+    },
+    {
+      "path": ".data/review92-capacity-snapshot-final.log",
+      "sha256": "32dc713ea6b955c4d0b5409158f8d2ab66a27f0448d810790e52fe92b0ad2e86",
+      "result": "passed",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "path": ".data/review92-load-first.log",
+      "sha256": "0f85bb273e6f08144f865c2debd2bf28560e007f425f88c431481959494df10d",
+      "result": "failed_fixture_column_names",
+      "passed": 0,
+      "failed": 1
+    },
+    {
+      "path": ".data/review92-load-final.log",
+      "sha256": "9413d951439ed57c0992d3b7ec1e748dbfa5cbb6b2d78c942e4270af0a89ce38",
+      "result": "passed_load_experiment",
+      "passed": 1,
+      "failed": 0
+    }
+  ],
+  "distinct_capacity_tests_passed": 3,
+  "load_experiments_passed": 1,
+  "test_counts_note": "Selective reruns overlap; first load run and snapshot fixture failure are not counted as passes.",
+  "capacity_cases": [
+    "Source SQLITE_FULL leaves task version and unpublished dirty marker intact; reopen then delivery is applied once.",
+    "Receiver real SQLite error 13; HTTP failure sends no ACK and preserves zero cursor/replicas; reopening and restoring capacity converges once.",
+    "Initial nonempty snapshot fails before staging offset or active projection advances; reopening resumes that snapshot and no early ACK is sent."
+  ],
+  "load": {
+    "format": "ai-fleet-single-host-load/v1",
+    "started_at": "2026-10-05T02:11:31.222Z",
+    "code_sha": "531cd4939f7ee755a03feb118f749e7abc53e1e3",
+    "environment": {
+      "platform": "win32",
+      "os_release": "10.0.22621",
+      "node": "v24.16.0",
+      "logical_cpus": 16,
+      "memory_bytes": 42312429568
+    },
+    "scope": {
+      "physical_hosts": 1,
+      "isolated_instances": 3,
+      "tailscale": false,
+      "providers_called": false,
+      "real_72_hours": false,
+      "write_durability": "WAL synchronous=FULL",
+      "proposed_thresholds_frozen": false
+    },
+    "sources": {
+      "tests/fleet-load.mjs": "e01cfaf19330874d97eff8fd2828eec48cf9c8ce0902473b7e017b58f4a3c7df",
+      "core/fleet-view.mjs": "7875e36d9114f2b244773450e43bfbd15883f716f45173cffca2aeaa8e1f57f0",
+      "core/store.js": "d172f1f2934cbe53f8a9df197599aa4ddd2e20b9ae6b47a8c90e347a279b24d9",
+      "core/federation/sync-client.mjs": "20e02f8c86ce233aa8ec692a78d4239043e0fb842f746427306721ec38193f51",
+      "core/federation/sync-store.mjs": "9cd97daa7284858a37348ee726812b706772f2b6b381e000003b106507e92c5f"
+    },
+    "seed": [
+      {
+        "tasks": 3334,
+        "task_events": 33340,
+        "elapsed_ms": 19016.047
+      },
+      {
+        "tasks": 3333,
+        "task_events": 33330,
+        "elapsed_ms": 21214.839
+      },
+      {
+        "tasks": 3333,
+        "task_events": 33330,
+        "elapsed_ms": 17639.893
+      }
+    ],
+    "initial_replication_ms": 7878.149,
+    "pagination": {
+      "n": 100,
+      "p50_ms": 560.031,
+      "p95_ms": 861.846,
+      "max_ms": 1688.62,
+      "samples_ms": [
+        451.334,
+        521.135,
+        490.168,
+        483.728,
+        563.235,
+        583.173,
+        489.894,
+        579.048,
+        521.182,
+        609.027,
+        552.718,
+        560.031,
+        577.269,
+        663.594,
+        680.709,
+        691.074,
+        568.29,
+        702.097,
+        740.204,
+        917.359,
+        599.911,
+        545.208,
+        464.624,
+        483.894,
+        468.286,
+        412.668,
+        483.57,
+        421.069,
+        428.806,
+        420.959,
+        487.416,
+        442.007,
+        475.368,
+        389.642,
+        408.789,
+        424.67,
+        455.101,
+        444.399,
+        414.348,
+        403.336,
+        401.994,
+        425.204,
+        427.009,
+        675.756,
+        449.811,
+        478.98,
+        378.252,
+        387.18,
+        414.977,
+        429.091,
+        447.44,
+        460.388,
+        413.508,
+        411.83,
+        405.775,
+        422.829,
+        421.112,
+        505.549,
+        513.845,
+        430.317,
+        480.306,
+        510.962,
+        550.65,
+        544.813,
+        794.016,
+        1688.62,
+        928.594,
+        692.08,
+        598.934,
+        699.464,
+        646.869,
+        790.314,
+        664.399,
+        589.018,
+        703.384,
+        754.11,
+        639.158,
+        677.068,
+        616.213,
+        615.055,
+        672.521,
+        712.432,
+        683.346,
+        746.955,
+        832.624,
+        677.041,
+        861.846,
+        1060.684,
+        657.777,
+        678.101,
+        707.061,
+        724.695,
+        726.455,
+        625.338,
+        619.85,
+        602.924,
+        653.06,
+        962.224,
+        623.119,
+        633.482
+      ]
+    },
+    "filtered": {
+      "project": {
+        "n": 20,
+        "p50_ms": 600.458,
+        "p95_ms": 756.584,
+        "max_ms": 774.513,
+        "samples_ms": [
+          596.691,
+          605.484,
+          756.584,
+          774.513,
+          630.392,
+          730.004,
+          749.163,
+          620.732,
+          533.927,
+          567.503,
+          627.784,
+          514.91,
+          556.112,
+          600.458,
+          610.257,
+          615.762,
+          534.466,
+          466.541,
+          480.288,
+          479.27
+        ]
+      },
+      "owner": {
+        "n": 20,
+        "p50_ms": 507.003,
+        "p95_ms": 621.026,
+        "max_ms": 689.197,
+        "samples_ms": [
+          483.22,
+          483.854,
+          459.787,
+          532.634,
+          443.042,
+          444.335,
+          522.318,
+          689.197,
+          591.821,
+          513.745,
+          515.731,
+          453.989,
+          573.268,
+          507.003,
+          486.945,
+          577.009,
+          621.026,
+          582.542,
+          435.316,
+          428.774
+        ]
+      },
+      "search": {
+        "n": 20,
+        "p50_ms": 481.574,
+        "p95_ms": 530.358,
+        "max_ms": 613.736,
+        "samples_ms": [
+          477.385,
+          499.164,
+          509.686,
+          501.753,
+          481.574,
+          482.36,
+          469.348,
+          481.644,
+          493.98,
+          526.847,
+          613.736,
+          452.744,
+          483.201,
+          530.358,
+          448.286,
+          440.638,
+          448.361,
+          437.283,
+          413.691,
+          419.946
+        ]
+      }
+    },
+    "backlog": {
+      "events": 1000,
+      "response_bytes": 1391204,
+      "max_event_bytes": 1377,
+      "elapsed_ms": 1400.374,
+      "sync_calls": 2,
+      "cursor": 4333
+    },
+    "reopen_projection_digest": "a56d15c782153db2a466211ad7fd24c5f5cc5afa156d82f9df7a1cec3c5d6e9e",
+    "database_bytes": [
+      {
+        "alias": "A",
+        "database": 25382912,
+        "wal": 0
+      },
+      {
+        "alias": "B",
+        "database": 28069888,
+        "wal": 11115792
+      },
+      {
+        "alias": "C",
+        "database": 25231360,
+        "wal": 11140512
+      }
+    ],
+    "sampled_peak_rss_bytes": 531832832,
+    "proposed_threshold_results": {
+      "all_query_p95_under_1000ms": true,
+      "backlog_under_60000ms": true
+    },
+    "correctness": "passed",
+    "finished_at": "2026-10-05T02:14:11.988Z"
+  },
+  "raw_load_report": {
+    "path": ".data/review92-load-final.json",
+    "sha256": "40f14a3771e1f8ba6ef9a688d6fd37c70c905af02e7f8f2da9686a6bf44a3eaf"
+  },
+  "sources": {
+    "tests/sync-capacitytest.mjs": "981ff3948b5701e264cdb9d55554b5aeaaf3d2479cb110aec6db8be87a9e8ad7",
+    "tests/fleet-load.mjs": "e01cfaf19330874d97eff8fd2828eec48cf9c8ce0902473b7e017b58f4a3c7df",
+    "package.json": "f9b634892c99ea8e7818a72f5cf90a4ec007c4c05431321013496445f75447c2",
+    ".github/workflows/ci.yml": "11746873b94901acf4f47c6873787a0e4008288457fa8208446abca9eebe4a45"
+  },
+  "limitations": [
+    "One physical Windows host, not two-device acceptance or a Tailscale/DERP benchmark.",
+    "100000 means actual task_events across three databases; it is not 100000 replicated outbox messages or artifact records.",
+    "No simultaneous model execution or active-contract load.",
+    "SQLite max_page_count triggers real SQLITE_FULL in temporary files; host disk exhaustion and power loss are not exercised.",
+    "Query/cache and loopback timings are this run on recorded hardware; G00 thresholds are still proposals.",
+    "No real 30-minute outage, 72-hour observation, operator acceptance or provider calls."
+  ],
+  "formal_accepted_tasks": 0,
+  "formal_accepted_stages": 0,
+  "sources_caliber": "The sha256 values recorded under sources (top level and load.sources) are unnormalized working-tree bytes captured on Windows. Line endings vary by file; a uniform CRLF caliber is not assumed. Declared commits and historical hashes retain their original values."
+}

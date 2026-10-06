@@ -1,0 +1,153 @@
+{
+  "plan_id": "AFK-FED-001",
+  "batch": "foundation-62-mcp-history-pagination",
+  "date": "2026-10-01",
+  "base_commit": "23f1f9494d6cfe64a583eae61064d9dacc060f5f",
+  "platform": "Windows",
+  "scope": "Scoped desktop evidence-history pagination through the real local MCP broker and independent stdio bridge; no production activation or real desktop/model acceptance.",
+  "source_files": [
+    {
+      "path": "core/fleet-evidence.mjs",
+      "sha256": "dc6f93cc859ca4a009d0d23c33b811acde1375949ecc5c0d8a30c2b8d73c795e"
+    },
+    {
+      "path": "core/mcp/context.mjs",
+      "sha256": "67fc5b19da3d3869a34ade9bd33c3efca66490d39d913080840d50250b524ae0"
+    },
+    {
+      "path": "core/mcp/policy.mjs",
+      "sha256": "933fa046f9f06a4f0f5be6693f3918500993d3e7a46a5fdc71159fc86f753a99"
+    },
+    {
+      "path": "core/mcp/tools.mjs",
+      "sha256": "4a5e7ca9abdc2afa9d3b2f53478586b4f22937c965a0b48586fe3b22c0a3462a"
+    },
+    {
+      "path": "tests/mcpevidencetest.mjs",
+      "sha256": "deb41b410bb768df59d2a40a44496627764ce36155d129a57f0f0573b24d65d0"
+    },
+    {
+      "path": "tests/mcptest.mjs",
+      "sha256": "9f4e9a86519169a8d3d5fc85fb4492236232030e4eea1f07d00ed9f02094300e"
+    },
+    {
+      "path": "tests/desktopcontexttest.mjs",
+      "sha256": "c7ac28f6f9f9c60fcaf6a19cc18b59c9e8a5755442bc05133ffec9c2df6c518e"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "44fd721d193c9486e96aec8c1cea72fd3d912f94894fe8ecf38fd35d1cf195ab"
+    },
+    {
+      "path": "package.json",
+      "sha256": "0ecdfe0dcb60ab71d8dc1163134590fcb8691e57380438ab86f58e87ce8a16d6"
+    }
+  ],
+  "contract": {
+    "tool": "get_task_evidence",
+    "roles": [
+      "coordinate",
+      "observe"
+    ],
+    "excluded_roles": [
+      "implement",
+      "review"
+    ],
+    "required": [
+      "task_uid",
+      "section"
+    ],
+    "sections": [
+      "children",
+      "relations",
+      "runs",
+      "results",
+      "artifacts",
+      "verifications",
+      "integrations",
+      "completions"
+    ],
+    "optional": [
+      "limit",
+      "cursor"
+    ],
+    "limit": {
+      "minimum": 1,
+      "maximum": 100,
+      "default": 100
+    },
+    "response_format": "ai-fleet-evidence-page/v1",
+    "read_only": true,
+    "content_is_untrusted": true,
+    "coverage": "locally_recorded_history",
+    "current_authorization_checked": false,
+    "cursor_binds": [
+      "task_uid",
+      "section",
+      "limit",
+      "current visible history and task versions",
+      "local node epoch"
+    ],
+    "fresh_authentication_each_call": true,
+    "extra_authority_from_cursor": false,
+    "response_byte_limit": 524288,
+    "mutations": "Only existing broker rate/audit records; task, run, assignment, event and idempotency-result tables unchanged by reads."
+  },
+  "regression": {
+    "baseline": "New observer/coordinator pagination test against unchanged base implementation",
+    "failed": 1,
+    "passed": 0,
+    "assertion": "MCP must expose evidence pagination",
+    "observed": "Tool missing from actual listTools response",
+    "log_sha256": "aa851747009585276db315596289c3fc382af1e4ee54b8fe22558cd4aa08199b"
+  },
+  "initial_focused_run": {
+    "passed": 5,
+    "failed": 1,
+    "reason": "Privacy fixture tried to UPDATE an immutable task_runs policy. Corrected to INSERT a new ended fixture run; production immutability guard unchanged.",
+    "independent_stdio_passed": true,
+    "log_sha256": "735337b670f325b98d263983322769489a6a22e829872636f890b046816d01ab"
+  },
+  "final_related_tests": {
+    "command": "node --test tests/mcpevidencetest.mjs tests/mcptest.mjs tests/desktopcontexttest.mjs tests/fleetevidencetest.mjs",
+    "passed": 88,
+    "failed": 0,
+    "skipped": 0,
+    "duration_ms": 128270.1593,
+    "new_units": 8,
+    "log_sha256": "0f57dca2be93e7c7567845f814c51f444990758442f2d00a64d94d69396b957b",
+    "counts_note": "New units are six history tests and two actual bound-role denials. Earlier focused runs overlap and are not added."
+  },
+  "observed": [
+    "Observer and coordinator both traverse 205 runs, 205 results and 206 relations without duplication; original task/run/event/assignment/request/result rows unchanged",
+    "get_task_context first-page cursors work for every history section; explicit custom limits and back-navigation use the same shared projection",
+    "Private/unknown/withdrawn task IDs do not disclose data; raw policy secrets, commands, paths, original offer/contract/note payloads and principal token excluded",
+    "Malformed schema and cursor reuse for another task, section or page size rejected",
+    "History additions, task version changes and visibility withdrawal reject old cursors; role updates and credential revocation reject continuation",
+    "Actual bound implement and review principals neither discover nor call the desktop evidence tool",
+    "Independent Node stdio child process through live authenticated loopback broker reads pages100/100/5, then observes EVIDENCE_CHANGED, fresh206 total and UNAUTHENTICATED after revocation",
+    "Existing MCP lifecycle, proxy isolation, transaction behavior, desktop Markdown/retention and panel history tests remain green"
+  ],
+  "compatibility": [
+    "Existing task-context shape and first pages unchanged",
+    "Legacy desktop-check/preflight still checks the original three baseline queries; ready does not assert evidence-tool availability",
+    "stdio transport already discovers tools dynamically; reconnect cached desktop clients after broker upgrade",
+    "No global MCP config changes, credential reissuance, model calls or network activation"
+  ],
+  "remaining": [
+    "Actual desktop client and physical two-PC G08 acceptance",
+    "Complete dependency/structure editing and action queue retention",
+    "10000-task/100000-event performance acceptance; projection still scans stored history",
+    "Windows persistent service lifecycle, model-adapter OS isolation and disk-capacity enforcement",
+    "Current-commit full Windows CI after push"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  },
+  "production_changed": false,
+  "physical_two_pc": false,
+  "models_called": false
+}

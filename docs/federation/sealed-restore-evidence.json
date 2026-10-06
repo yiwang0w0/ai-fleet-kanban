@@ -1,0 +1,150 @@
+{
+  "format": "ai-fleet-sealed-restore-evidence/v1",
+  "recorded_at": "2026-10-01T08:50:10.340112+00:00",
+  "base_commit": "c25d563b0db671d27783c9ca96ece6c7500a8e9b",
+  "finding": "seven-module/H5a",
+  "status": "implemented_and_locally_verified_not_deployed",
+  "behavior": {
+    "scope": "Verified evidence references in a new quarantined copy, within the existing restore transaction",
+    "permit": "One task, exact old/new evidence path, every other task column unchanged",
+    "result_and_completion_freeze_triggers_remain_installed": true,
+    "temporary_version_counter_exception": "Only the exact permitted path replacement; original trigger SQL restored before commit",
+    "task_and_projection_versions_preserved": true,
+    "sync_dirty_state_preserved": true,
+    "sealed_result_and_completion_records_preserved": true,
+    "outstanding_write_permits_rejected": true,
+    "unexpected_task_mutation_rejected": true,
+    "path_schema_and_permits_rollback_together": true,
+    "successful_restore_remains_held": true,
+    "new_runtime_api_or_schema_version": false
+  },
+  "negative_controls": {
+    "baseline": "c25d563b0db671d27783c9ca96ece6c7500a8e9b",
+    "tests": 4,
+    "passed": 0,
+    "expected_failures": 4,
+    "duration_ms": 20780.8715,
+    "failures": [
+      "Maximum aggregate version CHECK overflow on path replacement",
+      "Unexpected path-triggered business mutation was not rejected",
+      "Completion-sealed source restore rejected with COMPLETION_COMMITTED",
+      "Candidate-sealed target restore rejected with RESULT_PENDING"
+    ],
+    "outstanding_permit_case_added_after_baseline": true
+  },
+  "incremental_windows_tests": {
+    "suites": [
+      "backuptest",
+      "resulttest",
+      "completiontest",
+      "recoverytest"
+    ],
+    "initial_post_fix_targeted": {
+      "tests": 4,
+      "passed": 1,
+      "failed": 3,
+      "duration_ms": 20605.0718,
+      "cause": "SQLite null-prototype rows compared to plain expected objects; assertions normalized both sides without removing field checks"
+    },
+    "scoped_regression": {
+      "tests": 78,
+      "passed": 76,
+      "failed": 2,
+      "skipped": 0,
+      "duration_ms": 557907.275,
+      "cause": "Post-restore subject mutation reached BINDING_CONTRACT before the freeze guard under test"
+    },
+    "diagnostic_completion_run": {
+      "tests": 1,
+      "passed": 0,
+      "failed": 1,
+      "duration_ms": 25432.5944,
+      "cause": "Confirmed the same independent BINDING_CONTRACT guard"
+    },
+    "final_failed_cases_only": {
+      "tests": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "duration_ms": 26123.4396,
+      "correction": "Attempt to modify result instead of subject; keep strict RESULT_PENDING/COMPLETION_COMMITTED assertion"
+    },
+    "unique_tests_with_passing_result": 78,
+    "single_all_green_run": false,
+    "product_code_changed_after_initial_fix": false,
+    "repository_full_suite_repeated": false,
+    "coverage": [
+      "Sealed result backup, relocation, retained scope and explicit epoch activation",
+      "Both source and target evidence on a frozen completion intent",
+      "Maximum task version, projection version and dirty queue preservation",
+      "Exact original trigger definitions and no temporary schema after success",
+      "Injected second-row business mutation rolls all rows and schema back",
+      "Uncleared result/completion write permits refuse restoration",
+      "Existing recovery, legacy upgrade, HTTP completion and candidate regressions"
+    ]
+  },
+  "source_binding": "source_hashes use staged Git blob bytes; any differing Windows checkout bytes are recorded separately. Final guard assertions were rerun in the two targeted tests; the other 76 cases passed in the preceding scoped run.",
+  "source_hashes": [
+    {
+      "path": "core/backup.mjs",
+      "sha256": "3b11c20cafdecb90b5db06f79295db6da191b14bae376051a56a741cff82af70"
+    },
+    {
+      "path": "tests/backuptest.mjs",
+      "sha256": "aa98c9df4824e601a2d5a4a528b429a154693e28b37317e09fb8bf3c00566aec"
+    },
+    {
+      "path": "tests/resulttest.mjs",
+      "sha256": "6a4d23ce21b1803ae6ab5d706f0fa95df59e42b04155e9ec8dda54807a538ca4"
+    },
+    {
+      "path": "tests/completiontest.mjs",
+      "sha256": "2aa24445da07ec39715eef01d4f7cfa86a9afe8d3f8979543b7a6420e7e0451f"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "review70-h5a-before.log",
+      "sha256": "cbd2fd1cb131eecd7feb0ae015140b502cf963f6c3130a3a2eb228709f031267"
+    },
+    {
+      "name": "review70-h5a-targeted.log",
+      "sha256": "773ba535dd927c264df86c4538fedd639f9a88663440640f894eb0c815ea7cb2"
+    },
+    {
+      "name": "review70-restore-regression.log",
+      "sha256": "ba9d528061e429ea5c4317ba4f29be12df0132c1af933d8ebdc60ea64ba33cb0"
+    },
+    {
+      "name": "review70-completion-diagnostic.log",
+      "sha256": "4ecd57bd37c58e72001da972681df70654d6a67c98d3023b3bded04efa3d9eb6"
+    },
+    {
+      "name": "review70-sealed-final.log",
+      "sha256": "d59f0c0510d20709ed81c41007839067c3319050c59563bbd9db9b45d65d7f66"
+    }
+  ],
+  "prior_ci_observation": {
+    "code_sha": "c25d563b0db671d27783c9ca96ece6c7500a8e9b",
+    "run_id": 36836430926,
+    "url": "https://github.com/yiwang0w0/ai-fleet-kanban/actions/runs/36836430926",
+    "checked_at": "2026-10-01T08:43:59.996Z",
+    "peer_step": "success",
+    "gitleaks_job": "success",
+    "overall": "in_progress",
+    "helper_timeout_root_cause_confirmed": false
+  },
+  "limitations": [
+    "H4a cancellation binding/registrar closure remains unresolved",
+    "H5b acceptance of a source recovery chain across skipped epochs remains unresolved",
+    "No production or frozen physical-pilot source upgrade",
+    "No physical multi-PC recovery acceptance or real provider calls",
+    "G01/G02/G05 remain pending on f10f268; no independent task or phase sign-off"
+  ],
+  "formal_acceptance": {
+    "tasks": 0,
+    "total_tasks": 72,
+    "phases": 0,
+    "total_phases": 12
+  }
+}

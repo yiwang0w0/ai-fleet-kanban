@@ -1,0 +1,152 @@
+{
+  "format": "ai-fleet-acceptance-profile-proposal/v1",
+  "task_id": "T00.04",
+  "prepared_at": "2026-10-05T06:24:40.162674+00:00",
+  "decision": "pending",
+  "plan_document": {
+    "path": "docs/多终端共享看板-实施与验收计划.md",
+    "sha256": "23f8649cad6f74701d5c7ec3e801a85ad897195057acddfbe3a8bf87c0f18d34"
+  },
+  "trial_authorization": {
+    "source": "Direct user answer in this conversation",
+    "answer": "沿用",
+    "scope": "Existing one-minimal-dispatch-per-executor authorization; no increase or reset",
+    "allowed_dispatches_per_executor": 1,
+    "consumed": {
+      "claude": 1,
+      "codex": 1,
+      "zcode": 0
+    },
+    "remaining": {
+      "claude": 0,
+      "codex": 0,
+      "zcode": 1
+    },
+    "automatic_retries_authorized": false,
+    "new_api_spending_authorized": false,
+    "confirmed_at": "2026-10-05T01:55:34.2198665Z",
+    "status": "user_confirmed_unchanged_allowance"
+  },
+  "continuous_operation": {
+    "authorized": false,
+    "status": "limits_and_models_unconfirmed",
+    "daily_dispatch_limit_per_node": null,
+    "single_task_dispatch_limit": null,
+    "max_concurrent_dispatches_per_node": null,
+    "task_timeout_seconds": null,
+    "max_rounds": null,
+    "allowed_models": null,
+    "daily_cost_or_token_limit": null,
+    "single_task_cost_or_token_limit": null,
+    "note": "The existing minimal-trial confirmation does not reset consumed calls or authorize continuous dispatches."
+  },
+  "quality_thresholds": {
+    "decision": "proposed_from_plan_section_10",
+    "metrics": [
+      {
+        "id": "authorization",
+        "criterion": "0 successful unauthorized operations",
+        "scope": "Required negative cases across peer, worker, reviewer, UI and artifact entry points"
+      },
+      {
+        "id": "durable_data_loss",
+        "criterion": "0 lost acknowledged tasks/evidence",
+        "scope": "Application durable commit and receive acknowledgement; excludes writes never durably committed"
+      },
+      {
+        "id": "duplicate_acceptance",
+        "criterion": "0 duplicate logical creations/acceptances on replay",
+        "scope": "Does not claim exactly-once arbitrary external API side effects"
+      },
+      {
+        "id": "online_propagation",
+        "p95_max_seconds": 5,
+        "conditions": {
+          "node_instances": 3,
+          "physical_windows_hosts": 2,
+          "third_instance": "isolated supplementary Windows instance",
+          "rtt_max_ms": 100,
+          "bandwidth_min_mbps": 10,
+          "event_max_bytes": 16384,
+          "record_paths": [
+            "direct",
+            "relay"
+          ],
+          "record_co_location": true
+        }
+      },
+      {
+        "id": "reconnect",
+        "max_seconds": 60,
+        "conditions": {
+          "event_count": 1000,
+          "total_event_bytes_max": 16777216,
+          "large_files_excluded": true,
+          "start": "Tunnel actually usable",
+          "end": "Receiving side acknowledges durable catch-up"
+        }
+      },
+      {
+        "id": "offline",
+        "required_minutes": 30,
+        "optional_extended_hours": 24,
+        "conditions": "Continue already permitted work; model-provider connectivity recorded independently"
+      },
+      {
+        "id": "scale",
+        "node_instances": 3,
+        "tasks_total": 10000,
+        "events_total": 100000,
+        "conditions": "Pin actual hardware and dataset; test paging, search, backlog and disk growth; physical and isolated observations remain distinct"
+      },
+      {
+        "id": "global_list",
+        "p95_max_seconds": 1,
+        "page_size": 100,
+        "conditions": "Database query timing excludes network loading and model calls"
+      },
+      {
+        "id": "pause_new_dispatches",
+        "max_local_seconds": 5,
+        "conditions": "Remote delivery latency is separate; no immediate offline stop promise"
+      },
+      {
+        "id": "stop_child_processes",
+        "max_seconds": 30,
+        "alternative": "Explicitly report inability to terminate and escalate; never report stopped without proof"
+      },
+      {
+        "id": "real_models",
+        "minimum_successful_task_per_provider": 1,
+        "cross_node_review_count": 1,
+        "note": "Acceptance target, not new calling authorization. Existing failures consume the original allowance."
+      },
+      {
+        "id": "soak",
+        "hours": 72,
+        "conditions": "Include offline/reconnect and reboot; no S0/S1; new issues reset the affected acceptance window"
+      },
+      {
+        "id": "recovery",
+        "rpo_max_hours": 24,
+        "rto_max_minutes": 60,
+        "conditions": "Complete authority-node loss; does not promise zero-loss disaster recovery"
+      }
+    ]
+  },
+  "proposed_stop_conditions": [
+    "No new dispatch when its authorization or remaining allowance is absent.",
+    "Stop new dispatches on unknown required budget accounting, revoked policy, invalid source/configuration or failed permission boundary.",
+    "Timeout/cancel requires an actual child-process exit/stop receipt or explicit attention state.",
+    "Connectivity loss alone does not revoke already acquired work; no automatic reassignment.",
+    "Pause new delivery on storage limit or inability to durably record evidence; preserve known state."
+  ],
+  "measurement_inventory_ref": "docs/federation/gates/node-inventory-summary.json",
+  "not_claimed": [
+    "Operator approval",
+    "Active runtime configuration",
+    "Physical two-node result",
+    "72-hour completion",
+    "Any new provider usage"
+  ]
+}

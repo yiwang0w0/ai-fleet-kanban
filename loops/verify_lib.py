@@ -3,7 +3,8 @@
 """verify_lib —— 卡指名验证的**唯一**执行器(worker_loop 与将来的 reviewer_loop 共用)。
 写在两处必有一处腐烂。登记簿 = verify_registry.json(与 core/store.js 读**同一个文件**)。
 审阅在烧模型之前也先打这里的确定性验证 —— 红了就机器打回,不烧模型。"""
-import json, os, re, subprocess, sys, io, datetime
+import json, os, re, subprocess, sys, io, datetime, hashlib
+from types import MappingProxyType
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # ⭐两个「仓」要分开(与 worker_loop.py / reviewer_loop.py 同一约定):
@@ -111,7 +112,7 @@ def readonly_edit_rules(repo, data_dir):
     rules, prefix = [], ""
     for depth, ancestor in enumerate(parts):
         try:
-            r = subprocess.run(["git", "-C", repo_abs, "ls-tree", "-z", "HEAD"] + ([prefix] if prefix else []),
+            r = subprocess.run(["git", "--no-lazy-fetch", "-C", repo_abs, "ls-tree", "-z", "HEAD"] + ([prefix] if prefix else []),
                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         except Exception:
             return None
@@ -139,14 +140,57 @@ if __name__ == "__main__":
         sys.exit(0)
     sys.exit("verify_lib: 可用 --print-deny-rules")
 
-def verify_registry():
-    """卡可以指名的验证集合。"""
+REGISTRY_MAX_BYTES = 1024 * 1024
+_REGISTRY_PATH = os.path.abspath(REGISTRY)
+
+
+def _registry_bytes():
+    with io.open(_REGISTRY_PATH, "rb") as source:
+        value = source.read(REGISTRY_MAX_BYTES + 1)
+    if len(value) > REGISTRY_MAX_BYTES:
+        raise ValueError("registry exceeds size limit")
+    return value
+
+
+def _pin_registry():
+    """One snapshot per loop process, before a worker can claim any card."""
     try:
-        raw = json.load(io.open(REGISTRY, encoding="utf-8"))
-        return {k: v for k, v in raw.items() if not k.startswith("_") and isinstance(v, list)}
-    except Exception as e:
-        log(f"  ⚠验证登记簿读不了({e})")
+        content = _registry_bytes()
+        raw = json.loads(content.decode("utf-8"))
+        if not isinstance(raw, dict):
+            raise ValueError("registry must be an object")
+        commands = {k: tuple(v) for k, v in raw.items()
+                    if not k.startswith("_") and isinstance(v, list) and v
+                    and all(isinstance(arg, str) and "\\0" not in arg for arg in v)}
+        return hashlib.sha256(content).hexdigest(), MappingProxyType(commands)
+    except Exception:
+        return None, MappingProxyType({})
+
+
+_REGISTRY_SHA256, _REGISTRY_COMMANDS = _pin_registry()
+
+
+def registry_fingerprint():
+    return _REGISTRY_SHA256
+
+
+def _registry_error():
+    if _REGISTRY_SHA256 is None:
+        return "REGISTRY_UNAVAILABLE"
+    try:
+        if hashlib.sha256(_registry_bytes()).hexdigest() != _REGISTRY_SHA256:
+            return "REGISTRY_CHANGED"
+    except Exception:
+        return "REGISTRY_UNAVAILABLE"
+    return None
+
+
+def verify_registry():
+    """Only expose copies of the startup snapshot while its exact bytes still match."""
+    if _registry_error():
         return {}
+    return {key: list(argv) for key, argv in _REGISTRY_COMMANDS.items()}
+
 
 def run_verify(t):
     """卡指名的验证由 **loop** 执行,不采信 worker 的"通过了"申告。
@@ -155,13 +199,17 @@ def run_verify(t):
     argv 数组以 shell=False 传递,不经过 shell 解释与参数切分。"""
     key = str(t.get("verify_cmd") or "").strip()
     if not key: return None
-    reg = verify_registry()
+    error = _registry_error()
+    if error:
+        return {"ok": False, "registry_sha256": _REGISTRY_SHA256, "key": key, "rc": None, "code": error,
+                "out": "验证登记簿已变化或不可用；未执行命令。请由本机操作者核对登记簿并重启循环。"}
+    reg = _REGISTRY_COMMANDS
     argv = reg.get(key)
     if not argv:
         # 读不了/未登记不得化装成"没有验证"。默默放行是最危险的形。
-        return {"ok": False, "key": key, "rc": None,
+        return {"ok": False, "registry_sha256": _REGISTRY_SHA256, "key": key, "rc": None,
                 "out": f"验证 '{key}' 不在登记簿里(可用: {' / '.join(reg) or '(空)'})。"
-                       f"修改卡上的 verify_cmd,或往 verify_registry.json 加键。"}
+                       f"请由操作者修改 verify_cmd，或核对新增登记键后重启循环。"}
     venv = dict(os.environ)
     venv.setdefault("BOARD_PYTHON", sys.executable)
     venv["PYTHON"] = venv.get("BOARD_PYTHON", sys.executable)
@@ -176,7 +224,7 @@ def run_verify(t):
     real = list(argv)
     if real and real[0] in ("python", "python3", "py"):
         if not sys.executable:
-            return {"ok": False, "key": key, "cmd": " ".join(argv), "rc": -3,
+            return {"ok": False, "registry_sha256": _REGISTRY_SHA256, "key": key, "cmd": " ".join(argv), "rc": -3,
                     "out": "解释器映射不了(sys.executable 为空)。"
                            "不赌 PATH —— 占位状态的键不放行。"}
         real[0] = sys.executable
@@ -184,19 +232,21 @@ def run_verify(t):
     try:
         w = subprocess.run(real, shell=False, cwd=REPO, capture_output=True, env=venv,
                            text=True, encoding="utf-8", errors="replace", timeout=VERIFY_TIMEOUT)
-        return {"ok": w.returncode == 0, "key": key, "cmd": shown, "rc": w.returncode,
+        return {"registry_sha256": _REGISTRY_SHA256, "ok": w.returncode == 0, "key": key, "cmd": shown, "rc": w.returncode,
                 "out": ((w.stdout or "") + (w.stderr or ""))[-4000:]}
     except subprocess.TimeoutExpired:
-        return {"ok": False, "key": key, "cmd": shown, "rc": -1,
+        return {"ok": False, "registry_sha256": _REGISTRY_SHA256, "key": key, "cmd": shown, "rc": -1,
                 "out": f"({VERIFY_TIMEOUT}s 超时中止)"}
     except Exception as e:
-        return {"ok": False, "key": key, "cmd": shown, "rc": -2, "out": f"(无法启动: {e})"}
+        return {"ok": False, "registry_sha256": _REGISTRY_SHA256, "key": key, "cmd": shown, "rc": -2, "out": f"(无法启动: {e})"}
 
 def fmt_verify(vr):
     return chr(10).join([
         "—— 验证(由循环执行;worker 无执行权)——",
         f"键: {vr['key']}" + (f"   命令: {vr['cmd']}" if vr.get("cmd") else ""),
         f"结果: {'通过' if vr['ok'] else '失败'}   rc={vr.get('rc')}",
+        "登记簿 SHA-256: " + (vr.get("registry_sha256") or "未固定") +
+        ("   code=" + vr["code"] if vr.get("code") else ""),
         "```",
         (vr.get("out") or "").rstrip(),
         "```",

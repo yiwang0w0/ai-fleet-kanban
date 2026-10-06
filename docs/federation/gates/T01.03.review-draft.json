@@ -1,0 +1,26 @@
+{
+  "artifact_type": "independent_task_review_draft",
+  "task_id": "T01.03",
+  "plan_id": "AFK-FED-001",
+  "code_sha": "864feec033f4be38c929ae2d29cf683fb266516d",
+  "decision": "pending",
+  "acceptance_criteria": [
+    "冻结 SHA 上全部必选回归通过",
+    "Windows 路径断言有定位、修正或经核准的替代测试",
+    "不删测试凑绿"
+  ],
+  "required_roles": [
+    "TEST",
+    "REVIEW"
+  ],
+  "implementer": "codex-fleet-federation-foundation",
+  "reviewer_instance_id": null,
+  "verified_at": null,
+  "acceptance_receipt": null,
+  "ci_steps": [
+    "All required Windows harness steps and gitleaks in CI #149"
+  ],
+  "evidence_manifest": "docs/federation/acceptance-candidate-evidence.json",
+  "evidence_sha256": "2e744e2abb647daeb874c3d55e56843980de6c75922ec99a6279806f9c8c104a",
+  "note": "Pending independent criterion review only. Later commits and live deployment are not approved by this frozen CI result."
+}

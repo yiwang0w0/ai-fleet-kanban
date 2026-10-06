@@ -1,0 +1,236 @@
+{
+  "format": "ai-fleet-panel-auth-evidence/v1",
+  "finding": "seven-module/H2",
+  "status": "implemented_and_locally_verified_not_deployed",
+  "base_commit": "e73e27cb56f50052f01b208ac83b93733a4bfd3d",
+  "negative_control_code_sha": "f10f268c30358b8a2dcb58e72ac79c629fa15f5a",
+  "recorded_at": "2026-10-01T07:58:05.680Z",
+  "source_binding": "Changes based on base_commit; exact tested source bytes bound below as UTF-8 LF SHA256. This record does not label the old baseline as fixed.",
+  "implementation": {
+    "anonymous_surfaces": [
+      "pairing HTML and client script",
+      "health status and port",
+      "worker_protocol_version only"
+    ],
+    "operational_reads_authenticated": true,
+    "sse_authenticated": true,
+    "operator_pairing_required": true,
+    "existing_worker_and_review_write_permissions_preserved": true,
+    "credential_store": "sessionStorage per origin/tab, memory fallback",
+    "credential_in_url": false,
+    "credential_in_html": false,
+    "cookies_used": false,
+    "persistent_local_storage_used": false,
+    "invalid_authorization_clears_tab": true,
+    "automatic_write_retry": false,
+    "extra_origins_warning": true,
+    "csp_inline_script_hashes": true,
+    "frame_embedding": "denied",
+    "cross_origin_credential_send": "refused",
+    "redirect_credential_send": "refused"
+  },
+  "final_targeted_tests": {
+    "unique_outer_tests": 69,
+    "passed": 69,
+    "failed": 0,
+    "skipped": 0,
+    "counting": "Union of the named files after fixture corrections; not a claim of a single 69-test run or a full npm test.",
+    "new_http": 5,
+    "new_client": 3,
+    "existing": {
+      "server": 1,
+      "fleet_view": 14,
+      "versions": 26,
+      "run_fence": 18,
+      "timeline": 1,
+      "sentry": 1
+    },
+    "embedded_assertions": {
+      "server": 195,
+      "timeline": 23,
+      "sentry": 5,
+      "already_counted_as_file_wrappers": true
+    }
+  },
+  "negative_control": {
+    "command": "node --test tests/panelauth.test.mjs with BOARD_AUTH_TEST_ROOT set to the frozen checkout",
+    "tests": 5,
+    "expected_failures": 4,
+    "passed_control": 1,
+    "failures": [
+      "anonymous HTML contains an operator credential",
+      "anonymous meta includes node identity and task counts",
+      "anonymous task read returns 200 instead of 401",
+      "operator-only pairing endpoint absent"
+    ],
+    "unchanged_control": "authenticated SSE task change still works"
+  },
+  "preserved_initial_failures": [
+    {
+      "scope": "existing fleet HTTP fixture",
+      "result": "401 vs expected 404 for anonymous unknown route",
+      "resolution": "Fixture now authenticates before asserting the unknown-route 404; role-denial checks retained."
+    },
+    {
+      "scope": "new client VM fixture",
+      "result": "AbortController missing in simulated browser globals",
+      "resolution": "Added browser global to fixture; all three client tests pass."
+    },
+    {
+      "scope": "browser title locator",
+      "result": "Exact text match missed nested title metadata",
+      "resolution": "Locate actual fleet task title element by subject; full browser flow passes."
+    },
+    {
+      "scope": "sentry command invocation",
+      "result": "spawn python ENOENT after omitting explicit Python environment",
+      "resolution": "Re-ran with already verified absolute Python executable; five embedded assertions and wrapper passed. No install/environment mutation."
+    }
+  ],
+  "browser": {
+    "format": "ai-fleet-panel-pairing-browser/v1",
+    "checked_at": "2026-10-01T07:51:57.351Z",
+    "browser": "Chrome headless",
+    "anonymous_no_api_fetch": true,
+    "worker_pairing_refused": true,
+    "operator_pairing_succeeded": true,
+    "reload_revalidated": true,
+    "real_sse_task_update": true,
+    "fleet_view_usable": true,
+    "authenticated_operational_requests": true,
+    "logout_clears_tab_credential_and_view": true,
+    "token_in_url": false,
+    "token_in_html_global": false,
+    "persistent_local_storage_used": false,
+    "cookies_used": false,
+    "page_errors": [],
+    "csp_errors": [],
+    "real_model_calls": 0,
+    "production_changed": false
+  },
+  "test_runtime": {
+    "node": "v24.16.0",
+    "python": "3.12.14",
+    "platform": "win32"
+  },
+  "production": {
+    "source_changed": false,
+    "database_changed": false,
+    "server_restarted": false,
+    "tailscale_changed": false,
+    "peer_enabled": false,
+    "real_model_calls": 0
+  },
+  "acceptance": {
+    "accepted_tasks": 0,
+    "total_tasks": 72,
+    "accepted_gates": 0,
+    "total_gates": 12,
+    "independent_signoff": false,
+    "gate_drafts_reanchored_this_batch": false
+  },
+  "parallel_work": {
+    "existing_progress_plan_provider_evidence_files_changed": false,
+    "public_new_node_names": "synthetic node-test only",
+    "personal_subscription_details_added": false
+  },
+  "remaining": [
+    "Other seven-module H3-H12 findings except this H2 fix remain open or partially verified",
+    "Production installation/activation and independent acceptance pending",
+    "Same-origin script and local file trust remain; this is not an OS sandbox or a full XSS audit"
+  ],
+  "source_hashes": [
+    {
+      "path": "core/server.mjs",
+      "sha256": "1e9bfa853a0ddda4094c5b655e4d1fdf4fcb3eb9d20e3721ddbf24f11b5ee448"
+    },
+    {
+      "path": "core/panel.html",
+      "sha256": "642cfec39cef48f83fc55523fe6b095dd082f7fe5d091ae8cb20863fbbd92d54"
+    },
+    {
+      "path": "core/panel-auth.js",
+      "sha256": "144cfb0e2ee22a024958a544fffc91cd6e95d0a13d140e6cd4f48cfca8fc1d39"
+    },
+    {
+      "path": "watchers/sse_watch.py",
+      "sha256": "7f01ad9f08711478f33d84d78627341588446b76948bf68f55935ef6b62059f1"
+    },
+    {
+      "path": "tests/servertest.mjs",
+      "sha256": "82939ae478b9fca59efe320fefbbba04fc5c5e30c573abad8c081bab8dfc6553"
+    },
+    {
+      "path": "tests/sentrytest.mjs",
+      "sha256": "a6ed4ebaeaf099eb9adffed627cb5e21658c70657747352c26b63108035d1d0d"
+    },
+    {
+      "path": "tests/fleetviewtest.mjs",
+      "sha256": "8c857ebfd80e94414c59251fd1e7e6ca82d248e6086f7f85f24b783918446894"
+    },
+    {
+      "path": "tests/panelauth.test.mjs",
+      "sha256": "45441d70aa9eaba76426e67e3024c701886bc48998961df3ce99802c2c6d2918"
+    },
+    {
+      "path": "tests/panelclient.test.mjs",
+      "sha256": "be974f685ee7538d007f0aff6c183eb70f44df73b6139b64a377fabaac4a333f"
+    },
+    {
+      "path": "package.json",
+      "sha256": "32efe672e58f38661d14adebb8344d9bffd7dae57cb65c30310e4fb60f89d6a9"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "9ba469ad8c5ee1fac5cdfd1d45b4fcdc711051aa3c169588f9202deac6f95dc8"
+    }
+  ],
+  "private_log_hashes": [
+    {
+      "name": "h2-negative-final.log",
+      "sha256": "d662062b03e97e4f8e7959a2547a3db8c45c9cb27c4423876a71b504f04a0348"
+    },
+    {
+      "name": "auth-final.log",
+      "sha256": "cde05f0e89b71208bac0671bf3f286b39e86773ce54b764cfd256fcf552d6fb5"
+    },
+    {
+      "name": "server-regression.log",
+      "sha256": "592483f09ca6f898e9501c3102a79c9796197b271918aa7b9d02f1aa13cff830"
+    },
+    {
+      "name": "auth-client.log",
+      "sha256": "12972bb7bef348fd2e372a57637264a8f7aa2abf8c0678c66a736a4f953dd3a9"
+    },
+    {
+      "name": "client-final.log",
+      "sha256": "185b8d27303480a0c46eafab48535abeae0f181f427142c4c5d1cfab3dd6cc86"
+    },
+    {
+      "name": "h2-first.log",
+      "sha256": "9ca5ace2bab68a6b0a9a217fd1d7475810449bbae3c032a05f28ce8f0c936886"
+    },
+    {
+      "name": "sentry-final.log",
+      "sha256": "76b847144dfe84b0e7406f50d6f68f48b9be004131cee143760c2e63bd026bd4"
+    },
+    {
+      "name": "sentry-final-python.log",
+      "sha256": "a38344e53afc5c5ed629ef86bb44232d345b485e6c12b08cda8632e25e41951e"
+    },
+    {
+      "name": "browser.log",
+      "sha256": "5498daf1efe933394ed17d17b86fe43b604946fa996522fc536e85fcf31bd297"
+    },
+    {
+      "name": "browser-final.log",
+      "sha256": "0d22ce8299d6296d5ae73d90e7ccabd0583c542ca55bcab3a47955b4631a3d65"
+    },
+    {
+      "name": "browser-result.json",
+      "sha256": "62c99071785ed85729348334d2be2f45bec57391538f42608fd2aa992cadb6f5"
+    }
+  ],
+  "browser_fixture_script_sha256": "4e2073bd710e210cb02bcb6ed91358fe8762d5c02271302669826b4d21a2156e",
+  "raw_log_policy": "Raw logs, fixture screenshots, executable paths and environment details stay in ignored local storage."
+}

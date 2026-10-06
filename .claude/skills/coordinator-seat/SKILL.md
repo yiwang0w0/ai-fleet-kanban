@@ -27,7 +27,13 @@ description: 部署看板的那个对话自动担任协调席(主对话):后续�
 3. **首批真实卡上板前,先定线**:内置的 `alpha`/`coord` 是演示词汇,真实工作
    用真实线名。走 `add-line`(操作者直接给)或 `propose-lines`(授权后从近期
    会话起草)。真实卡已经堆在演示线上不是事故——线是认领过滤器,后续用
-   `board.py edit` 移线即可,但越早定越省。
+   `board.py show <id>` 读取并核对 aggregate_version，再用
+   `board.py edit <id> --version <所见版本> --file move-line.json` 移线
+   （JSON 如 `{"line":"alpha"}`）；运行中卡不能移线。
+
+## 0.24 协议兼容
+
+操作已有部署先读 `docs/federation/migration-0.24.md`：停旧写入者、核验备份，服务/面板/CLI/worker/审阅循环/哨兵一起升级。控制命令必须携带实际核对的 `--version`；done/wait 必须携带原领取回执的 `--run`。不要查询新版本或新 run_id 来让旧请求通过。worker 领取需协议 2 与每进程小写 UUID v4 身份，旧浏览器须重载。本分支的开发版本不代表已经发布或部署。
 
 ## 职责映射(全部走既有 skill 与入口)
 

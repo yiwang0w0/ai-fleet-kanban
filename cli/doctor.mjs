@@ -13,7 +13,9 @@ import { existsSync, readFileSync, accessSync, constants } from "node:fs";
 import { createServer } from "node:net";
 import { join, dirname, isAbsolute, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyConfigDefaults } from "../core/env.mjs";
+import {inspectSeatCLI} from "../core/seat-cli-evidence.mjs";
+import { MIN_GIT_VERSION, probeGitVersion } from "../core/git-version.mjs";
+import { applyConfigDefaults, nodeTooOld } from "../core/env.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -33,14 +35,20 @@ const PORT_SRC = HAD_PORT_ENV ? "BOARD_PORT" : CFG0.port != null ? "fleet.config
 
 // ── ① node:sqlite — the store's engine ──────────────────────────────────────
 try {
+  if (nodeTooOld()) throw new Error("Unsupported Node version");
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(":memory:");
-  db.exec("CREATE TABLE t (x)");
-  db.close();
-  ok(`node:sqlite 可用(node ${process.version})`);
+  try {
+    if (db.isTransaction !== false) throw new Error("Missing SQLite transaction state");
+    db.exec("BEGIN; CREATE TABLE t (x)");
+    if (db.isTransaction !== true) throw new Error("SQLite transaction state did not advance");
+    db.exec("ROLLBACK");
+    if (db.isTransaction !== false) throw new Error("SQLite transaction state did not reset");
+  } finally { db.close(); }
+  ok(`node:sqlite 及事务状态接口可用(node ${process.version})`);
 } catch (e) {
   no(`node:sqlite 不可用(node ${process.version})`,
-     "需要 node >= 22.5(建议 24+)。nvm/官网安装后重试。");
+     "需要 Node >= 24.0.0 及正常的 SQLite isTransaction 接口。安装 Node 24 LTS 后重试。");
 }
 
 // ── ② python — the loops' runtime ───────────────────────────────────────────
@@ -67,15 +75,15 @@ if (process.platform === "win32" && process.env.PYTHONUTF8 !== "1")
 
 // ── ③ git — the revision gate's ground ──────────────────────────────────────
 try {
-  execFileSync("git", ["--version"], { stdio: "ignore", windowsHide: true, timeout: 15000 });
+  const gitVersion = probeGitVersion("git");
   try {
     execFileSync("git", ["-C", ROOT, "rev-parse", "HEAD"], { stdio: "ignore", windowsHide: true, timeout: 15000 });
-    ok("git 可用,且本目录是一个 git 仓库(revision 闸有地可站)");
+    ok("Git " + gitVersion + " 可用（最低 " + MIN_GIT_VERSION + "），且本目录是 git 仓库");
   } catch {
     wr("git 可用,但本目录不是 git 仓库", "revision 闸(accepted_rev)需要 git 历史;git init 或从 clone 运行");
   }
-} catch {
-  no("找不到 git", "revision 闸与 CI 都需要它。安装 git 后重试。");
+} catch (e) {
+  no((e.code || "GIT_UNAVAILABLE") + ": " + e.message, "安装 Git for Windows >= " + MIN_GIT_VERSION + " 后重试；联邦产物读取需要 --no-lazy-fetch。");
 }
 
 // ── ④ the local agent CLI — who actually does the work ──────────────────────
@@ -193,6 +201,16 @@ await new Promise((resolve) => {
       // fine for reading `--help`: no arguments to mangle, and we want the text, not
       // the exit code. Windows cannot spawn .cmd/.bat or an extension-less bash shim
       // directly since Node 20 — those need a shell.
+      // ⭐ The shim path is INTERPOLATED into that shell string, so a path carrying
+      //   `"` closes the quoting and `%VAR%` expands inside cmd's double quotes
+      //   (both demonstrated externally, audit 2026-10-05). The shim path comes from
+      //   WORKER_CLAUDE_CLI or a PATH walk for fixed names — an operator-controlled
+      //   value, so refuse the two shell-active characters instead of escaping them:
+      //   a diagnostic command never needs them.
+      if (CLI_IS_SHIM && /["%]/.test(CLI_PATH))
+        no(`CLI 路径含 shell 活动字符(引号或 %): ${CLI_PATH}`,
+           "换一个不含 \" 和 % 的 claude 入口路径(WORKER_CLAUDE_CLI),doctor 才能安全地经 shell 读它的 --help");
+      else {
       const help = CLI_IS_SHIM
         ? execSync(`"${CLI_PATH}" --help`, { encoding: "utf8", windowsHide: true, timeout: 30000 })
         : execFileSync(CLI_PATH, ["--help"], { encoding: "utf8", windowsHide: true, timeout: 30000 });
@@ -207,10 +225,28 @@ await new Promise((resolve) => {
           wr(`${flag} 的取值 ${bad.join("/")} 没出现在 --help 里`,
              "可能是 CLI 改了值域;fleet.config 里配了它的槽会在启动时才报错");
       }
+      }
     } catch (e) {
       wr(`CLI --help 跑不起来(${String(e.message).slice(0, 50)})`, "参数契约这一项没测成 —— 不是通过,是没测");
     }
   }
+}
+
+// Record actual native CLI version and bytes; help compatibility is not a deny-rule measurement.
+{
+  let native=CLI_PATH;
+  if(CLI_IS_SHIM&&native){
+    const sibling=join(dirname(native),"node_modules","@anthropic-ai","claude-code","bin","claude.exe");
+    native=existsSync(sibling)?sibling:null;
+  }
+  if(native){
+    try{
+      const observation=inspectSeatCLI(resolve(native));
+      console.log("  seat-cli-evidence: "+JSON.stringify(observation));
+      if(observation.measurement.status==="matched")ok("座席 CLI 与同平台已测量版本及摘要一致");
+      else wr("座席 CLI 权限语义尚无同平台、同版本、同摘要的实测记录","版本/摘要已列出；历史 Linux 测量不能证明此 Windows 文件的 deny 规则有效");
+    }catch{wr("座席 CLI 版本或摘要未能核实","未执行模型；此项不能作为权限语义验收");}
+  }else wr("没有可核实的原生座席 CLI","不把包装器或缺失文件视为已测量执行器");
 }
 
 // ── ⑤c the trust boundary: are the tokens and the registry inside the worker's reach? ─

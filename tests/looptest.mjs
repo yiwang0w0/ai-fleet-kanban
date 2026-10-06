@@ -1,3 +1,4 @@
+import { fixtureVersion } from "./http-version-fixture.mjs";
 // Loop-layer harness. `node tests/looptest.mjs`
 //
 // selftest.mjs = DB layer / decisiontest.mjs = ruling layer. THIS one runs
@@ -65,6 +66,7 @@ srv.on("error", (e) => { srvOut += `\n[server spawn error] ${(e && e.message) ||
 
 let TOKEN = "";
 const api = async (method, path, body) => {
+  body=await fixtureVersion(BASE,TOKEN,method,path,body);
   const r = await fetch(BASE + path, {
     method,
     headers: { "Content-Type": "application/json", "X-Board-Token": TOKEN },
@@ -599,9 +601,14 @@ process.stdin.on("end", () => {
          hit?.argv?.includes("--approve-for-me") && !hit?.argv?.includes("--sandbox") &&
          hit?.argv?.at(-1) === "-" && hit?.model === "gpt-5.6-sol" && hit?.effort === "xhigh",
        JSON.stringify(hit?.argv || []));
-    ok("⭐the second seat claims through /api/claim and runtime=codex lands on the card",
-       tC?.attempts >= 1 && tC?.last_runtime === "codex",
-       `status=${tC?.status} attempts=${tC?.attempts} runtime=${tC?.last_runtime}`);
+    // This loop was started by the harness with the shared worker token, not by
+    // the supervisor. It can execute/report but cannot attest its own runtime.
+    // Bound supervised seats are covered by worker-runtime-boundary.test.mjs.
+    const cRuns = (await api("GET", `/api/tasks/${C}/runs`)).body?.runs || [];
+    ok("⭐manual second-seat claim/report cannot turn a shared token into a trusted runtime",
+       tC?.attempts >= 1 && tC?.last_runtime === null &&
+         cRuns.length === 1 && cRuns[0].runtime === null,
+       `status=${tC?.status} attempts=${tC?.attempts} runtime=${tC?.last_runtime} run_runtime=${cRuns[0]?.runtime}`);
     ok("⭐heartbeat_at really advances while the seat's process blocks",
        !!liveC?.heartbeat_at, `heartbeat_at=${liveC?.heartbeat_at || "(none)"}`);
     ok("⭐JSONL terminal-state judgement (turn.completed + -o + rc=0) passes on the real path",
