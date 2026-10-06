@@ -34,6 +34,8 @@ from a named incident (see `docs/INCIDENTS.md`):
   a new unbound claim clears the previous runtime stamp. Only an operator may
   explicitly attest a manual runtime. This prevents a shared token from turning
   copied `PASS` prose into Codex machine evidence.
+  A manually launched legacy loop therefore records an unknown runtime even
+  when it actually invokes a Codex CLI; CLI output and usage are still retained.
   **Measured 2026-09-07 with the real CLI on Windows (nine experiments, positive
   controls included):** a Claude worker in `-p` mode can `Read` any absolute path
   on the machine, inside or outside its working directory — so moving the data
