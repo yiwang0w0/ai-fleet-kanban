@@ -14,7 +14,7 @@
 // operator's — is never touched, whoever calls.
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { CODE_ROOT } from "./env.mjs";
 
 const WIN = process.platform === "win32";
@@ -76,11 +76,15 @@ export function detectCodex(env = process.env) {
 }
 
 /** `--repo`: where tasks run. Must be an existing git work tree — the deliverable gate reads
- *  its HEAD, and a board whose work repo is its own clone would block every line on the
- *  next commit (the source gate watches that tree). Returns { path } or { error }. */
+ *  its HEAD — and must neither be, sit inside, nor contain the board's own folder: the source
+ *  gate watches that tree, so every commit there would hold every line until the next
+ *  confirmation. Returns { path } or { error }. */
 export function checkRepo(raw) {
   const path = resolve(String(raw));
   if (!isDir(path)) return { error: `工作目录不存在: ${path}` };
+  const within = (child, parent) => { const r = relative(parent, child); return r === "" || (!r.startsWith("..") && !isAbsolute(r)); };
+  if (within(path, CODE_ROOT) || within(CODE_ROOT, path))
+    return { error: `${path} 是看板自己的目录(或包含它)—— 任务要在另一个项目里执行;把看板放在项目外面` };
   try {
     const inside = execFileSync("git", ["-C", path, "rev-parse", "--is-inside-work-tree"],
                                 { encoding: "utf8", windowsHide: true, timeout: 15000, stdio: ["ignore", "pipe", "ignore"] }).trim();

@@ -8,9 +8,9 @@
 > 「帮我安装 AI 舰队看板:https://github.com/yiwang0w0/ai-fleet-kanban ,按仓库里的 INSTALL.md 做,任务在 D:\my-project 里执行。」
 
 你的 Claude 照 [`INSTALL.md`](../INSTALL.md) 做:体检、clone、`node cli/setup.mjs --repo …`(按这台电脑上找到的执行器
-生成配置;你提到 Codex 才加 `--codex`)、`npm run start:bg`(后台起板,面板按「更新」时原地重起)、`npm run open`
-(浏览器打开面板并自动连上,这台电脑会记住)。剩下一步是你的:面板首页的「确认当前版本」。
-面板给你的眼睛看;你的 Claude 走 API。停板用 `npm run stop`。
+生成配置;你提到 Codex 才加 `--codex`)、`node cli/start.mjs --background`(后台起板,面板按「更新」时原地重起)、
+`node cli/open.mjs`(浏览器打开面板并自动连上,这台电脑会记住)。剩下一步是你的:面板首页的「确认当前版本」。
+面板给你的眼睛看;你的 Claude 走 API。停板用 `node cli/stop.mjs`。
 
 **部署它的这个对话,从此就是你的主对话(协调席)**:改线、停线、查状态,
 直接在这里说,不用找别的入口。对话被压缩或关闭也不要紧——席位状态全在
@@ -112,7 +112,7 @@ health 哨在下一轮体检时自己发现版本不同。**不需要你敲任�
 Ctrl+C 再起),看板根本没在跑的时候就走命令行。底栏一直显示当前跑着的版本号。
 `BOARD_RESTART_MODE`:用 `npm start` 起板时是 `exit`——`cli/start.mjs` 是个极小的守护,看板
 exit 75 它就在**同一个终端**原地重起,日志和 Ctrl+C 都不变(pm2/systemd 下同样自动选 `exit`;
-`npm run start:bg` 是同一个守护在后台跑,日志在 `<data>/board.log`);
+`node cli/start.mjs --background` 是同一个守护在后台跑,日志在 `<data>/board.log`);
 裸 `node core/server.mjs` 起的板没人替它重起,就自己起继任进程(`respawn`):继任进程是
 detached 的(Windows 上非 detached 的子进程会随父进程一起被杀,实测两次),从此日志写到
 `<data>/board.log`(退出的那个进程会把路径打出来)。**推荐用 `npm start`。**

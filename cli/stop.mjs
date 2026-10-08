@@ -1,4 +1,4 @@
-// `npm run stop` (= node cli/stop.mjs [--force]) — stop the board on this machine, the way
+// `node cli/stop.mjs [--force]` (= npm run stop) — stop the board on this machine, the way
 // Ctrl+C would: lines stop with their intent kept, so the next start brings them back.
 // A card in flight would be interrupted (it returns to 「未开始」 and its line claims it
 // again later), so that needs --force — the same question the panel's restart asks.
@@ -20,7 +20,7 @@ if (r.status === 409 && v.needs_force) {
 if (r.status !== 202) { console.error(`停不了(${r.status}): ${v.error || "看板没有接受停止请求"}`); process.exit(1); }
 for (let waited = 0; waited < 20_000; waited += 300) {
   await sleep(300);
-  if (!(await boardUp(url, 800))) { console.log("看板已停止。再起: npm run start:bg"); process.exit(0); }
+  if (!(await boardUp(url, 800))) { console.log("看板已停止。再起: node cli/start.mjs --background"); process.exit(0); }
 }
 console.error(`看板说在停,但 20 秒后 ${url} 还在应答 —— 看日志: ${localBoard().logFile}`);
 process.exit(1);

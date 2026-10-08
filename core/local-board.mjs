@@ -1,5 +1,5 @@
-// The board on this machine, as the operator's own commands see it (`npm run start:bg`,
-// `npm run open`, `npm run stop`): its address — BOARD_URL, else the configured port on
+// The board on this machine, as the operator's own commands see it (cli/start.mjs
+// --background, cli/open.mjs, cli/stop.mjs): its address — BOARD_URL, else the configured port on
 // 127.0.0.1 — and the operator token in its data directory, read the way cli/board.py
 // reads it. These commands run where the board runs; none of them sends the token anywhere
 // but that address.

@@ -11,11 +11,11 @@
 // final and is passed through. pm2 / systemd users do not need this file — the board
 // detects them and exits 75 for them directly (see RESTART_MODE in core/server.mjs).
 //
-// `npm run start:bg` (= --background): the same wrapper, started detached with its output
-// in <data>/board.log, for whoever should not keep a terminal open — the operator's AI
-// running INSTALL.md first of all. It returns once /health answers (or says why not, with
-// the log's last lines), and does nothing if a board already answers. `npm run stop` is
-// the other half.
+// `node cli/start.mjs --background` (= npm run start:bg): the same wrapper, started detached
+// with its output in <data>/board.log, for whoever should not keep a terminal open — the
+// operator's AI running INSTALL.md first of all. It returns once /health answers (or says
+// why not, with the log's last lines), and does nothing if a board already answers.
+// cli/stop.mjs is the other half.
 import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -47,12 +47,13 @@ async function background() {
     if (await boardUp(url)) {
       console.log(`[start] 看板已在后台运行: ${url}`);
       console.log(`        日志: ${logFile}`);
-      console.log("        打开面板: npm run open    停止: npm run stop");
+      console.log("        打开面板: node cli/open.mjs    停止: node cli/stop.mjs");
       return 0;
     }
   }
   let tail = "";
-  try { tail = readFileSync(logFile, "utf8").slice(from).trimEnd().split(/\r?\n/).slice(-20).join("\n"); } catch {}
+  // `from` counts BYTES (statSync): slice the buffer, then decode — the board writes Chinese.
+  try { tail = readFileSync(logFile).subarray(from).toString("utf8").trimEnd().split(/\r?\n/).slice(-20).join("\n"); } catch {}
   console.error(exited === null ? `[start] 一分钟内 ${url} 没有应答 —— 看板进程还在,看日志找原因: ${logFile}`
                                 : `[start] 看板没起来(退出码 ${exited})。日志 ${logFile} 的最后几行:`);
   if (tail) console.error(tail);

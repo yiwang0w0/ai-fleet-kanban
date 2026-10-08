@@ -34,7 +34,7 @@ permission to consume a real-model allowance.
 - Windows PowerShell users: set `$env:PYTHONUTF8 = "1"` in each shell — pipes
   default to a legacy codepage and the harnesses print CJK
 
-**The short path** — one command does steps 0 and 1 and prints the two that are yours:
+**The short path** — one command does steps 0 and 1 and prints what is left:
 
 ```
 npm run setup      # doctor → fleet.config.json (a Claude line) → core/verify_registry.json → what is left
@@ -44,8 +44,9 @@ npm run demo       # board up → seed → one mock worker round (zero tokens) �
 
 **For real work, let your AI install it:** [`INSTALL.md`](../INSTALL.md) is written for
 Claude Code / Codex to follow — `node cli/setup.mjs --repo <your project>` (and `--codex`
-if you asked for it), `npm run start:bg`, `npm run open` (the panel opens already paired),
-and it leaves you the one step that is yours: 「确认当前版本」 on the panel's home page.
+if you asked for it), `node cli/start.mjs --background`, `node cli/open.mjs` (the panel opens
+already paired), and it leaves you the one step that is yours: 「确认当前版本」 on the panel's
+home page.
 
 (`npm run demo` is steps 3–4 below in one command. It asks the source gate first
 — an unblessed tree is refused with the gate's own words, there is no demo flag

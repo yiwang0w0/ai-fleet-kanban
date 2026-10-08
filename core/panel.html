@@ -467,7 +467,7 @@
 <body>
 <main id="board-pair" style="max-width:480px;margin:12vh auto;padding:24px">
  <h1>连接本机看板</h1>
- <p>在看板所在的电脑上运行 <code>npm run open</code>，浏览器会自动打开并连上。</p>
+ <p>在看板所在的电脑上，进入看板目录运行 <code>node cli/open.mjs</code>，浏览器会自动打开并连上。</p>
  <p>也可以填它给出的 6 位配对码，或者粘贴看板数据目录里 <code>board_token</code> 文件中的操作员令牌。</p>
  <form id="board-pair-form"><label for="board-pair-token">配对码或操作员令牌</label>
   <input id="board-pair-token" type="password" autocomplete="off" spellcheck="false" required style="display:block;width:100%;box-sizing:border-box;margin:12px 0" />
@@ -2930,7 +2930,7 @@ setInterval(() => {
   restartPending.hinted = true;
   live(false, restartPending.mode === "respawn"
     ? `看板还没回来(超过 30 秒)—— 看它的日志:${restartPending.log_path || "<数据目录>/board.log"}`
-    : "看板还没回来(超过 30 秒)—— 去起它的终端看看(npm start 那个窗口;用 npm run start:bg 起的看 <数据目录>/board.log)");
+    : "看板还没回来(超过 30 秒)—— 去起它的终端看看(npm start 那个窗口;后台起的看 <数据目录>/board.log)");
 }, 5000);
 
 // v0.6: the setup guide. Every step's state is MEASURED by the server on each

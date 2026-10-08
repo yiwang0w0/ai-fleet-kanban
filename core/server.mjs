@@ -122,7 +122,7 @@ if (existsSync(CONFIG_FILE)) {
 // The codex seat's switches may live in the config (`npm run setup -- --codex`). Env still
 // wins; seatUnlocked/seatCmdOk read process.env and the loops inherit it, so this is the
 // whole wiring.
-backfillEnv(CFG, SEAT_KEYS);
+const BACKFILLED = backfillEnv(CFG, SEAT_KEYS);   // dropped from a respawned successor's env (restartBoard)
 // Deployment keys (env > config > default). REPO_ROOT anchors the deliverable
 // gate and the workers' cwd; the board's own code stays anchored at CODE_ROOT.
 const REPO_ROOT = process.env.BOARD_REPO || (CFG.repo ? resolve(String(CFG.repo)) : CODE_ROOT);
@@ -2220,30 +2220,64 @@ const BOARD_TOKEN = mintToken(TOKEN_FILE);
 const WORKER_TOKEN = mintToken(join(store.DATA_DIR, "worker_token"));
 const REVIEW_TOKEN = mintToken(join(store.DATA_DIR, "review_token"));
 
-// ── One-time pairing codes (v0.24, 一句话安装). The operator token stays in the data
-//    directory; `npm run open` — which reads it, like every local CLI — asks for a code and
-//    opens /#pair=<code>, and the page trades the code for the token on this origin.
+// ── One-time pairing codes (v0.24, 一句话安装). `node cli/open.mjs` — which reads
+//    board_token from the data directory, like every local CLI — asks for a code and opens
+//    /#pair=<code>; the page trades the code for a PANEL CREDENTIAL (below) on this origin.
 //    One code at a time: 6 digits, single use, 10 minutes, burned after 5 wrong guesses.
 //    The trade requires an allowed Origin, so a page from another site cannot even try. A
-//    local process can forge that header, but it still needs a code that was never written
-//    to disk, within 5 guesses (5 in 10^6) — and a process that can read the data
-//    directory holds the token already.
+//    local process can forge that header, but it still needs the code — shown once by the
+//    command and used once by the page — within 5 guesses (5 in 10^6).
 const PAIR_TTL_MS = 10 * 60 * 1000, PAIR_MAX_FAILURES = 5;
 let pairing = null;   // { code, expires, failures }
 function mintPairCode() {
   pairing = { code: String(randomInt(0, 1_000_000)).padStart(6, "0"), expires: Date.now() + PAIR_TTL_MS, failures: 0 };
   return { code: pairing.code, expires_at: new Date(pairing.expires).toISOString() };
 }
-/** The operator token for the live code, or null. Using the code, letting it expire and
- *  the fifth wrong guess all retire it. */
+/** Is this the live code? Using it, letting it expire and the fifth wrong guess retire it. */
 function redeemPairCode(raw) {
   const p = pairing, code = typeof raw === "string" ? raw : "";
-  if (!p) return null;
-  if (Date.now() > p.expires) { pairing = null; return null; }
-  if (/^\d{6}$/.test(code) && timingSafeEqual(Buffer.from(code), Buffer.from(p.code))) { pairing = null; return BOARD_TOKEN; }
+  if (!p) return false;
+  if (Date.now() > p.expires) { pairing = null; return false; }
+  if (/^\d{6}$/.test(code) && timingSafeEqual(Buffer.from(code), Buffer.from(p.code))) { pairing = null; return true; }
   if (++p.failures >= PAIR_MAX_FAILURES) pairing = null;
-  return null;
+  return false;
 }
+// ── Panel credentials. A browser paired by code holds its OWN operator credential, never
+//    board_token: 退出连接 revokes it, it lapses 30 days after it was issued (pair again with
+//    node cli/open.mjs), and `--forget-browsers` drops them all. What a browser remembers can
+//    leak with its profile — or to whoever serves a page on this address while the board is
+//    stopped — so what it holds must be one revocable, expiring credential, not the master
+//    key the CLIs and loops use. Kept as sha256 in a private file: the list opens nothing.
+const PANEL_FILE = join(store.DATA_DIR, "panel_sessions.json");
+const PANEL_TTL_MS = 30 * 24 * 60 * 60 * 1000, PANEL_MAX = 10;
+const sha256 = (t) => createHash("sha256").update(String(t)).digest("hex");
+const panelSessions = new Map();   // sha256 → { issued_at }, oldest first
+try {
+  for (const [h, v] of Object.entries(JSON.parse(readFileSync(PANEL_FILE, "utf8")).sessions || {}))
+    if (/^[0-9a-f]{64}$/.test(h) && Date.parse(v?.issued_at) > 0) panelSessions.set(h, { issued_at: v.issued_at });
+} catch { /* none yet, or unreadable: every browser pairs again — never a reason to refuse startup */ }
+const panelLive = (v) => Date.now() - Date.parse(v.issued_at) <= PANEL_TTL_MS;
+function savePanelSessions() {
+  // The private-file helper only creates: write a fresh private file, then swap it in.
+  const tmp = `${PANEL_FILE}.${randomUUID()}.tmp`;
+  const text = JSON.stringify({ format: "ai-fleet-panel-sessions/v1", sessions: Object.fromEntries(panelSessions) }, null, 1);
+  if (process.platform === "win32") writePrivateText(tmp, text);
+  else writeFileSync(tmp, text, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  renameSync(tmp, PANEL_FILE);
+}
+function mintPanelCredential() {
+  for (const [h, v] of panelSessions) if (!panelLive(v)) panelSessions.delete(h);
+  while (panelSessions.size >= PANEL_MAX) panelSessions.delete(panelSessions.keys().next().value);
+  const credential = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+  panelSessions.set(sha256(credential), { issued_at: new Date().toISOString() });
+  savePanelSessions();
+  return credential;
+}
+const isPanelCredential = (tok) => {
+  if (typeof tok !== "string" || !/^[0-9a-f]{64}$/.test(tok)) return false;
+  const v = panelSessions.get(sha256(tok));
+  return !!v && panelLive(v);
+};
 /** An anonymous caller's body: small JSON, or null. Excess is read and dropped, so the
  *  socket stays usable for the refusal. */
 const readSmallJson = (req, max = 1024) => new Promise((resolve) => {
@@ -2340,7 +2374,7 @@ function guardAuthentication(req, res) {
   const tok = req.headers["x-board-token"];
   const bound = [...workers.entries()].find(([,w]) => w.workerToken && tok === w.workerToken);
   req.workerSeat = bound ? { worker:bound[0], runtime:bound[1].settings.runtime } : null;
-  const role = tok === BOARD_TOKEN ? "operator"
+  const role = tok === BOARD_TOKEN || isPanelCredential(tok) ? "operator"
              : tok === WORKER_TOKEN || bound ? "worker"
              : tok === REVIEW_TOKEN ? "review" : null;
   req.boardRole = role;
@@ -2421,10 +2455,11 @@ const server = http.createServer(async (req, res) => {
     if (m === "POST" && p === "/api/pair") {
       const origin = req.headers.origin;
       if (!origin || !ALLOWED_ORIGINS.has(origin)) return json(res, 403, { error: "配对只接受本机看板页面发起的请求" });
-      const token = redeemPairCode((await readSmallJson(req))?.code);
-      if (!token) return json(res, 401, { error: "配对码无效或已过期 —— 在看板电脑上重新运行 npm run open" });
-      console.log("面板已用一次性配对码连上(本机浏览器)");
-      return json(res, 200, { token, role: "operator" });
+      if (!redeemPairCode((await readSmallJson(req))?.code))
+        return json(res, 401, { error: "配对码无效或已过期 —— 在看板电脑上的看板目录里重新运行 node cli/open.mjs" });
+      const token = mintPanelCredential();
+      console.log("面板已用一次性配对码连上(本机浏览器;退出连接即撤销,30 天后需重新配对)");
+      return json(res, 200, { token, role: "operator", expires_at: new Date(Date.now() + PANEL_TTL_MS).toISOString() });
     }
     // Authenticate every other request, including SSE and future read endpoints.
     const boardRole = m === "GET" || m === "HEAD" ? guardAuthentication(req,res) : guardWrite(req,res,p);
@@ -2435,6 +2470,17 @@ const server = http.createServer(async (req, res) => {
     }
     // guardWrite let only the operator through: worker/review tokens have no pairing write.
     if (m === "POST" && p === "/api/pair/code") return json(res, 201, mintPairCode());
+    // 退出连接 revokes the caller's own panel credential; {all:true} (node cli/open.mjs
+    // --forget-browsers) revokes every browser's. board_token itself is never revoked here.
+    if (m === "POST" && p === "/api/pair/revoke") {
+      const b = await readBody(req);
+      const before = panelSessions.size;
+      if (b.all === true) panelSessions.clear();
+      else panelSessions.delete(sha256(req.headers["x-board-token"]));
+      const revoked = before - panelSessions.size;
+      if (revoked) savePanelSessions();
+      return json(res, 200, { revoked });
+    }
 
     // The new fleet reads require the existing operator credential. No new page
     // receives an injected credential; the view uses explicit operator pairing.
@@ -2577,7 +2623,7 @@ const server = http.createServer(async (req, res) => {
       setTimeout(() => { void restartBoard(p === "/api/upgrade/apply" ? "panel-upgrade" : "panel-restart"); }, 80);
       return;
     }
-    // Stop from the command line (`npm run stop`, the other half of `npm run start:bg`): the
+    // Stop from the command line (cli/stop.mjs, the other half of start.mjs --background): the
     // Ctrl+C path — lines stop with their intent kept, so the next start brings them back —
     // with the same in-flight refusal as restart.
     if (m === "POST" && p === "/api/setup/stop") {
@@ -2587,7 +2633,7 @@ const server = http.createServer(async (req, res) => {
         return json(res, 409, { error: `有 ${c.in_progress} 张卡正在跑 —— 现在停会打断它们(卡回到「未开始」,下次起板后由线重领)`,
                                 in_progress: c.in_progress, needs_force: true });
       json(res, 202, { stopping: true });
-      console.log("停止看板(操作员请求,npm run stop)—— 线的运行意图保留,下次起板照原样恢复");
+      console.log("停止看板(操作员请求,node cli/stop.mjs)—— 线的运行意图保留,下次起板照原样恢复");
       setTimeout(() => { void stopWithBoard("operator-stop"); }, 80);
       return;
     }
@@ -3431,9 +3477,12 @@ async function restartBoard(trigger) {
   const logPath = join(store.DATA_DIR, "board.log");
   let logFd = "ignore";
   try { logFd = openSync(logPath, "a", 0o600); /* same mode as the tokens next to it */ } catch (e) { console.error(`打不开 ${logPath}(${e.message})—— 新进程的日志将丢弃`); }
+  // Keys this process only backfilled from its config must not reach the successor as env —
+  // env wins, so an edited config would be ignored after the very restart meant to read it.
+  const env = { ...process.env, BOARD_RESTARTED_FROM: BOOT_REV || "?", BOARD_RESTART_TRIGGER: trigger };
+  for (const k of BACKFILLED) delete env[k];
   const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
-    cwd: process.cwd(), detached: true, stdio: ["ignore", logFd, logFd], windowsHide: true,
-    env: { ...process.env, BOARD_RESTARTED_FROM: BOOT_REV || "?", BOARD_RESTART_TRIGGER: trigger },
+    cwd: process.cwd(), detached: true, stdio: ["ignore", logFd, logFd], windowsHide: true, env,
   });
   child.once("spawn", () => {
     child.unref();

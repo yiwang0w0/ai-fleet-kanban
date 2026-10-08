@@ -98,8 +98,10 @@ npm run demo               # board up → demo chain → one mock worker round, 
 ```
 
 For real work, point it at your project and run it in the background:
-`node cli/setup.mjs --repo <your project>` (add `--codex` for a Codex line), `npm run start:bg`,
-`npm run open` (the panel opens already connected), `npm run stop` — [`INSTALL.md`](INSTALL.md).
+`node cli/setup.mjs --repo <your project>` (add `--codex` for a Codex line),
+`node cli/start.mjs --background`, `node cli/open.mjs` (the panel opens already connected),
+`node cli/stop.mjs` — [`INSTALL.md`](INSTALL.md). (`npm run start:bg` / `open` / `stop` are the
+same commands; a fresh Windows PowerShell refuses `npm.ps1` until scripts are allowed.)
 
 (No `npm install` — `package.json` declares zero dependencies and exists for its
 `scripts` table. `node cli/doctor.mjs` alone runs the preflight: everything

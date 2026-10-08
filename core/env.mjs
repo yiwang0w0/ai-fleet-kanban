@@ -32,13 +32,17 @@ const KEYS = [["port", "BOARD_PORT"], ["repo", "BOARD_REPO"], ["gated_subtree", 
 // config itself and backfills only these; the clients get them with the deployment keys.
 export const SEAT_KEYS = [["codex_cmd", "BOARD_CODEX_CMD"], ["codex_released", "BOARD_CODEX_RELEASED"]];
 
-/** Backfill unset env vars from config keys: true → "1", false/null → left unset. */
+/** Backfill unset env vars from config keys: true → "1", false/null → left unset.
+ *  Returns the env names it set (a process that hands its env on can drop them). */
 export function backfillEnv(cfg, keys = [...KEYS, ...SEAT_KEYS]) {
+  const set = [];
   for (const [ck, ek] of keys) {
     const v = cfg?.[ck];
     if (v == null || v === false || process.env[ek]) continue;
     process.env[ek] = v === true ? "1" : String(v);
+    set.push(ek);
   }
+  return set;
 }
 
 /** Backfill process.env defaults from the config; returns the config object. */

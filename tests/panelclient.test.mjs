@@ -60,6 +60,28 @@ test('a one-time code in the fragment pairs once, leaves the address bar and is 
  assert.equal(f.elements.get('board-shell').hidden,false);assert.equal(f.local.get(KEY),TOKEN);assert.equal(f.stored.size,0);
  for(const value of [...f.local.values(),...f.stored.values()])assert.equal(value.includes('123456'),false);
  f.elements.get('board-logout').dispatchEvent(new Event('click'));assert.equal(f.local.size+f.stored.size,0,'退出连接 forgets this browser too');
+ const revoke=f.calls.find(c=>c.url.pathname==='/api/pair/revoke');
+ assert.ok(revoke,'退出连接 revokes the credential on the board');assert.equal(new Headers(revoke.options.headers).get('X-Board-Token'),TOKEN);
+ assert.equal(revoke.options.keepalive,true,'the reload that follows must not cancel it');assert.equal(f.reloads(),1);
+});
+test('a board that is restarting is retried, never a reason to forget the remembered credential',async()=>{
+ let failures=0;
+ const f=client({remember:true,savedLocal:TOKEN,handler:({url,options})=>{
+  if(url.pathname==='/api/auth'&&failures<3){failures++;if(failures===1)throw new TypeError('fetch failed');return Response.json({error:'restarting'},{status:failures===2?503:502});}
+  return pairingBoard()({url,options});
+ }});
+ await f.window.boardSession.ready;
+ assert.equal(failures,3);assert.equal(f.local.get(KEY),TOKEN,'kept through a network error and two 5xx answers');assert.equal(f.elements.get('board-shell').hidden,false);
+ const refused=client({remember:true,savedLocal:'revoked-credential',handler:pairingBoard()});await until(()=>refused.local.size===0);
+ assert.match(refused.elements.get('board-pair-note').textContent,/node cli\/open\.mjs/,'a refusal (401) drops it and says how to pair again');
+});
+test('a tab that is not remembered leaves the browser-wide credential of another pairing alone',async()=>{
+ // The browser remembers credential A (another tab, box ticked); this tab holds B (box unticked).
+ const A='a'.repeat(64),B='b'.repeat(64);
+ const board=({options})=>{const t=new Headers(options.headers).get('X-Board-Token');return Response.json(t===A||t===B?{role:'operator'}:{error:'unauthorized'},{status:t===A||t===B?200:401});};
+ const f=client({remember:true,saved:B,savedLocal:A,handler:board});await f.window.boardSession.ready;
+ assert.equal(f.elements.get('board-pair-remember').checked,false,'this tab was not remembered');
+ assert.equal(f.stored.get(KEY),B);assert.equal(f.local.get(KEY),A,'reloading this tab did not undo the other tab\'s choice');
 });
 test('the form takes a 6-digit code; with 「记住」 unticked the token stays in this tab only',async()=>{
  const f=client({remember:false,handler:pairingBoard()});f.submit(' 123456 ');await f.window.boardSession.ready;

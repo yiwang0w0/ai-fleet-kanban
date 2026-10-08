@@ -93,9 +93,11 @@ applyConfigDefaults();               // the config exists now; read its port for
 const port = process.env.BOARD_PORT || 47824;
 
 say();
+// node, not npm: on a fresh Windows PowerShell the default execution policy refuses npm.ps1.
 say("接下来(可以交给你的 AI):");
-say("  1. npm run start:bg   在后台起板,关掉这个窗口也不停;停止用 npm run stop(想在当前窗口看日志:npm start)");
-say(`  2. npm run open       打开面板 http://127.0.0.1:${port} —— 自动连上,这台电脑的浏览器会记住`);
+say("  1. node cli/start.mjs --background   在后台起板,关掉这个窗口也不停;停止用 node cli/stop.mjs");
+say(`  2. node cli/open.mjs                 打开面板 http://127.0.0.1:${port} —— 自动连上,这台电脑的浏览器会记住`);
+say("  (想在当前窗口里看日志,就用 node cli/start.mjs 起板;npm run start:bg / open / stop 是同样的命令)");
 say("最后一步得你本人来:面板首页会提示「确认当前版本」—— 看一眼版本号,点确认。");
 say("  看板只运行你确认过的代码;以后每次更新看板代码都要再确认一次。命令行也行:python cli/board.py bless");
 say();

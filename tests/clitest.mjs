@@ -4,7 +4,7 @@
 // live board's data dir — reset is pointed at a temp BOARD_DATA_DIR and refuses when
 // something listens on its (temp) port, which is exactly the property under test.
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,8 +87,9 @@ console.log(NL + "[③ setup]");
      !("handoff_targets" in made) && !("codex_cmd" in made) && !("codex_released" in made) && !("repo" in made) && typeof made._setup === "string");
   ok("creates verify_registry.json from the example (store validates verify_cmd against it)", existsSync(reg) &&
      readFileSync(reg, "utf8") === readFileSync(join(ROOT, "examples", "verify_registry.example.json"), "utf8"));
-  ok("prints what is left: start in the background, open the panel, and bless", /npm run start:bg/.test(r1.out) &&
-     /npm run open/.test(r1.out) && /npm start/.test(r1.out) && /bless/.test(r1.out), r1.out.slice(-400));
+  ok("prints what is left as node commands (PowerShell's default policy refuses npm.ps1): start in the background, open, stop, and bless",
+     /node cli\/start\.mjs --background/.test(r1.out) && /node cli\/open\.mjs/.test(r1.out) && /node cli\/stop\.mjs/.test(r1.out) &&
+     /bless/.test(r1.out), r1.out.slice(-400));
   ok("⭐closing text: confirming the version is the operator's own panel button (CLI optional), no 「不做成按钮」",
      /确认当前版本/.test(r1.out) && /你本人/.test(r1.out) && !/不做成按钮/.test(r1.out));
   ok("names the executor lines and warns that without --repo tasks run in the board's own folder",
@@ -112,6 +113,10 @@ console.log(NL + "[③ setup]");
   const missing = run("cli/setup.mjs", ["--no-doctor", "--repo", join(TMP, "absent")], env2);
   ok("--repo on a missing folder: exit 1, writes nothing", missing.code === 1 && /不存在/.test(missing.out) && !existsSync(cfg2));
   ok("an unknown flag is refused with the usage line", run("cli/setup.mjs", ["--no-doctor", "--frobnicate"], env2).code === 2);
+  const own = run("cli/setup.mjs", ["--no-doctor", "--repo", ROOT], env2);
+  const inside = run("cli/setup.mjs", ["--no-doctor", "--repo", join(ROOT, "core")], env2);
+  ok("⭐--repo on the board's own folder (or inside it): exit 1, writes nothing — its commits would hold every line",
+     own.code === 1 && inside.code === 1 && /看板自己的目录/.test(own.out) && !existsSync(cfg2), `codes=${own.code}/${inside.code}`);
   // --repo + --codex: the work tree is recorded and Codex gets a line and an unlocked seat.
   const work = join(TMP, "work repo"); mkdirSync(work);
   spawnSync("git", ["init", "-q", work], { windowsHide: true });
@@ -140,6 +145,14 @@ console.log(NL + "[③b codex_cmd / codex_released → env]");
   ok("env set → env wins", JSON.stringify(read({ BOARD_CODEX_CMD: "D:/y.exe", BOARD_CODEX_RELEASED: "0" })) === JSON.stringify(["D:/y.exe", "0"]));
   writeFileSync(cfg, JSON.stringify({ lines: [{ id: "a" }], codex_released: false }));
   ok("config false → left unset (the seat stays locked)", JSON.stringify(read({})) === "[null,null]");
+  // A board that respawns itself (no wrapper) must not hand what it only BACKFILLED to its
+  // successor as env — env wins, and an edited config would be ignored after the restart.
+  const filled = spawnSync(process.execPath, ["-e", 'import("./core/env.mjs").then(m=>{process.env.BOARD_CODEX_CMD="pre-set";console.log(JSON.stringify(m.backfillEnv({codex_cmd:"x",codex_released:true},m.SEAT_KEYS)))})'],
+    { cwd: ROOT, encoding: "utf8", windowsHide: true, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("BOARD_CODEX"))) }).stdout.trim();
+  ok("backfillEnv names exactly the env vars it set (not ones already set)", filled === '["BOARD_CODEX_RELEASED"]', filled);
+  const srv = readFileSync(join(ROOT, "core", "server.mjs"), "utf8");
+  ok("(structure) the respawned successor's env drops the backfilled keys",
+     /const BACKFILLED = backfillEnv\(CFG, SEAT_KEYS\)/.test(srv) && /for \(const k of BACKFILLED\) delete env\[k\];/.test(srv));
 }
 
 // ── ④ reset: fail-closed on every axis ──────────────────────────────────────
@@ -288,6 +301,7 @@ console.log(NL + "[⑧ start:bg / open / stop]");
     '  if (req.url === "/health") return send(res, 200, { status: "ok" });',
     '  if (req.headers["x-board-token"] !== T) return send(res, 401, { error: "token" });',
     '  if (req.method === "POST" && req.url === "/api/pair/code") return send(res, 201, { code: "123456" });',
+    '  if (req.method === "POST" && req.url === "/api/pair/revoke") return send(res, 200, { revoked: JSON.parse(b || "{}").all === true ? 2 : 0 });',
     '  if (req.method === "POST" && req.url === "/api/setup/stop") {',
     '    if (existsSync(join(D, "inflight")) && !JSON.parse(b || "{}").force) return send(res, 409, { error: "有 1 张卡正在跑", needs_force: true, in_progress: 1 });',
     '    send(res, 202, { stopping: true }); setTimeout(() => process.exit(0), 50); return; }',
@@ -312,6 +326,9 @@ console.log(NL + "[⑧ start:bg / open / stop]");
   const link = cli("open.mjs", ["--print"]);
   ok("⭐open --print: asks the board for a one-time code with the operator token and prints <board>/#pair=<code>",
      link.code === 0 && link.out.trim() === `http://127.0.0.1:${port}/#pair=123456`, link.out.trim());
+  const forgot = cli("open.mjs", ["--forget-browsers"]);
+  ok("open --forget-browsers revokes every browser's panel credential with the operator token",
+     forgot.code === 0 && /已撤销 2 个浏览器/.test(forgot.out), forgot.out.trim());
   ok("open with a wrong token stops with the board's refusal (no link)",
      (() => { const d2 = join(TMP, "bg-data-2"); mkdirSync(d2); writeFileSync(join(d2, "board_token"), "wrong");
               const r = cli("open.mjs", ["--print"], { BOARD_DATA_DIR: d2 }); return r.code === 1 && !/#pair=/.test(r.out); })());
@@ -323,11 +340,15 @@ console.log(NL + "[⑧ start:bg / open / stop]");
   ok("⭐stop --force: the board stops and the command waits until it no longer answers",
      stopped.code === 0 && /已停止/.test(stopped.out) && !(await up()), stopped.out.slice(-160));
   ok("stop with nothing running says so and exits 0", (() => { const r = cli("stop.mjs"); return r.code === 0 && /没有在运行/.test(r.out); })());
+  // The log already holds earlier runs in Chinese (3 bytes a character): the tail is cut by
+  // bytes, then decoded — cutting the decoded text at a byte offset lost this run's lines.
+  appendFileSync(join(data, "board.log"), "看板已启动,端口与数据目录都正常。\n".repeat(40));
   const dead = join(TMP, "stub-dies.mjs");
-  writeFileSync(dead, 'console.log("stub cannot start: port taken"); process.exit(3);');
+  writeFileSync(dead, 'console.log("端口已被占用,看板起不来"); process.exit(3);');
   const failed = cli("start.mjs", ["--background"], { BOARD_SERVER_SCRIPT: dead });
-  ok("⭐a board that dies on boot: start:bg exits 1 and prints that run's log lines",
-     failed.code === 1 && /退出码 3/.test(failed.out) && /stub cannot start/.test(failed.out), failed.out.slice(-200));
+  ok("⭐a board that dies on boot: start:bg exits 1 and prints that run's log lines (not earlier runs', not none)",
+     failed.code === 1 && /退出码 3/.test(failed.out) && /端口已被占用,看板起不来/.test(failed.out) && !/端口与数据目录都正常/.test(failed.out),
+     failed.out.slice(-200));
 }
 
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}

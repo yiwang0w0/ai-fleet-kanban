@@ -3,6 +3,9 @@
 用户对你说"帮我装 AI 舰队看板"时，照这一页做。只面向 Windows，命令按 PowerShell 写。
 每一步都有能检查的结果：某一步失败就停下，把失败的那一行和它下面的"修法"告诉用户，不要绕过。
 
+看板的命令一律用 `node cli/...` 运行：新装的 Windows 上 PowerShell 默认不允许运行脚本，`npm` 会因为
+`npm.ps1` 被拦而失败。（`npm run setup` / `start:bg` / `open` / `stop` 是同样的命令，能用 npm 时也可以用。）
+
 ## 0 先弄清两件事
 
 1. **任务在哪个文件夹里执行。** 必须是 git 仓库。用户说了就用那个；用户正在某个项目里和你对话，
@@ -26,7 +29,13 @@ claude --version   # Claude Code，执行任务的 CLI
 - Python 3：`winget install Python.Python.3.12`
 - Claude Code：按 Anthropic 官方安装说明装，装完运行一次 `claude` 完成登录
 
-装完要开一个新的 PowerShell 窗口，新的 PATH 才生效。
+装完后刷新当前窗口的 PATH，新装的命令才找得到：
+
+```powershell
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+```
+
+还是找不到，就请用户重启你（AI 工具），再从第 1 步继续。
 
 ## 2 下载
 
@@ -50,18 +59,19 @@ node cli/setup.mjs --repo "D:\path\to\project"
 setup 先体检，有 FAIL 就停下，按 FAIL 下面的修法处理后重跑。成功时会显示「执行线: Claude」
 和接下来的命令。配置写在看板目录的 `fleet.config.json`，已经存在时不会覆盖。
 
-带参数时直接用 `node`：PowerShell 里 `npm run setup -- --codex` 的 `--` 可能被吞掉，参数就丢了。
+（不要写成 `npm run setup -- --codex`：PowerShell 里那个 `--` 可能被吞掉，参数就丢了。）
 
 ## 4 启动并打开
 
 ```powershell
-npm run start:bg
-npm run open
+node cli/start.mjs --background
+node cli/open.mjs
 ```
 
-`start:bg` 在后台启动看板，返回时看板已经在应答；关掉 PowerShell 也不会停。
-`open` 打开浏览器并自动连上，浏览器会记住这台电脑。没有自动打开时，把它打印的地址交给用户；
-地址里的配对码 10 分钟内有效，只能用一次。
+第一条在后台启动看板，返回时看板已经在应答；关掉 PowerShell 也不会停。
+第二条打开浏览器并自动连上，浏览器会记住这台电脑。没有自动打开时，把它打印的地址交给用户；
+地址里的配对码 10 分钟内有效，只能用一次。浏览器拿到的是它自己的连接凭据（不是看板的主令牌），
+30 天后需要再运行一次 `node cli/open.mjs`。
 
 ## 5 交给用户
 
@@ -71,22 +81,23 @@ npm run open
    **不要**替用户运行 `python cli/board.py bless`。
 2. 开始干活：在「全部任务」页上方的「自动拉取」一行，点 Claude 旁边的「启动」；然后在「目标」栏
    写下要做的事，点「加入并拆解」。
-3. 停止用 `npm run stop`，再启动用 `npm run start:bg`。
+3. 停止用 `node cli/stop.mjs`，再启动用 `node cli/start.mjs --background`，打开面板用 `node cli/open.mjs`。
 
 ## 平时用
 
 | 想做的事 | 命令 |
 |---|---|
-| 停止 | `npm run stop`（有任务正在执行时会先拒绝；确定要停：`node cli/stop.mjs --force`） |
-| 启动 | `npm run start:bg` |
-| 换了浏览器、清了浏览器数据 | `npm run open` |
-| 体检 | `npm run doctor` |
+| 停止 | `node cli/stop.mjs`（有任务正在执行时会先拒绝；确定要停：`node cli/stop.mjs --force`） |
+| 启动 | `node cli/start.mjs --background` |
+| 打开面板；换了浏览器、清了浏览器数据、连接过期 | `node cli/open.mjs` |
+| 让所有浏览器都重新连接（比如电脑借给过别人） | `node cli/open.mjs --forget-browsers` |
+| 体检 | `node cli/doctor.mjs` |
 | 更新看板 | `git pull`，然后在面板顶部的横幅里点「更新到新代码」，它会先列出改动 |
 
 ## 改配置
 
 配置文件是看板目录里的 `fleet.config.json`。改完 `port`、`repo`、`codex_cmd`、`codex_released`
-要重启：`npm run stop`，再 `npm run start:bg`。加线不用重启。
+要重启：`node cli/stop.mjs`，再 `node cli/start.mjs --background`。加线不用重启。
 
 - **换执行任务的文件夹**：设 `"repo": "D:/path/to/project"`（用 `/` 或 `\\`）。
 - **启用 Codex**：加三项。
@@ -104,21 +115,22 @@ npm run open
   ```
 
   `codex_cmd` 必须是原生的 `codex.exe` 绝对路径，不能是 `codex.cmd` 或 `codex.ps1`。用 npm 装的
-  Codex，原生文件在 npm 全局目录的 `node_modules\@openai\` 下面；`npm run doctor` 找到它时会把路径打出来。
+  Codex，原生文件在 npm 全局目录的 `node_modules\@openai\` 下面；`node cli/doctor.mjs` 找到它时会把路径打出来。
 - **换端口**：设 `"port": 47900`（默认 47824）。
 
 ## 出问题
 
-- `npm run start:bg` 说没起来：它会打印这次的日志；完整日志在 `core\.data\board.log`。
-- `start:bg` 说已在运行，紧接着 `npm run open` 却说看板没有在运行：你所在的工具在每条命令结束时会结束它启动的
-  所有进程。请用户自己开一个 PowerShell 窗口，进入看板目录运行 `npm start`，并让这个窗口一直开着。
-- 端口被别的程序占用：换端口（见上），再 `npm run start:bg`。
-- 面板显示要重新连接：`npm run open`。
-- 想从头再来：`npm run stop`，然后 `node cli/reset.mjs --yes`。它只清运行数据，不动配置和仓库；
+- 后台启动说没起来：它会打印这次的日志；完整日志在 `core\.data\board.log`。
+- 后台启动说已在运行，紧接着 `node cli/open.mjs` 却说看板没有在运行：你所在的工具在每条命令结束时会结束它
+  启动的所有进程。请用户自己开一个 PowerShell 窗口，进入看板目录运行 `node cli/start.mjs`，并让这个窗口一直开着。
+- 端口被别的程序占用：换端口（见上），再 `node cli/start.mjs --background`。
+- 面板显示要重新连接：`node cli/open.mjs`。
+- 想从头再来：`node cli/stop.mjs`，然后 `node cli/reset.mjs --yes`。它只清运行数据，不动配置和仓库；
   之后要重新确认版本。
 
 ## 不要做的事
 
 - 不替用户确认版本（bless），也不启用用户没要求的执行器。
-- 不把 `core\.data\board_token` 的内容贴进聊天、网址或其他文件。
+- 不把 `core\.data\board_token` 的内容贴进聊天、网址或其他文件；把面板交给用户用 `node cli/open.mjs`，不用这个令牌。
+- 不把看板装进要执行任务的项目里，也不把看板自己的目录当成 `--repo`（setup 会拒绝）。
 - 不手改 `core\.data\` 里的文件。
