@@ -467,12 +467,14 @@
 <body>
 <main id="board-pair" style="max-width:480px;margin:12vh auto;padding:24px">
  <h1>连接本机看板</h1>
- <p>从本机看板数据目录的 <code>board_token</code> 文件复制操作员令牌，粘贴后连接。</p>
- <form id="board-pair-form"><label for="board-pair-token">操作员令牌</label>
+ <p>在看板所在的电脑上运行 <code>npm run open</code>，浏览器会自动打开并连上。</p>
+ <p>也可以填它给出的 6 位配对码，或者粘贴看板数据目录里 <code>board_token</code> 文件中的操作员令牌。</p>
+ <form id="board-pair-form"><label for="board-pair-token">配对码或操作员令牌</label>
   <input id="board-pair-token" type="password" autocomplete="off" spellcheck="false" required style="display:block;width:100%;box-sizing:border-box;margin:12px 0" />
+  <label style="display:flex;gap:8px;align-items:center;margin:0 0 12px"><input type="checkbox" id="board-pair-remember" checked />在这台电脑上记住（点「退出连接」即清除）</label>
   <button type="submit" class="pri">连接看板</button>
  </form>
- <p id="board-pair-note" role="status">令牌仅保存在标签页会话中；点击退出连接即可清除。请勿填写到网址中。</p>
+ <p id="board-pair-note" role="status">请勿把令牌填到网址里。</p>
 </main>
 <div id="board-shell" hidden>
 <header>
@@ -482,7 +484,7 @@
     <button type="button" data-view="board">全部任务</button>
     <button type="button" data-view="history">历史</button>
   </nav>
-  <button type="button" id="fleet-open">全局视图</button>
+  <button type="button" id="fleet-open" hidden>全局视图</button>
   <button type="button" id="board-logout">退出连接</button>
   <span class="live"><span class="dot" id="dot"></span><span id="livetxt">连接中</span></span>
 </header>
@@ -568,7 +570,7 @@
     <option value="implement">实现</option><option value="review">评审</option>
   </select>
   <label class="chk" title="勾上=这条线的 worker 改不了工作仓 —— 这是 argv / 沙箱层面的限制,不是提示词请求;证据文件照常能写"><input type="checkbox" id="line-add-ro"> 只读</label>
-  <input id="line-add-charter" placeholder="章程(看板仓相对 .md,可选)" maxlength="120" title="逐字内联进这条线每次提示词的章程;文件住看板仓且必须在受闸子树内(改了要重新接受代码)">
+  <input id="line-add-charter" placeholder="章程(看板仓相对 .md,可选)" maxlength="120" title="逐字内联进这条线每次提示词的章程;文件住看板仓且必须在受闸子树内(改了要重新确认版本)">
   <label class="chk" title="勾上=这条线交付的卡不用你点「通过」,交付即完成(交付物闸照常检查);要你决定的卡照样进等待中"><input type="checkbox" id="line-add-auto"> 交付即完成</label>
   <button type="submit">加入</button>
   <span class="note" id="line-add-note" aria-live="polite"></span>
@@ -2928,7 +2930,7 @@ setInterval(() => {
   restartPending.hinted = true;
   live(false, restartPending.mode === "respawn"
     ? `看板还没回来(超过 30 秒)—— 看它的日志:${restartPending.log_path || "<数据目录>/board.log"}`
-    : "看板还没回来(超过 30 秒)—— 去起它的终端看看(npm start 那个窗口)");
+    : "看板还没回来(超过 30 秒)—— 去起它的终端看看(npm start 那个窗口;用 npm run start:bg 起的看 <数据目录>/board.log)");
 }, 5000);
 
 // v0.6: the setup guide. Every step's state is MEASURED by the server on each
@@ -3290,15 +3292,22 @@ function homeStatus({ localName = "本机", nodes = null, fleetError = null, hea
                   next: HOME_HEALTH_NEXT[i.next_action] || "检查本机看板的运行日志", go: null });
   if (healthError) alerts.push({ tone: "warn", where: here, what: "运行检查暂时读不到", next: "稍后会自动重试", go: null });
   if (setup && setup.steps && !setup.complete) {
-    const step = setup.steps.find((s) => s.state !== "done");
-    alerts.push({ tone: "warn", where: "看板设置", what: "还差 " + (setup.total - setup.done) + " 步" + (step ? "：" + step.title : ""),
-                  next: "到「全部任务」完成设置", go: "board" });
+    // A step the server can do in one request (generate the config, confirm the version,
+    // restart) gets its button right here; anything else is done in the guide on 全部任务.
+    const step = setup.steps.find((s) => s.state !== "done"), act = step && step.action;
+    const what = "还差 " + (setup.total - setup.done) + " 步" + (step ? "：" + step.title : "");
+    if (act && act.type === "api" && typeof act.path === "string")
+      alerts.push({ tone: "warn", where: "看板设置", what, next: step.detail || "按右边的按钮", go: null,
+                    action: { path: act.path, body: act.body || {}, confirm: act.confirm || "", label: act.label || "执行" } });
+    else alerts.push({ tone: "warn", where: "看板设置", what, next: "到「全部任务」完成设置", go: "board" });
   }
   const count = 1 + remotes.length;
   const tone = alerts.some((a) => a.tone === "bad") ? "bad" : alerts.length ? "warn" : "ok";
   const names = [here + "（本机）", ...remotes.map((n) => homeName(n.display_name) + " " + (HOME_SYNC[n.connection_state] || ["", "状态未知"])[1])];
-  const line = alerts.length ? count + " 台电脑 · " + alerts.length + " 项需要注意"
-    : remotes.length ? count + " 台电脑正常：" + names.join("、") : "本机「" + here + "」正常 · 没有连接其他电脑";
+  // One computer is the ordinary case: say it is fine, without making "no other computer"
+  // sound like something missing.
+  const line = alerts.length ? (remotes.length ? count + " 台电脑 · " : "") + alerts.length + " 项需要注意"
+    : remotes.length ? count + " 台电脑正常：" + names.join("、") : "本机「" + here + "」运行正常";
   return { tone, line, alerts };
 }
 // ── /home-model ──
@@ -3373,6 +3382,8 @@ function homeLane(lane, items, empty){
   });
 }
 function homeLocalName(){ return meta.node?.display_name; }
+/** Other computers known to this board — until there is one, multi-computer details stay out of sight. */
+const homeMulti = () => (homeFleet?.nodes || []).some((n) => !n.local);
 function renderHomeViews(){
   if (homeView === "board") return;
   const nodes = homeFleet?.nodes || null;
@@ -3395,7 +3406,12 @@ function renderHomeViews(){
       return [line, ...(known ? s.alerts : []).map((a) => {
         const row = homeEl("div", undefined, "hs-alert"); row.dataset.tone = a.tone;
         row.append(homeEl("span", a.where, "hs-where"), homeEl("span", a.what, "hs-what"), homeEl("span", "下一步：" + a.next, "hs-next"));
-        if (a.go){
+        if (a.action){
+          const b = homeEl("button", a.action.label, "pri"); b.type = "button";
+          b.addEventListener("click", () => homeSetupAction(a.action, b));
+          row.append(b);
+        }
+        else if (a.go){
           const b = homeEl("button", a.go === "board" ? "去设置" : "查看详情"); b.type = "button";
           b.addEventListener("click", () => { if (a.go === "board") setView("board"); else fleetApi?.open(); });
           row.append(b);
@@ -3426,16 +3442,29 @@ function renderHomeViews(){
     });
   }
 }
+/** The guide's own path for an api step (see the #guide handler): confirm text first, then the
+ *  request — with the one in-flight question postWithForce asks — then a fresh read. */
+async function homeSetupAction(action, button){
+  if (action.confirm && !confirm(action.confirm)) return;
+  button.disabled = true;
+  try {
+    const r = await postWithForce(action.path, action.body);
+    if (r === null){ button.disabled = false; return; }
+    if (r && r.restarting){ noteRestart(r); return; }
+    await refresh();
+  } catch (err) { button.disabled = false; alert("这一步没能完成:" + err.message); await refresh(); }
+}
 async function homeGet(path){
   const r = await fetch(path, { headers: WH, cache: "no-store" });
   const v = await r.json().catch(() => ({}));
   if (!r.ok) throw Error(v.error || "读取失败(" + r.status + ")");
   return v;
 }
-/** The three fleet reads, at most every 15 s (the board's own fallback cadence), and only
- *  while a home view is showing — the 全部任务 view never pays for them. */
+/** The three fleet reads, at most every 15 s (the board's own fallback cadence), while a home
+ *  view is showing. 全部任务 reads them once — enough to know whether there is another
+ *  computer for the header to offer — and never polls them. */
 async function loadHomeExtras(force = false){
-  if (homeView === "board" || homeExtrasBusy || (!force && Date.now() - homeExtrasAt < 15000)) return;
+  if (homeExtrasBusy || (homeView === "board" && homeExtrasAt > 0) || (!force && Date.now() - homeExtrasAt < 15000)) return;
   homeExtrasBusy = true;
   try {
     // The computers first (limit=1 still lists every node), then each other computer's own
@@ -3453,7 +3482,13 @@ async function loadHomeExtras(force = false){
     if (h.status === "fulfilled") { homeHealth = h.value; homeHealthError = null; } else homeHealthError = h.reason?.message || "读取失败";
     homeActions = a.status === "fulfilled" ? a.value : null;
     homeExtrasAt = Date.now();
-  } finally { homeExtrasBusy = false; renderHomeViews(); }
+  } finally {
+    homeExtrasBusy = false;
+    // One computer is the ordinary case: the global view stays out of the header until there
+    // is another computer, or the fleet read is failing and the view is where to look.
+    document.getElementById("fleet-open").hidden = !homeMulti() && !homeFleetError;
+    renderHomeViews();
+  }
 }
 // Called inside refresh()'s try: a drawing fault here must not read as "取数失败" on the
 // live indicator — the data did arrive. It still reaches the console.
@@ -3786,11 +3821,12 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
    const t=await request("/api/fleet/task?uid="+encodeURIComponent(uid));if(id!==detailGeneration||!detail.open)return;
    $("fleet-detail-title").textContent=t.subject;body.replaceChildren();
    const card=t.local_id!==null?byId.get(t.local_id):null,wait=t.status==="waiting"&&t.waiting_for?" · "+(meta.wf_labels?.[t.waiting_for]||t.waiting_for):"";
-   const dl=el("dl");
-   for(const[label,value]of [["所属电脑",homeName(t.owner_name,t.read_only?"另一台电脑":"本机")],["状态",(states[t.status]||t.status)+wait],["项目",t.project_id||"未绑定"],["数据来源",t.read_only?"其他电脑的缓存 · 同步于 "+time(t.last_sync_at):"本机"],["更新",time(t.updated_at)],...(t.local_id!==null?[["本机编号","#"+t.local_id]]:[])])dl.append(el("dt",label),el("dd",value));
+   // One computer: which computer, where the data came from and an unbound project say nothing.
+   const dl=el("dl"),multi=homeMulti()||t.read_only;
+   for(const[label,value]of [...(multi?[["所属电脑",homeName(t.owner_name,t.read_only?"另一台电脑":"本机")]]:[]),["状态",(states[t.status]||t.status)+wait],...(multi||t.project_id?[["项目",t.project_id||"未绑定"]]:[]),...(multi?[["数据来源",t.read_only?"其他电脑的缓存 · 同步于 "+time(t.last_sync_at):"本机"]]:[]),["更新",time(t.updated_at)],...(t.local_id!==null?[[multi?"本机编号":"编号","#"+t.local_id]]:[])])dl.append(el("dt",label),el("dd",value));
    body.append(dl);nextStep(t,card,body);
    for(const[label,value]of [["任务说明",t.description],["验收条件",t.acceptance],["执行结果",t.result],["裁定",t.verdict_note]])if(value){body.append(el("h3",label),el("pre",value));}
-   taskActions(t,body,id);
+   if(multi||t.project_id)taskActions(t,body,id);
    const tech=techIds([["终端身份",t.owner_node_id],["任务 UID",t.task_uid],["父任务",t.parent_uid||"根任务"],["运行",t.run_id||"尚无运行"],["任务版本",t.aggregate_version],...(t.read_only?[["数据代次",t.source_epoch],["收到于",time(t.received_at)]]:[])]);
    tech.classList.add("fleet-trace");evidence(t.evidence,tech);body.append(tech);
    if(t.local_id!==null){const locate=el("button","在「全部任务」中定位");locate.type="button";locate.addEventListener("click",()=>{detail.close();dialog.close();locateOnBoard(t.local_id);});body.append(locate);}

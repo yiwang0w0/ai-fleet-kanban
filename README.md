@@ -4,6 +4,16 @@
 
 **The acceptance-first kanban for mixed AI fleets.**
 
+**Install it by asking your AI.** On Windows, paste this to Claude Code (or another coding agent):
+
+> 帮我安装 AI 舰队看板：https://github.com/yiwang0w0/ai-fleet-kanban ，按仓库里的 INSTALL.md 做，任务在 D:\my-project 里执行。
+
+[`INSTALL.md`](INSTALL.md) is written for the agent: it checks the machine, clones, writes a
+config with one line per AI CLI (Claude; Codex too if you ask for it), starts the board in the
+background and opens the panel already connected. One step stays yours — 「确认当前版本」 on the
+panel's home page, because the board runs only code a person has confirmed. One computer is all
+it needs; more computers are optional.
+
 Most agent boards solve *how to make a fleet of coding agents run*. This one solves the opposite problem, distilled from weeks of running a high-autonomy mixed fleet (Claude + Codex) against a production codebase: **how not to trust what they say they finished.**
 
 - **Deliverable-existence gate** — evidence must name files, and the named files must exist in `HEAD`. Prose doesn't close cards.
@@ -82,10 +92,14 @@ This development branch targets Windows. Install **Git for Windows >= 2.45.0**; 
 
 ```
 git clone https://github.com/yiwang0w0/ai-fleet-kanban && cd ai-fleet-kanban
-npm run setup              # doctor → config → verify registry → prints the two steps that are yours
-python cli/board.py bless  # accept this tree — or press 「接受当前代码」 in the panel; both show you the diff first
+npm run setup              # doctor → config (a Claude line) → verify registry → prints what is left
+python cli/board.py bless  # confirm this version — or press 「确认当前版本」 in the panel; both show you the diff first
 npm run demo               # board up → demo chain → one mock worker round, zero tokens → a card awaits your ruling
 ```
+
+For real work, point it at your project and run it in the background:
+`node cli/setup.mjs --repo <your project>` (add `--codex` for a Codex line), `npm run start:bg`,
+`npm run open` (the panel opens already connected), `npm run stop` — [`INSTALL.md`](INSTALL.md).
 
 (No `npm install` — `package.json` declares zero dependencies and exists for its
 `scripts` table. `node cli/doctor.mjs` alone runs the preflight: everything

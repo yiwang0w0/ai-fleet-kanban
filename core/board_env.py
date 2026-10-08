@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""board_env —— fleet.config.json 的部署键(port / repo / gated_subtree)对 python
-客户端的**唯一**接线点(cli/board.py、两哨、两 loop 共用;写五份必有一份腐烂)。
+"""board_env —— fleet.config.json 的部署键(port / repo / gated_subtree,以及 codex 座席的
+codex_cmd / codex_released)对 python 客户端的**唯一**接线点(cli/board.py、两哨、两 loop
+共用;写五份必有一份腐烂)。
 
 机制=「读配置→回填 os.environ 缺省」:env 已设的键一个不碰(env 永远赢),
 之后每个客户端**既有的 env 读取代码零改动**。这替代的是把同一个端口在 server
@@ -18,7 +19,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CODE_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 CONFIG_FILE = os.environ.get("BOARD_CONFIG") or os.path.join(CODE_ROOT, "fleet.config.json")
 
-_KEYS = (("port", "BOARD_PORT"), ("repo", "BOARD_REPO"), ("gated_subtree", "BOARD_GATED_SUBTREE"))
+_KEYS = (("port", "BOARD_PORT"), ("repo", "BOARD_REPO"), ("gated_subtree", "BOARD_GATED_SUBTREE"),
+         # codex 座席的两个开关(npm run setup -- --codex 写入);与 core/env.mjs 的 SEAT_KEYS 同表。
+         ("codex_cmd", "BOARD_CODEX_CMD"), ("codex_released", "BOARD_CODEX_RELEASED"))
 
 
 def load():
@@ -37,6 +40,8 @@ def apply():
     """把配置里的部署键回填进 os.environ **缺省**(已设的 env 不动)。返回配置字典。"""
     cfg = load()
     for ck, ek in _KEYS:
-        if cfg.get(ck) is not None and not os.environ.get(ek):
-            os.environ[ek] = str(cfg[ck])
+        v = cfg.get(ck)
+        if v is None or v is False or os.environ.get(ek):
+            continue
+        os.environ[ek] = "1" if v is True else str(v)
     return cfg

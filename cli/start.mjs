@@ -10,13 +10,54 @@
 // stdio: the log stays in this terminal and Ctrl+C keeps working. Any other exit code is
 // final and is passed through. pm2 / systemd users do not need this file — the board
 // detects them and exits 75 for them directly (see RESTART_MODE in core/server.mjs).
+//
+// `npm run start:bg` (= --background): the same wrapper, started detached with its output
+// in <data>/board.log, for whoever should not keep a terminal open — the operator's AI
+// running INSTALL.md first of all. It returns once /health answers (or says why not, with
+// the log's last lines), and does nothing if a board already answers. `npm run stop` is
+// the other half.
 import { spawn } from "node:child_process";
+import { closeSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { boardUp, localBoard, sleep } from "../core/local-board.mjs";
 
 const CODE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // BOARD_SERVER_SCRIPT is a test hook (a stub that exits 75 once); production is the board.
 const SCRIPT = process.env.BOARD_SERVER_SCRIPT || join(CODE_ROOT, "core", "server.mjs");
+
+if (process.argv.includes("--background")) process.exit(await background());
+async function background() {
+  const { url, dataDir, logFile } = localBoard();
+  if (await boardUp(url)) { console.log(`[start] 看板已经在运行: ${url}`); return 0; }
+  mkdirSync(dataDir, { recursive: true });
+  const fd = openSync(logFile, "a", 0o600);    // same mode as the tokens next to it
+  const from = statSync(logFile).size;         // on failure, show this run's lines only
+  const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url),
+                                         ...process.argv.slice(2).filter((a) => a !== "--background")], {
+    cwd: CODE_ROOT, detached: true, stdio: ["ignore", fd, fd], windowsHide: true, env: process.env,
+  });
+  let exited = null;
+  child.on("exit", (code) => { exited = code ?? 1; });
+  child.on("error", (e) => { exited = 1; console.error(`[start] 起不了看板: ${e.message}`); });
+  child.unref();
+  closeSync(fd);
+  for (let waited = 0; waited < 60_000 && exited === null; waited += 500) {
+    await sleep(500);
+    if (await boardUp(url)) {
+      console.log(`[start] 看板已在后台运行: ${url}`);
+      console.log(`        日志: ${logFile}`);
+      console.log("        打开面板: npm run open    停止: npm run stop");
+      return 0;
+    }
+  }
+  let tail = "";
+  try { tail = readFileSync(logFile, "utf8").slice(from).trimEnd().split(/\r?\n/).slice(-20).join("\n"); } catch {}
+  console.error(exited === null ? `[start] 一分钟内 ${url} 没有应答 —— 看板进程还在,看日志找原因: ${logFile}`
+                                : `[start] 看板没起来(退出码 ${exited})。日志 ${logFile} 的最后几行:`);
+  if (tail) console.error(tail);
+  return 1;
+}
 const RESTART_CODE = 75;
 // ⭐ v0.19 (self-audit P2-3): a board that asks to be restarted the moment it comes up would
 //   otherwise loop forever at 300ms — give up loudly instead; the log above says why.

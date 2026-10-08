@@ -1,5 +1,5 @@
-// board env — fleet.config.json's deployment keys (port / repo / gated_subtree)
-// wired ONCE for the JS clients (doctor, seed). Same mechanism as
+// board env — fleet.config.json's deployment keys (port / repo / gated_subtree, plus the
+// codex seat's codex_cmd / codex_released) wired ONCE for the JS clients (doctor, seed). Same mechanism as
 // core/board_env.py: read the config, backfill process.env DEFAULTS — env vars
 // already set are never touched (env always wins), so every existing env read
 // downstream keeps working unchanged. This replaces the choreography of setting
@@ -28,12 +28,23 @@ export function loadConfig() {
 }
 
 const KEYS = [["port", "BOARD_PORT"], ["repo", "BOARD_REPO"], ["gated_subtree", "BOARD_GATED_SUBTREE"]];
+// The codex seat's two switches (written by `npm run setup -- --codex`). The server reads its
+// config itself and backfills only these; the clients get them with the deployment keys.
+export const SEAT_KEYS = [["codex_cmd", "BOARD_CODEX_CMD"], ["codex_released", "BOARD_CODEX_RELEASED"]];
+
+/** Backfill unset env vars from config keys: true → "1", false/null → left unset. */
+export function backfillEnv(cfg, keys = [...KEYS, ...SEAT_KEYS]) {
+  for (const [ck, ek] of keys) {
+    const v = cfg?.[ck];
+    if (v == null || v === false || process.env[ek]) continue;
+    process.env[ek] = v === true ? "1" : String(v);
+  }
+}
 
 /** Backfill process.env defaults from the config; returns the config object. */
 export function applyConfigDefaults() {
   const cfg = loadConfig();
-  for (const [ck, ek] of KEYS)
-    if (cfg[ck] != null && !process.env[ek]) process.env[ek] = String(cfg[ck]);
+  backfillEnv(cfg);
   return cfg;
 }
 

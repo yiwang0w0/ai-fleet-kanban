@@ -1180,3 +1180,8 @@ B 已发送的初始化包固定 fea7378，而 A 初次回执指向持续开发�
 - 测试：hometest 8 项通过；tltest、decisiontest、gatetest、progressdiagnostictest、conflicttest、fleetviewtest、panelclient 通过；versiontest 1 项、panelauth 1 项、fleetactionstest 27 项、servertest 10 项在 Linux 上改前改后同样失败（Windows 专属存储观测与凭据文件、容器 git 版本），全量交 Windows CI。
 - 截图实测：电脑 1440×900、手机 390×844 的首页不滚屏即见两栏标题和计数；首页、历史、全部任务、详情、全局视图均无横向溢出；首页与历史无长串 ID。
 - 阻塞：无；第 2 批等操作者确认第 1 批。
+- 2026-10-08 一句话安装（第 2 批）：INSTALL.md 写给用户自己的 AI 照做；`node cli/setup.mjs --repo … [--codex]` 按本机执行器生成配置（Claude 线，用户要求时加 Codex 线并写 codex_cmd/codex_released），`npm run start:bg` 后台起板，`npm run open` 用一次性配对码（6 位、10 分钟、单次、错 5 次作废）打开并自动连上，浏览器默认记住，`npm run stop` 平稳停板。
+- 首页设置提醒直接带「确认当前版本」按钮（源码闸对用户的新叫法，确认前仍先列版本号）；单机时不显示「全局视图」，详情不列所属电脑、数据来源、未绑定项目和跨机操作，设备摘要写「本机「X」运行正常」。
+- 测试：clitest 64、servertest 200、looptest 67、hometest 8、panelclient 6、legacy-boundaries 6 项通过（本容器 git 2.43 用本地垫片去掉 --no-lazy-fetch）；panelauth 新增配对与停板 2 项通过，原 H3 体检 1 项在 Linux 上改前改后同样失败。
+- 全新克隆实测（容器内用假 claude/codex）：setup → start:bg → open 直接进首页，点确认后变为「运行正常」；配对码复用被拒，新标签页与停板重启后仍保持连接，控制台无错误。Windows 上的浏览器拉起、后台进程脱离终端未在本机实测，交 Windows CI 与操作者确认。
+- 阻塞：无；第 3 批（围绕任务操作、首页新建任务）继续。

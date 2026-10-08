@@ -86,3 +86,39 @@ test('H3 watcher reads actual authenticated health and cannot treat unavailable 
   const unavailable=run();assert.equal(unavailable.status,1,unavailable.stderr);assert.match(unavailable.stdout,/联邦体检不可读/);assert.doesNotMatch(unavailable.stdout,/体检恢复正常/);
  }finally{db.close();}
 });
+
+test('H4 one-time pairing: the operator mints a code, the board page trades it once, wrong guesses burn it',async()=>{
+ const trade=(code,origin=base)=>fetch(base+'/api/pair',{method:'POST',headers:{'Content-Type':'application/json',...(origin?{Origin:origin}:{})},body:JSON.stringify({code})});
+ const mint=async()=>{const r=await fetch(base+'/api/pair/code',{method:'POST',headers:headers(operator),body:'{}'});assert.equal(r.status,201);const v=await r.json();
+  assert.match(v.code,/^\d{6}$/);assert.ok(Date.parse(v.expires_at)-Date.now()<=10*60*1000+2000,'a code lives ten minutes at most');return v.code;};
+ assert.equal((await fetch(base+'/api/pair/code',{method:'POST',body:'{}'})).status,401);
+ for(const token of [worker,review])assert.equal((await fetch(base+'/api/pair/code',{method:'POST',headers:headers(token),body:'{}'})).status,403,'only the operator hands out pairing');
+ assert.equal((await trade('123456')).status,401,'no live code, nothing to trade');
+ let code=await mint();
+ assert.equal((await trade(code,null)).status,403,'no Origin: not a board page');
+ assert.equal((await trade(code,'https://foreign.example')).status,403,'another site cannot even try');
+ const r=await trade(code);assert.equal(r.status,200);assert.deepEqual(await r.json(),{token:operator,role:'operator'});
+ assert.equal((await trade(code)).status,401,'single use');
+ code=await mint();const wrong=code==='000000'?'000001':'000000';
+ for(let i=0;i<5;i++){const miss=await trade(wrong);assert.equal(miss.status,401);assert.equal((await miss.text()).includes(operator),false);}
+ assert.equal((await trade(code)).status,401,'five wrong guesses burn the code');
+ const first=await mint(),second=await mint();
+ if(first!==second)assert.equal((await trade(first)).status,401,'a new code replaces the old one');
+ assert.equal((await trade(second,'https://paired.example')).status,200,'an allowed extra origin is a board page too');
+ assert.equal((await fetch(base+'/api/pair',{headers:headers(operator)})).status,404,'GET is not a pairing route');
+});
+
+// Last on purpose: it stops the fixture board.
+test('H5 npm run stop: operator-only, refuses while a card runs unless forced, then the board exits cleanly',async()=>{
+ const stop=(token,body={})=>fetch(base+'/api/setup/stop',{method:'POST',headers:token?headers(token):{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ assert.equal((await stop(null)).status,401);
+ for(const token of [worker,review])assert.equal((await stop(token)).status,403);
+ const created=await fetch(base+'/api/tasks',{method:'POST',headers:headers(operator),body:JSON.stringify({subject:'Synthetic running card',line:'alpha'})});assert.equal(created.status,201);
+ const claimed=await fetch(base+'/api/claim',{method:'POST',headers:headers(operator),body:JSON.stringify({worker:'alpha',line:'alpha',route:'default'})});assert.equal(claimed.status,200);
+ const held=await stop(operator);assert.equal(held.status,409);const why=await held.json();assert.equal(why.needs_force,true);assert.ok(why.in_progress>=1);
+ assert.equal((await fetch(base+'/health')).status,200,'refused means nothing stopped');
+ const exited=new Promise(r=>child.once('exit',code=>r(code)));
+ const forced=await stop(operator,{force:true});assert.equal(forced.status,202);assert.deepEqual(await forced.json(),{stopping:true});
+ assert.equal(await Promise.race([exited,delay(15000).then(()=>'timeout')]),0);
+ assert.match(logs,/停止看板\(操作员请求,npm run stop\)/,'the log says who stopped it');
+});

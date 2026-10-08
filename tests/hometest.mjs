@@ -128,12 +128,13 @@ test("the device line is one sentence when all is well and lists what needs atte
   const b = (state, name = "笔记本 B") => ({ node_id: NODE_B, display_name: name, local: false, connection_state: state });
   const ok = M.homeStatus({ localName: "台式机 A", nodes: [local, b("recent")], health: { issues: [] }, setup: { complete: true, steps: [] } });
   assert.deepEqual([ok.tone, ok.alerts.length, ok.line], ["ok", 0, "2 台电脑正常：台式机 A（本机）、笔记本 B 最近已同步"]);
-  assert.equal(M.homeStatus({ localName: "台式机 A", nodes: [local] }).line, "本机「台式机 A」正常 · 没有连接其他电脑");
+  assert.equal(M.homeStatus({ localName: "台式机 A", nodes: [local] }).line, "本机「台式机 A」运行正常",
+    "one computer is the ordinary case, not a missing second one");
   assert.equal(M.homeStatus({ nodes: [local, b("syncing")] }).tone, "ok", "catching up is not a fault");
   const bad = M.homeStatus({ localName: "台式机 A", nodes: [local, b("failed", NODE_B)], fleetError: "x",
     health: { issues: [{ code: "STORAGE_LOW", level: "problem", next_action: "inspect_storage_before_new_work", count: 2 },
                        { code: "SCHEDULER_LOCK_ORPHAN", level: "notice", next_action: "no_such_action", count: 1 }] },
-    setup: { complete: false, done: 3, total: 4, steps: [{ state: "done", title: "起来" }, { state: "todo", title: "接受当前代码" }] } });
+    setup: { complete: false, done: 3, total: 4, steps: [{ state: "done", title: "起来" }, { state: "todo", title: "定义你自己的线" }] } });
   assert.equal(bad.tone, "bad");
   assert.equal(bad.line, "2 台电脑 · 5 项需要注意");
   assert.deepEqual(bad.alerts.map((a) => [a.tone, a.where, a.what, a.go]), [
@@ -141,11 +142,25 @@ test("the device line is one sentence when all is well and lists what needs atte
     ["warn", "多机视图", "暂时读不到", null],
     ["bad", "台式机 A", "磁盘空间不足（2 项）", null],
     ["warn", "台式机 A", "调度器运行锁异常", null],
-    ["warn", "看板设置", "还差 1 步：接受当前代码", "board"],
+    ["warn", "看板设置", "还差 1 步：定义你自己的线", "board"],
   ]);
   assert.equal(bad.alerts[2].next, "先腾出磁盘空间再派新任务");
   assert.equal(M.homeHealthWhat("SOMETHING_NEW"), "运行检查报告了问题", "an unknown code still says something, never the code");
   assert.equal(UUID.test(JSON.stringify(bad)), false);
+  // A step the server does in one request carries its button onto home, with the server's own
+  // detail as the next step and its confirm text; the count is not prefixed by one computer.
+  const bless = { state: "todo", title: "确认当前版本(开始干活前需要)", detail: "点一下,表示「这个版本我认可」",
+    action: { type: "api", method: "POST", path: "/api/setup/bless", label: "确认当前版本", body: { confirm_tree: "t1" }, confirm: "你正在确认版本 t1" } };
+  const fresh = M.homeStatus({ localName: "台式机 A", nodes: [local], health: { issues: [] },
+                               setup: { complete: false, done: 3, total: 4, steps: [{ state: "done", title: "起来" }, bless] } });
+  assert.equal(fresh.line, "1 项需要注意");
+  assert.deepEqual(fresh.alerts.map((a) => [a.what, a.next, a.go, a.action]), [
+    ["还差 1 步：确认当前版本(开始干活前需要)", "点一下,表示「这个版本我认可」", null,
+     { path: "/api/setup/bless", body: { confirm_tree: "t1" }, confirm: "你正在确认版本 t1", label: "确认当前版本" }],
+  ]);
+  const quick = M.homeStatus({ nodes: [local], setup: { complete: false, done: 2, total: 4,
+    steps: [{ state: "todo", title: "定义你自己的线", action: { type: "quick", kind: "propose-lines" } }] } });
+  assert.deepEqual(quick.alerts.map((a) => [a.go, a.action]), [["board", undefined]], "other steps still go to the guide");
 });
 
 test("layout pins: home is the landing view, ids fold under 技术信息, hidden columns never animate", () => {
@@ -168,4 +183,9 @@ test("layout pins: home is the landing view, ids fold under 技术信息, hidden
     "FLIP measures and plays only while the columns are visible");
   assert.ok(src.includes("if (v === \"board\") { if (homeReady) render(); }"),
     "the columns' shell is never built before meta arrives");
+  // One computer: no global-view button in the header, and the detail drops which computer,
+  // where the data came from, an unbound project and the cross-computer actions.
+  assert.match(src, /<button type="button" id="fleet-open" hidden>全局视图<\/button>/);
+  assert.ok(src.includes('document.getElementById("fleet-open").hidden = !homeMulti() && !homeFleetError;'));
+  assert.ok(show.includes("multi=homeMulti()||t.read_only") && show.includes("if(multi||t.project_id)taskActions(t,body,id);"));
 });

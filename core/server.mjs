@@ -14,14 +14,15 @@ import {inspectionError} from './inspection.mjs';
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, copyFileSync, renameSync, unlinkSync, mkdirSync, chmodSync } from "node:fs";
-import { randomUUID, createHash } from "node:crypto";
+import { readFileSync, writeFileSync, existsSync, statSync, readdirSync, createReadStream, openSync, readSync, closeSync, renameSync, unlinkSync, mkdirSync, chmodSync } from "node:fs";
+import { randomUUID, createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { execFile, execFileSync, execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve, relative } from "node:path";
 import { createRequire } from "node:module";
-import { nodeTooOld } from "./env.mjs";
+import { nodeTooOld, backfillEnv, SEAT_KEYS } from "./env.mjs";
+import { buildConfig, writeNewConfig } from "./config-setup.mjs";
 import {readFleetView,readFleetTask,readFleetEvidencePage} from "./fleet-view.mjs";
 import {readFleetProgress} from "./fleet-progress.mjs";
 import {openFleetActions,loadFleetActionsConfig} from "./fleet-actions.mjs";
@@ -118,6 +119,10 @@ if (existsSync(CONFIG_FILE)) {
     process.exit(1);
   }
 }
+// The codex seat's switches may live in the config (`npm run setup -- --codex`). Env still
+// wins; seatUnlocked/seatCmdOk read process.env and the loops inherit it, so this is the
+// whole wiring.
+backfillEnv(CFG, SEAT_KEYS);
 // Deployment keys (env > config > default). REPO_ROOT anchors the deliverable
 // gate and the workers' cwd; the board's own code stays anchored at CODE_ROOT.
 const REPO_ROOT = process.env.BOARD_REPO || (CFG.repo ? resolve(String(CFG.repo)) : CODE_ROOT);
@@ -695,25 +700,26 @@ function blessStep() {
                         { encoding: "utf8", windowsHide: true }).trim();
   } catch (e) {
     return { state: "unknown", detail: `读不到代码的版本(${String(e.message).slice(0, 60)})`,
-             hint: "看板目录得是一个 git 仓库 —— 「接受代码」就是记下它当前的 git 树哈希" };
+             hint: "看板目录得是一个 git 仓库 —— 「确认版本」就是记下它当前的 git 树哈希" };
   }
   let accepted = null;
   try { accepted = readFileSync(revFile, "utf8").trim(); } catch {}
   if (!accepted)
-    return { state: "todo", detail: "按一下,表示「当前这份代码我看过、我接受」—— 按之前会先列出你要接受的版本",
-             hint: "起线之前必须先接受一次;以后每次改了代码都要再接受一次 —— 这道门(源码闸)就是用来挡没人确认过的代码的。命令行也行:python cli/board.py bless",
+    return { state: "todo", detail: "点一下,表示「这个版本我认可」—— 点之前会先列出版本号",
+             hint: "看板只用你确认过的代码运行执行线:开始干活前确认一次,以后每次更新看板代码再确认一次 —— 这道门(源码闸)挡的是没人确认过的代码,所以得你本人来点。命令行也行:python cli/board.py bless",
              action: acceptAction(acceptPreview(head, accepted)) };
   if (accepted !== head)
-    return { state: "todo", detail: "代码改过了,接受记录还停在旧版本 —— 看一眼改动,再接受一次",
+    return { state: "todo", detail: "代码有更新,确认记录还停在旧版本 —— 看一眼改动,再确认一次",
              hint: "在这之前自动拉取会拒绝起线(exit 3)—— 那是门在挡没确认过的代码,不是故障",
              action: acceptAction(acceptPreview(head, accepted)) };
-  return { state: "done", detail: `已接受 ${CFG_GATED_SUBTREE} = ${accepted.slice(0, 12)}` };
+  return { state: "done", detail: `已确认版本 ${accepted.slice(0, 12)}` + (CFG_GATED_SUBTREE === "." ? "" : `(${CFG_GATED_SUBTREE})`) };
 }
 
 // ── Accepting code from the panel (v0.18) ────────────────────────────────────
 // The source gate's record is a human act either way — `board.py bless` or the panel's
-// 「接受当前代码」 button. Both show the same thing first (this tree, the previously accepted
-// one, `git diff --stat` between them), and the button carries the tree the human SAW
+// 「确认当前版本」 button (「接受当前代码」 before v0.24). Both show the same thing first (this
+// tree, the previously accepted one, `git diff --stat` between them), and the button carries
+// the tree the human SAW
 // (`confirm_tree`): if the disk moved in between, the server refuses. What you looked at is
 // what you accept — a button that accepts "whatever is there now" would be the one-click the
 // gate exists to prevent.
@@ -748,13 +754,14 @@ function acceptPreview(tree, prev) {
   const files = prev && prev !== tree ? Math.max(0, stat.length - 1) : (prev ? 0 : null);   // last stat line = summary
   const shown = stat.slice(0, 14).map((l) => "  " + l);
   const confirm = [
-    `你正在接受 ${CFG_GATED_SUBTREE} = ${tree.slice(0, 12)}` + (prev ? `(上次接受的是 ${prev.slice(0, 12)})` : "(首次接受)"),
-    ...(prev && prev !== tree ? ["", "上次接受 → 这次,改了什么:", ...shown, ...(stat.length > 14 ? [`  …还有 ${stat.length - 14} 行`] : [])] : []),
-    "", "接受 = 你说「这份代码我看过、我认」。自动拉取的线只用你接受过的代码起跑。",
+    `你正在确认版本 ${tree.slice(0, 12)}` + (CFG_GATED_SUBTREE === "." ? "" : `(${CFG_GATED_SUBTREE})`) +
+      (prev ? `(上次确认的是 ${prev.slice(0, 12)})` : "(首次确认)"),
+    ...(prev && prev !== tree ? ["", "上次确认 → 这次,改了什么:", ...shown, ...(stat.length > 14 ? [`  …还有 ${stat.length - 14} 行`] : [])] : []),
+    "", "确认 = 你说「这个版本我认可」。执行线只用你确认过的代码起跑。",
   ].join("\n");
   return { tree, prev, files, stat, confirm };
 }
-const acceptAction = (pv) => pv ? { type: "api", method: "POST", path: "/api/setup/bless", label: "接受当前代码",
+const acceptAction = (pv) => pv ? { type: "api", method: "POST", path: "/api/setup/bless", label: "确认当前版本",
                                     body: { confirm_tree: pv.tree }, confirm: pv.confirm } : null;
 function acceptTree(confirmTree, who) {
   const { tree, err } = gatedTree();
@@ -770,7 +777,7 @@ function acceptTree(confirmTree, who) {
     dirty = execFileSync("git", ["-C", CODE_ROOT, "--no-lazy-fetch", "status", "--short", "--", CFG_GATED_SUBTREE === "." ? "." : CFG_GATED_SUBTREE],
                          { encoding: "utf8", windowsHide: true }).split("\n").filter((l) => l.trim()).length;
   } catch {}
-  console.log(`已接受 ${CFG_GATED_SUBTREE} = ${tree}(${who})` + (prev ? `,上次 ${prev.slice(0, 12)}` : ",首次")
+  console.log(`已确认 ${CFG_GATED_SUBTREE} = ${tree}(${who})` + (prev ? `,上次 ${prev.slice(0, 12)}` : ",首次")
     + (dirty ? ` ⚠ 工作树有 ${dirty} 处未提交改动 —— 闸锚的是 HEAD,起线前先 commit` : ""));
   emit("code.accepted", { tree, prev, by: who, dirty });
   return { accepted: tree, prev, dirty, files: acceptPreview(tree, prev).files };
@@ -810,10 +817,10 @@ function upgradeState() {
     ? `⚠ 有 ${c.in_progress} 张卡正在跑:更新会打断它们,卡回到「未开始」由线重领。想等它们交付再更新,就先取消。` : "";
   const needAccept = bl.state !== "done" && !!pv;
   const steps = [
-    { key: "bless", title: "接受新代码", state: bl.state === "done" ? "done" : bl.state === "blocked" ? "blocked" : "todo",
+    { key: "bless", title: "确认新版本", state: bl.state === "done" ? "done" : bl.state === "blocked" ? "blocked" : "todo",
       detail: bl.state === "done" ? bl.detail
-            : pv && pv.files != null ? `上次接受 → 这次改了 ${pv.files} 个文件,按「更新」时会先列给你看`
-            : pv ? "首次接受,按「更新」时会先列出版本" : bl.detail },
+            : pv && pv.files != null ? `上次确认 → 这次改了 ${pv.files} 个文件,按「更新」时会先列给你看`
+            : pv ? "首次确认,按「更新」时会先列出版本" : bl.detail },
     { key: "restart", title: "重启看板", state: "todo",
       detail: `进程跑的是 ${BOOT_REV},磁盘上已经是 ${onDisk}`, hint: keep + (interrupt ? "。" + interrupt : "") },
     ...(sentries.size ? [{ key: "sentries", title: "通知进程", state: "done",
@@ -823,7 +830,7 @@ function upgradeState() {
     path: needAccept ? "/api/upgrade/apply" : "/api/setup/restart", label: "更新到新代码",
     body: needAccept ? { confirm_tree: pv.tree } : {}, in_progress: c.in_progress, lines: { stop: live, resume: want },
     confirm: [`把看板从 ${BOOT_REV} 更新到 ${onDisk}。`, "",
-              ...(needAccept ? [pv.confirm] : bl.state === "done" ? ["新代码已经接受过了。"] : [`(${bl.detail})`]),
+              ...(needAccept ? [pv.confirm] : bl.state === "done" ? ["新代码已经确认过了。"] : [`(${bl.detail})`]),
               "", `接着看板会自己重启:${keep}。`, ...(interrupt ? ["", interrupt] : [])].join("\n"),
   };
   return { measurable: true, pending: true, running: BOOT_REV, on_disk: onDisk, steps, apply };
@@ -856,7 +863,7 @@ function setupState() {
           : { state: "todo", detail: `内置的 ${builtinNames} 只是占位,换成你自己的活分几条`,
               hint: "「线」= 一条自动领卡、一张接一张干下去的流水线,按你的工作切:比如 后端 / 前端 / 文档。用上面的「加线」框直接加,或按下面的按钮让你的 Claude 看看你最近在忙什么、替你起草几条",
               action: { type: "quick", kind: "propose-lines", label: "让我的 Claude 替我起草线路" } }) },
-    { key: "bless", title: "接受当前代码(起线的前提)", ...blessStep() },
+    { key: "bless", title: "确认当前版本(开始干活前需要)", ...blessStep() },
   ];
   const doneN = steps.filter((s) => s.state === "done").length;
   return { steps, done: doneN, total: steps.length, complete: doneN === steps.length,
@@ -2213,6 +2220,39 @@ const BOARD_TOKEN = mintToken(TOKEN_FILE);
 const WORKER_TOKEN = mintToken(join(store.DATA_DIR, "worker_token"));
 const REVIEW_TOKEN = mintToken(join(store.DATA_DIR, "review_token"));
 
+// ── One-time pairing codes (v0.24, 一句话安装). The operator token stays in the data
+//    directory; `npm run open` — which reads it, like every local CLI — asks for a code and
+//    opens /#pair=<code>, and the page trades the code for the token on this origin.
+//    One code at a time: 6 digits, single use, 10 minutes, burned after 5 wrong guesses.
+//    The trade requires an allowed Origin, so a page from another site cannot even try. A
+//    local process can forge that header, but it still needs a code that was never written
+//    to disk, within 5 guesses (5 in 10^6) — and a process that can read the data
+//    directory holds the token already.
+const PAIR_TTL_MS = 10 * 60 * 1000, PAIR_MAX_FAILURES = 5;
+let pairing = null;   // { code, expires, failures }
+function mintPairCode() {
+  pairing = { code: String(randomInt(0, 1_000_000)).padStart(6, "0"), expires: Date.now() + PAIR_TTL_MS, failures: 0 };
+  return { code: pairing.code, expires_at: new Date(pairing.expires).toISOString() };
+}
+/** The operator token for the live code, or null. Using the code, letting it expire and
+ *  the fifth wrong guess all retire it. */
+function redeemPairCode(raw) {
+  const p = pairing, code = typeof raw === "string" ? raw : "";
+  if (!p) return null;
+  if (Date.now() > p.expires) { pairing = null; return null; }
+  if (/^\d{6}$/.test(code) && timingSafeEqual(Buffer.from(code), Buffer.from(p.code))) { pairing = null; return BOARD_TOKEN; }
+  if (++p.failures >= PAIR_MAX_FAILURES) pairing = null;
+  return null;
+}
+/** An anonymous caller's body: small JSON, or null. Excess is read and dropped, so the
+ *  socket stays usable for the refusal. */
+const readSmallJson = (req, max = 1024) => new Promise((resolve) => {
+  let b = "", over = false;
+  req.on("data", (c) => { if (!over) { b += c; over = b.length > max; } });
+  req.on("end", () => { if (over) return resolve(null); try { resolve(b ? JSON.parse(b) : {}); } catch { resolve(null); } });
+  req.on("error", () => resolve(null));
+});
+
 const WORKER_WRITES = (p) =>
   p === "/api/claim" || p === "/api/tasks" || p === "/api/pools/exhausted" ||
   /^\/api\/tasks\/\d+\/(?:report|heartbeat|attempt)$/.test(p) ||
@@ -2376,6 +2416,16 @@ const server = http.createServer(async (req, res) => {
     if (m === "GET" && p === "/health") return json(res, 200, { status: "ok", port: PORT });
     if (m === "GET" && p === "/api/meta" && req.headers["x-board-token"] === undefined)
       return json(res, 200, { worker_protocol_version: WORKER_PROTOCOL_VERSION });
+    // The pairing trade is anonymous by nature — the caller holds a code, not a token — so it
+    // sits before the guard and checks the Origin itself (see mintPairCode).
+    if (m === "POST" && p === "/api/pair") {
+      const origin = req.headers.origin;
+      if (!origin || !ALLOWED_ORIGINS.has(origin)) return json(res, 403, { error: "配对只接受本机看板页面发起的请求" });
+      const token = redeemPairCode((await readSmallJson(req))?.code);
+      if (!token) return json(res, 401, { error: "配对码无效或已过期 —— 在看板电脑上重新运行 npm run open" });
+      console.log("面板已用一次性配对码连上(本机浏览器)");
+      return json(res, 200, { token, role: "operator" });
+    }
     // Authenticate every other request, including SSE and future read endpoints.
     const boardRole = m === "GET" || m === "HEAD" ? guardAuthentication(req,res) : guardWrite(req,res,p);
     if (!boardRole) return;
@@ -2383,6 +2433,8 @@ const server = http.createServer(async (req, res) => {
       if (boardRole !== "operator") return json(res,403,{error:"管理面板需要操作员身份"});
       return json(res,200,{role:"operator"});
     }
+    // guardWrite let only the operator through: worker/review tokens have no pairing write.
+    if (m === "POST" && p === "/api/pair/code") return json(res, 201, mintPairCode());
 
     // The new fleet reads require the existing operator credential. No new page
     // receives an injected credential; the view uses explicit operator pairing.
@@ -2493,11 +2545,12 @@ const server = http.createServer(async (req, res) => {
     if (m === "POST" && p === "/api/setup/init-config") {
       if (existsSync(CONFIG_FILE))
         throw store.err(store.ERR.CONFLICT, `${CONFIG_FILE} 已存在 —— 不覆盖(你编辑过的配置就是你的配置)`);
-      copyFileSync(join(CODE_ROOT, "examples", "fleet.config.json"), CONFIG_FILE);
-      console.log(`配置已生成: ${CONFIG_FILE}(从 examples/ 抄来)—— 改动 lines/port/repo 后重启生效;加线可免重启`);
+      // Same builder as npm run setup, without its flags: a Claude line, no codex unlock.
+      writeNewConfig(CONFIG_FILE, buildConfig());
+      console.log(`配置已生成: ${CONFIG_FILE}(执行线: Claude)—— 改动 lines/port/repo 后重启生效;加线可免重启`);
       return json(res, 201, { config_file: CONFIG_FILE, setup: setupState() });
     }
-    // ⭐ v0.18: the guide's 「接受当前代码」. Operator token (guardWrite ran above) AND the tree the
+    // ⭐ v0.18: the guide's 「确认当前版本」. Operator token (guardWrite ran above) AND the tree the
     //   human was shown — see acceptTree. Not a one-click "accept whatever is there".
     if (m === "POST" && p === "/api/setup/bless") {
       const b = await readBody(req);
@@ -2522,6 +2575,20 @@ const server = http.createServer(async (req, res) => {
       json(res, 202, { restarting: true, mode: RESTART_MODE, from: BOOT_REV, to: codeRev(), lines: { stop: live, resume: want },
                        log_path: RESTART_MODE === "respawn" ? join(store.DATA_DIR, "board.log") : null, accepted });
       setTimeout(() => { void restartBoard(p === "/api/upgrade/apply" ? "panel-upgrade" : "panel-restart"); }, 80);
+      return;
+    }
+    // Stop from the command line (`npm run stop`, the other half of `npm run start:bg`): the
+    // Ctrl+C path — lines stop with their intent kept, so the next start brings them back —
+    // with the same in-flight refusal as restart.
+    if (m === "POST" && p === "/api/setup/stop") {
+      const b = await readBody(req);
+      const c = store.counts(db);
+      if (c.in_progress > 0 && !b.force)
+        return json(res, 409, { error: `有 ${c.in_progress} 张卡正在跑 —— 现在停会打断它们(卡回到「未开始」,下次起板后由线重领)`,
+                                in_progress: c.in_progress, needs_force: true });
+      json(res, 202, { stopping: true });
+      console.log("停止看板(操作员请求,npm run stop)—— 线的运行意图保留,下次起板照原样恢复");
+      setTimeout(() => { void stopWithBoard("operator-stop"); }, 80);
       return;
     }
     if (m === "GET" && p === "/api/meta") {

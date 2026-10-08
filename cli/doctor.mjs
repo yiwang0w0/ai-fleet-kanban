@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import {inspectSeatCLI} from "../core/seat-cli-evidence.mjs";
 import { MIN_GIT_VERSION, probeGitVersion } from "../core/git-version.mjs";
 import { applyConfigDefaults, nodeTooOld } from "../core/env.mjs";
+import { detectCodex } from "../core/config-setup.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -137,7 +138,7 @@ let CLI_PATH = null, CLI_IS_SHIM = false;
   const cfgPath = process.env.BOARD_CONFIG || join(ROOT, "fleet.config.json");
   if (!existsSync(cfgPath)) {
     ok("fleet.config.json 不存在 —— 用内置缺省(线=alpha/coord)。这不是错误",
-       "要定制就从 examples/fleet.config.json 抄一份到仓库根,或让你的 Claude 替你写");
+       "npm run setup 会按这台电脑上的执行器生成一份(INSTALL.md)");
   } else {
     try {
       const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
@@ -343,13 +344,10 @@ if (!process.env.BOARD_CODEX_CMD) {
   // Not a finding either way — but the native exe hides in a place PATH never
   // shows (a real deployment dug it out of %LOCALAPPDATA% by hand; the .cmd
   // shim PATH offers is exactly what the BatBadBut gate refuses). If we can
-  // see it, say where it is.
-  const guesses = [
-    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "OpenAI", "Codex", "bin", "codex.exe"),
-    process.env.HOME && join(process.env.HOME, ".local", "bin", "codex"),
-  ].filter(Boolean);
-  const found = guesses.find((p) => { try { accessSync(p, constants.X_OK); return true; } catch { return false; } });
-  if (found) ok(`发现原生 codex 可执行文件(${found})`, "要启用第二座席:BOARD_CODEX_CMD 指向它 + BOARD_CODEX_RELEASED=1");
+  // see it, say where it is — the same search `npm run setup -- --codex` uses.
+  const found = detectCodex();
+  if (found) ok(`发现原生 codex 可执行文件(${found})`,
+                "要让 Codex 也接活:fleet.config.json 写 codex_cmd 指向它、codex_released: true,再加一条 codex 线(INSTALL.md「改配置」)");
 }
 if (process.env.BOARD_CODEX_CMD) {
   const p = process.env.BOARD_CODEX_CMD;
@@ -371,6 +369,6 @@ console.log(`result: ${pass} PASS / ${warn} WARN / ${fail} FAIL` +
             (fail ? "\n⛔ 有 FAIL —— 修完再起板(每条 FAIL 下面都写了修法)"
                   : (warn ? "\n可以起板(WARN 不拦路,但建议看一眼): "
                           : "\n一切就绪: ") +
-                    `${envPrefix}npm start(= node cli/start.mjs;面板按「更新」时原地重起)` +
+                    `${envPrefix}npm run start:bg(后台;停止用 npm run stop),或 ${envPrefix}npm start(在这个窗口里跑,面板按「更新」时原地重起)` +
                     (envPrefix ? "(PowerShell 用 $env: 形式设同名变量)" : "")));
 process.exit(fail ? 1 : 0);

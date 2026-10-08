@@ -6,15 +6,26 @@ import {setTimeout as delay} from 'node:timers/promises';
 const source=readFileSync(new URL('../core/panel-auth.js',import.meta.url),'utf8');
 const KEY='ai-fleet-board-pairing-v1',TOKEN='synthetic-browser-pairing-credential';
 async function until(fn){for(let i=0;i<200;i++){if(fn())return;await delay(5);}assert.fail('Client condition not observed');}
-function client({saved='',handler=null}={}){
- const elements=new Map(),calls=[],stored=new Map(saved?[[KEY,saved]]:[]);let reloads=0;
- for(const id of ['board-pair-form','board-pair-token','board-pair-note','board-pair','board-shell','board-logout']){const e=new EventTarget();e.value='';e.textContent='';e.hidden=id==='board-shell';e.button={disabled:false};e.querySelector=()=>e.button;elements.set(id,e);}
+// remember: null = a page without the 「记住」 box; true/false = the box, ticked or not.
+// stored = sessionStorage, local = localStorage; hash = the address bar's fragment.
+function client({saved='',savedLocal='',handler=null,remember=false,hash=''}={}){
+ const elements=new Map(),calls=[],stored=new Map(saved?[[KEY,saved]]:[]),local=new Map(savedLocal?[[KEY,savedLocal]]:[]),replaced=[];let reloads=0;
+ for(const id of ['board-pair-form','board-pair-token','board-pair-note','board-pair','board-shell','board-logout',...(remember===null?[]:['board-pair-remember'])]){const e=new EventTarget();e.value='';e.textContent='';e.hidden=id==='board-shell';e.checked=remember===true;e.button={disabled:false};e.querySelector=()=>e.button;elements.set(id,e);}
  const raw=async(url,options)=>{const call={url:new URL(url,'http://127.0.0.1:43123/'),options};calls.push(call);if(handler)return handler(call);
   const token=new Headers(options.headers).get('X-Board-Token');return Response.json(token===TOKEN?{role:'operator'}:{error:'unauthorized'},{status:token===TOKEN?200:token==='worker-only'?403:401});};
- const location={href:'http://127.0.0.1:43123/',origin:'http://127.0.0.1:43123',reload(){reloads++;}},window={fetch:raw,addEventListener(){}};
- vm.runInNewContext(source,{window,location,document:{getElementById:id=>elements.get(id)},sessionStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v),removeItem:k=>stored.delete(k)},URL,Headers,AbortSignal,AbortController,EventTarget,Event,MessageEvent,TextDecoder,setTimeout:(fn,ms)=>setTimeout(fn,Math.min(ms,10))});
+ const storage=map=>({getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,String(v)),removeItem:k=>map.delete(k)});
+ const location={href:'http://127.0.0.1:43123/'+hash,origin:'http://127.0.0.1:43123',pathname:'/',search:'',hash,reload(){reloads++;}},window={fetch:raw,addEventListener(){}};
+ vm.runInNewContext(source,{window,location,history:{replaceState:(state,title,url)=>replaced.push(url)},document:{getElementById:id=>elements.get(id)},sessionStorage:storage(stored),localStorage:storage(local),URL,URLSearchParams,Headers,AbortSignal,AbortController,EventTarget,Event,MessageEvent,TextDecoder,setTimeout:(fn,ms)=>setTimeout(fn,Math.min(ms,10))});
  const submit=value=>{elements.get('board-pair-token').value=value;elements.get('board-pair-form').dispatchEvent(new Event('submit',{cancelable:true}));};
- return {window,elements,calls,stored,submit,reloads:()=>reloads};
+ return {window,elements,calls,stored,local,replaced,submit,reloads:()=>reloads};
+}
+// A board that trades the code '123456' once for TOKEN and confirms TOKEN as the operator.
+function pairingBoard(){
+ let used=false;
+ return ({url,options})=>{
+  if(url.pathname==='/api/pair'){const {code}=JSON.parse(options.body);const okay=code==='123456'&&!used;used=used||okay;return Response.json(okay?{token:TOKEN,role:'operator'}:{error:'配对码无效或已过期 —— 在看板电脑上重新运行 npm run open'},{status:okay?200:401});}
+  const token=new Headers(options.headers).get('X-Board-Token');return Response.json(token===TOKEN?{role:'operator'}:{error:'unauthorized'},{status:token===TOKEN?200:401});
+ };
 }
 test('pairing waits for explicit operator proof, keeps the token out of HTML globals and signs subsequent reads',async()=>{
  const f=client();assert.equal(f.calls.length,0);assert.equal(f.elements.get('board-shell').hidden,true);
@@ -38,4 +49,33 @@ test('authenticated event client reconnects and decodes split Unicode/multiline/
  }});await f.window.boardSession.ready;const stream=f.window.boardSession.events('/api/events');let data=null,opened=0,errors=0;
  stream.onopen=()=>opened++;stream.onerror=()=>errors++;stream.addEventListener('future.kind',event=>{data=event.data;stream.close();});await until(()=>data!==null);
  assert.equal(data,'第一行\n第二行');assert.equal(connections,2);assert.equal(opened,2);assert.equal(errors,1);await delay(30);assert.equal(connections,2);
+});
+test('a one-time code in the fragment pairs once, leaves the address bar and is remembered in this browser',async()=>{
+ const f=client({remember:true,hash:'#pair=123456&fleet-task=abc',handler:pairingBoard()});
+ assert.deepEqual(f.replaced,['/#fleet-task=abc'],'the code leaves the address bar before anything else reads it; other fragment keys stay');
+ await f.window.boardSession.ready;
+ const trade=f.calls.find(c=>c.url.pathname==='/api/pair');
+ assert.equal(trade.options.method,'POST');assert.equal(trade.options.credentials,'omit');assert.equal(trade.options.redirect,'error');
+ assert.deepEqual(JSON.parse(trade.options.body),{code:'123456'});assert.equal(trade.url.href.includes('123456'),false,'the code travels in the body, never a URL');
+ assert.equal(f.elements.get('board-shell').hidden,false);assert.equal(f.local.get(KEY),TOKEN);assert.equal(f.stored.size,0);
+ for(const value of [...f.local.values(),...f.stored.values()])assert.equal(value.includes('123456'),false);
+ f.elements.get('board-logout').dispatchEvent(new Event('click'));assert.equal(f.local.size+f.stored.size,0,'退出连接 forgets this browser too');
+});
+test('the form takes a 6-digit code; with 「记住」 unticked the token stays in this tab only',async()=>{
+ const f=client({remember:false,handler:pairingBoard()});f.submit(' 123456 ');await f.window.boardSession.ready;
+ assert.equal(f.stored.get(KEY),TOKEN);assert.equal(f.local.size,0);assert.equal(f.calls[0].url.pathname,'/api/pair');
+ const again=client({remember:true,handler:pairingBoard()});again.submit('000000');await until(()=>!again.elements.get('board-pair-form').button.disabled);
+ assert.match(again.elements.get('board-pair-note').textContent,/npm run open/);assert.equal(again.elements.get('board-shell').hidden,true);assert.equal(again.local.size,0);
+});
+test('a remembered token restores this browser and the box follows where it was kept; a dead code falls back to it',async()=>{
+ const kept=client({remember:false,savedLocal:TOKEN,handler:pairingBoard()});await kept.window.boardSession.ready;
+ assert.equal(kept.elements.get('board-pair-remember').checked,true,'kept in this browser → the box says so');assert.equal(kept.local.get(KEY),TOKEN);
+ const tab=client({remember:true,saved:TOKEN,handler:pairingBoard()});await tab.window.boardSession.ready;
+ assert.equal(tab.elements.get('board-pair-remember').checked,false,'kept in this tab only → the box is unticked');assert.equal(tab.stored.get(KEY),TOKEN);assert.equal(tab.local.size,0);
+ const used=client({remember:true,savedLocal:TOKEN,hash:'#pair=999999',handler:pairingBoard()});await used.window.boardSession.ready;
+ assert.ok(used.calls.some(c=>c.url.pathname==='/api/pair'));assert.equal(used.elements.get('board-shell').hidden,false);assert.deepEqual(used.replaced,['/']);
+ const lost=client({remember:true,hash:'#pair=999999',handler:pairingBoard()});await until(()=>/npm run open/.test(lost.elements.get('board-pair-note').textContent));
+ assert.equal(lost.elements.get('board-shell').hidden,true);
+ const junk=client({remember:true,hash:'#pair=12ab',handler:pairingBoard()});await delay(30);
+ assert.deepEqual(junk.replaced,['/']);assert.equal(junk.calls.length,0,'a malformed code is dropped, never sent');
 });

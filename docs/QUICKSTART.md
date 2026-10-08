@@ -37,10 +37,15 @@ permission to consume a real-model allowance.
 **The short path** — one command does steps 0 and 1 and prints the two that are yours:
 
 ```
-npm run setup      # doctor → fleet.config.json → core/verify_registry.json → "now bless, then start"
+npm run setup      # doctor → fleet.config.json (a Claude line) → core/verify_registry.json → what is left
 python cli/board.py bless
 npm run demo       # board up → seed → one mock worker round (zero tokens) → "card #N awaits your ruling"
 ```
+
+**For real work, let your AI install it:** [`INSTALL.md`](../INSTALL.md) is written for
+Claude Code / Codex to follow — `node cli/setup.mjs --repo <your project>` (and `--codex`
+if you asked for it), `npm run start:bg`, `npm run open` (the panel opens already paired),
+and it leaves you the one step that is yours: 「确认当前版本」 on the panel's home page.
 
 (`npm run demo` is steps 3–4 below in one command. It asks the source gate first
 — an unblessed tree is refused with the gate's own words, there is no demo flag
@@ -71,7 +76,7 @@ a worker would fail at start time rather than at test time.
 ## 1 · Install your config (recommended)
 
 ```
-node cli/init.mjs        # copies examples/fleet.config.json to the BOARD repo root
+node cli/init.mjs        # writes fleet.config.json (the example, with one Claude line) to the BOARD repo root
 ```
 
 (`npm run setup` runs this for you, and also drops `core/verify_registry.json`
@@ -105,8 +110,8 @@ It tells you what you are accepting before it writes anything: the tree hash,
 the previously accepted one, and `git diff --stat` between the two (they are
 tree objects, so they diff directly) — and it warns when the working tree has
 uncommitted changes, because bless anchors HEAD and the gate will refuse to
-start a line from a dirty tree. Or press **「接受当前代码」** in the panel's guide
-(v0.18): the confirm dialog shows the same preview, and the button carries the tree
+start a line from a dirty tree. Or press **「确认当前版本」** (「接受当前代码」 before v0.24) on
+the panel's home page or in its guide (v0.18): the confirm dialog shows the same preview, and the button carries the tree
 you were shown (`confirm_tree`) — the server refuses if the disk moved in between.
 Either way it is you looking, then you accepting.
 

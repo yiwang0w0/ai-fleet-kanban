@@ -1339,7 +1339,7 @@ try {
       return { su, s: (su.steps || []).find((x) => x.key === key) };
     };
     const s0 = await stepOf("board");
-    ok("S1 全新部署:四步 —— 板=done,配置=todo(带一键动作),线=blocked(等配置),接受代码=blocked;「挂通知」「跑一轮」两步已删(v0.18:操作者不跑命令)",
+    ok("S1 全新部署:四步 —— 板=done,配置=todo(带一键动作),线=blocked(等配置),确认版本=blocked;「挂通知」「跑一轮」两步已删(v0.18:操作者不跑命令)",
        s0.s.state === "done" && s0.su.total === 4 &&
        s0.su.steps.find((x) => x.key === "config").state === "todo" &&
        s0.su.steps.find((x) => x.key === "config").action?.path === "/api/setup/init-config" &&
@@ -1353,9 +1353,12 @@ try {
     const init1 = await B.api("POST", "/api/setup/init-config");
     const init2 = await B.api("POST", "/api/setup/init-config");
     const afterInit = await stepOf("config");
-    ok("S3 ⭐一键生成配置 201 且当场落盘;重复 409(不覆盖你编辑过的配置)",
+    const made = existsSync(CFGS) ? JSON.parse(readFileSync(CFGS, "utf8")) : {};
+    ok("S3 ⭐一键生成配置 201 且当场落盘;重复 409(不覆盖你编辑过的配置);和 npm run setup 同一个生成器:一条 Claude 线,不解禁 codex",
        init1.status === 201 && init2.status === 409 && existsSync(CFGS) &&
-       afterInit.s.state === "done", `${init1.status}/${init2.status}`);
+       afterInit.s.state === "done" && made.lines?.map((l) => l.id).join() === "claude" &&
+       made.gated_subtree === "." && !("codex_released" in made) && !("handoff_targets" in made),
+       `${init1.status}/${init2.status} lines=${JSON.stringify(made.lines || null)}`);
     // The measured trap: the example config carries gated_subtree, but the
     // deployment keys are read ONCE at boot — so right after init-config the
     // bless step must say "restart", not "you never decided" (a browser walk of
@@ -1398,9 +1401,10 @@ try {
     // tree the human is shown (v0.18) — not a command, and not "accept whatever is there".
     const tree = execFileSync("git", ["-C", ROOT, "rev-parse", "HEAD:"], { encoding: "utf8" }).trim();
     const bl = (await D.api("GET", "/api/setup")).body.steps.find((x) => x.key === "bless");
-    ok("S7 ⭐接受代码是带「你看到的树」的按钮:api /api/setup/bless,confirm_tree=磁盘上的树,确认文案先说接受的是什么",
+    ok("S7 ⭐确认版本是带「你看到的树」的按钮:api /api/setup/bless,confirm_tree=磁盘上的树,确认文案先说确认的是哪个版本",
        bl.state === "todo" && bl.action?.type === "api" && bl.action.path === "/api/setup/bless" &&
-       bl.action.body?.confirm_tree === tree && /首次接受|上次接受/.test(bl.action.confirm || ""),
+       bl.action.body?.confirm_tree === tree && bl.action.label === "确认当前版本" &&
+       /首次确认|上次确认/.test(bl.action.confirm || "") && bl.action.confirm.includes(tree.slice(0, 12)),
        `state=${bl.state} action=${JSON.stringify(bl.action || null).slice(0, 90)}`);
     const badTree = await D.api("POST", "/api/setup/bless", { confirm_tree: "0".repeat(40) });
     const noTree = await D.api("POST", "/api/setup/bless", {});
@@ -1432,7 +1436,7 @@ try {
     D.kill();
     // The panel consumes it; accepting code is confirm-then-button, not a copied command.
     const panelSrc2 = readFileSync(join(ROOT, "core", "panel.html"), "utf8");
-    ok("S9 面板消费 /api/setup;接受代码的按钮先弹确认(data-guide-confirm);「故意没有一键按钮」的说辞已删",
+    ok("S9 面板消费 /api/setup;确认版本的按钮先弹确认(data-guide-confirm);「故意没有一键按钮」的说辞已删",
        /\/api\/setup/.test(panelSrc2) && /renderGuide/.test(panelSrc2) && /data-guide-confirm/.test(panelSrc2) &&
        !/故意没有一键按钮/.test(panelSrc2), "");
     try { rmSync(DS, { recursive: true, force: true }); } catch {}
@@ -1482,7 +1486,7 @@ try {
     const B = await mk({ env: { BOARD_GATED_SUBTREE: ".", BOARD_TEST_BOOT_REV: "0ldb00t", BOARD_RESTART_MODE: "exit" } });
     const ud = (await B.api("GET", "/api/setup")).body.upgrade;
     const keys = ud.steps.map((s) => s.key);
-    ok("T4 ⭐pull 之后 → 横幅报出两个版本,列「接受新代码 · 重启看板」两件事(没有哨连着就不提哨),并给一个「更新」按钮",
+    ok("T4 ⭐pull 之后 → 横幅报出两个版本,列「确认新版本 · 重启看板」两件事(没有哨连着就不提哨),并给一个「更新」按钮",
        ud.pending === true && JSON.stringify(keys) === JSON.stringify(["bless", "restart"]) &&
        ud.running === "0ldb00t" && ud.on_disk && ud.on_disk !== "0ldb00t" &&
        ud.apply?.path === "/api/upgrade/apply" && /更新/.test(ud.apply.label || ""),
@@ -1490,7 +1494,7 @@ try {
     ok("T5 ⭐没有一步是命令(v0.18:更新是一个按钮);按钮带的是磁盘上的树,确认文案先列改动、再说数据不丢",
        ud.steps.every((s) => !s.action || s.action.type !== "cmd") &&
        /^[0-9a-f]{40}$/.test(ud.apply?.body?.confirm_tree || "") &&
-       /接受/.test(ud.apply.confirm) && /不会丢/.test(ud.apply.confirm),
+       /确认/.test(ud.apply.confirm) && /不会丢/.test(ud.apply.confirm),
        JSON.stringify(ud.steps.map((s) => [s.key, s.state, s.action?.type])));
     ok("T6 重启这一步说清楚了「数据不会丢」——这是人按「更新」前最想知道的事",
        /不会丢/.test(ud.steps.find((s) => s.key === "restart").hint || ""), "");
