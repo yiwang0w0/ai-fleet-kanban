@@ -425,7 +425,7 @@
             border-top:1px solid var(--line);border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 5%,transparent)}
   .hs-alert[data-tone="bad"]{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 5%,transparent)}
   .hs-alert:last-child{border-radius:0 0 var(--r-md) var(--r-md)}
-  .hs-where{font-weight:600}
+  .hs-where{font-weight:600;min-width:0;overflow-wrap:anywhere}
   .hs-what{min-width:0;overflow-wrap:anywhere}
   .hs-next{color:var(--dim);min-width:0;overflow-wrap:anywhere}
   .hs-alert button{margin-left:auto}
@@ -534,6 +534,7 @@
       <div class="home-list" id="home-running"></div>
     </section>
   </div>
+  <p class="home-note" id="home-note" hidden></p>
 </main>
 <main class="home" id="history-view" data-view-panel="history" hidden>
   <section class="home-sec" data-lane="done" aria-labelledby="history-h">
@@ -3186,13 +3187,24 @@ function homeHealthWhat(code) {
   return m ? (m[1] === "SCHEDULER" ? "调度器" : "节点运行器") + "运行锁异常" : "运行检查报告了问题";
 }
 /** Where one task stands for the person looking: which list, its state, the next step.
- *  `t.hb` is hbClass(t) for this board's cards. `remoteName` = the owning computer when the
- *  row is another computer's cached copy (it can only be handled there). */
+ *  `t.hb` is hbClass(t) for this board's cards; `t.progress_blockers` is the server's own
+ *  stuckWhy — the same reasons pendingReview and claim use, so a card the machine will not
+ *  move is never shown as "the machine is on it". `remoteName` = the owning computer when
+ *  the row is another computer's cached copy (it can only be handled there). */
 function homeStep(t, { autoReview = false, remoteName = null } = {}) {
   if (t.status === "in_progress") {
     const rt = HOME_RUNTIME[t.last_runtime] ? HOME_RUNTIME[t.last_runtime] + " " : "";
     if (t.hb === "dead") return { lane: "running", state: rt + "执行中 · 心跳中断", tone: "warn", next: "检查执行线", rank: 0 };
     return { lane: "running", state: rt + "执行中", tone: "", next: "等待完成", rank: 1 };
+  }
+  const blockers = (Array.isArray(t.progress_blockers) ? t.progress_blockers : []).filter((b) => b && typeof b.code === "string");
+  const besides = (...codes) => blockers.filter((b) => !codes.includes(b.code));
+  const said = (b, fallback) => (b && typeof b.next_action === "string" && b.next_action.trim()) || fallback;
+  if (t.status === "not_started") {
+    // Parked for a person on purpose: the queue never hands it out and nothing sends it back.
+    if (t.human_gate && !remoteName) return { lane: "mine", state: "待人工裁定", tone: "", rank: 4,
+      next: said(blockers.find((b) => b.code === "HUMAN_GATE"), "裁定或解除人工闸") };
+    return { lane: null };
   }
   if (t.status !== "waiting") return { lane: null };
   const there = remoteName ? "到「" + remoteName + "」上处理" : null;
@@ -3200,11 +3212,22 @@ function homeStep(t, { autoReview = false, remoteName = null } = {}) {
   if (t.waiting_for === "decision") return { lane: "mine", state: "执行方在等你决定", tone: "", next: there || "给出决定", rank: 1 };
   if (t.waiting_for === "review") {
     if (remoteName) return { lane: null };          // that computer's own reviewer may take it; it lists there
-    if (t.review_hold === "same_family" || !autoReview)
+    // pendingReview skips human-gated cards, cards held by a protocol and deliveries it
+    // already judged: each of those waits for a person even with the reviewer running.
+    const held = besides("HUMAN_GATE", "DELIVERY_ALREADY_REVIEWED")[0];
+    if (held) return { lane: "mine", state: "待你验收", tone: "", next: said(held, "确认验收"), rank: 2 };
+    if (!autoReview || t.review_hold === "same_family" || t.human_gate || blockers.length)
       return { lane: "mine", state: "待你验收", tone: "", next: "确认验收", rank: 2 };
     return { lane: "running", state: "等待自动审阅", tone: "", next: "无需操作", rank: 2 };
   }
-  if (t.waiting_for === "dep" || t.waiting_for === "rearm") return { lane: null };   // machine-tended
+  if (t.waiting_for === "rearm" || t.waiting_for === "dep") {
+    // Machine-tended while the only reason is the one the machine resolves; anything else
+    // (a human gate, a protocol hold, no new child result) waits for a person.
+    const stuck = t.waiting_for === "rearm" ? besides("CHILDREN_UNFINISHED")[0] : besides("DELIVERY_ALREADY_REVIEWED")[0];
+    if (!stuck || remoteName) return { lane: null };
+    const state = stuck.code === "HUMAN_GATE" ? "待人工裁定" : t.waiting_for === "rearm" ? "重审受阻" : "依赖受阻";
+    return { lane: "mine", state, tone: "", next: said(stuck, "查看原因"), rank: 3 };
+  }
   return { lane: "mine", state: "等待处理", tone: "", next: there || "查看", rank: 3 };
 }
 function homeResolved(t) {
@@ -3236,12 +3259,17 @@ function homeLists({ tasks = [], localName = "本机", remote = [], actions = nu
   }
   if (actions && actions.enabled) {
     const from = (id) => "来自「" + homeName(nodeNames[id]) + "」";
-    const add = (r, state, next, rank, computer) => { if (r.identity_current !== false) mine.push({
+    // identity_current is a boolean on delegations and proposals and 0/1 on results: test truth.
+    const add = (r, state, next, rank, computer) => { if (r.identity_current) mine.push({
       key: "action:" + state + ":" + (r.delegation_id || r.relation_id || r.result_id), uid: null, localId: null, action: "fleet",
       title: String(r.subject || "跨机任务"), computer, updated: String(r.updated_at || ""), state, tone: "", next, rank }); };
     for (const r of actions.incoming || []) if (r.state === "received") add(r, "收到委派", "接收或拒绝", 3, from(r.source_node_id));
     for (const r of actions.proposals || []) if (r.state === "pending") add(r, "待确认绑定", "核对后确认", 4, from(r.relation && r.relation.source_node_id));
-    for (const r of actions.results || []) if (r.side === "source" && r.state === "received") add(r, "交付已回传", "查看交付", 5, from(r.target_node_id));
+    // A result row carries ids only; its title and the executing computer live on the binding.
+    for (const r of actions.results || []) if (r.side === "source" && r.state === "received") {
+      const b = (actions.bindings || []).find((x) => x.relation_id === r.relation_id);
+      add({ ...r, subject: b && b.subject }, "交付已回传", "查看交付", 5, from(b && b.target_node_id));
+    }
   }
   const byWait = (a, b) => a.rank - b.rank || a.updated.localeCompare(b.updated);   // longest waiting first
   mine.sort(byWait); running.sort(byWait);
@@ -3377,10 +3405,14 @@ function renderHomeViews(){
     });
     homeLane("mine", lists.mine, "没有需要你处理的事。新的目标可以在「全部任务」里写。");
     homeLane("running", lists.running, "没有正在执行的任务。排队中的任务在「全部任务」里。");
+    const note = document.getElementById("home-note"), partial = homeFleet?.partial || [];
+    note.hidden = !partial.length;
+    note.textContent = partial.length ? partial.map((n) => "「" + n + "」").join("、") + "的缓存任务较多，这里只读取了前 1000 项；完整列表在全局视图。" : "";
   } else {
     const items = lists.history;
     document.getElementById("history-n").textContent = items.length ? String(items.length) : "";
-    homeFill(document.getElementById("history-list"), JSON.stringify([homeReady, historyLimit, items, homeFleet?.truncated]), () => {
+    const partial = homeFleet?.partial || [];
+    homeFill(document.getElementById("history-list"), JSON.stringify([homeReady, historyLimit, items, partial]), () => {
       if (!homeReady) return [homeEl("p", "正在读取…", "home-empty")];
       if (!items.length) return [homeEl("p", "还没有已完成的任务。完成的任务会出现在这里。", "home-empty")];
       const out = items.slice(0, historyLimit).map((item) => homeCard({ ...item, next: item.updated ? "完成于 " + localTime(item.updated) : "" }, "done"));
@@ -3389,7 +3421,7 @@ function renderHomeViews(){
         more.addEventListener("click", () => { historyLimit += 40; renderHomeViews(); });
         out.push(more);
       }
-      if (homeFleet?.truncated) out.push(homeEl("p", "其他电脑的记录较多，这里只列出前 " + homeFleet.returned + " 项。", "home-note"));
+      if (partial.length) out.push(homeEl("p", partial.map((n) => "「" + n + "」").join("、") + "的缓存任务较多，这里只列出前 1000 项中已完成的部分。", "home-note"));
       return out;
     });
   }
@@ -3406,8 +3438,18 @@ async function loadHomeExtras(force = false){
   if (homeView === "board" || homeExtrasBusy || (!force && Date.now() - homeExtrasAt < 15000)) return;
   homeExtrasBusy = true;
   try {
-    const [f, h, a] = await Promise.allSettled([homeGet("/api/fleet?limit=1000"), homeGet("/api/fleet/health"), homeGet("/api/fleet/actions")]);
-    if (f.status === "fulfilled") { homeFleet = f.value; homeFleetError = null; } else homeFleetError = f.reason?.message || "读取失败";
+    // The computers first (limit=1 still lists every node), then each other computer's own
+    // cached rows: one capped list sorted by task_uid would let this board's rows push a
+    // whole computer out of view. This board's own cards come from `tasks`, not from here.
+    const [f, h, a] = await Promise.allSettled([homeGet("/api/fleet?limit=1"), homeGet("/api/fleet/health"), homeGet("/api/fleet/actions")]);
+    if (f.status === "fulfilled") {
+      const others = (f.value.nodes || []).filter((n) => !n.local);
+      const pages = await Promise.allSettled(others.map((n) => homeGet("/api/fleet?limit=1000&owner=" + encodeURIComponent(n.node_id))));
+      const failed = pages.find((p) => p.status === "rejected");
+      homeFleet = { nodes: f.value.nodes || [], tasks: pages.flatMap((p) => p.status === "fulfilled" ? p.value.tasks || [] : []),
+                    partial: others.filter((n, i) => pages[i].status === "fulfilled" && pages[i].value.truncated).map((n) => homeName(n.display_name)) };
+      homeFleetError = failed ? failed.reason?.message || "读取失败" : null;
+    } else homeFleetError = f.reason?.message || "读取失败";
     if (h.status === "fulfilled") { homeHealth = h.value; homeHealthError = null; } else homeHealthError = h.reason?.message || "读取失败";
     homeActions = a.status === "fulfilled" ? a.value : null;
     homeExtrasAt = Date.now();

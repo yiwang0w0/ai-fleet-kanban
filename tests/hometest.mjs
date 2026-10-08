@@ -35,6 +35,29 @@ test("decisions and answers wait for me; a delivery waits for me only when no re
   assert.ok(plain.mine.every((r) => r.computer === "台式机 A"));
 });
 
+test("a card the machine will not move is mine even with the reviewer running", () => {
+  const why = (code, next_action) => ({ code, message: code, next_action });
+  const tasks = [
+    card(1, { waiting_for: "review", human_gate: 1, progress_blockers: [why("HUMAN_GATE", "由操作者裁定或显式解除人工闸")] }),
+    card(2, { waiting_for: "review", progress_blockers: [why("DELIVERY_ALREADY_REVIEWED", "按既有审阅意见处理或补充新证据")] }),
+    card(3, { waiting_for: "review", progress_blockers: [why("DELEGATION_FINISH_HELD", "按对应协议完成结算或人工恢复")] }),
+    card(4, { waiting_for: "review" }),
+    card(5, { waiting_for: "rearm", progress_blockers: [why("CHILDREN_UNFINISHED", "先推进未完成子任务")] }),
+    card(6, { waiting_for: "rearm", progress_blockers: [why("NO_NEW_CHILD_RESULT", "核对审阅记录及子任务结果")] }),
+    card(7, { waiting_for: "dep", progress_blockers: [why("DELIVERY_ALREADY_REVIEWED", "按既有审阅意见处理或补充新证据")] }),
+    card(8, { waiting_for: "dep", human_gate: 1, progress_blockers: [why("HUMAN_GATE", "由操作者裁定或显式解除人工闸")] }),
+    card(9, { status: "not_started", human_gate: 1, progress_blockers: [why("HUMAN_GATE", "由操作者裁定或显式解除人工闸")] }),
+    card(10, { status: "not_started", released: 0, progress_blockers: [why("NOT_RELEASED", "核对任务后显式放行")] }),
+  ];
+  const { mine, running } = M.homeLists({ tasks, autoReview: true });
+  assert.deepEqual(running.map((r) => [r.localId, r.state]), [[4, "等待自动审阅"]], "only an unheld, unjudged delivery is the reviewer's");
+  assert.deepEqual(mine.map((r) => [r.localId, r.state, r.next]), [
+    [1, "待你验收", "确认验收"], [2, "待你验收", "确认验收"], [3, "待你验收", "按对应协议完成结算或人工恢复"],
+    [6, "重审受阻", "核对审阅记录及子任务结果"], [8, "待人工裁定", "由操作者裁定或显式解除人工闸"],
+    [9, "待人工裁定", "由操作者裁定或显式解除人工闸"],
+  ], "unfinished children and a judged dependency wait are the machine's; an unreleased card stays in 全部任务");
+});
+
 test("running cards name their executor and a silent one comes first with a warning", () => {
   const { running } = M.homeLists({ tasks: [
     card(1, { status: "in_progress", last_runtime: "codex", hb: "fresh" }),
@@ -79,13 +102,18 @@ test("other computers: cached copies are handled where they live, and never show
 });
 
 test("cross-computer requests that wait for me open the global view, where they are handled", () => {
+  // Shapes as core/fleet-actions.mjs catalog() sends them: delegations and proposals carry a
+  // subject and a boolean identity_current; a result row carries ids and a 0/1 identity_current
+  // only, its title and executing computer live on the binding with the same relation_id.
   const actions = { enabled: true,
-    incoming: [{ delegation_id: "d1", subject: "跑一次压测", state: "received", source_node_id: NODE_B },
-               { delegation_id: "d2", subject: "已接收的", state: "accepted_unconfirmed", source_node_id: NODE_B },
+    incoming: [{ delegation_id: "d1", subject: "跑一次压测", state: "received", source_node_id: NODE_B, identity_current: true },
+               { delegation_id: "d2", subject: "已接收的", state: "accepted_unconfirmed", source_node_id: NODE_B, identity_current: true },
                { delegation_id: "d3", subject: "旧代次", state: "received", source_node_id: NODE_B, identity_current: false }],
-    proposals: [{ relation_id: "r1", subject: "绑定", state: "pending", relation: { source_node_id: NODE_B } }],
-    results: [{ result_id: "x1", subject: "交付回来了", side: "source", state: "received", target_node_id: NODE_B },
-              { result_id: "x2", subject: "我交出去的", side: "target", state: "received", target_node_id: NODE_B }] };
+    proposals: [{ relation_id: "r1", subject: "绑定", state: "pending", relation: { source_node_id: NODE_B }, identity_current: true }],
+    bindings: [{ relation_id: "r2", subject: "交付回来了", source_node_id: "a", target_node_id: NODE_B, identity_current: 1 }],
+    results: [{ result_id: "x1", relation_id: "r2", side: "source", state: "received", identity_current: 1 },
+              { result_id: "x2", relation_id: "r2", side: "target", state: "received", identity_current: 1 },
+              { result_id: "x3", relation_id: "r2", side: "source", state: "received", identity_current: 0 }] };
   const { mine } = M.homeLists({ tasks: [], actions, nodeNames: { [NODE_B]: "笔记本 B" } });
   assert.deepEqual(mine.map((r) => [r.title, r.computer, r.state, r.next, r.action]), [
     ["跑一次压测", "来自「笔记本 B」", "收到委派", "接收或拒绝", "fleet"],
@@ -133,6 +161,9 @@ test("layout pins: home is the landing view, ids fold under 技术信息, hidden
   assert.ok(show.includes("evidence(t.evidence,tech)"), "receipts and delegation history render inside 技术信息");
   assert.ok(!src.includes('el("p",n.node_id,"fleet-id")') && src.includes('techIds([["终端身份",n.node_id]])'),
     "the global view folds a computer's id too");
+  assert.ok(show.includes("evidence(t.evidence,tech);body.append(tech);"), "the folded block is appended to the detail");
+  assert.ok(src.includes('const boardShown = () => !document.getElementById("board-view").hidden;'),
+    "visibility is read from the 全部任务 panel itself");
   assert.ok(src.includes("if (!REDUCED.matches && boardShown())") && src.includes("!document.hidden && boardShown()"),
     "FLIP measures and plays only while the columns are visible");
   assert.ok(src.includes("if (v === \"board\") { if (homeReady) render(); }"),

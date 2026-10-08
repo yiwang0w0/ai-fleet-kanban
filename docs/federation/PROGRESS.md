@@ -1176,7 +1176,7 @@ B 已发送的初始化包固定 fea7378，而 A 初次回执指向持续开发�
 - CI157后续检查继续执行，当前只报looptest失败；待原run收尾后一次推修正候选。双机仍待B回执/执行通道。
 
 - 2026-10-08 首页减负（第 1 批）：面板默认打开「首页」，只列待我处理和正在执行（含其他电脑缓存的任务），卡片只写标题、电脑、状态、下一步；已完成进「历史」，原五栏原样移到「全部任务」。
-- 设备状态收成一条摘要，同步失败、本机运行问题、设置未完成时才逐条展开；UUID、哈希、运行号、回执、委派关系收进详情里默认折叠的「技术信息」，全局视图的终端、委派、请求编号同样折叠。
-- 测试：新增 hometest 7 项通过；tltest、decisiontest、gatetest、progressdiagnostictest、conflicttest、fleetviewtest、panelclient 通过；versiontest 1 项、panelauth 1 项、fleetactionstest 27 项、servertest 10 项在 Linux 上改前改后同样失败（Windows 专属存储观测与凭据文件、容器 git 版本），全量交 Windows CI。
+- 设备状态收成一条摘要，有异常才逐条展开；UUID、哈希、运行号、回执、委派关系收进详情里默认折叠的「技术信息」。独立审阅后改为按服务端 stuckWhy 判断谁在处理一张卡，跨机交付按接口真实字段读取，其他电脑的任务按电脑分开读取。
+- 测试：hometest 8 项通过；tltest、decisiontest、gatetest、progressdiagnostictest、conflicttest、fleetviewtest、panelclient 通过；versiontest 1 项、panelauth 1 项、fleetactionstest 27 项、servertest 10 项在 Linux 上改前改后同样失败（Windows 专属存储观测与凭据文件、容器 git 版本），全量交 Windows CI。
 - 截图实测：电脑 1440×900、手机 390×844 的首页不滚屏即见两栏标题和计数；首页、历史、全部任务、详情、全局视图均无横向溢出；首页与历史无长串 ID。
 - 阻塞：无；第 2 批等操作者确认第 1 批。
