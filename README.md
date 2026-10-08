@@ -33,7 +33,9 @@ OS process, **not** a subagent. `docs/GLOSSARY.md` maps the two vocabularies, an
 
 This minor-version development line intentionally changes machine contracts: worker protocol 2, per-claim `run_id`, explicit task `expected_version`, stable node/task identities, scoped peer/MCP credentials, and independent task workspaces. Upgrade the server, panel, CLI and loops together using the [Windows migration guide](docs/federation/migration-0.24.md); an old browser or worker must not keep writing. The two role domains are qualified separately in the [glossary](docs/GLOSSARY.md#federation-contracts-024-development). This is not a published release or deployment approval.
 
-`npm test` currently runs 40 Node harnesses; Windows CI also runs four Python selftests and the page verifier selftest, plus a blocking secret scan. Exact-commit results and remaining acceptance work are recorded in [PROGRESS](docs/federation/PROGRESS.md), not inferred from the default-branch badge above. A fresh local mock cycle is described in [QUICKSTART](docs/QUICKSTART.md); it does not prove real providers or two-PC acceptance.
+The panel opens on a home view: what waits for you and what is running, across every computer the board can see, under one line of device state that unfolds only on a fault. Ids, hashes and receipts sit folded under 技术信息 in a task's detail; finished work is under 历史, and the full board is the 全部任务 tab, unchanged.
+
+`npm test` currently runs 64 Node harness files; Windows CI also runs four Python selftests and the page verifier selftest, plus a blocking secret scan. Exact-commit results and remaining acceptance work are recorded in [PROGRESS](docs/federation/PROGRESS.md), not inferred from the default-branch badge above. A fresh local mock cycle is described in [QUICKSTART](docs/QUICKSTART.md); it does not prove real providers or two-PC acceptance.
 
 **Historical baseline: v0.23.1.** Extracted, file by file and with a sanitization audit, from the production deployment where the original single-node mechanisms were built and exercised.
 

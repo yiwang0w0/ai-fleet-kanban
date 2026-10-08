@@ -406,6 +406,61 @@
   #fleet-actions button{white-space:normal}
   #fleet-progress progress{accent-color:var(--ok)}
   .fleet-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--fs-md)/1.6 var(--font);background:var(--panel);padding:var(--sp-3);border:1px solid var(--line);border-radius:var(--r-sm)}
+  /* ── Home (docs/style-guide.md §五 首页): the landing view answers two questions — what
+     needs me, what is running. A card carries four things: title, computer, state, next
+     step. Ids, hashes, receipts and protocol state live under 技术信息 in the detail. */
+  header{flex-wrap:wrap;row-gap:var(--sp-2)}
+  .views{display:flex;gap:var(--sp-1)}
+  .views button{border-color:transparent;color:var(--dim)}
+  .views button[aria-current="page"]{border-color:var(--line);background:var(--panel2);color:var(--fg);font-weight:600}
+  @media (max-width:620px){ .views{order:5;flex-basis:100%} }
+  .home{display:block;padding:var(--sp-3) var(--sp-4) var(--sp-5);max-width:1280px;margin:0 auto}
+  .home[hidden]{display:none}
+  .home-status{margin-bottom:var(--sp-3);background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md)}
+  .hs-line{display:flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3);min-width:0}
+  .hs-line .dot{flex:none}
+  .dot.warn{background:var(--warn)}
+  .hs-text{min-width:0;overflow-wrap:anywhere}
+  .hs-alert{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--sp-1) var(--sp-3);padding:6px var(--sp-3);
+            border-top:1px solid var(--line);border-left:3px solid var(--warn);background:color-mix(in srgb,var(--warn) 5%,transparent)}
+  .hs-alert[data-tone="bad"]{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 5%,transparent)}
+  .hs-alert:last-child{border-radius:0 0 var(--r-md) var(--r-md)}
+  .hs-where{font-weight:600}
+  .hs-what{min-width:0;overflow-wrap:anywhere}
+  .hs-next{color:var(--dim);min-width:0;overflow-wrap:anywhere}
+  .hs-alert button{margin-left:auto}
+  .home-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-3);align-items:start}
+  @media (max-width:900px){ .home-cols{grid-template-columns:minmax(0,1fr)} }
+  .home-sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);min-width:0}
+  .home-sec > h2{margin:0;padding:var(--sp-2) var(--sp-3);font-size:var(--fs-sm);font-weight:600;letter-spacing:.04em;
+                 border-bottom:1px solid var(--line);display:flex;align-items:center;gap:var(--sp-2)}
+  .home-sec > h2 .n{color:var(--dim);font-weight:400;font-variant-numeric:tabular-nums}
+  .home-sec[data-lane="mine"]{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+  .home-sec[data-lane="mine"] > h2{border-left:3px solid var(--accent)}
+  .home-sec[data-lane="running"] > h2{border-left:3px solid var(--cc)}
+  .home-sec[data-lane="done"] > h2{border-left:3px solid var(--ok)}
+  .home-list{padding:var(--sp-2);display:flex;flex-direction:column;gap:6px}
+  .hcard{display:flex;flex-direction:column;gap:var(--sp-1);width:100%;text-align:left;padding:var(--sp-2) 10px;
+         background:var(--panel2);border:1px solid var(--line);border-radius:var(--r-sm);color:var(--fg);font:var(--fs-md)/1.45 var(--font)}
+  .hcard:hover{background:var(--panel2);border-color:var(--dim2)}
+  .home-sec[data-lane="mine"] .hcard{border-left:3px solid var(--accent)}
+  .hc-title{font-weight:500;overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .hc-meta{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px var(--sp-3);font-size:var(--fs-sm);color:var(--dim);min-width:0}
+  .hc-pc,.hc-st{min-width:0;overflow-wrap:anywhere}
+  .hc-next{margin-left:auto;color:var(--fg);overflow-wrap:anywhere}
+  .home-sec[data-lane="mine"] .hc-next{color:var(--accent)}
+  .hcard[data-tone="warn"] .hc-st{color:var(--warn)}
+  .home-empty{color:var(--dim);padding:var(--sp-2) var(--sp-1);font-size:var(--fs-sm)}
+  .home-more{align-self:flex-start}
+  .home-note{color:var(--dim);font-size:var(--fs-sm);margin:var(--sp-2) 0 0}
+  .fleet-next{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);margin:var(--sp-3) 0;padding:var(--sp-2) var(--sp-3);
+              border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r-sm);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+  .fleet-next[data-lane="running"]{border-left-color:var(--cc);background:transparent}
+  .fleet-tech{margin:var(--sp-2) 0;font-size:var(--fs-sm)}
+  .fleet-tech > summary{cursor:pointer;color:var(--dim)}
+  .fleet-tech dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--sp-1) var(--sp-3);margin:var(--sp-2) 0 0}
+  .fleet-tech dt{color:var(--dim)}
+  .fleet-tech dd{margin:0;font-family:var(--mono);color:var(--dim);overflow-wrap:anywhere}
   @media(max-width:520px){.fleet-filters label{width:100%;justify-content:space-between}.fleet-filters input,.fleet-filters select{max-width:68%}.fleet-dialog{padding:var(--sp-3)}.fleet-detail dl{grid-template-columns:1fr}.fleet-top h2{font-size:var(--fs-lg)}}
 </style>
 </head>
@@ -422,6 +477,11 @@
 <div id="board-shell" hidden>
 <header>
   <h1>AI 舰队看板</h1>
+  <nav class="views" aria-label="页面">
+    <button type="button" data-view="home">首页</button>
+    <button type="button" data-view="board">全部任务</button>
+    <button type="button" data-view="history">历史</button>
+  </nav>
   <button type="button" id="fleet-open">全局视图</button>
   <button type="button" id="board-logout">退出连接</button>
   <span class="live"><span class="dot" id="dot"></span><span id="livetxt">连接中</span></span>
@@ -445,7 +505,7 @@
   <p class="fleet-note">远端显示上次收到的授权数据。同步失败时保留缓存；尚未同步的终端任务数量未知。跨端请求由本机协调身份发出，任务处理仍由所有者终端负责。</p>
 </dialog>
 <dialog id="fleet-detail" class="fleet-dialog fleet-detail" aria-labelledby="fleet-detail-title">
- <div class="fleet-top"><h2 id="fleet-detail-title">任务详情</h2><button type="button" id="fleet-detail-close">返回视图</button></div>
+ <div class="fleet-top"><h2 id="fleet-detail-title">任务详情</h2><button type="button" id="fleet-detail-close">关闭</button></div>
  <div id="fleet-detail-body"></div>
 </dialog>
 
@@ -459,6 +519,30 @@
  </form>
 </dialog>
 
+<div class="upg" id="rev-bar" hidden></div>
+<div class="upg" id="upg" hidden></div>
+
+<main class="home" id="home-view" data-view-panel="home">
+  <section class="home-status" id="home-status" aria-live="polite"></section>
+  <div class="home-cols">
+    <section class="home-sec" data-lane="mine" aria-labelledby="home-mine-h">
+      <h2 id="home-mine-h">待我处理 <span class="n" id="home-mine-n"></span></h2>
+      <div class="home-list" id="home-mine"></div>
+    </section>
+    <section class="home-sec" data-lane="running" aria-labelledby="home-running-h">
+      <h2 id="home-running-h">正在执行 <span class="n" id="home-running-n"></span></h2>
+      <div class="home-list" id="home-running"></div>
+    </section>
+  </div>
+</main>
+<main class="home" id="history-view" data-view-panel="history" hidden>
+  <section class="home-sec" data-lane="done" aria-labelledby="history-h">
+    <h2 id="history-h">已完成 <span class="n" id="history-n"></span></h2>
+    <div class="home-list" id="history-list"></div>
+  </section>
+</main>
+
+<div id="board-view" data-view-panel="board" hidden>
 <form class="task-find" id="task-find" role="search">
   <label for="task-find-id">按卡号定位</label>
   <input id="task-find-id" type="search" inputmode="numeric" autocomplete="off"
@@ -468,8 +552,6 @@
   <span class="note" id="task-find-note" aria-live="polite">输入号码后,该卡会临时置于所属栏最上方</span>
 </form>
 
-<div class="upg" id="rev-bar" hidden></div>
-<div class="upg" id="upg" hidden></div>
 <div class="guide" id="guide" hidden></div>
 <div class="rig" id="rig"></div>
 <!-- v0.4: add a line from the panel — static markup on purpose: #rig is
@@ -539,6 +621,7 @@
   <span>未开始 <b id="f-ns">–</b> · 进行中 <b id="f-ip">–</b> · 等待中 <b id="f-wa">–</b> · 已完成 <b id="f-dn">–</b></span>
   <span style="margin-left:auto" id="f-when">–</span>
 </footer>
+</div>
 
 </div>
 <script src="/panel-auth.js"></script>
@@ -1076,6 +1159,10 @@ const pinRelated = (rows) => focusId == null ? rows
 // move" never exists — no animation is possible. Not rebuilding ALSO protects
 // drafts, open state, scroll position and selection (they used to vanish every 15s).
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
+// The columns live in the 全部任务 view. While another view is showing they keep rendering
+// (open state and drafts survive) but never animate: a hidden card measures as 0×0, and a
+// FIRST taken there would fly every card in from the corner when the view comes back.
+const boardShown = () => !document.getElementById("board-view").hidden;
 const cardNodes = new Map();     // id -> DOM
 let shell = null;                // key -> { col, list, n, empty, divider }
 
@@ -1904,7 +1991,7 @@ function renderNow(){
 
   // ── FIRST: note the coordinates before anything moves
   const first = new Map();
-  if (!REDUCED.matches)
+  if (!REDUCED.matches && boardShown())
     for (const [id, el] of cardNodes)
       if (el.isConnected && !el.dataset.leaving) first.set(id, el.getBoundingClientRect());
 
@@ -2011,7 +2098,7 @@ function renderNow(){
   // ── LAST → INVERT → PLAY
   // Never animate while invisible. A leftover reservation replays with
   // minutes-old coordinates on return (rAF only pauses; it does not cancel).
-  if (!REDUCED.matches && !document.hidden) requestAnimationFrame(() => {
+  if (!REDUCED.matches && !document.hidden && boardShown()) requestAnimationFrame(() => {
     const landed = new Set();
     // ⚠ Measuring with an in-flight transform attached returns the VISUAL position,
     //   not the layout one — the deltas double-cancel and interrupted cards jump.
@@ -2481,6 +2568,7 @@ async function refresh(){
       fetch("/api/setup").then((x) => x.json()).catch(() => null),
     ]);
     renderQuick(qres.requests || []);
+    lastSetup = sres;
     renderGuide(sres);
     renderUpgrade(sres && sres.upgrade);
     set("f-rev", sres?.version || "–");
@@ -2503,7 +2591,7 @@ async function refresh(){
     tasks = r.tasks; taskEvents = eres; usageByCard = (ures && ures.cards) || {};
     meta = { ...mres, archived_count: r.archived_count, caps: r.caps || {} };
     byId.clear(); for (const t of tasks) byId.set(t.id, t);
-    render(); renderRig(); renderCtx();
+    render(); renderRig(); renderCtx(); homeAfterRefresh();
   }catch(e){ live(false, "取数失败"); }
 }
 
@@ -3044,6 +3132,297 @@ es.addEventListener("log", () => {
   lastLogAt = t; refresh();
 });
 
+// ═══ Home and history views ════════════════════════════════════════════════════
+// The landing view answers two questions across every computer this board can see: what
+// needs me, what is running. It reads what refresh() already holds (tasks, meta, workers,
+// setup) plus three existing read endpoints (/api/fleet, /api/fleet/health,
+// /api/fleet/actions). No new route, no writes: acting still happens where it always did
+// (the card in 全部任务, or the global view), reached from the task detail.
+
+// ── home-model(pure;tests/hometest.mjs)──
+// What the two lists and the history hold, as pure functions of data the panel already has.
+// No DOM, no globals, no clock: the harness slices this block out and runs it. Rows carry
+// display words only — a computer whose name is unknown never shows its id instead.
+const HOME_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+const homeName = (name, fallback = "另一台电脑") =>
+  typeof name === "string" && name.trim() && !HOME_UUID.test(name) ? name.trim() : fallback;
+const HOME_RUNTIME = { claude: "Claude", codex: "Codex", zcode: "Zcode" };
+// connection_state (core/fleet-view.mjs) → [tone, what, next step]
+const HOME_SYNC = {
+  recent: ["ok", "最近已同步"], syncing: ["ok", "同步中"],
+  stale: ["warn", "超过 1 分钟没有同步", "确认这台电脑已开机、看板在运行"],
+  unknown: ["warn", "还没有收到它的任务列表", "确认这台电脑已开机、看板在运行"],
+  clock_unknown: ["warn", "时间记录对不上", "核对两台电脑的系统时间"],
+  failed: ["bad", "同步失败", "检查这台电脑的看板服务和网络"],
+  recovery: ["bad", "恢复后待核对", "在全局视图核对恢复记录"],
+};
+// issue code / next_action (core/fleet-health.mjs) → words
+const HOME_HEALTH = {
+  BROKER_INTERRUPTED: "有一次执行分派中断", BROKER_PREPARED_STALE: "有执行分派长时间没有启动",
+  CALL_BUDGET_OVERRUN: "调用额度记账超出上限", CALL_BUDGET_EXHAUSTED: "调用额度已用完",
+  STORAGE_LOW: "磁盘空间不足", STORAGE_UNAVAILABLE: "读不到磁盘空间",
+  DELIVERY_BLOCKED: "有跨机交付操作受阻", DELIVERY_RETRY_PENDING: "有跨机交付在等待重发",
+  SCHEDULER_ATTENTION: "调度器的停止情况待核对", SCHEDULER_HEARTBEAT_STALE: "调度器心跳超时",
+  NODE_ATTENTION: "节点运行器的停止情况待核对", NODE_HEARTBEAT_STALE: "节点运行器心跳超时",
+  NODE_SYNC_RETRY: "同步正在重试", NODE_SYNC_PENDING: "同步有积压",
+  NODE_SYNC_OBSERVATION_STALE: "同步状态长时间没有更新", NODE_COMPONENT_STOPPED: "节点组件已停止",
+  NODE_COMPONENTS_MISSING: "节点组件没有上报", CLOCK_UNKNOWN: "时间记录对不上", STALE_EPOCH_RECORD: "有旧代次的遗留记录",
+};
+const HOME_HEALTH_NEXT = {
+  dispatch_stale_then_reconcile: "核对后恢复这次分派", review_prepared_dispatch: "核对没有启动的分派",
+  inspect_call_quota_ledger: "核对额度记账", review_explicit_call_budget: "决定是否追加额度",
+  inspect_storage_before_new_work: "先腾出磁盘空间再派新任务", inspect_storage_observation: "检查数据盘",
+  review_fleet_action: "在全局视图核对受阻操作", check_peer_then_resume_same_action: "检查对端后重发原操作",
+  review_scheduler_stop_evidence: "核对调度器的停止证明", review_node_stop_evidence: "核对节点运行器的停止证明",
+  inspect_scheduler_owner: "检查调度器进程", inspect_node_runtime: "检查节点运行器",
+  inspect_scheduler_lock: "检查调度器运行锁", inspect_node_lock: "检查节点运行锁",
+  verify_stop_before_lock_recovery: "确认进程已停止，再恢复运行锁",
+  inspect_node_sync_then_peer: "检查同步和对端", inspect_sync_backlog: "查看同步积压",
+  check_local_clock: "检查本机时间", review_epoch_recovery: "核对代次恢复",
+};
+function homeHealthWhat(code) {
+  if (HOME_HEALTH[code]) return HOME_HEALTH[code];
+  const m = /^(SCHEDULER|NODE)_(LOCK_[A-Z_]+|OWNER_UNKNOWN)$/.exec(String(code));
+  return m ? (m[1] === "SCHEDULER" ? "调度器" : "节点运行器") + "运行锁异常" : "运行检查报告了问题";
+}
+/** Where one task stands for the person looking: which list, its state, the next step.
+ *  `t.hb` is hbClass(t) for this board's cards. `remoteName` = the owning computer when the
+ *  row is another computer's cached copy (it can only be handled there). */
+function homeStep(t, { autoReview = false, remoteName = null } = {}) {
+  if (t.status === "in_progress") {
+    const rt = HOME_RUNTIME[t.last_runtime] ? HOME_RUNTIME[t.last_runtime] + " " : "";
+    if (t.hb === "dead") return { lane: "running", state: rt + "执行中 · 心跳中断", tone: "warn", next: "检查执行线", rank: 0 };
+    return { lane: "running", state: rt + "执行中", tone: "", next: "等待完成", rank: 1 };
+  }
+  if (t.status !== "waiting") return { lane: null };
+  const there = remoteName ? "到「" + remoteName + "」上处理" : null;
+  if (t.waiting_for === "confirm") return { lane: "mine", state: "待你选择方案", tone: "", next: there || "选择方案", rank: 0 };
+  if (t.waiting_for === "decision") return { lane: "mine", state: "执行方在等你决定", tone: "", next: there || "给出决定", rank: 1 };
+  if (t.waiting_for === "review") {
+    if (remoteName) return { lane: null };          // that computer's own reviewer may take it; it lists there
+    if (t.review_hold === "same_family" || !autoReview)
+      return { lane: "mine", state: "待你验收", tone: "", next: "确认验收", rank: 2 };
+    return { lane: "running", state: "等待自动审阅", tone: "", next: "无需操作", rank: 2 };
+  }
+  if (t.waiting_for === "dep" || t.waiting_for === "rearm") return { lane: null };   // machine-tended
+  return { lane: "mine", state: "等待处理", tone: "", next: there || "查看", rank: 3 };
+}
+function homeResolved(t) {
+  if (t.kind === "goal") return "目标完成";
+  return t.resolved_by === "auto" ? "自动通过" : t.resolved_by === "cascade" ? "联动关闭" : t.resolved_by ? "手动通过" : "已完成";
+}
+/** The two home lists and the history list. `tasks` = this board's cards, each carrying `hb`;
+ *  `remote` = /api/fleet rows (only other computers' cached copies are read from it);
+ *  `actions` = /api/fleet/actions; `nodeNames` = node_id → display name. */
+function homeLists({ tasks = [], localName = "本机", remote = [], actions = null, nodeNames = {}, autoReview = false } = {}) {
+  const mine = [], running = [], history = [], here = homeName(localName, "本机");
+  const place = (row, s) => (s.lane === "mine" ? mine : running).push({ ...row, state: s.state, tone: s.tone, next: s.next, rank: s.rank });
+  for (const t of tasks) {
+    if (t.archived_at) continue;
+    const row = { key: "local:" + t.id, uid: t.task_uid || null, localId: t.id, title: String(t.subject || ""), computer: here, updated: String(t.updated_at || "") };
+    if (t.status === "done") { history.push({ ...row, state: homeResolved(t), tone: "", next: "" }); continue; }
+    if (t.kind === "goal") continue;
+    const s = homeStep(t, { autoReview });
+    if (s.lane) place(row, s);
+  }
+  for (const t of remote) {
+    if (!t.read_only) continue;                       // this board's own rows come from `tasks`, fresher
+    const name = homeName(t.owner_name);
+    const row = { key: "remote:" + t.task_uid, uid: t.task_uid, localId: null, title: String(t.subject || ""), computer: name, updated: String(t.updated_at || "") };
+    if (t.status === "done") { history.push({ ...row, state: homeResolved(t), tone: "", next: "" }); continue; }
+    if (t.kind === "goal") continue;
+    const s = homeStep({ ...t, hb: "fresh" }, { remoteName: name });
+    if (s.lane) place(row, s);
+  }
+  if (actions && actions.enabled) {
+    const from = (id) => "来自「" + homeName(nodeNames[id]) + "」";
+    const add = (r, state, next, rank, computer) => { if (r.identity_current !== false) mine.push({
+      key: "action:" + state + ":" + (r.delegation_id || r.relation_id || r.result_id), uid: null, localId: null, action: "fleet",
+      title: String(r.subject || "跨机任务"), computer, updated: String(r.updated_at || ""), state, tone: "", next, rank }); };
+    for (const r of actions.incoming || []) if (r.state === "received") add(r, "收到委派", "接收或拒绝", 3, from(r.source_node_id));
+    for (const r of actions.proposals || []) if (r.state === "pending") add(r, "待确认绑定", "核对后确认", 4, from(r.relation && r.relation.source_node_id));
+    for (const r of actions.results || []) if (r.side === "source" && r.state === "received") add(r, "交付已回传", "查看交付", 5, from(r.target_node_id));
+  }
+  const byWait = (a, b) => a.rank - b.rank || a.updated.localeCompare(b.updated);   // longest waiting first
+  mine.sort(byWait); running.sort(byWait);
+  history.sort((a, b) => b.updated.localeCompare(a.updated));
+  return { mine, running, history };
+}
+/** One line about the computers, plus the alerts that line folds away when all is well. */
+function homeStatus({ localName = "本机", nodes = null, fleetError = null, health = null, healthError = null, setup = null } = {}) {
+  const here = homeName(localName, "本机"), alerts = [], remotes = (nodes || []).filter((n) => !n.local);
+  for (const n of remotes) {
+    const s = HOME_SYNC[n.connection_state] || ["warn", "状态未知", "在全局视图查看"];
+    if (s[0] !== "ok") alerts.push({ tone: s[0], where: homeName(n.display_name), what: s[1], next: s[2], go: "fleet" });
+  }
+  if (fleetError) alerts.push({ tone: "warn", where: "多机视图", what: "暂时读不到", next: "稍后会自动重试", go: null });
+  for (const i of (health && health.issues) || [])
+    alerts.push({ tone: i.level === "problem" ? "bad" : "warn", where: here,
+                  what: homeHealthWhat(i.code) + (i.count > 1 ? "（" + i.count + " 项）" : ""),
+                  next: HOME_HEALTH_NEXT[i.next_action] || "检查本机看板的运行日志", go: null });
+  if (healthError) alerts.push({ tone: "warn", where: here, what: "运行检查暂时读不到", next: "稍后会自动重试", go: null });
+  if (setup && setup.steps && !setup.complete) {
+    const step = setup.steps.find((s) => s.state !== "done");
+    alerts.push({ tone: "warn", where: "看板设置", what: "还差 " + (setup.total - setup.done) + " 步" + (step ? "：" + step.title : ""),
+                  next: "到「全部任务」完成设置", go: "board" });
+  }
+  const count = 1 + remotes.length;
+  const tone = alerts.some((a) => a.tone === "bad") ? "bad" : alerts.length ? "warn" : "ok";
+  const names = [here + "（本机）", ...remotes.map((n) => homeName(n.display_name) + " " + (HOME_SYNC[n.connection_state] || ["", "状态未知"])[1])];
+  const line = alerts.length ? count + " 台电脑 · " + alerts.length + " 项需要注意"
+    : remotes.length ? count + " 台电脑正常：" + names.join("、") : "本机「" + here + "」正常 · 没有连接其他电脑";
+  return { tone, line, alerts };
+}
+// ── /home-model ──
+
+let lastSetup = null;            // /api/setup as refresh() last saw it (the guide's data)
+let fleetApi = null;             // { showTask, open } — set by the global-view block below
+const HOME_VIEWS = ["home", "board", "history"];
+let homeView = (() => { try { const v = localStorage.getItem("tb_view"); return HOME_VIEWS.includes(v) ? v : "home"; } catch { return "home"; } })();
+let homeReady = false, homeFleet = null, homeFleetError = null, homeHealth = null, homeHealthError = null, homeActions = null;
+let homeExtrasAt = 0, homeExtrasBusy = false, historyLimit = 40;
+const homeExpanded = { mine: false, running: false }, homeSig = new Map();
+const homeNarrow = matchMedia("(max-width:620px)");
+
+function setView(v){
+  if (!HOME_VIEWS.includes(v)) v = "home";
+  homeView = v;
+  for (const p of document.querySelectorAll("[data-view-panel]")) p.hidden = p.dataset.viewPanel !== v;
+  for (const b of document.querySelectorAll(".views [data-view]"))
+    if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  try { localStorage.setItem("tb_view", v); } catch {}
+  // The columns' shell (headers, goal box) is built once, from meta — never before the first
+  // refresh() answered, or a board opened straight into 全部任务 keeps raw status keys.
+  if (v === "board") { if (homeReady) render(); }
+  else { homeSig.clear(); renderHomeViews(); loadHomeExtras(true); }
+}
+document.querySelector(".views").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-view]"); if (b) setView(b.dataset.view);
+});
+/** Open a card where it can be acted on: the 全部任务 view, located at the top of its column. */
+function locateOnBoard(id){
+  setView("board");
+  document.getElementById("task-find-id").value = String(id);
+  document.getElementById("task-find").requestSubmit();
+}
+function openHomeItem(item){
+  if (item.action === "fleet") { fleetApi?.open(); return; }
+  if (item.uid && fleetApi) { fleetApi.showTask(item.uid); return; }
+  if (item.localId != null) locateOnBoard(item.localId);
+}
+const homeEl = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
+function homeCard(item, lane){
+  const b = homeEl("button", undefined, "hcard"); b.type = "button";
+  if (item.tone) b.dataset.tone = item.tone;
+  const meta = homeEl("span", undefined, "hc-meta"), next = lane === "done" ? item.next : item.next && "下一步：" + item.next;
+  meta.append(homeEl("span", item.computer, "hc-pc"), homeEl("span", item.state, "hc-st"));
+  if (next) meta.append(homeEl("span", next, "hc-next"));
+  b.append(homeEl("span", item.title, "hc-title"), meta);
+  b.setAttribute("aria-label", [item.title, item.computer, item.state, next].filter(Boolean).join("，"));
+  b.addEventListener("click", () => openHomeItem(item));
+  return b;
+}
+/** Rebuild one list only when what it shows changed — a focused card keeps its focus. */
+function homeFill(list, sig, build){
+  if (homeSig.get(list.id) === sig) return;
+  homeSig.set(list.id, sig);
+  list.replaceChildren(...build());
+}
+function homeLane(lane, items, empty){
+  const list = document.getElementById("home-" + lane);
+  document.getElementById("home-" + lane + "-n").textContent = items.length ? String(items.length) : "";
+  const base = homeNarrow.matches ? 3 : 8, cap = homeExpanded[lane] || items.length <= base + 1 ? items.length : base;
+  homeFill(list, JSON.stringify([homeReady, cap, items]), () => {
+    if (!homeReady) return [homeEl("p", "正在读取…", "home-empty")];
+    if (!items.length) return [homeEl("p", empty, "home-empty")];
+    const out = items.slice(0, cap).map((item) => homeCard(item, lane));
+    if (items.length > cap){
+      const more = homeEl("button", "还有 " + (items.length - cap) + " 项 · 全部展开", "home-more"); more.type = "button";
+      more.addEventListener("click", () => { homeExpanded[lane] = true; renderHomeViews(); });
+      out.push(more);
+    }
+    return out;
+  });
+}
+function homeLocalName(){ return meta.node?.display_name; }
+function renderHomeViews(){
+  if (homeView === "board") return;
+  const nodes = homeFleet?.nodes || null;
+  const lists = homeLists({
+    tasks: tasks.map((t) => ({ ...t, hb: hbClass(t) })), localName: homeLocalName(),
+    remote: homeFleet?.tasks || [], actions: homeActions,
+    nodeNames: Object.fromEntries((nodes || []).map((n) => [n.node_id, n.display_name])),
+    autoReview: workers.some((w) => w.line === "review" && w.running),
+  });
+  if (homeView === "home"){
+    const s = homeStatus({ localName: homeLocalName(), nodes, fleetError: homeFleetError, health: homeHealth,
+                           healthError: homeHealthError, setup: lastSetup });
+    // The computers are known only once the fleet reads answered — until then say so rather
+    // than print "no other computer" for a board that has one.
+    const known = homeExtrasAt > 0;
+    homeFill(document.getElementById("home-status"), JSON.stringify([known, s]), () => {
+      const line = homeEl("div", undefined, "hs-line");
+      line.append(homeEl("span", undefined, "dot" + (!known || s.tone === "ok" ? "" : s.tone === "bad" ? " off" : " warn")),
+                  homeEl("span", known ? s.line : "正在读取设备状态…", "hs-text"));
+      return [line, ...(known ? s.alerts : []).map((a) => {
+        const row = homeEl("div", undefined, "hs-alert"); row.dataset.tone = a.tone;
+        row.append(homeEl("span", a.where, "hs-where"), homeEl("span", a.what, "hs-what"), homeEl("span", "下一步：" + a.next, "hs-next"));
+        if (a.go){
+          const b = homeEl("button", a.go === "board" ? "去设置" : "查看详情"); b.type = "button";
+          b.addEventListener("click", () => { if (a.go === "board") setView("board"); else fleetApi?.open(); });
+          row.append(b);
+        }
+        return row;
+      })];
+    });
+    homeLane("mine", lists.mine, "没有需要你处理的事。新的目标可以在「全部任务」里写。");
+    homeLane("running", lists.running, "没有正在执行的任务。排队中的任务在「全部任务」里。");
+  } else {
+    const items = lists.history;
+    document.getElementById("history-n").textContent = items.length ? String(items.length) : "";
+    homeFill(document.getElementById("history-list"), JSON.stringify([homeReady, historyLimit, items, homeFleet?.truncated]), () => {
+      if (!homeReady) return [homeEl("p", "正在读取…", "home-empty")];
+      if (!items.length) return [homeEl("p", "还没有已完成的任务。完成的任务会出现在这里。", "home-empty")];
+      const out = items.slice(0, historyLimit).map((item) => homeCard({ ...item, next: item.updated ? "完成于 " + localTime(item.updated) : "" }, "done"));
+      if (items.length > historyLimit){
+        const more = homeEl("button", "显示更多（还有 " + (items.length - historyLimit) + " 项）", "home-more"); more.type = "button";
+        more.addEventListener("click", () => { historyLimit += 40; renderHomeViews(); });
+        out.push(more);
+      }
+      if (homeFleet?.truncated) out.push(homeEl("p", "其他电脑的记录较多，这里只列出前 " + homeFleet.returned + " 项。", "home-note"));
+      return out;
+    });
+  }
+}
+async function homeGet(path){
+  const r = await fetch(path, { headers: WH, cache: "no-store" });
+  const v = await r.json().catch(() => ({}));
+  if (!r.ok) throw Error(v.error || "读取失败(" + r.status + ")");
+  return v;
+}
+/** The three fleet reads, at most every 15 s (the board's own fallback cadence), and only
+ *  while a home view is showing — the 全部任务 view never pays for them. */
+async function loadHomeExtras(force = false){
+  if (homeView === "board" || homeExtrasBusy || (!force && Date.now() - homeExtrasAt < 15000)) return;
+  homeExtrasBusy = true;
+  try {
+    const [f, h, a] = await Promise.allSettled([homeGet("/api/fleet?limit=1000"), homeGet("/api/fleet/health"), homeGet("/api/fleet/actions")]);
+    if (f.status === "fulfilled") { homeFleet = f.value; homeFleetError = null; } else homeFleetError = f.reason?.message || "读取失败";
+    if (h.status === "fulfilled") { homeHealth = h.value; homeHealthError = null; } else homeHealthError = h.reason?.message || "读取失败";
+    homeActions = a.status === "fulfilled" ? a.value : null;
+    homeExtrasAt = Date.now();
+  } finally { homeExtrasBusy = false; renderHomeViews(); }
+}
+// Called inside refresh()'s try: a drawing fault here must not read as "取数失败" on the
+// live indicator — the data did arrive. It still reaches the console.
+function homeAfterRefresh(){
+  homeReady = true;
+  try { renderHomeViews(); } catch (e) { console.error("home view", e); }
+  loadHomeExtras();
+}
+homeNarrow.addEventListener("change", () => renderHomeViews());
+setView(homeView);
+
 refresh();
 setInterval(tick, 1000);        // running numbers update in place (no full redraw = open state survives)
 setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stale screen
@@ -3054,6 +3433,8 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
  const states={not_started:"未开始",in_progress:"进行中",waiting:"等待处理",done:"已完成"},connections={local:"本机",recent:"最近已同步",stale:"缓存可能过期",failed:"同步失败",syncing:"同步未追平",recovery:"恢复待核对",clock_unknown:"时间待核对",unknown:"尚未取得列表"};
  const ownerNames=new Map(),projectNames=new Set(),folds=new Map();let generation=0,detailGeneration=0,limit=1000,timer=null,controller=null,last=null;
  const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
+ // Ids, hashes and receipts are for checking, not for reading the board: they sit folded under 技术信息.
+ const techIds=rows=>{const d=el("details",undefined,"fleet-tech"),dl=el("dl");d.append(el("summary","技术信息"));for(const[k,v]of rows)dl.append(el("dt",k),el("dd",String(v??"未记录")));d.append(dl);return d;};
  const time=v=>{if(!v)return "尚无记录";const d=new Date(v);return Number.isNaN(d.valueOf())?"时间无效":d.toLocaleString();};
  const request=async(path,signal)=>{const r=await fetch(path,{headers:WH,cache:"no-store",signal});const value=await r.json();if(!r.ok)throw Object.assign(Error(value.error||"读取失败"),{code:value.code,status:r.status});return value;};
  function choices(){const oldOwner=owner.value,oldProject=project.value;owner.replaceChildren(el("option","全部终端"));owner.firstChild.value="";for(const[id,name]of ownerNames){const option=el("option",name+" · "+id.slice(0,8));option.value=id;owner.append(option);}owner.value=oldOwner;project.replaceChildren(el("option","全部项目"));project.firstChild.value="";for(const name of [...projectNames].sort()){const option=el("option",name);option.value=name;project.append(option);}project.value=oldProject;}
@@ -3079,7 +3460,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   if(unavailable.length)container.append(el("p","部分关系信息尚不可用："+unavailable.map(([k,s])=>(moduleNames[k]||k)+"："+(moduleStates[s]||s)).join("，"),"fleet-note fleet-warning"));
   for(const r of value.items){const card=el("article",undefined,"fleet-edge"),path=el("div",undefined,"fleet-edge-path");path.append(taskButton(r.source),el("span","→","fleet-arrow"),taskButton(r.target));card.append(path);
    const labels=[r.project_id];for(const[k,label]of [["offer_state","委派"],["binding_state","端点绑定"],["registration_state","关系登记"],["cancellation_state","取消"]])if(r[k])labels.push(label+"："+(historyStates[r[k]]||r[k]));
-   if(r.closed)labels.push("本机绑定已关闭");if(r.identity_current===false)labels.push("旧节点代次记录");card.append(el("p",labels.join(" · "),"fleet-note"),el("p","委派 "+r.delegation_id+(r.relation_id?" · 关系 "+r.relation_id:""),"fleet-id"));container.append(card);
+   if(r.closed)labels.push("本机绑定已关闭");if(r.identity_current===false)labels.push("旧节点代次记录");card.append(el("p",labels.join(" · "),"fleet-note"),techIds([["委派",r.delegation_id],...(r.relation_id?[["关系",r.relation_id]]:[])]));container.append(card);
   }
   if(!value.items.length)container.append(el("p","当前范围未找到可显示的关系记录；远端未共享的历史不会出现在这里。","fleet-note"));
  }
@@ -3323,7 +3704,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   renderDelivery(v.delivery,box);
   const receipts=el("details",undefined,"fleet-trace");receipts.open=true;receipts.append(el("summary","操作回执 · "+v.actions.length));
-  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({integration_ready:"合并内容已准备",integration_launched:"合并已启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.conflict?.message?" · "+a.conflict.message:a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),el("p",a.action_id,"fleet-id"));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
+  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({integration_ready:"合并内容已准备",integration_launched:"合并已启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.conflict?.message?" · "+a.conflict.message:a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),techIds([["请求",a.action_id]]));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
   if(!v.actions.length)receipts.append(el("p","从本机任务详情发起委派，或处理收到的委派。","fleet-note"));box.append(receipts);
   if(v.truncated)box.append(el("p","每类最多显示 100 条；请缩小项目范围。","fleet-note fleet-warning"));
  }
@@ -3345,7 +3726,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
  }
 
  function render(value){last=value;for(const n of value.nodes)ownerNames.set(n.node_id,n.display_name);for(const p of value.projects)projectNames.add(p);choices();nodes.replaceChildren();$("fleet-summary").replaceChildren(el("span",value.nodes.length+" 个终端"),el("span",value.total_matching+" 项匹配任务"),el("span",value.pending_publications+" 项待发布"),el("span",value.pending_acknowledgements+" 项同步待确认"));
-  for(const n of value.nodes){const section=el("details",undefined,"fleet-node");section.open=folds.get(n.node_id)!==false;section.addEventListener("toggle",()=>folds.set(n.node_id,section.open));const heading=el("summary");heading.append(el("h3",n.display_name),el("span",connections[n.connection_state],"fleet-badge"));section.append(heading,el("p",n.node_id,"fleet-id"));
+  for(const n of value.nodes){const section=el("details",undefined,"fleet-node");section.open=folds.get(n.node_id)!==false;section.addEventListener("toggle",()=>folds.set(n.node_id,section.open));const heading=el("summary");heading.append(el("h3",n.display_name),el("span",connections[n.connection_state],"fleet-badge"));section.append(heading,techIds([["终端身份",n.node_id]]));
    if(n.counts)section.append(el("p",(n.local?"当前筛选":"已缓存可见")+" "+n.counts.total+" 项 · 进行中 "+n.counts.in_progress+" · 等待 "+n.counts.waiting+" · 已完成 "+n.counts.done,"fleet-note"));else section.append(el("p","任务数量未知；取得远端列表后才显示数量。","fleet-note fleet-warning"));
    for(const p of n.projects)section.append(el("p",p.project_id+" · "+connections[p.state]+" · 上次同步 "+time(p.last_sync_at)+(p.error_code?" · "+p.error_code:""),"fleet-note"));
    const tasks=value.tasks.filter(t=>t.owner_node_id===n.node_id),list=el("div",undefined,"fleet-tasks");if(tasks.length)taskRows(tasks,list);else list.append(el("p",n.counts?"当前筛选没有可显示的已知任务。":"此终端尚无可用任务列表。","fleet-note"));section.append(list);nodes.append(section);
@@ -3356,12 +3737,38 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
  async function load(){if(!dialog.open)return;const id=++generation;controller?.abort();controller=new AbortController();const params=new URLSearchParams({limit:String(limit)});if(owner.value)params.set("owner",owner.value);if(project.value)params.set("project",project.value);if(query.value.trim())params.set("q",query.value.trim());notice.textContent="正在更新…";loadActions(id,controller.signal);loadProgress(id,controller.signal);
   try{const value=await request("/api/fleet?"+params,controller.signal);if(id===generation)render(value);}catch(e){if(e.name==="AbortError")return;if(id===generation){notice.className="fleet-note fleet-warning";notice.textContent=(last?"更新失败，保留上次视图。":"视图读取失败。")+e.message;}}
  }
- async function showTask(uid){const id=++detailGeneration;$("fleet-detail-title").textContent="任务详情";detail.showModal();const body=$("fleet-detail-body");body.replaceChildren(el("p","正在读取任务…","fleet-note"));try{const t=await request("/api/fleet/task?uid="+encodeURIComponent(uid));if(id!==detailGeneration||!detail.open)return;$("fleet-detail-title").textContent=t.subject;body.replaceChildren();const dl=el("dl");for(const[label,value]of [["所属终端",t.owner_name],["终端身份",t.owner_node_id],["任务 UID",t.task_uid],["父任务",t.parent_uid||"根任务"],["项目",t.project_id||"未绑定"],["状态",states[t.status]||t.status],["数据来源",t.read_only?"远端缓存 · "+time(t.last_sync_at):"本机"],["运行",t.run_id||"尚无运行"],["更新",time(t.updated_at)]])dl.append(el("dt",label),el("dd",value));body.append(dl);for(const[label,value]of [["任务说明",t.description],["验收条件",t.acceptance],["执行结果",t.result],["裁定",t.verdict_note]])if(value){body.append(el("h3",label),el("pre",value));}evidence(t.evidence,body);taskActions(t,body,id);if(t.local_id!==null){const locate=el("button","在本机面板定位");locate.type="button";locate.addEventListener("click",()=>{detail.close();dialog.close();$("task-find-id").value=String(t.local_id);$("task-find").requestSubmit();});body.append(locate);}}catch(e){if(id===detailGeneration)body.replaceChildren(el("p",e.message,"fleet-note fleet-warning"));}}
+ async function showTask(uid){
+  const id=++detailGeneration;$("fleet-detail-title").textContent="任务详情";if(!detail.open)detail.showModal();
+  const body=$("fleet-detail-body");body.replaceChildren(el("p","正在读取任务…","fleet-note"));
+  try{
+   const t=await request("/api/fleet/task?uid="+encodeURIComponent(uid));if(id!==detailGeneration||!detail.open)return;
+   $("fleet-detail-title").textContent=t.subject;body.replaceChildren();
+   const card=t.local_id!==null?byId.get(t.local_id):null,wait=t.status==="waiting"&&t.waiting_for?" · "+(meta.wf_labels?.[t.waiting_for]||t.waiting_for):"";
+   const dl=el("dl");
+   for(const[label,value]of [["所属电脑",homeName(t.owner_name,t.read_only?"另一台电脑":"本机")],["状态",(states[t.status]||t.status)+wait],["项目",t.project_id||"未绑定"],["数据来源",t.read_only?"其他电脑的缓存 · 同步于 "+time(t.last_sync_at):"本机"],["更新",time(t.updated_at)],...(t.local_id!==null?[["本机编号","#"+t.local_id]]:[])])dl.append(el("dt",label),el("dd",value));
+   body.append(dl);nextStep(t,card,body);
+   for(const[label,value]of [["任务说明",t.description],["验收条件",t.acceptance],["执行结果",t.result],["裁定",t.verdict_note]])if(value){body.append(el("h3",label),el("pre",value));}
+   taskActions(t,body,id);
+   const tech=techIds([["终端身份",t.owner_node_id],["任务 UID",t.task_uid],["父任务",t.parent_uid||"根任务"],["运行",t.run_id||"尚无运行"],["任务版本",t.aggregate_version],...(t.read_only?[["数据代次",t.source_epoch],["收到于",time(t.received_at)]]:[])]);
+   tech.classList.add("fleet-trace");evidence(t.evidence,tech);body.append(tech);
+   if(t.local_id!==null){const locate=el("button","在「全部任务」中定位");locate.type="button";locate.addEventListener("click",()=>{detail.close();dialog.close();locateOnBoard(t.local_id);});body.append(locate);}
+  }catch(e){if(id===detailGeneration)body.replaceChildren(el("p",e.message,"fleet-note fleet-warning"));}
+ }
+ // The same words the home lists use (homeStep): what state, what to do next, and for a card
+ // of this board a way to the place where it is done.
+ function nextStep(t,card,body){
+  const step=homeStep(card?{...card,hb:hbClass(card)}:{...t,hb:"fresh"},{autoReview:workers.some(w=>w.line==="review"&&w.running),remoteName:t.read_only?homeName(t.owner_name):null});
+  if(!step.lane)return;
+  const box=el("div",undefined,"fleet-next");box.dataset.lane=step.lane;box.append(el("span",step.state+" · 下一步："+step.next));
+  if(step.lane==="mine"&&card){const go=el("button","去处理");go.type="button";go.className="pri";go.addEventListener("click",()=>{detail.close();dialog.close();locateOnBoard(card.id);});box.append(go);}
+  body.append(box);
+ }
  function openFleet(){if(!dialog.open){dialog.showModal();timer=setInterval(()=>{if(!actionDialog.open&&!$("fleet-actions").contains(document.activeElement))load();},15000);}load();}
  $("fleet-open").addEventListener("click",openFleet);$("fleet-close").addEventListener("click",()=>dialog.close());dialog.addEventListener("close",()=>{clearInterval(timer);controller?.abort();generation++;});$("fleet-detail-close").addEventListener("click",()=>detail.close());detail.addEventListener("close",()=>{if(!detail.open)detailGeneration++;});
  $("fleet-refresh").addEventListener("click",load);$("fleet-filters").addEventListener("submit",e=>{e.preventDefault();limit=1000;load();});owner.addEventListener("change",load);project.addEventListener("change",load);$("fleet-more").addEventListener("click",()=>{limit=Math.min(limit*2,10000);load();});
  function linkedTask(){const uid=new URLSearchParams(location.hash.slice(1)).get("fleet-task");if(!uid)return;openFleet();if(detail.open)detail.close();showTask(uid);}
  window.addEventListener("hashchange",linkedTask);linkedTask();
+ fleetApi={showTask,open:openFleet};
 })();
 
 });

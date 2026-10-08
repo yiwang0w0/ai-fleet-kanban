@@ -284,6 +284,9 @@ jobs:
       - name: "tltest (timeline drawing primitives + source shape)"
         if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/tltest.mjs
+      - name: "hometest (home lists, device line and layout pins)"
+        if: ${{ !cancelled() }}
+        run: bash hrun.sh node tests/hometest.mjs
 
   gitleaks:
     runs-on: windows-latest
