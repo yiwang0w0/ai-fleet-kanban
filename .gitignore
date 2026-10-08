@@ -9,6 +9,8 @@ board_token
 probe_conn
 *.pem
 *.key
+# Claude Code's per-machine settings: where people put model endpoints and their keys
+.claude/settings.local.json
 
 # Node / Python
 node_modules/

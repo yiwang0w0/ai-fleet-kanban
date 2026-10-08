@@ -11,6 +11,7 @@
 import { execFileSync, execSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, accessSync, constants } from "node:fs";
 import { createServer } from "node:net";
+import { homedir } from "node:os";
 import { join, dirname, isAbsolute, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import {inspectSeatCLI} from "../core/seat-cli-evidence.mjs";
@@ -355,6 +356,39 @@ if (process.env.BOARD_CODEX_CMD) {
   else if (!existsSync(p)) no(`BOARD_CODEX_CMD 指向的文件不存在: ${p}`, "修路径,或先不配置这个座席");
   else if (/\.(cmd|bat|ps1)$/i.test(p)) no("BOARD_CODEX_CMD 指向包装器脚本", "指向原生可执行文件(BatBadBut 门)");
   else ok(`第二座席 CLI 就位(${p})` + (process.env.BOARD_CODEX_RELEASED === "1" ? " 且已解禁" : ",未解禁(BOARD_CODEX_RELEASED=1 才领卡)"));
+}
+
+// ── ⑧ where the model traffic goes ───────────────────────────────────────────
+// Everything a worker sends — your code, the card text, the model's answers — goes to the host
+// its CLI is pointed at. A third-party relay (中转站) receives and can keep all of it, the same
+// way the provider does under its own terms. Read from where the CLIs read it: the environment,
+// Claude Code's settings (user, and the work repo the workers run in), Codex's config.toml.
+// Only host names are printed — never a key, never a full URL. Informational: never a FAIL.
+{
+  const OFFICIAL = [/(^|\.)anthropic\.com$/, /(^|\.)openai\.com$/, /\.openai\.azure\.com$/, /(^|\.)bigmodel\.cn$/,
+                    /(^|\.)z\.ai$/, /(^|\.)deepseek\.com$/, /(^|\.)moonshot\.(cn|ai)$/, /\.amazonaws\.com$/, /\.googleapis\.com$/];
+  const KEYS = ["ANTHROPIC_BASE_URL", "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL", "OPENAI_BASE_URL"];
+  const HOME = process.env.USERPROFILE || process.env.HOME || homedir();
+  const REPO = resolve(process.env.BOARD_REPO || ROOT);
+  const seen = [];   // [where, name, url]
+  const scan = (where, env) => { for (const k of KEYS) if (typeof env?.[k] === "string" && env[k].trim()) seen.push([where, k, env[k].trim()]); };
+  scan("环境变量", process.env);
+  for (const f of [join(HOME, ".claude", "settings.json"), join(REPO, ".claude", "settings.json"), join(REPO, ".claude", "settings.local.json")]) {
+    try { scan(f, JSON.parse(readFileSync(f, "utf8")).env); } catch {}
+  }
+  const codexToml = join(process.env.CODEX_HOME || join(HOME, ".codex"), "config.toml");
+  try { for (const m of readFileSync(codexToml, "utf8").matchAll(/^\s*base_url\s*=\s*["']([^"']+)["']/gm)) seen.push([codexToml, "base_url", m[1]]); } catch {}
+  for (const [where, k, url] of seen) {
+    let host = "";
+    try { host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, ""); } catch {}
+    if (!host) wr(`${k} 不是合法地址(${where})`, "CLI 会连不上模型;改成完整的 https:// 地址或删掉");
+    else if (["localhost", "127.0.0.1", "::1"].includes(host))
+      ok(`模型请求经本机代理 ${host}(${k},${where})`, "本机代理看得到全部内容 —— 确认它是你自己装的");
+    else if (OFFICIAL.some((re) => re.test(host))) ok(`模型请求发往官方服务 ${host}(${k},${where})`);
+    else wr(`模型请求经第三方转发 ${host}(${k},${where})`,
+            "你的代码、任务内容和模型的回答都会经过它,它能留存全部内容 —— 改用官方服务,或确认这是你信任的服务");
+  }
+  if (!seen.length) ok("模型请求走各 CLI 的默认官方地址(没有设置转发地址)");
 }
 
 console.log(`\n${"─".repeat(56)}`);

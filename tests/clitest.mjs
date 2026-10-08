@@ -351,6 +351,34 @@ console.log(NL + "[⑧ start:bg / open / stop]");
      failed.out.slice(-200));
 }
 
+// ⑨ doctor says where the model traffic goes: a third-party relay (中转站) receives every
+//    prompt, every file a worker reads and every answer. Hosts only — never a key or a full URL.
+console.log(NL + "[⑨ doctor: 模型请求发往哪里]");
+{
+  const home = join(TMP, "doc-home"), repo = join(TMP, "doc-repo"), codexHome = join(TMP, "doc-codex");
+  for (const d of [join(home, ".claude"), join(repo, ".claude"), codexHome]) mkdirSync(d, { recursive: true });
+  writeFileSync(join(home, ".claude", "settings.json"), JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://relay.example.net/v1", ANTHROPIC_AUTH_TOKEN: "sk-relay-secret-value-0001" } }));
+  writeFileSync(join(repo, ".claude", "settings.local.json"), JSON.stringify({ env: { ANTHROPIC_BASE_URL: "http://127.0.0.1:8080" } }));
+  writeFileSync(join(codexHome, "config.toml"), '[model_providers.zhipu]\nbase_url = "https://open.bigmodel.cn/api/paas/v4"\n');
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC_|OPENAI_BASE_URL|CODEX_HOME|BOARD_)/.test(k)));
+  const doctor = (extra) => {
+    const r = spawnSync(process.execPath, [join(ROOT, "cli", "doctor.mjs")], { encoding: "utf8", windowsHide: true, timeout: 120000,
+      env: { ...clean, HOME: home, USERPROFILE: home, CODEX_HOME: codexHome, BOARD_REPO: repo, BOARD_CONFIG: join(TMP, "none.json"),
+             BOARD_DATA_DIR: join(TMP, "doc-data"), BOARD_PORT: "0", ...extra } });
+    return (r.stdout || "") + (r.stderr || "");
+  };
+  const out = doctor({ OPENAI_BASE_URL: "https://api.openai.com/v1" });
+  const line = (re) => out.split(/\r?\n/).find((l) => re.test(l)) || "";
+  ok("⭐a relay in Claude Code's user settings is a WARN that names the host and what it can see",
+     /^\s*WARN\s+模型请求经第三方转发 relay\.example\.net/.test(line(/relay\.example\.net/)) && /留存全部内容/.test(out), line(/relay\.example\.net/));
+  ok("an official endpoint (Codex config, env) passes and is named",
+     /PASS\s+模型请求发往官方服务 open\.bigmodel\.cn/.test(out) && /PASS\s+模型请求发往官方服务 api\.openai\.com/.test(out));
+  ok("a local proxy in the work repo's settings is named as local", /PASS\s+模型请求经本机代理 127\.0\.0\.1/.test(out));
+  ok("⭐no key and no full URL is ever printed", !out.includes("sk-relay-secret-value-0001") && !out.includes("relay.example.net/v1"));
+  rmSync(join(home, ".claude", "settings.json")); rmSync(join(repo, ".claude", "settings.local.json")); rmSync(join(codexHome, "config.toml"));
+  ok("nothing configured: says the CLIs use their default official endpoints", /PASS\s+模型请求走各 CLI 的默认官方地址/.test(doctor({})));
+}
+
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}
 console.log(`${NL}${"─".repeat(56)}${NL}result: ${pass} PASS / ${fail} FAIL`);
 process.exit(fail ? 1 : 0);

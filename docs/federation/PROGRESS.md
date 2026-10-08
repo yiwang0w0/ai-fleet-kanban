@@ -1185,3 +1185,5 @@ B 已发送的初始化包固定 fea7378，而 A 初次回执指向持续开发�
 - 独立审阅：无阻塞；修了后台启动失败时中文日志尾被字节偏移截掉、主令牌进浏览器存储、PowerShell 拦 npm.ps1、面板重启把配置回填的 codex 变量当成环境变量带给继任进程、页面加载遇到瞬时故障就丢掉记住的连接，及 4 项小问题。
 - 测试：clitest 66、servertest 200、looptest 67、hometest 8、panelclient 8、legacy-boundaries 6 项通过；panelauth 新增配对、停板、重启后仍有效 3 项通过，原 H3 体检 1 项在 Linux 上改前改后同样失败（本容器 git 2.43 用本地垫片）。全新克隆实测（假 claude/codex）：setup → 后台起板 → open 直接进首页，确认后「运行正常」，配对码复用被拒，停板重启后仍保持连接。
 - 阻塞：无；Windows 上的浏览器拉起与后台进程脱离终端未在本机实测，交 Windows CI 与操作者确认；第 3 批（围绕任务操作、首页新建任务）继续。
+- 2026-10-08 安全自查（操作者转来韩国银行被 AI 攻击的报道）：看板只绑本机回环、对端网关和 MCP 代理同样只绑回环；仓库及 207 个提交的历史里没有密钥、个人路径或真实地址；执行器不带任何越权参数。补了 doctor「模型请求发往哪里」（第三方转发标黄，只打印主机名），`.gitignore` 加 `.claude/settings.local.json`，INSTALL.md 加「记录留在哪里」。
+- 测试：clitest 73、legacy-boundaries 6 项通过。阻塞：无。
