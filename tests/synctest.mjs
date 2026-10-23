@@ -12,7 +12,7 @@ import {fileURLToPath} from "node:url";
 import {migratePeers,localIdentity,authenticate} from "../core/federation/peers.mjs";
 
 import {migrateSync,shareTask,exportBatch,acknowledge,applyBatch,listReplicas,syncStatus,cursor,digest,canonical} from "../core/federation/sync-store.mjs";
-import {syncOnce,endpoint} from "../core/federation/sync-client.mjs";
+import {syncOnce,endpoint,request} from "../core/federation/sync-client.mjs";
 const require=createRequire(import.meta.url),store=require("../core/store.js");
 const ROOT=fileURLToPath(new URL("../",import.meta.url)),TMP=mkdtempSync(join(tmpdir(),"fleet-sync-")),handles=[];
 let counter=0;
@@ -199,12 +199,32 @@ test("local execution continues during tunnel outage, then reconnect publishes t
  store.report(f.a.db,{id,worker:"offline-local",runId:run.run_id,outcome:"done",evidence:"offline result"});
  const offline=await syncOnce(f.b.db,{url,credentialFile:f.credentialFile,projectId:f.projectId});
  assert.equal(offline.state,"error");assert.equal(store.get(f.a.db,id).status,"waiting");assert.equal(listReplicas(f.b.db)[0].status,"not_started");
+ assert.equal(offline.error_code,"PEER_REFUSED","a stopped board on a reachable computer is refused, not unreachable (real fetch, real closed port)");
  const resumed=await listenPeerServer(f.a.db,{port});
  try{
   const result=await syncOnce(f.b.db,{url,credentialFile:f.credentialFile,projectId:f.projectId,now:offline.retry_after+1});
   assert.equal(result.state,"synced");assert.equal(listReplicas(f.b.db)[0].result,"offline result");
   assert.equal(listReplicas(f.b.db)[0].run_id,run.run_id);assert.equal(store.list(f.b.db).tasks.length,0);
  }finally{await new Promise(r=>{resumed.close(r);resumed.closeAllConnections();});}
+});
+test("a failed connection says which side is down: unreachable, refused, or a proxy's error page",async()=>{
+ // The home page words these (core/panel.html homeNodeState): 「连不上这台电脑」 vs 「电脑在线,看板服务没有应答」.
+ const f=pair();let now=Date.now();
+ const attempt=async fetchImpl=>{const r=await syncOnce(f.b.db,{url:fixtureEndpoint(f.a.db),credentialFile:f.credentialFile,projectId:"demo",now,fetchImpl});now=(r.retry_after??now)+1;return r.error_code;};
+ // The shapes fetch (undici) rejects with: TypeError("fetch failed",{cause:{code}}); AbortSignal.timeout → TimeoutError.
+ const failed=code=>async()=>{throw new TypeError("fetch failed",{cause:Object.assign(new Error(code),{code})});};
+ assert.equal(await attempt(failed("ECONNREFUSED")),"PEER_REFUSED");
+ assert.equal(await attempt(failed("UND_ERR_CONNECT_TIMEOUT")),"PEER_UNREACHABLE");
+ assert.equal(await attempt(failed("EHOSTUNREACH")),"PEER_UNREACHABLE");
+ assert.equal(await attempt(async()=>{throw new DOMException("timed out","TimeoutError");}),"PEER_UNREACHABLE");
+ assert.equal(await attempt(async()=>{throw Error("offline");}),"NETWORK_ERROR","an unknown failure stays generic");
+ // A proxy in front of a stopped board (Tailscale Serve) answers 502 with a page, not JSON.
+ assert.equal(await attempt(async()=>new Response("<html>Bad Gateway</html>",{status:502,headers:{"content-type":"text/html"}})),"REMOTE_502");
+ assert.equal(await attempt(async()=>new Response("<html>ok</html>",{status:200})),"BAD_RESPONSE","a 200 that is not JSON is still a bad response");
+ // Only the sync record learns the status: request() still throws BAD_RESPONSE, so the delivery clients'
+ // retry-or-block decision for that page stays exactly what it was.
+ await assert.rejects(request(fixtureEndpoint(f.a.db),"/peer/v1/hello",f.credential,{},async()=>new Response("<html>Bad Gateway</html>",{status:502})),
+  e=>e.code==="BAD_RESPONSE"&&e.http_status===502);
 });
 test("endpoint policy and credential binding reject before leaking credentials",async()=>{
  for(const url of ["http://100.64.0.1","https://example.com","http://user:pass@127.0.0.1","http://127.0.0.1/path","http://127.0.0.1?token=x"])

@@ -163,7 +163,10 @@ test("line picker shows failed writes and refreshes without retry",async()=>{
  const context={e:{target:{closest:()=>({dataset:{assign:"1",line:"alpha"}})}},pick:{dataset:{version:"2"},classList:{remove(){}}},
   post:async(url,body)=>{calls++;assert.equal(body.expected_version,2);throw Error("version conflict");},
   refresh:async()=>{refreshed++;},alert:text=>notices.push(text)};
- vm.createContext(context);await vm.runInContext("(async()=>{"+source.slice(a,b)+"})()",context);
+ const copyStart=source.indexOf("// ── display-copy(pure;tests/panelcopytest.mjs)──"),copyEnd=source.indexOf("// ── /display-copy ──",copyStart);
+ assert.ok(copyStart>=0&&copyEnd>copyStart);
+ vm.createContext(context);vm.runInContext(source.slice(copyStart,copyEnd),context);
+ await vm.runInContext("(async()=>{"+source.slice(a,b)+"})()",context);
  assert.equal(calls,1);assert.equal(refreshed,1);assert.match(notices[0],/version conflict/);
 });
 test("HTTP requires versions, rejects stale controls and returns current version",async()=>{

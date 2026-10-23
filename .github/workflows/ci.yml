@@ -287,6 +287,9 @@ jobs:
       - name: "hometest (home lists, device line and layout pins)"
         if: ${{ !cancelled() }}
         run: bash hrun.sh node tests/hometest.mjs
+      - name: "原生任务视图（中文展示、领取证据与侧栏原位更新）"
+        if: ${{ !cancelled() }}
+        run: bash hrun.sh node --test tests/panelcopytest.mjs tests/panelsidetest.mjs tests/taskexecutionviewtest.mjs tests/taskexecutionhttp.test.mjs
 
   gitleaks:
     runs-on: windows-latest

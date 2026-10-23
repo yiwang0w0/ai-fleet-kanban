@@ -2412,7 +2412,7 @@ function progressHolds(db,t,action) {
 /** Current local reasons only; absence is not a grant to run a provider or a remote action. */
 function stuckWhy(db,task) {
   const id=typeof task==="object"&&task!==null?task.id:task;
-  if(!Number.isSafeInteger(id)||id<1)throw err(ERR.BAD_INPUT,"task id invalid");
+  if(!Number.isSafeInteger(id)||id<1)throw err(ERR.BAD_INPUT,"任务编号无效");
   const t=db.prepare("SELECT * FROM tasks WHERE id=?").get(id);
   if(!t)throw err(ERR.NOT_FOUND,"任务不存在");
   if(t.archived_at||t.status==="done"||t.status==="in_progress")return [];
@@ -2476,7 +2476,7 @@ function stuckWhy(db,task) {
  * picked up next cycle.
  */
 function rearmDone(db, {parentId=null}={}) {
-  if(parentId!==null&&(!Number.isSafeInteger(parentId)||parentId<1))throw err(ERR.BAD_INPUT,"parentId invalid");
+  if(parentId!==null&&(!Number.isSafeInteger(parentId)||parentId<1))throw err(ERR.BAD_INPUT,"父任务编号无效");
   const ownsTransaction=!db.isTransaction;
   db.exec(ownsTransaction?"BEGIN IMMEDIATE":"SAVEPOINT store_rearm");
   try {
@@ -2656,8 +2656,8 @@ function updateInner(db, fields) {
     description.length > oldDescription.length &&
     description.startsWith(oldDescription);
   if (t.status === "in_progress" && !liveDescriptionAppend)
-    throw err(ERR.CONFLICT, `卡 #${id} 是 in_progress(持有者 ${t.worker}),不可 edit 任何字段;` +
-      `唯一例外是保留 description 原文并在末尾追记。worker prompt 在认领时已快照,本轮 worker 看不到追记`);
+    throw err(ERR.CONFLICT, `卡 #${id} 已被 ${t.worker} 领取，不能修改字段；` +
+      `唯一例外是保留说明原文并在末尾追加。智能体使用领取时的任务快照，本轮不会看到追加内容。`);
   const sets = [], args = [];
   // Dependency edges are writable. Invalid input throws ⇒ the whole update fails and
   // blocked_by keeps its original value (no half-write). `changed` counts itself via
@@ -2739,7 +2739,7 @@ function updateInner(db, fields) {
   // the running worker is holding a snapshot and will not see this text.
   return { id: Number(id), changed,
            ...(liveDescriptionAppend
-             ? { notice: "description 已追记;worker prompt 是认领时快照,本轮 worker 不可见,下次认领才会读到" }
+             ? { notice: "说明已追加；智能体使用领取时的任务快照，本轮不会看到追加内容，下次领取时才会读取。" }
              : {}) };
 }
 

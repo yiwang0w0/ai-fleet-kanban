@@ -100,8 +100,10 @@ npm run demo               # board up → demo chain → one mock worker round, 
 For real work, point it at your project and run it in the background:
 `node cli/setup.mjs --repo <your project>` (add `--codex` for a Codex line),
 `node cli/start.mjs --background`, `node cli/open.mjs` (the panel opens already connected),
-`node cli/stop.mjs` — [`INSTALL.md`](INSTALL.md). (`npm run start:bg` / `open` / `stop` are the
-same commands; a fresh Windows PowerShell refuses `npm.ps1` until scripts are allowed.)
+`node cli/stop.mjs` — [`INSTALL.md`](INSTALL.md).
+日常状态检查用 `node cli/status.mjs`；登录后自动后台启动是可选功能，只有用户要求时才运行
+`node cli/autostart.mjs on`（关闭用 `off`，查看用 `status`，仅校验用 `check`）。
+Windows 的 PowerShell 可能拦截 `npm.ps1`，这时直接使用上述 `node cli/...` 命令。
 
 (No `npm install` — `package.json` declares zero dependencies and exists for its
 `scripts` table. `node cli/doctor.mjs` alone runs the preflight: everything

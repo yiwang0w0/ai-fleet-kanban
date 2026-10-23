@@ -28,6 +28,7 @@ import {readFleetProgress} from "./fleet-progress.mjs";
 import {openFleetActions,loadFleetActionsConfig} from "./fleet-actions.mjs";
 import {PeerError} from "./federation/protocol.mjs";
 import {writePrivateText} from "./private-json.mjs";
+import {taskExecutionView} from "./task-execution-view.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require_ = createRequire(import.meta.url);
@@ -70,7 +71,7 @@ const CONFIG_FILE = process.env.BOARD_CONFIG || join(CODE_ROOT, "fleet.config.js
 const BUILTIN_CONFIG = {
   lines: [
     // label = what the operator sees (Chinese); id = what machines use (CLI, config, slot names)
-    { id: "alpha", hint: "实装", label: "实装" },
+    { id: "alpha", hint: "开发", label: "开发" },
     { id: "coord", hint: "协调/裁定/跑命令", label: "协调" },
   ],
   // Built-in single-seat roles ("review" only; reorg was retired by operator
@@ -146,7 +147,7 @@ const HANDOFF_TARGETS = decision.normalizeTargets(
   Array.isArray(CFG.handoff_targets) && CFG.handoff_targets.length
     ? CFG.handoff_targets
     : process.env.BOARD_HANDOFF_DIR
-      ? [{ id: "default", label: "Handoff", dir: process.env.BOARD_HANDOFF_DIR }]
+      ? [{ id: "default", label: "交接目录", dir: process.env.BOARD_HANDOFF_DIR }]
       : []);
 if (Array.isArray(CFG.handoff_targets) && CFG.handoff_targets.length !== HANDOFF_TARGETS.length) {
   console.error("拒绝启动:handoff_targets 含不可用行(每行需要 id + dir,id 不可重复)");
@@ -295,6 +296,7 @@ const unnamedOf = (t) => {
 // file names, hashes and controlled download endpoints — never source paths.
 const taskOut = (t) => t ? {
   ...t,
+  execution_trace: taskExecutionView(db, t),
   progress_blockers: store.stuckWhy(db,t),
   decision_package: decision.publicDecisionPackage(t, DECISION_CTX),
   // ⭐ The panel's button captions come FROM the server-side criterion. If the panel
@@ -854,7 +856,7 @@ function setupState() {
                                                 confirm: "重启看板,让它读到改过的配置。\n\n卡、事件、账本都在库里,不会丢;在跑的线会先停下,起来后照原样恢复。" } }
                      : { state: "done", detail: CONFIG_FILE }; })()
         : { state: "todo", detail: "点下面的按钮,生成一份属于你的配置文件",
-            hint: "你的线、端口、工作仓路径都会写在这份文件里;它被 gitignore,只留在这台机器。现在用的是内置缺省,只有「实装」「协调」两条占位线",
+            hint: "执行线、端口和工作目录路径都会写入此配置；配置已排除在版本控制之外，只保存在本机。当前使用内置默认配置，只有「开发」「协调」两条占位线。",
             action: { type: "api", method: "POST", path: "/api/setup/init-config", label: "生成配置文件" } }) },
     { key: "lines", title: "定义你自己的线", ...(custom
         ? { state: "done", detail: `线: ${LINES.join(" / ")}` }
@@ -1545,20 +1547,20 @@ function setSettings(line, patch) {
         `设置已被他处改动(你基于 rev ${patch.rev},现在是 ${curRev})—— 重新读取后再保存`);
     next.agents = patch.agents.map((a, i) => {
       const rt = seatOf(a?.runtime);
-      if (!rt) throw store.err(store.ERR.BAD_INPUT, `Agent${i + 1}: 未知运行时 ${a?.runtime}`);
+      if (!rt) throw store.err(store.ERR.BAD_INPUT, `智能体 ${i + 1}：未知运行时 ${a?.runtime}`);
       // ⚠ A locked seat refuses with BAD_INPUT: unlocking is a separate human act;
       //   resending later does not pass ⇒ the caller may give up (4xx, not 409).
       if (rt.disabled) throw store.err(store.ERR.BAD_INPUT,
-        `Agent${i + 1}: ${rt.label} —— 未获解禁(${rt.release_env} 闸),保存拒绝`);
+        `智能体 ${i + 1}：${rt.label} —— 未获解禁(${rt.release_env} 闸),保存拒绝`);
       // ⭐ Models AND rungs are judged by the SEAT's declaration (judging by the
       //   global tables would let a codex slot save a claude model and die with a
       //   400 only at start).
       if (!(rt.models || []).some((m) => m.id === a?.model))
-        throw store.err(store.ERR.BAD_INPUT, `Agent${i + 1}: ${rt.label} 没有模型 ${a?.model}`);
+        throw store.err(store.ERR.BAD_INPUT, `智能体 ${i + 1}：${rt.label} 没有模型 ${a?.model}`);
       const dom = effortsFor(a?.runtime, a?.model);
       if (!dom.includes(a?.effort))
         throw store.err(store.ERR.BAD_INPUT,
-          `Agent${i + 1}: ${a?.model} 的强度必须是 ${dom.join("/")}(座席宣言值域)`);
+          `智能体 ${i + 1}：${a?.model} 的强度必须是 ${dom.join("/")}(座席宣言值域)`);
       return { runtime: a.runtime || RUNTIME_IDS[0], model: a.model, effort: a.effort, window: !!a.window };
     });
     next.rev = curRev + 1;
@@ -1603,13 +1605,13 @@ const validStop = (v) => v && STOP_REASON_SET.has(v.reason) && Number.isFinite(D
  *  nothing itself — two mapping tables would drift. */
 function stopText(stop, exitCode) {
   const s = validStop(stop);
-  if (!s) return exitCode === REFUSED_EXIT ? `启动被拒绝 code=${REFUSED_EXIT}`
-                                           : (exitCode == null ? "" : `已停止 code=${exitCode}`);
+  if (!s) return exitCode === REFUSED_EXIT ? `启动被拒绝（退出码 ${REFUSED_EXIT}）`
+                                           : (exitCode == null ? "" : `已停止（退出码 ${exitCode}）`);
   const at = s.at.replace("T", " ").replace(/\.\d{3}Z$/, "Z");
   if (s.reason === STOP_REASON.BY_USER) return `用户停止 · ${at}`;
   if (s.reason === STOP_REASON.WITH_BOARD) return `随看板停止 · ${at}`;
   if (s.reason === STOP_REASON.EXIT_NORMAL) return `正常结束 · ${at}`;
-  return `崩溃${exitCode == null ? "" : ` code=${exitCode}`} · ${at}`;
+  return `崩溃${exitCode == null ? "" : `（退出码 ${exitCode}）`} · ${at}`;
 }
 
 const loopScriptOf = (line) =>
@@ -1664,13 +1666,13 @@ function workerStart(line, route = store.DEFAULT_ROUTE, agentsOverride = null) {
     const seat = seatOf(ag0.runtime);
     if (seat?.cmd_env && !process.env[seat.cmd_env])
       throw store.err(store.ERR.BAD_INPUT,
-        `Agent${k} 是 ${seat.id} 槽,但宿主没有配置 ${seat.cmd_env}(必填绝对路径)—— 拒绝启动`);
+        `智能体 ${k} 使用 ${seat.id} 座席，但宿主没有配置 ${seat.cmd_env}（必须是绝对路径）—— 拒绝启动`);
     // window=true opens a cmd.exe console — a Windows-only affordance. On POSIX it
     // would spawn a literal "cmd" (ENOENT) and, pre-error-handler, took the board
     // down with it. Refuse by name instead of failing mysteriously.
     if (ag0.window && process.platform !== "win32")
       throw store.err(store.ERR.BAD_INPUT,
-        `Agent${k} 配置了 window=true(打开控制台窗口),这只在 Windows 上可用 —— 拒绝启动`);
+        `智能体 ${k} 配置了 window=true（打开控制台窗口），此功能仅适用于 Windows —— 拒绝启动`);
   }
   for (const k of missing) startSlot(line, k, route, agents[k - 1], untilArgs, isReview);
   setDesired(line, true);
@@ -2136,7 +2138,7 @@ const readBody = (req) => new Promise((resolve, reject) => {
   req.on("end", () => {
     let body;
     try { body = b ? JSON.parse(b) : {}; }
-    catch (e) { return reject(store.err(store.ERR.BAD_INPUT, `request body is not valid JSON: ${e.message}`)); }
+    catch { return reject(store.err(store.ERR.BAD_INPUT, "请求正文不是有效的 JSON，请检查输入格式。")); }
     // Covers claim, report, heartbeat and derived-card writes, before state changes.
     if (req.boardRole === "worker" && body?.worker !== undefined &&
         (req.workerSeat ? body.worker !== req.workerSeat.worker : workers.get(String(body.worker))?.workerToken))
@@ -3108,12 +3110,12 @@ const server = http.createServer(async (req, res) => {
           let receipt = "", outcome = "";
           if (decisionAction === "request_completion") {
             if (opt.kind !== "apply" || publicOpt?.ready !== false)
-              throw store.err(store.ERR.BAD_INPUT, "只有文件尚未补齐的方案才能交回 Agent 补齐");
+              throw store.err(store.ERR.BAD_INPUT, "只有文件尚未补齐的方案才能交回智能体补齐");
           } else if (opt.kind === "apply") {
             if (decisionAction !== "confirm_executed" || b.executed !== true)
-              throw store.err(store.ERR.BAD_INPUT, "该方案含需人手应用的文件;未执行时只能交回 Agent 补齐,不能确认已执行");
+              throw store.err(store.ERR.BAD_INPUT, "该方案含需人手应用的文件;未执行时只能交回智能体补齐,不能确认已执行");
             if (!publicOpt?.ready)
-              throw store.err(store.ERR.BAD_INPUT, "该方案的文件尚未补齐,不能确认已执行;请选择交回 Agent 补齐");
+              throw store.err(store.ERR.BAD_INPUT, "该方案的文件尚未补齐,不能确认已执行;请选择交回智能体补齐");
             receipt = String(b.receipt || "").trim();
             if (!receipt)
               throw store.err(store.ERR.BAD_INPUT, "确认已执行时必须填写执行回执");

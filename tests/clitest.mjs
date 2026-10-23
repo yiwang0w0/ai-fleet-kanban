@@ -305,6 +305,15 @@ console.log(NL + "[⑧ start:bg / open / stop]");
     '  if (req.method === "POST" && req.url === "/api/setup/stop") {',
     '    if (existsSync(join(D, "inflight")) && !JSON.parse(b || "{}").force) return send(res, 409, { error: "有 1 张卡正在跑", needs_force: true, in_progress: 1 });',
     '    send(res, 202, { stopping: true }); setTimeout(() => process.exit(0), 50); return; }',
+    // What cli/status.mjs reads: a computer that cannot be reached and a scheduler that stopped (two records, one cause).
+    '  if (req.method === "GET" && req.url === "/api/meta") return send(res, 200, { node: { display_name: "台式机 A" } });',
+    '  if (req.method === "GET" && req.url === "/api/workers") return send(res, 200, { lines: ["engine"], line_labels: { engine: "引擎" }, workers: [{ line: "engine", running: true }] });',
+    '  if (req.method === "GET" && req.url === "/api/setup") return send(res, 200, { version: "stub-rev", complete: true, steps: [] });',
+    '  if (req.method === "GET" && req.url === "/api/fleet?limit=1") return send(res, 200, { nodes: [{ node_id: "n-a", display_name: "台式机 A", local: true, connection_state: "local" },',
+    '    { node_id: "n-b", display_name: "笔记本 B", local: false, connection_state: "failed", projects: [{ project_id: "p", error_code: "PEER_UNREACHABLE" }] }] });',
+    '  if (req.method === "GET" && req.url === "/api/fleet/health") return send(res, 200, { issues: [',
+    '    { code: "SCHEDULER_HEARTBEAT_STALE", level: "problem", next_action: "inspect_scheduler_owner", count: 1 },',
+    '    { code: "SCHEDULER_LOCK_MISSING", level: "problem", next_action: "inspect_scheduler_owner", count: 1 }] });',
     '  send(res, 404, {}); }); }).listen(Number(process.env.BOARD_PORT), "127.0.0.1");',
   ].join(NL));
   const env = { ...process.env, BOARD_SERVER_SCRIPT: stub, BOARD_PORT: String(port), BOARD_DATA_DIR: data,
@@ -332,6 +341,16 @@ console.log(NL + "[⑧ start:bg / open / stop]");
   ok("open with a wrong token stops with the board's refusal (no link)",
      (() => { const d2 = join(TMP, "bg-data-2"); mkdirSync(d2); writeFileSync(join(d2, "board_token"), "wrong");
               const r = cli("open.mjs", ["--print"], { BOARD_DATA_DIR: d2 }); return r.code === 1 && !/#pair=/.test(r.out); })());
+  const denied = cli("status.mjs", [], { BOARD_DATA_DIR: join(TMP, "bg-data-2") });
+  ok("状态命令在服务在线但授权失败时返回 2，给出授权指引而不是正常或停机",
+     denied.code === 2 && /看板服务有应答/.test(denied.out) && /操作员授权未通过/.test(denied.out)
+     && /核对启动命令、数据目录和操作员授权/.test(denied.out) && !/看板服务正常|没有运行/.test(denied.out));
+  const st = cli("status.mjs");
+  ok("⭐status with the board up: computer online, service fine, and the home page's own merged alerts with next steps (exit 2: something red)",
+     st.code === 2 && /电脑在线 · 看板服务正常/.test(st.out) && /执行线:引擎 运行中/.test(st.out)
+     && /笔记本 B:连不上这台电脑（可能关机或断网）/.test(st.out)
+     && /台式机 A:调度器可能已经停了：心跳超时、没有运行锁 —— 下一步:检查调度器进程/.test(st.out)
+     && st.out.split(NL).filter((l) => l.includes("台式机 A:")).length === 1, st.out.slice(-500));
   writeFileSync(join(data, "inflight"), "");
   const held = cli("stop.mjs");
   ok("⭐stop with a card in flight: refuses, says how to force it, the board keeps running",
@@ -340,6 +359,18 @@ console.log(NL + "[⑧ start:bg / open / stop]");
   ok("⭐stop --force: the board stops and the command waits until it no longer answers",
      stopped.code === 0 && /已停止/.test(stopped.out) && !(await up()), stopped.out.slice(-160));
   ok("stop with nothing running says so and exits 0", (() => { const r = cli("stop.mjs"); return r.code === 0 && /没有在运行/.test(r.out); })());
+  const down = cli("status.mjs");
+  ok("⭐status with the board stopped: says so, shows the end of its log and the command that brings it back (exit 1)",
+     down.code === 1 && /电脑在线 · 看板服务没有运行/.test(down.out) && /stub boot supervised=1/.test(down.out)
+     && /下一步:node cli\/start\.mjs --background/.test(down.out), down.out.slice(-500));
+  // ⭐ On Windows (Node v24.16.0, 2026-10-14) the open/stop runs above printed their result and
+  //   then aborted in libuv (Assertion failed … src\win\async.c): process.exit() after two
+  //   requests to a running board. Pinned in the source too, so a Linux run — where it does not
+  //   abort — still catches the call coming back.
+  // (Comment lines are skipped: the files explain the rule in words.)
+  const code = (f) => readFileSync(join(ROOT, "cli", f), "utf8").split(NL).filter((l) => !l.trim().startsWith("//")).join(NL);
+  ok("open and stop return their exit code instead of calling process.exit()",
+     ["open.mjs", "stop.mjs"].every((f) => /process\.exitCode = await main\(\)/.test(code(f)) && !/process\.exit\(/.test(code(f))));
   // The log already holds earlier runs in Chinese (3 bytes a character): the tail is cut by
   // bytes, then decoded — cutting the decoded text at a byte offset lost this run's lines.
   appendFileSync(join(data, "board.log"), "看板已启动,端口与数据目录都正常。\n".repeat(40));
@@ -377,6 +408,34 @@ console.log(NL + "[⑨ doctor: 模型请求发往哪里]");
   ok("⭐no key and no full URL is ever printed", !out.includes("sk-relay-secret-value-0001") && !out.includes("relay.example.net/v1"));
   rmSync(join(home, ".claude", "settings.json")); rmSync(join(repo, ".claude", "settings.local.json")); rmSync(join(codexHome, "config.toml"));
   ok("nothing configured: says the CLIs use their default official endpoints", /PASS\s+模型请求走各 CLI 的默认官方地址/.test(doctor({})));
+}
+
+// ⑩ autostart (optional): one Task Scheduler task of the operator's account that runs exactly
+//    `node cli/start.mjs --background`. Measured here without registering anything: the definition,
+//    then Task Scheduler's own validation (TASK_VALIDATE_ONLY) on Windows.
+console.log(NL + "[⑩ autostart: 登录后自动启动(可选)]");
+{
+  const { autostartTaskXML, autostartName, taskScheduler } = await import("../core/autostart.mjs");
+  const sid = "S-1-5-21-1000-2000-3000-1001";
+  const xml = autostartTaskXML({ sid, node: "C:\\Program Files\\nodejs\\node.exe", root: "D:\\o'neil\\ai-fleet-kanban" });
+  ok("⭐the task runs start --background from this folder, for this user only, hidden, never twice, without raised rights",
+     xml.includes("<UserId>" + sid + "</UserId><Delay>PT30S</Delay>") && xml.includes("<LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel>")
+     && xml.includes("<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>") && xml.includes("-WindowStyle Hidden")
+     && xml.includes("start.mjs&apos; --background&quot;</Arguments>"), xml);
+  ok("a quote in the folder name stays inside the PowerShell string (doubled), and & is escaped for XML",
+     xml.includes("o&apos;&apos;neil") && xml.includes("&amp; &apos;C:\\Program Files\\nodejs\\node.exe&apos;"));
+  ok("one task per board folder: the name follows the folder", autostartName("C:\\a") !== autostartName("C:\\b") && /^AiFleetBoard-[0-9a-f]{8}$/.test(autostartName("C:\\a")));
+  let threw = false; try { autostartTaskXML({ sid: "nope" }); } catch { threw = true; }
+  ok("an unrecognized user id never reaches Task Scheduler", threw);
+  if (process.platform === "win32") {
+    const run = (args) => { const r = spawnSync(process.execPath, [join(ROOT, "cli", "autostart.mjs"), ...args], { encoding: "utf8", windowsHide: true, timeout: 120000 });
+                            return { code: r.status, out: (r.stdout || "") + (r.stderr || "") }; };
+    const before = run(["status"]), checked = run(["check"]), after = run(["status"]);
+    ok("⭐check: Task Scheduler accepts the definition, and nothing is registered by checking",
+       checked.code === 0 && /任务定义有效/.test(checked.out) && before.out === after.out, checked.out + before.out + after.out);
+    ok("Task Scheduler's validation is real: a broken definition is refused",
+       !!taskScheduler("check", { name: autostartName() + "-probe", xml: "<Task>bad</Task>" }).error);
+  }
 }
 
 try { rmSync(TMP, { recursive: true, force: true }); } catch {}

@@ -33,6 +33,7 @@ REGISTRY = os.environ.get("BOARD_VERIFY_REGISTRY") or os.path.join(CODE_ROOT, "c
 #     所有 `join(DATA_DIR, "…")` 形的字面量,归不进去的直接红:这是防「忘了列」的结构,不是提醒。
 PROTECTED = (
     "board_token", "worker_token", "review_token",   # 三令牌(INCIDENT-12:读到令牌 = 拿到裁定权)
+    "panel_sessions.json",                           # 浏览器操作员会话授权记录，不是模型出件
     "board.db*",                                     # 状态本体(含 -wal / -shm)
     "accepted_rev", "restart_from",                  # 源码闸的记录 / 重启标记
     "worker_settings.json", "lineage.json",          # 座席设置;个人会话 id

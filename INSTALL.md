@@ -81,7 +81,7 @@ node cli/open.mjs
    **不要**替用户运行 `python cli/board.py bless`。
 2. 开始干活：在「全部任务」页上方的「自动拉取」一行，点 Claude 旁边的「启动」；然后在「目标」栏
    写下要做的事，点「加入并拆解」。
-3. 停止用 `node cli/stop.mjs`，再启动用 `node cli/start.mjs --background`，打开面板用 `node cli/open.mjs`。
+3. 停止用 `node cli/stop.mjs`，再启动用 `node cli/start.mjs --background`，打开面板用 `node cli/open.mjs`，看状态用 `node cli/status.mjs`。
 
 ## 平时用
 
@@ -92,6 +92,8 @@ node cli/open.mjs
 | 打开面板；换了浏览器、清了浏览器数据、连接过期 | `node cli/open.mjs` |
 | 让所有浏览器都重新连接（比如电脑借给过别人） | `node cli/open.mjs --forget-browsers` |
 | 体检 | `node cli/doctor.mjs` |
+| 看看板现在怎么样、出了问题下一步做什么 | `node cli/status.mjs`（看板停了会打印上次的日志和重新启动的命令） |
+| 登录 Windows 后自动在后台启动（可选） | `node cli/autostart.mjs on`；关闭用 `off`，查看用 `node cli/autostart.mjs` |
 | 更新看板 | `git pull`，然后在面板顶部的横幅里点「更新到新代码」，它会先列出改动 |
 
 ## 改配置
@@ -120,6 +122,8 @@ node cli/open.mjs
 
 ## 出问题
 
+- 先运行 `node cli/status.mjs`：它说明看板服务在不在运行、哪里有问题、下一步做什么。
+- 面板首页显示「看板服务没有应答」：在这台电脑上运行 `node cli/start.mjs --background`。已有任务和结果都保留，面板会自己恢复。
 - 后台启动说没起来：它会打印这次的日志；完整日志在 `core\.data\board.log`。
 - 后台启动说已在运行，紧接着 `node cli/open.mjs` 却说看板没有在运行：你所在的工具在每条命令结束时会结束它
   启动的所有进程。请用户自己开一个 PowerShell 窗口，进入看板目录运行 `node cli/start.mjs`，并让这个窗口一直开着。
@@ -140,6 +144,7 @@ node cli/open.mjs
 ## 不要做的事
 
 - 不替用户确认版本（bless），也不启用用户没要求的执行器。
+- 不替用户开启登录后自动启动（`node cli/autostart.mjs on`）；用户要求时才开。
 - 不替用户配置第三方转发（中转站）；用户已经配了的，把 doctor 标黄的那一行告诉用户。
 - 不把 `core\.data\board_token` 的内容贴进聊天、网址或其他文件；把面板交给用户用 `node cli/open.mjs`，不用这个令牌。
 - 不把看板装进要执行任务的项目里，也不把看板自己的目录当成 `--repo`（setup 会拒绝）。

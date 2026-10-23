@@ -560,8 +560,8 @@ section("⑩bis in-progress edit gate + description tail-append");
 
   const blocked = grabErr(() => store.update(db, { id, maxAttempts: 9 }));
   ok("⭐an in-progress edit is CONFLICT and the text says EVERY field, not just the line",
-     blocked?.code === store.ERR.CONFLICT && /in_progress/.test(blocked.message) &&
-     /不可 edit 任何字段/.test(blocked.message), blocked?.message || "it went through");
+     blocked?.code === store.ERR.CONFLICT && /已被 engine@3 领取/.test(blocked.message) &&
+     /不能修改字段/.test(blocked.message), blocked?.message || "it went through");
   ok("the refused edit moved no value", store.get(db, id).max_attempts === 3);
 
   const appended = "认领时原文\n—— 追记:人的裁定 ——";
@@ -569,7 +569,7 @@ section("⑩bis in-progress edit gate + description tail-append");
   ok("⭐only a pure tail-append passes while in progress",
      r.changed === 1 && store.get(db, id).description === appended);
   ok("the return states prompt = claim-time snapshot, invisible to THIS round's worker",
-     /认领时快照/.test(r.notice || "") && /本轮 worker 不可见/.test(r.notice || ""),
+     /领取时的任务快照/.test(r.notice || "") && /本轮不会看到追加内容/.test(r.notice || ""),
      r.notice || "(no notice)");
 
   const mixed = grabErr(() => store.update(db, { id, description: appended + "x", line: "mail" }));

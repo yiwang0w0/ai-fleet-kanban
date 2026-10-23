@@ -101,3 +101,17 @@ test('a remembered token restores this browser and the box follows where it was 
  const junk=client({remember:true,hash:'#pair=12ab',handler:pairingBoard()});await delay(30);
  assert.deepEqual(junk.replaced,['/']);assert.equal(junk.calls.length,0,'a malformed code is dropped, never sent');
 });
+test('配对的网络、超时与响应解析异常显示中文，且不改变授权或自动重试',async()=>{
+ const cases=[
+  {input:'123456',handler:()=>{throw new TypeError('Failed to fetch');},message:'暂时连不上看板，请确认看板正在运行后重试。'},
+  {input:'123456',handler:()=>{throw new DOMException('The operation timed out','TimeoutError');},message:'连接看板超时，请确认看板正在运行后重试。'},
+  {input:TOKEN,handler:()=>new Response('not-json',{headers:{'Content-Type':'application/json'}}),message:'看板返回的数据无法识别，请刷新页面后重新配对。'}
+ ];
+ for(const item of cases){
+  const f=client({handler:item.handler});f.submit(item.input);await until(()=>!f.elements.get('board-pair-form').button.disabled);
+  assert.equal(f.elements.get('board-pair-note').textContent,item.message);assert.equal(f.elements.get('board-shell').hidden,true);assert.equal(f.local.size+f.stored.size,0);assert.equal(f.calls.length,1);
+ }
+ const fragment=client({hash:'#pair=123456',handler:()=>{throw new TypeError('Failed to fetch');}});
+ await until(()=>fragment.elements.get('board-pair-note').textContent==='暂时连不上看板，请确认看板正在运行后重试。');
+ assert.equal(fragment.calls.length,1);assert.equal(fragment.elements.get('board-shell').hidden,true);
+});

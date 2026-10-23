@@ -25,6 +25,11 @@ export function loadCredential(file,local,projectId,requiredScopes=["peer:handsh
  assertCredentialEndpoint(c,serverEndpoint);
  return c;
 }
+// A failed connection says which side is down; the home page words it (core/panel.html homeNodeState):
+// a timeout, no route or no such host = that computer cannot be reached (off, asleep, off the network);
+// refused or reset = the computer answered but nothing is listening on the port — its board is down.
+const UNREACHABLE=new Set(["ETIMEDOUT","EHOSTUNREACH","ENETUNREACH","ENOTFOUND","EAI_AGAIN","UND_ERR_CONNECT_TIMEOUT"]),REFUSED=new Set(["ECONNREFUSED","ECONNRESET"]);
+export function connectionCode(e){const c=e?.cause?.code??e?.code;return e?.name==="TimeoutError"||UNREACHABLE.has(c)?"PEER_UNREACHABLE":REFUSED.has(c)?"PEER_REFUSED":null;}
 export async function request(base,path,c,body,fetchImpl,signal,knownErrors=[]){
  base=assertCredentialEndpoint(c,base);
  const r=await fetchImpl(base+path,{method:"POST",redirect:"error",signal:signal?AbortSignal.any([signal,AbortSignal.timeout(10000)]):AbortSignal.timeout(10000),
@@ -36,7 +41,10 @@ export async function request(base,path,c,body,fetchImpl,signal,knownErrors=[]){
    if(bytes>MAX_BATCH_BYTES)throw new PeerError("BAD_RESPONSE","对端响应超限");chunks.push(value);}
  }catch(e){await reader.cancel().catch(()=>{});throw e;}finally{reader.releaseLock();}
  let data;try{data=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(Buffer.concat(chunks)));}
- catch{throw new PeerError("BAD_RESPONSE","对端响应不是有效 JSON");}
+ // A refusal that is not JSON (a proxy's 502 page when the board behind it is down) carries its HTTP
+ // status on the side: the delivery clients go on classifying BAD_RESPONSE exactly as before (blocked,
+ // not retried); syncOnce records the status, so the home page can say the computer itself answered.
+ catch{const e=new PeerError("BAD_RESPONSE","对端响应不是有效 JSON");if(!r.ok)e.http_status=r.status;throw e;}
  if(!r.ok){const code=["SNAPSHOT_REQUIRED","SNAPSHOT_EXPIRED","CURSOR_AHEAD","EPOCH_CHANGED",...knownErrors].includes(data?.code)?data.code:"REMOTE_"+r.status;throw new PeerError(code,"对端拒绝同步请求",r.status);}
  return data;
 }
@@ -116,7 +124,7 @@ export async function syncOnce(db,{url,credentialFile,projectId,fetchImpl=fetch,
   return {state:more?"pending":"synced",applied,batches,snapshot_pages:snapshotPages,rebuilt,has_more:more,cursor:replicationCursor(db,c.server_node_id,c.server_epoch,projectId)};
  }catch(e){
   const failures=(previous?.failure_count??0)+1,retryAfter=now+Math.floor(performance.now()-started)+Math.min(30000,1000*2**Math.min(failures-1,5));
-  const code=typeof e.code==="string"&&/^[A-Z0-9_]{1,64}$/.test(e.code)?e.code:"NETWORK_ERROR";
+  const code=connectionCode(e)??(e?.code==="BAD_RESPONSE"&&e.http_status>=400?"REMOTE_"+e.http_status:typeof e.code==="string"&&/^[A-Z0-9_]{1,64}$/.test(e.code)?e.code:"NETWORK_ERROR");
   db.prepare("INSERT INTO federation_sync_attempts(origin_node_id,project_id,last_attempt_at,error_code,failure_count,retry_after) VALUES(?,?,?,?,?,?) ON CONFLICT(origin_node_id,project_id) DO UPDATE SET last_attempt_at=excluded.last_attempt_at,error_code=excluded.error_code,failure_count=excluded.failure_count,retry_after=excluded.retry_after")
    .run(c.server_node_id,projectId,new Date(now).toISOString(),code,failures,retryAfter);
   return {state:"error",error_code:code,retry_after:retryAfter,applied,batches,snapshot_pages:snapshotPages,rebuilt};

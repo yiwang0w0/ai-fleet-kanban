@@ -8,21 +8,21 @@
      descriptive: paper / surface / hairline / ink; one ACCENT for "this needs you"; low-
      saturation status colours; a type scale of five; two radii. Borders, not shadows. */
   :root{
-    --bg:#0f1115; --panel:#171a21; --panel2:#1d212a; --line:#2a2f3a;
-    --fg:#e6e9ef; --dim:#8b93a3; --dim2:#5d6472;
-    --accent:#f2a33a; --wait:var(--accent);
-    --cc:#6b9ce0; --l0:#b48cf2;
-    --ok:#46b982; --warn:#e0b04c; --bad:#e5534b;
+    --bg:#f7f2e8; --panel:#fffcf6; --panel2:#f1e9dc; --line:#ddcfbb;
+    --fg:#332b23; --dim:#756652; --dim2:#726451;
+    --accent:#9b530b; --wait:var(--accent);
+    --cc:#80572c; --l0:#936544;
+    --ok:#396a4c; --warn:#7f5d0e; --bad:#b74332;
     --font:"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",system-ui,sans-serif;
     --mono:ui-monospace,"Cascadia Mono",Consolas,"Noto Sans Mono CJK SC",monospace;
     --fs-xl:18px; --fs-lg:14px; --fs-md:13px; --fs-sm:12px; --fs-xs:10.5px;
     --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
     --r-sm:6px; --r-md:10px;
   }
-  @media (prefers-color-scheme: light){
-    :root{ --bg:#f6f5f1; --panel:#ffffff; --panel2:#f1efe9; --line:#e4e1d9;
-           --fg:#1f2328; --dim:#6b7280; --dim2:#9aa1ad;
-           --accent:#d9740c; --cc:#3b74c4; --l0:#7c4dcc; --ok:#2f9e6b; --warn:#b8860b; --bad:#c9382f; }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#1e1a16; --panel:#27211c; --panel2:#312920; --line:#574737;
+           --fg:#f4eadb; --dim:#c2b19a; --dim2:#a7957d;
+           --accent:#e7ab5c; --cc:#c99760; --l0:#cfb18b; --ok:#8db394; --warn:#d7b765; --bad:#f08a77; }
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);
@@ -424,6 +424,11 @@
   .side-head h2{flex:1;margin:0;font-size:16px;line-height:1.4;word-break:break-word}
   .side-body{flex:1;overflow:auto;padding:var(--sp-3) var(--sp-4) var(--sp-5)}
   .side-state{color:var(--dim);font-size:13px;margin:0 0 var(--sp-3);word-break:break-all}
+  .side-state[data-tone="warn"]{color:var(--warn)}
+  .side-trace{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--sp-1) var(--sp-3);font-size:var(--fs-sm)}
+  .side-trace dt{color:var(--dim)}
+  .side-trace dd{margin:0;overflow-wrap:anywhere}
+  .side-links{display:flex;flex-wrap:wrap;gap:var(--sp-1);margin:var(--sp-2) 0}
   .side-next{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r-md);padding:var(--sp-3);margin-bottom:var(--sp-3)}
   .side-next[data-tone="quiet"]{border-left-color:var(--line)}
   .side-next h3{margin:0 0 var(--sp-2);font-size:14px}
@@ -454,6 +459,9 @@
   .hs-what{min-width:0;overflow-wrap:anywhere}
   .hs-next{color:var(--dim);min-width:0;overflow-wrap:anywhere}
   .hs-alert button{margin-left:auto}
+  .hs-alert button + button{margin-left:0}
+  .hs-cmd{font-family:var(--mono);font-size:12px;padding:0 4px;border:1px solid var(--line);border-radius:4px;background:var(--bg);overflow-wrap:anywhere}
+  .home.stale .home-cols,.home.stale .home-note{opacity:.55}
   .home-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-3);align-items:start}
   @media (max-width:900px){ .home-cols{grid-template-columns:minmax(0,1fr)} }
   .home-sec{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);min-width:0}
@@ -519,7 +527,7 @@
   <form id="fleet-filters" class="fleet-filters" role="search">
     <label>终端<select id="fleet-owner"><option value="">全部终端</option></select></label>
     <label>项目<select id="fleet-project"><option value="">全部项目</option></select></label>
-    <label>任务<input id="fleet-query" type="search" maxlength="160" placeholder="标题或完整任务 UID"></label>
+    <label>任务<input id="fleet-query" type="search" maxlength="160" placeholder="标题或完整任务唯一编号（UID）"></label>
     <button type="submit">查找</button>
   </form>
   <p id="fleet-notice" class="fleet-note" role="status" aria-live="polite">正在读取全局视图…</p>
@@ -600,15 +608,15 @@
      re-rendered on every refresh and would erase an in-progress entry. -->
 <form class="line-add" id="line-add" autocomplete="off">
   <label for="line-add-id">加线</label>
-  <input id="line-add-label" placeholder="显示名(可中文)" maxlength="24">
-  <input id="line-add-id" placeholder="标识(小写/数字/-_,给命令行用)" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{0,31}" required>
-  <input id="line-add-hint" placeholder="一句用途(可选)" maxlength="80">
+  <input id="line-add-label" placeholder="显示名称（可用中文）" aria-label="执行线显示名称" maxlength="24">
+  <input id="line-add-id" placeholder="命令行标识（小写字母、数字、- 或 _）" aria-label="执行线标识" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{0,31}" required>
+  <input id="line-add-hint" placeholder="一句话说明用途（可选）" aria-label="执行线用途" maxlength="80">
   <!-- v0.22: the line's identity. 实现 is the plain line; 评审 reads, checks and judges only
        (its evidence is the review), and defaults to 只读. -->
   <select id="line-add-kind" title="身份:实现线干活;评审线只读、只核对、只判断,评审文本就是它的交付物(默认只读)">
     <option value="implement">实现</option><option value="review">评审</option>
   </select>
-  <label class="chk" title="勾上=这条线的 worker 改不了工作仓 —— 这是 argv / 沙箱层面的限制,不是提示词请求;证据文件照常能写"><input type="checkbox" id="line-add-ro"> 只读</label>
+  <label class="chk" title="勾上=这条线的 执行器不能修改工作目录 —— 这是 命令参数与沙箱层面的限制,不是提示词请求;证据文件照常能写"><input type="checkbox" id="line-add-ro"> 只读</label>
   <input id="line-add-charter" placeholder="章程(看板仓相对 .md,可选)" maxlength="120" title="逐字内联进这条线每次提示词的章程;文件住看板仓且必须在受闸子树内(改了要重新确认版本)">
   <label class="chk" title="勾上=这条线交付的卡不用你点「通过」,交付即完成(交付物闸照常检查);要你决定的卡照样进等待中"><input type="checkbox" id="line-add-auto"> 交付即完成</label>
   <button type="submit">加入</button>
@@ -622,7 +630,7 @@
   <button data-quick="propose-lines" title="点击=授权你的 Claude 只读检索你最近的会话(标题与相关片段,不外发),访谈后起草自动拉取线">根据我最近的对话起草线路</button>
   <select id="quick-days" title="检索范围"><option value="7">近 7 天</option><option value="14" selected>近 14 天</option><option value="30">近 30 天</option></select>
   <button data-quick="mount-sentries" title="让你的 Claude 持续接收板上的通知(卡交付了、你按了按钮、线出了问题)—— 接着通知的那个对话就是「协调席」">让 Claude 持续接收板上通知</button>
-  <button data-quick="install-worker-constraints" title="把 worker 的工作守则(examples/AGENTS.template.md)装进工作仓根目录并填好空,worker 起跑时会读它">把 worker 守则装进工作仓</button>
+  <button data-quick="install-worker-constraints" title="把执行器工作守则(examples/AGENTS.template.md)装进工作仓根目录并填好空,执行器启动时会读它">把执行器守则装进工作仓</button>
   <button data-quick="enable-review" title="让 Claude 打开自动审阅(改配置 roles:[&quot;review&quot;],之后按横幅里的重启)">打开自动审阅</button>
   <button data-quick="board-briefing" title="让 Claude 在对话里用几句话汇报板上现状">给我说说板上现状</button>
   <span class="note" id="quick-note" aria-live="polite"></span>
@@ -651,14 +659,14 @@
 
 <div class="ctxwrap"><section class="ctx" id="tl">
   <h2>时间轴 <span class="n" id="tl-sum"></span></h2>
-  <div class="body" id="tl-body"><div id="tl-bar"><button id="tl-mode-lin">谱系</button><button id="tl-mode-load">负载</button><span style="width:6px"></span><button id="tl-prev">◀</button><input type="date" id="tl-date"><button id="tl-next">▶</button><button id="tl-fit" class="pri">聚焦活动</button><button id="tl-day">全天</button><span id="tl-note"></span></div><div id="tl-scroll"></div></div>
+  <div class="body" id="tl-body"><div id="tl-bar"><button id="tl-mode-lin">谱系</button><button id="tl-mode-load">负载</button><span style="width:6px"></span><button id="tl-prev" aria-label="上一天" title="上一天">◀</button><input type="date" id="tl-date" aria-label="时间轴日期"><button id="tl-next" aria-label="下一天" title="下一天">▶</button><button id="tl-fit" class="pri">聚焦活动</button><button id="tl-day">全天</button><span id="tl-note"></span></div><div id="tl-scroll"></div></div>
 </section></div>
 
 <div class="cols" id="cols"></div>
 
 <footer>
   <span>归档 <b id="f-arch">–</b> 件</span>
-  <span>uptime <b id="f-up">–</b></span>
+  <span>已运行 <b id="f-up">–</b></span>
   <span>版本 <b id="f-rev">–</b></span>
   <span>未开始 <b id="f-ns">–</b> · 进行中 <b id="f-ip">–</b> · 等待中 <b id="f-wa">–</b> · 已完成 <b id="f-dn">–</b></span>
   <span style="margin-left:auto" id="f-when">–</span>
@@ -672,6 +680,28 @@ window.boardSession.ready.then(()=>{
 const fetch = window.boardSession.fetch;
 const WH = { "Content-Type":"application/json" };
 // Five columns. Goal is a KIND, not a status — the state machine still has four values.
+// ── display-copy(pure;tests/panelcopytest.mjs)──
+/** 仅转换显示文字；调用方按委派、验证、合并等语义域提供各自的标签。 */
+function copyLabel(labels, value, fallback = "状态待核实"){
+  return Object.hasOwn(labels, value) ? labels[value] : fallback;
+}
+function routeLabel(value){
+  return copyLabel({ default: "默认", claude: "Claude", codex: "Codex", zcode: "Zcode" }, value, String(value || "未指定"));
+}
+function formatCount(value){
+  return value >= 1e8 ? (value / 1e8).toFixed(1) + "亿" : value >= 1e4 ? (value / 1e4).toFixed(1) + "万"
+    : value >= 1e3 ? (value / 1e3).toFixed(1) + "千" : String(value);
+}
+function copyError(error){
+  const message = String(error?.message ?? error ?? "").trim();
+  if (/[\u3400-\u9fff]/.test(message)) return message;
+  if (error?.name === "TimeoutError" || error?.name === "AbortError") return "请求超时或已取消，请检查连接后重试。";
+  if (/^(?:failed to fetch|networkerror(?: when attempting to fetch resource\.)?|network request failed|load failed)$/i.test(message)) return "暂时无法连接看板，请检查服务和网络后重试。";
+  if (error?.name === "SyntaxError") return "看板返回的数据格式无法读取，请刷新后重试。";
+  if (!message) return "操作未完成，请稍后重试。";
+  return "操作未完成。原始信息：" + message;
+}
+// ── /display-copy ──
 const COLS = ["goal", "not_started", "in_progress", "waiting", "done"];
 // ⭐ Labels come from the server (GET /api/meta → status_labels / wf_labels): the ONE
 //   copy is core/store.js, and the CLI reads the same endpoint. This file used to carry
@@ -679,8 +709,8 @@ const COLS = ["goal", "not_started", "in_progress", "waiting", "done"];
 //   code" was measured (confirm went missing once). refresh() fetches meta in the same
 //   Promise.all as the tasks, before render(), so the first paint already has them.
 //   "目标" is a KIND, not a status — the panel's own word, not a domain label.
-const colLabel = (k) => k === "goal" ? "目标" : (meta.status_labels?.[k] || k);
-const wfLabel = (w) => meta.wf_labels?.[w] || w;
+const colLabel = (k) => k === "goal" ? "目标" : (meta.status_labels?.[k] || "状态待核实");
+const wfLabel = (w) => meta.wf_labels?.[w] || "等待处理";
 // Line colors are assigned from a palette by the line's index in the server-sent
 // LINES (lines are fleet config, not this file's business). Roles keep the accent.
 const PALETTE = ["#5b9dff","#f0883e","#3ecf8e","#f2555a","#c084fc","#e8b93a","#6fd3c7","#d38fd3"];
@@ -704,7 +734,7 @@ const roleBadge = (w) => {
   if (r?.charter) parts.push("章程");
   if (w.seat_drift) parts.push("⚠偏离身份座席");
   if (!parts.length) return "";
-  return `<span class="tail" title="${esc(r?.charter ? "章程 " + r.charter : "")}${w.seat_drift ? " · 当前座席与 role.seat 不同(首次启动时该座席未解禁,或你在面板改过)" : ""}">${parts.join("·")}</span>`;
+  return `<span class="tail" title="${esc(r?.charter ? "章程 " + r.charter : "")}${w.seat_drift ? " · 当前执行配置与预设身份配置不同（首次启动时预设配置未启用，或之后在面板修改过）" : ""}">${parts.join("·")}</span>`;
 };
 const lineLabel = (l) => {
   const s = String(l || ""); if (!s) return "未指派";
@@ -712,21 +742,21 @@ const lineLabel = (l) => {
   return (LINE_LABELS[m[1]] || m[1]) + (m[2] || "");
 };
 // Runtime badge text: conventional short forms with a generic fallback.
-const RT_BADGE = { claude: "CC", codex: "CX" };
+const RT_BADGE = { claude: "Claude", codex: "Codex", zcode: "Zcode" };
 const rtColor = (rt) => rt === "codex" ? "#b07dd8" : "var(--cc)";
 // ⭐ Post-decompose hint. ONE copy of the wording (two decompose entrances; written
 //   separately, only one gets fixed — measured, twice, including a hint that
 //   promised an action this panel cannot perform). It states only who releases and
 //   what happens here, which is correct for every reader.
 const HOLD_HINT = `拆出的子卡已就位,但**目标未放行前,一张也不会被领**(祖先放行不变量)。
-放行整链 = 放行这个目标(board.py release <目标id>);只想放一部分,给其余子卡 hold。
+放行整链 = 放行这个目标(board.py release <目标id>);只想放行一部分,将其余子任务设为暂缓领取（hold）。
 在此检查内容;有问题就在输入框写明(=回原线继续),或用 [编辑]。`;
 
 let tasks = [], taskEvents = [], meta = {}, skew = 0;   // skew = server time - local time
 let usageByCard = {};                                    // card id -> aggregated token usage
 // Token counts read at a glance: 1234 -> 1.2k, 2456789 -> 2.5M. One decimal is
 // plenty for a card face; the ledger holds the exact numbers.
-const fmtTok = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+const fmtTok = formatCount;
 
 // What a human typed must survive re-renders (same logic as the evidence box that
 // used to fold one second after opening).
@@ -830,14 +860,14 @@ function openDecisionModal(t){
       `<div class="hf-outcome-title">执行结果(必选)</div>` +
       `<div class="hf-outcomes" role="radiogroup" aria-label="执行结果">` +
         `<label><input type="radio" name="hf-outcome-${t.id}" data-handoff-outcome="${t.id}" value="success">` +
-          `<span>执行成功<small>已应用;交回 Agent 做结果验证</small></span></label>` +
+          `<span>执行成功<small>已应用;交回智能体做结果验证</small></span></label>` +
         `<label class="failure"><input type="radio" name="hf-outcome-${t.id}" data-handoff-outcome="${t.id}" value="failure">` +
-          `<span>执行失败<small>算已尝试;未应用;交回 Agent 修正</small></span></label></div>` +
+          `<span>执行失败<small>算已尝试;未应用;交回智能体修正</small></span></label></div>` +
       `<label for="hf-receipt-${t.id}">执行回执(必填,原文保留)</label>` +
       `<textarea id="hf-receipt-${t.id}" data-handoff-receipt="${t.id}" rows="3" ` +
         `placeholder="粘贴你应用之处返回的原始回执;成功或报错都可以。请另补执行时间、环境和影响范围。"></textarea>` +
-      `<div class="hint">失败也算实际执行过,但不会记成已应用。不要粘贴密钥或客户明细;回执会逐字交回原 Agent。</div></div>` +
-    `<textarea class="vin" data-vin="${t.id}" rows="2" placeholder="可选:补充给原 Agent 的一句指示"></textarea>` +
+      `<div class="hint">失败也算实际执行过,但不会记成已应用。不要粘贴密钥或客户明细;回执会逐字交回原智能体。</div></div>` +
+    `<textarea class="vin" data-vin="${t.id}" rows="2" placeholder="可选:补充给原智能体的一句指示"></textarea>` +
     `<div class="hoh" data-hoh></div><div class="acts decision-actions">` +
     `<button class="pri" data-decide="${t.id}" disabled>先选择 A / B / C</button>` +
     `<button data-final-close="${t.id}">无需后续 · 通过</button></div>`;
@@ -911,7 +941,7 @@ function decisionPanel(t, compact=false){
     //   them apart needs only the layer).
     const dirTag = (f) => f.dir ? `<span class="hf-dir">${esc(f.dir)}/</span>` : "";
     const files = (o.files || []).map((f) => {
-      const name = `${dirTag(f)}${esc(f.archive_name || f.name || "file")}`;
+      const name = `${dirTag(f)}${esc(f.archive_name || f.name || "文件")}`;
       // Split by ROLE only — never guess from file names or dirs: companions are
       // viewable but are not executable downloads.
       if (f.role === "companion") {
@@ -921,36 +951,36 @@ function decisionPanel(t, compact=false){
         return `<span class="hf-companion" data-handoff-role="companion"><span>ⓘ ${name}</span><b>非执行用 · 仅供查阅</b>${view}</span>`;
       }
       return f.available && f.download_url
-        ? `<a class="hf-download" data-stop data-handoff-role="${esc(f.role)}" data-handoff-action="download" href="${esc(f.download_url)}" download="${esc(f.archive_name || f.name)}">↓ 执行用下载 · ${name} · ${esc(f.role)}${f.target_label ? " · →" + esc(f.target_label) : ""}</a>`
-        : `<span class="hf-warn" data-handoff-role="${esc(f.role)}">${name} · ${esc(f.role)}: ${esc(f.error || "不可下载")}</span>`;
+        ? `<a class="hf-download" data-stop data-handoff-role="${esc(f.role)}" data-handoff-action="download" href="${esc(f.download_url)}" download="${esc(f.archive_name || f.name)}">↓ 执行用下载 · ${name} · ${esc(copyLabel({apply:"执行文件",rollback:"回退文件",companion:"参考文件"},f.role,"文件用途待核实"))}${f.target_label ? " · →" + esc(f.target_label) : ""}</a>`
+        : `<span class="hf-warn" data-handoff-role="${esc(f.role)}">${name} · ${esc(copyLabel({apply:"执行文件",rollback:"回退文件",companion:"参考文件"},f.role,"文件用途待核实"))}： ${esc(copyError(f.error || "文件暂不可下载"))}</span>`;
     }).join("");
     const warn = o.kind === "apply" && !o.ready
-      ? `<div class="hf-warn">⚠ 本方案的文件尚未补齐;仍可选择本方案,并交回 Agent 补齐文件。当前不会应用或归档任何文件。</div>` : "";
+      ? `<div class="hf-warn">⚠ 本方案的文件尚未补齐；仍可选择本方案，并交回智能体补齐文件。当前不会应用或归档任何文件。</div>` : "";
     return `<label class="dopt${chosen ? " chosen" : ""}${rec ? " recommended" : ""}${!o.ready ? " unready" : ""}">
       <div class="dopt-head"><input type="radio" name="decision-${t.id}" data-choice="${t.id}" value="${esc(o.key)}"
         ${chosen ? "checked" : ""}>
         <span class="key">${esc(o.key)}</span><span>${esc(o.title)}</span>
-        ${rec ? `<span class="flag">recommended</span>` : ""}</div>
+        ${rec ? `<span class="flag">推荐</span>` : ""}</div>
       ${o.detail ? `<div class="dopt-detail">${esc(o.detail)}</div>` : ""}
-      ${o.cost ? `<div class="dopt-cost"><b>Cost / risk:</b> ${esc(o.cost)}</div>` : ""}
+      ${o.cost ? `<div class="dopt-cost"><b>成本与风险：</b> ${esc(o.cost)}</div>` : ""}
       ${files ? `<div class="hf-files">${files}</div>` : ""}${warn}
     </label>`;
   }).join("");
   return `<section class="decision" data-decision="${t.id}">
-    <div class="decision-h"><b>Final ruling</b><span class="tag wf confirm">请选择 A / B / C</span>
-      ${p.recommend ? `<span class="rec">recommended: ${esc(p.recommend)}</span>` : ""}</div>
+    <div class="decision-h"><b>最终裁定</b><span class="tag wf confirm">请选择 A / B / C</span>
+      ${p.recommend ? `<span class="rec">推荐方案：${esc(p.recommend)}</span>` : ""}</div>
     <div class="decision-summary">${esc(p.summary || p.reason || "需要你选择后续方案。")}</div>
     <div class="decision-options">${opts}</div>
-    <div class="decision-foot">文件未补齐:可直接选该方案并交回 Agent 补齐。文件已齐且实际应用过(成功或失败):选择结果并填写原始回执后确认;系统不会替你执行任何操作,只记录选择、结果、回执,并把本轮文件归档到已授权的 handoff 目标。</div>
+    <div class="decision-foot">文件未补齐：可直接选该方案并交回智能体补齐。文件已齐且实际应用过（成功或失败）：选择结果并填写原始回执后确认。系统不会替你执行任何操作，只记录选择、结果、回执，并把本轮文件归档到已授权的交接目录。</div>
   </section>`;
 }
 
 function ago(ms){
   if (ms == null) return null;
   const s = Math.max(0, Math.round((now() - ms) / 1000));
-  if (s < 60) return s + "s 前";
-  if (s < 3600) return Math.floor(s/60) + "m" + (s%60 ? (s%60)+"s" : "") + " 前";
-  return Math.floor(s/3600) + "h" + Math.floor((s%3600)/60) + "m 前";
+  if (s < 60) return s + " 秒前";
+  if (s < 3600) return Math.floor(s/60) + " 分" + (s%60 ? (s%60)+" 秒" : "") + "前";
+  return Math.floor(s/3600) + " 小时" + Math.floor((s%3600)/60) + " 分前";
 }
 
 // The DB stores ISO UTC. Slicing the string shows the wrong wall time — always
@@ -997,9 +1027,9 @@ function cardParts(t){
   const rtKey = t.last_runtime || t.route;
   const rtTxt = t.last_runtime
     ? (RT_BADGE[t.last_runtime] || String(t.last_runtime).toUpperCase())
-    : t.route.toUpperCase();
+    : routeLabel(t.route);
   top += `<span class="tag" style="color:${t.last_runtime ? rtColor(t.last_runtime) : "var(--dim)"};border-color:color-mix(in srgb,${t.last_runtime ? rtColor(t.last_runtime) : "var(--dim)"} 45%,transparent)" title="${t.last_runtime
-    ? `运行: ${esc(t.last_runtime)}` : `路由族: ${esc(t.route)}(未领,认领后显示实际运行方)`}">${esc(rtTxt)}</span>`;
+    ? `执行器：${esc(routeLabel(t.last_runtime))}` : `执行路由：${esc(routeLabel(t.route))}（领取后显示实际执行器）`}">${esc(rtTxt)}</span>`;
   // Derived cards state their origin (chains like #8→#51→#83 are untraceable
   // without it). The chain is walked from the local full set; clicking lights the
   // family (existing focus machinery).
@@ -1066,7 +1096,7 @@ function cardParts(t){
     //   "stopped" while the card moves, and an operator reading the rig has no
     //   other way to know (a deployment hit exactly this and called it a bug).
     if (t.status === "in_progress" && t.worker && !liveWorkerNames().has(t.worker))
-      meta2.push(`<span class="tag offrig" title="持卡的 worker「${esc(t.worker)}」不是任何在跑的自动拉取槽 —— 这张卡在板外被推进(手动 --once / CLI 认领 / 外部进程)。预算·阶梯·账本只在自动拉取里存在">板外在跑</span>`);
+      meta2.push(`<span class="tag offrig" title="领取方「${esc(t.worker)}」不属于当前自动拉取槽；可能由手动命令或外部进程领取，实际开工仍须核对执行记录。">看板外领取</span>`);
   }
   // ⭐ The no-progress brake is holding this card. Without saying so, the card reads
   //   as "queued, waiting its turn" while the queue will in fact never hand it out —
@@ -1075,7 +1105,7 @@ function cardParts(t){
   // v0.23: held by the auto-review anti-affinity — the server decides (review_hold), the
   // panel only shows it; the card is waiting for YOU or for another family's reviewer.
   if (t.review_hold === "same_family") {
-    meta2.push(`<span class="tag" title="自动审阅座席与交付这张卡的座席是同一家族(review.anti_affinity):不由它审。留给你,或另一家族的审阅座席">待异族审阅</span>`);
+    meta2.push(`<span class="tag" title="当前自动审阅方与交付方属于同一模型家族，不能互相验收。请由操作者或其他模型家族审阅。">待独立审阅</span>`);
   }
   if (t.no_progress) {
     const since = String(t.no_progress.since || "").replace("T", " ").slice(0, 16);
@@ -1087,9 +1117,9 @@ function cardParts(t){
   {
     const u = usageByCard[t.id];
     if (u && (u.in || u.out || u.cr || u.cc)) {
-      meta2.push(`<span class="tok" title="token 消耗(本卡累计,自 usage_ledger)
+      meta2.push(`<span class="tok" title="本卡累计模型用量（词元）
 输入 ${u["in"]} · 输出 ${u.out} · 缓存读 ${u.cr} · 缓存写 ${u.cc} · 调用 ${u.calls} 次">` +
-        `tok ${fmtTok(u["in"] + u.out)}` + (u.cr ? `<small>+缓存读${fmtTok(u.cr)}</small>` : ``) + `</span>`);
+        `词元 ${fmtTok(u["in"] + u.out)}` + (u.cr ? `<small>+缓存读${fmtTok(u.cr)}</small>` : ``) + `</span>`);
     }
   }
   if (t.blocked_by && t.blocked_by.length) meta2.push(`<span>依赖 #${t.blocked_by.join(" #")}</span>`);
@@ -1109,7 +1139,7 @@ function cardParts(t){
        <div class="evh"><span>${label}</span><span class="hint">双击展开</span></div>
        <div class="evp">${esc(String(text).replace(/\s+/g, " ").slice(0, 160))}</div>
      </div>`;
-  if (t.result) body += ev("ev", "evidence / reason", t.result);
+  if (t.result) body += ev("ev", "证据／原因", t.result);
   if (t.verdict_note) body += ev("vn", t.decision_package ? "自动审阅原始记录" : "裁定记录", t.verdict_note);
 
   // ⛔ No "stuck" column exists. Both flavors of waiting are told apart by the
@@ -1135,7 +1165,7 @@ function cardParts(t){
     //   change the signature, replace innerHTML and throw the caret. Values are
     //   poured in afterwards.
     if (!t.decision_package?.options?.length){
-      body += `<textarea class="vin" data-vin="${t.id}" rows="2" placeholder="可选:补充给原 Agent 的一句指示"></textarea>`;
+      body += `<textarea class="vin" data-vin="${t.id}" rows="2" placeholder="可选:补充给原智能体的一句指示"></textarea>`;
       body += `<div class="hoh" data-hoh></div>`;
     }
     // ⭐ Ruling: the human "bounce" button is GONE. The button chooses CLOSE OR NOT —
@@ -1199,6 +1229,7 @@ function tick(){
       else { ls.className = "hb dead"; ls.textContent = "租约已过"; }
     }
   }
+  updateSideLive();
 }
 
 function rowsFor(key){
@@ -1308,9 +1339,9 @@ function syncHandoff(scope){
   //   not exist — a cold-machine walkthrough read the API after a bounce, saw
   //   nothing "+1", and correctly could not reconcile the two.
   if (h) h.textContent = isQ
-    ? (on ? "同意=按这段指示交回原 Agent 执行;否决=退回,写一句为什么更好"
+    ? (on ? "同意=按这段指示交回原智能体 执行;否决=退回,写一句为什么更好"
           : "同意=按建议执行(卡完成);否决=退回原线,写一句为什么更好")
-    : (on ? "按下=**打回** —— 这段文字作为指令交回原 Agent 继续;卡回到原线,下次认领按新一轮派发计算尝试预算(attempts 累计不清零,预算锚在认领时重打)"
+    : (on ? "按下=**打回** —— 这段文字作为指令交回原智能体 继续;卡回到原线,下次认领按新一轮派发计算尝试预算(attempts 累计不清零,预算锚在认领时重打)"
           : "空白提交=**通过**(计入已完成)。需修改或继续:先在上方写明指示再提交 —— 未写指示不会产生后续动作");
 }
 
@@ -1339,24 +1370,24 @@ function syncDecision(scope, t){
   if (b){
     b.disabled = !opt || !hasOutcome || !hasReceipt;
     b.textContent = !opt ? "先选择 A / B / C"
-      : incompleteApply ? `按 ${opt.key} 方向 · 交回 Agent 补齐文件`
+      : incompleteApply ? `按 ${opt.key} 方向 · 交回智能体 补齐文件`
       : executedApply && !hasOutcome ? `先选择 ${opt.key} 的执行结果`
       : executedApply && !hasReceipt ? `先填写 ${opt.key} 的执行回执`
       : executedApply && outcome === "failure" ? `确认 ${opt.key} · 已尝试执行但失败`
       : executedApply ? `确认 ${opt.key} · 执行成功并附回执`
-      : `采用 ${opt.key} · 交回原 Agent`;
+      : `采用 ${opt.key} · 交回原智能体`;
   }
   const h = scope.querySelector("[data-hoh]");
   if (h) h.textContent = !opt ? "先阅读摘要、做法和代价,再选择一个方案。"
     : incompleteApply
-      ? "确认后不会应用或归档任何文件:只会锁定这个方案方向,并交回原 Agent 补齐缺失文件。"
+      ? "确认后不会应用或归档任何文件:只会锁定这个方案方向,并交回原智能体 补齐缺失文件。"
     : executedApply
       ? outcome === "failure"
-        ? "本次会记录为已尝试执行但失败:保留错误回执、把本轮文件归档到 handoff 目标,并交回原 Agent 修正;不会冒充已应用。"
+        ? "本次会记录为已尝试执行但失败：保留错误回执、把本轮文件归档到交接目录，并交回原智能体修正；不会冒充已应用。"
         : outcome === "success"
-          ? "本次会记录为执行成功:保留回执、把文件归档到 handoff 目标,并交回原 Agent 做结果验证。"
+          ? "本次会记录为执行成功：保留回执、把文件归档到交接目录，并交回原智能体做结果验证。"
           : "先取走并自行应用上面的文件,再明确选择成功或失败并填写原始回执。"
-      : "确认后不会通过(卡回原线):选择与补充指示会原样交回原 Agent 继续。";
+      : "确认后不会通过(卡回原线):选择与补充指示会原样交回原智能体 继续。";
 }
 
 function upsert(t, wanted){
@@ -1770,9 +1801,9 @@ function renderLineage(wrap){
         if (e.k === "entry")
           gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="none" stroke="var(--dim2)" stroke-width="1.5" stroke-dasharray="2 2"><title>#${t.id} 来自此前(窗口外历史未导入)${NLC}${esc2(t.subject)}</title></circle>`;
         else if (e.k === "birth")
-          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="var(--dim)"><title>#${t.id} 启动 ${tt}${NLC}${esc2(t.subject)}</title></circle>`;
+          gg += `<circle cx="${x}" cy="${yy}" r="3.4" fill="var(--dim)"><title>#${t.id} 建卡 ${tt}${NLC}${esc2(t.subject)}</title></circle>`;
         else if (e.k === "open")
-          gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="var(--cc)"><title>#${t.id} 开工 ${tt} · ${esc2(lineLabel(e.w))}${whyRan(e)}</title></rect>`;
+          gg += `<rect x="${x - 2.6}" y="${yy - 2.6}" width="5.2" height="5.2" fill="var(--cc)"><title>#${t.id} 领取 ${tt} · ${esc2(lineLabel(e.w))}${whyRan(e)}${NLC}领取不等于模型已开工</title></rect>`;
         else if (e.k === "close"){
           if (last && t.status === "waiting")
             gg += `<circle cx="${x}" cy="${yy}" r="4" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"><title>#${t.id} 交付→等待${t.waiting_for ? "/" + esc2(wfLabel(t.waiting_for)) : ""} ${tt}</title></circle>`;
@@ -1796,7 +1827,7 @@ function renderLineage(wrap){
     `${gArr.length} 组 · ${inc.size} 张 · ${evTotal} 事件${rangeLab ? " · " + rangeLab : ""}`;
   document.getElementById("tl-note").textContent = focusing
     ? `聚焦中: 只画 #${focusId} 家族(再点该卡节点=恢复全图)`
-    : `横=事件顺序(时刻见悬浮/时变小字) 纵=活跃分支(完成即回收轨道) ┐派生 ┘合流(仅完成) ▭处理段(橙=等你) ●启动 ■开工 ○等待 ◌来自此前 · 点组行收起/展开 · 点节点=只留该家族`;
+    : `横=事件顺序(时刻见悬浮/时变小字) 纵=活跃分支(完成即回收轨道) ┐派生 ┘合流(仅完成) ▭持卡区间(橙=等你) ●建卡 ■领取 ○等待 ◌来自此前 · 点组行收起/展开 · 点节点=只留该家族`;
 }
 document.addEventListener("click", (e) => {
   const gh = e.target.closest("[data-tlgroup]");
@@ -1952,7 +1983,7 @@ function renderLoad(wrap){
         svg += `<g class="tl-cluster" data-from="${group[0].s - 1800_000}" data-to="${group[group.length - 1].s + 1800_000}">` +
           `<rect class="tl-pill" x="${X(mid) - Math.max(9, tlTextWidth(String(group.length), 10) / 2 + 6)}" y="${y - 8}" width="${Math.max(18, tlTextWidth(String(group.length), 10) + 12)}" height="16" rx="8"></rect>` +
           `<text x="${X(mid)}" y="${y + 3.5}" text-anchor="middle">${group.length}</text>` +
-          `<title>${group.length} 张卡在此启动: ${group.map((g) => "#" + g.t.id).join(" ")}${NLC}点击放大此段</title></g>`;
+          `<title>${group.length} 张卡在此建卡: ${group.map((g) => "#" + g.t.id).join(" ")}${NLC}点击放大此段</title></g>`;
       }
       iB = jB;
     }
@@ -1972,11 +2003,11 @@ function renderLoad(wrap){
     }
   }
   wrap.innerHTML = `<svg id="tl-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${svg}</svg>`;
-  const viewLab = tlView === "day" ? "全天 26h" : tlView === "fit" ? "聚焦活动" : "簇放大";
+  const viewLab = tlView === "day" ? "全天 26 小时" : tlView === "fit" ? "聚焦活动" : "簇放大";
   document.getElementById("tl-sum").textContent =
     `负载 · ${lanesK.length} 条线 · ${vis.length} 张 · ${viewLab} ${fmtRange(w0, w1)}`;
   document.getElementById("tl-note").textContent =
-    `▭=处理段(橙=等你) 带=等待数量 ⬭N=同刻启动(点击放大) · 本图只表达负载,谱系见「谱系」`;
+    `▭=持卡区间(橙=等你) 带=等待数量 ⬭N=同刻建卡(点击放大) · 本图不证明模型已开工,谱系见「谱系」`;
 }
 document.getElementById("tl-mode-lin").addEventListener("click", () => { tlMode = "lineage"; renderTimeline(); });
 document.getElementById("tl-mode-load").addEventListener("click", () => { tlMode = "load"; renderTimeline(); });
@@ -2229,7 +2260,7 @@ function renderNow(){
   document.getElementById("f-when").textContent = "刷新于 " + new Date().toTimeString().slice(0,8);
 }
 const set = (id, v) => { document.getElementById(id).textContent = v == null ? "–" : v; };
-const fmtUp = (s) => s < 3600 ? Math.floor(s/60)+"m" : Math.floor(s/3600)+"h"+Math.floor((s%3600)/60)+"m";
+const fmtUp = (s) => s < 3600 ? Math.floor(s/60)+" 分钟" : Math.floor(s/3600)+" 小时 "+Math.floor((s%3600)/60)+" 分钟";
 
 let workers = [], LINES = [], LINE_HINTS = {}, ROUTES = [], claimMisses = [];
 /** Worker names of every RUNNING supervised slot (slot 1 = the line name,
@@ -2253,7 +2284,7 @@ function renderRig(){
     //   stop was initiated; fall back to the old code wording only for an older server
     //   that does not send stop_text (rolling upgrades).
     const tail = w.running ? (w.last_log?.[w.last_log.length-1] || "")
-                           : (w.stop_text || (w.exit_code == null ? "" : `已停止 code=${w.exit_code}`));
+                           : (w.stop_text || (w.exit_code == null ? "" : `已停止（退出码 ${w.exit_code}）`));
     // Extra slots (2+) list their tails as ②③… — melted into one, "how many are
     // running" loses its meaning
     const extra = slots.filter((sl) => sl.slot > 1)
@@ -2262,7 +2293,7 @@ function renderRig(){
            `<span class="st"></span><span class="nm" style="color:${lineColor(w.line)}" title="${esc(LINE_HINTS[w.line] || "")}">${esc(label)}${xN}</span>` +
            roleBadge(w) +
            `<span class="tail">${esc(tail)}</span>` + extra +
-           `<button class="gear" data-cfg="${w.line}" title="模型 / 强度 / 并行">⚙</button>` +
+           `<button class="gear" data-cfg="${w.line}" title="执行器设置：模型、推理强度与并行数量" aria-label="执行器设置">⚙</button>` +
            `<button data-wk="${w.line}" data-op="${w.running ? "stop" : "start"}">${w.running ? "停止" : "启动"}</button></span>`;
   }).join("")
   // claim_misses onto the face — the API emitted them long before anyone read them
@@ -2272,9 +2303,9 @@ function renderRig(){
       const root = String(m.worker || "").split("@")[0];
       const known = workers.some((w) => w.line === root);
       const mins = m.since ? Math.max(1, Math.round((Date.now() - m.since) / 60000)) : "?";
-      return `<span class="wk" title="route=${esc(m.route || "?")} line=${esc(m.line || "?")}">` +
+      return `<span class="wk" title="路由：${esc(routeLabel(m.route))} · 执行线：${esc(lineLabel(m.line))}">` +
              `<span class="tail"${known ? "" : ' style="color:var(--bad)"'}>⚠${esc(m.worker)} 连续 ${m.n} 次空领` +
-             ` (≈${mins} 分)${known ? "" : " · 疑似打错 worker 名"}</span></span>`;
+             ` (≈${mins} 分)${known ? "" : " · 执行器名称可能有误"}</span></span>`;
     }).join("");
 }
 
@@ -2306,6 +2337,9 @@ function openCfg(anchor, line){
   renderCfg();
 }
 
+function effortName(value){
+  return copyLabel({ none: "关闭", minimal: "极低", low: "低", medium: "中", high: "高", xhigh: "很高", max: "最高", ultra: "超高" }, value, value ? "强度待核实" : "未设置");
+}
 function renderCfg(){
   const w = workers.find((x) => x.line === cfgLine) || {};
   const seatModels = (rt) => { const seat = RUNTIMES.find((r2) => r2.id === rt);
@@ -2324,23 +2358,23 @@ function renderCfg(){
     const ei = Math.max(0, dom.indexOf(a.effort));
     return `
     <fieldset class="agent">
-      <legend>Agent${i + 1}<span class="sub">${i === 0 ? "持续会话·继承记忆" : "逐卡新会话"}</span>${i > 0 ? `<button class="ax" data-del="${i}" title="删除此 Agent">✕</button>` : ""}</legend>
+      <legend>智能体 ${i + 1}<span class="sub">${i === 0 ? "持续会话·继承记忆" : "逐卡新会话"}</span>${i > 0 ? `<button class="ax" data-del="${i}" title="删除此智能体">✕</button>` : ""}</legend>
       <div class="duo">
-        <span><div class="cap">CLI</div>
-          <select data-i="${i}" data-k="runtime">
+        <span><div class="cap">命令行程序（CLI）</div>
+      <select data-i="${i}" data-k="runtime" aria-label="命令行程序">
             ${(RUNTIMES.length ? RUNTIMES : [{ id: "claude", label: "Claude Code" }]).map((r2) =>
               `<option value="${r2.id}"${(a.runtime || "claude") === r2.id ? " selected" : ""}${r2.disabled ? " disabled" : ""}>${esc(r2.label)}</option>`).join("")}
           </select></span>
         <span><div class="cap">模型名称</div>
-          <select data-i="${i}" data-k="model">
+          <select data-i="${i}" data-k="model" aria-label="模型名称">
             ${seatModels(a.runtime || "claude").map((m) =>
               `<option value="${m.id}"${m.id === a.model ? " selected" : ""}>${esc(m.label)}</option>`).join("")}
           </select></span>
       </div>
-      <div class="cap" style="margin-top:7px">强度 <b>${esc(a.effort || "")}</b></div>
+      <div class="cap" style="margin-top:7px">推理强度 <b>${esc(effortName(a.effort))}</b></div>
       ${dom.length > 1
-        ? `<input type="range" min="0" max="${dom.length - 1}" step="1" value="${ei}" data-i="${i}" data-k="effort">
-           <div class="ends"><span>${esc(dom[0])}</span><span>${esc(dom[dom.length - 1])}</span></div>`
+        ? `<input type="range" min="0" max="${dom.length - 1}" step="1" value="${ei}" data-i="${i}" data-k="effort" aria-label="智能体 ${i + 1}的推理强度" aria-valuetext="${esc(effortName(a.effort))}">
+            <div class="ends"><span>${esc(effortName(dom[0]))}</span><span>${esc(effortName(dom[dom.length - 1]))}</span></div>`
         // ⭐ Single-rung models show NO slider. A max=0 slider is a decoration that
         //   does nothing when pressed — the worst kind of UI.
         : `<div class="ends"><span>此模型固定单档(座席裁定)</span></div>`}
@@ -2350,8 +2384,8 @@ function renderCfg(){
   cfg.innerHTML = `
     <h4 style="color:${lineColor(cfgLine)}">${esc(lineLabel(cfgLine))}</h4>
     ${blocks}
-    ${cfgSingle ? `<div class="ends"><span>${esc(cfgLine)} 职务单线 —— 只有一个 Agent</span></div>` : `
-    <button id="cfg-add"${cfgAgents.length >= (MAXP || 1) || cfgLegacy ? " disabled" : ""}>＋ 添加一个 Agent</button>
+    ${cfgSingle ? `<div class="ends"><span>${esc(lineLabel(cfgLine))}仅配置一个智能体</span></div>` : `
+    <button id="cfg-add"${cfgAgents.length >= (MAXP || 1) || cfgLegacy ? " disabled" : ""}>＋ 添加智能体</button>
     <div class="ends"><span>${cfgLegacy ? "服务器旧版 —— 重启看板进程后可用" : ""}</span><span>上限 ${MAXP || 3}(全线共享额度)</span></div>`}
     <div class="note" id="cfg-note">${w.running && w.stale_settings ? "当前进程仍用旧设置,停止再启动才生效" : ""}</div>`;
   const r = cfgAnchor.getBoundingClientRect();
@@ -2396,7 +2430,7 @@ async function saveAgents(){
       cfgAgents = w.settings.agents.map((a) => ({ ...a }));
     renderCfg();
     const n2 = document.getElementById("cfg-note");
-    if (n2) n2.textContent = "保存失败:" + err.message;
+    if (n2) n2.textContent = "保存失败:" + copyError(err);
     return false;
   }
 }
@@ -2413,7 +2447,8 @@ cfg.addEventListener("input", (e) => {
   };
   if (k === "effort"){
     a.effort = domOf(a)[Number(el.value)] || a.effort;
-    const b = el.closest("fieldset").querySelector(".cap b"); if (b) b.textContent = a.effort;
+    const b = el.closest("fieldset").querySelector(".cap b"); if (b) b.textContent = effortName(a.effort);
+    el.setAttribute("aria-valuetext", effortName(a.effort));
     saveAgents();
   } else if (k === "window"){ a.window = el.checked; saveAgents(); }
   else if (k === "model"){
@@ -2470,20 +2505,20 @@ function openEdit(anchor, taskId){
     <h4>编辑 #${t.id}</h4>
     <div class="row">
       <div class="cap">线</div>
-      <select data-eid="${t.id}" data-k="line">
+      <select data-eid="${t.id}" data-k="line" aria-label="执行线">
         <option value=""${!t.line ? " selected" : ""}>(不指定线 · 谁都能领)</option>
         ${LINES.map((l) => `<option value="${l}"${t.line === l ? " selected" : ""}>${esc(lineLabel(l))}</option>`).join("")}
       </select>
     </div>
     <div class="row">
       <div class="cap">路由</div>
-      <select data-eid="${t.id}" data-k="route">
-        ${ROUTES.map((r) => `<option value="${r}"${t.route === r ? " selected" : ""}>${esc(r.toUpperCase())}</option>`).join("")}
+      <select data-eid="${t.id}" data-k="route" aria-label="执行路由">
+        ${ROUTES.map((r) => `<option value="${r}"${t.route === r ? " selected" : ""}>${esc(routeLabel(r))}</option>`).join("")}
       </select>
     </div>
     <div class="row">
       <div class="cap">自行尝试上限 <b id="edit-ma">${ma}</b></div>
-      <input type="range" min="1" max="9" step="1" value="${ma}" data-eid="${t.id}" data-k="maxAttempts">
+      <input type="range" min="1" max="9" step="1" value="${ma}" data-eid="${t.id}" data-k="maxAttempts" aria-label="自行尝试次数上限">
       <div class="ends"><span>1</span><span>9</span></div>
     </div>
     <div class="note" id="edit-note">已尝试 ${Number(t.attempts) || 0} 次 —— 改上限不会清空它。</div>`;
@@ -2515,7 +2550,7 @@ async function saveEdit(id, k, v){
     //   only a pure tail-append to description is allowed through, and this dialog has
     //   no description box, so from here in-progress always means 409; ② the domain gate
     //   is 400 ("unknown route" / "unknown line").
-    if (n) n.textContent = "保存失败:" + err.message;
+    if (n) n.textContent = "保存失败:" + copyError(err);
   } finally {
     // Refusal text can grow the popup after its initial measurement.
     epop.style.top=Math.max(8,Math.min(parseFloat(epop.style.top),innerHeight-epop.offsetHeight-8))+"px";
@@ -2565,8 +2600,7 @@ const CTX_LIMITS = { "claude-opus-5":1e6, "claude-sonnet-5":1e6, "claude-fable-5
 const CTX_DEFAULT = 1e6;
 const ctxLimitOf = (line) =>
   CTX_LIMITS[(workers.find((w) => w.line === line) || {}).settings?.model] ?? CTX_DEFAULT;
-const kfmt = (n) => n == null ? "—"
-  : n >= 1e6 ? (n/1e6).toFixed(1) + "M" : n >= 1000 ? (n/1000).toFixed(1) + "k" : String(n);
+const kfmt = (n) => n == null ? "—" : formatCount(n);
 
 document.getElementById("ctx").querySelector("h2")
   .addEventListener("click", () => document.getElementById("ctx").classList.toggle("open"));
@@ -2598,7 +2632,7 @@ function renderCtx(){
     return `<div class="cl">
       <span class="nm" style="color:${lineColor(c.line)}">${esc(lineLabel(c.line))}</span>
       <span class="bar ${cls}"><i style="width:${pct}%"></i></span>
-      <span class="num">${kfmt(c.tokens)} / ${kfmt(lim)} tok · ${c.messages} 条 · ${esc(lc)}</span>
+      <span class="num">${kfmt(c.tokens)} / ${kfmt(lim)} 词元 · ${c.messages} 条 · ${esc(lc)}</span>
       <button data-ctx="${c.line}">压缩上下文</button>
     </div>`;
   }).join("");
@@ -2615,12 +2649,13 @@ async function loadTaskEvents(){
     out.push(...rows);
     if (rows.length < 50000) return out;
     const next = Number(page.last_id || 0);
-    if (next <= after) throw new Error("task-events 分页没有前进");
+    if (next <= after) throw new Error("任务历史读取未前进，请刷新后重试");
     after = next;
   }
 }
 
 async function refresh(){
+  const started = Date.now();
   try{
     const [r, mres, wres, cres, eres, ures, qres, sres] = await Promise.all([
       fetch("/api/tasks?archived=false").then((x) => x.json()),
@@ -2632,6 +2667,10 @@ async function refresh(){
       fetch("/api/requests?open=1").then((x) => x.json()).catch(() => ({ requests: [] })),
       fetch("/api/setup").then((x) => x.json()).catch(() => null),
     ]);
+    const wasDown = !!boardDown;
+    boardDown = null; lastGoodRead = Date.now();
+    // 取数成功后清除旧失败；主动重启仍沿用原有提示。
+    if (!restartPending) { if (liveOpen) live(true, "实时"); else if (wasDown) live(false, "已恢复，正在接回实时更新…"); }
     renderQuick(qres.requests || []);
     lastSetup = sres;
     renderGuide(sres);
@@ -2658,23 +2697,35 @@ async function refresh(){
     byId.clear(); for (const t of tasks) byId.set(t.id, t);
     render(); renderRig(); renderCtx(); homeAfterRefresh();
     sideAfterRefresh();
-    // 从停机态回来:清零并立刻重绘首页,别等下一条 SSE。
-    if (boardDownStreak >= 2 && homeView !== "board") renderHomeViews();
-    boardDownStreak = 0;
+    if (wasDown) loadHomeExtras(true);   // 断开前的多电脑与运行检查结果需要重新读取。
   }catch(e){
-    live(false, "取数失败");
-    // ⭐ 第 4 批: 首页要分清「电脑在线」与「看板服务正常」。页面是缓存的,取数失败 =
-    //   看板没有应答 —— 连续两次失败后(单次可能是瞬时抖动),首页状态区换成一条
-    //   坏消息和恢复动作,而不是留着上一次的「运行正常」骗人。
-    if (++boardDownStreak >= 2 && homeView !== "board") renderHomeViews();
+    // 取数失败先核实服务本身；主动重启由原有提示负责。
+    if (restartPending) return;
+    const p = await probeBoard();
+    if (lastGoodRead > started) return;   // 后开始的读取已成功，不再报告过时的失败。
+    if (!p) { live(false, "取数失败"); return; }
+    if (!boardDown) boardDown = { at: Date.now(), kind: p.kind, status: p.status };
+    else Object.assign(boardDown, { kind: p.kind, status: p.status });
+    live(false, downText());
+    try { renderHomeViews(); } catch (err) { console.error("首页显示失败", err); }
   }
 }
-let boardDownStreak = 0;
 
 function live(on, txt){
   document.getElementById("dot").className = "dot" + (on ? "" : " off");
   document.getElementById("livetxt").textContent = txt;
 }
+// 服务探测匿名访问 /health；不能使用仅允许 /api/ 且附带凭据的面板请求封装。
+let boardDown = null;   // { at, kind: "unreachable" | "error", status }
+let liveOpen = false;
+let lastGoodRead = 0;
+const HOME_LOCAL_PAGE = ["127.0.0.1", "localhost", "::1", "[::1]"].includes(location.hostname);
+async function probeBoard(){
+  try { const r = await window.fetch("/health", { cache: "no-store", credentials: "omit" }); return r.ok ? null : { kind: "error", status: r.status }; }
+  catch { return { kind: "unreachable", status: null }; }
+}
+const hhmm = (ms) => { const d = new Date(ms); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+const downText = () => boardDown && boardDown.kind === "error" ? "看板服务出错" : "看板服务没有应答";
 
 document.addEventListener("click", async (e) => {
   // ── Create goal + decompose
@@ -2694,7 +2745,7 @@ document.addEventListener("click", async (e) => {
       await refresh();
       if (r) alert(`目标 #${g.task.id} 拆出 ${r.count} 张子任务卡(${r.model})
 ` + HOLD_HINT);
-    }catch(err){ alert("失败:" + err.message); }
+    }catch(err){ alert("失败:" + copyError(err)); }
     finally{ btn.disabled = false; btn.textContent = lab; }
     return;
   }
@@ -2702,7 +2753,7 @@ document.addEventListener("click", async (e) => {
   if (pin){
     pin.disabled = true;
     try{ await post(`/api/tasks/${pin.dataset.pin}/pin`, { pinned: pin.dataset.on !== "1" }); }
-    catch(err){ alert("置顶失败:" + err.message); }
+    catch(err){ alert("置顶失败:" + copyError(err)); }
     finally{ pin.disabled = false; await refresh(); }
     return;
   }
@@ -2716,7 +2767,7 @@ document.addEventListener("click", async (e) => {
       await refresh();
       if (r) alert(`拆出 ${r.count} 张子任务卡(${r.model})${r.forced ? "(强制:评审卡未完成,正史已记)" : ""}
 ` + HOLD_HINT);
-    }catch(err){ alert("拆解失败:" + err.message); }
+    }catch(err){ alert("拆解失败:" + copyError(err)); }
     finally{ dec.disabled = false; dec.textContent = lab; }
     return;
   }
@@ -2727,7 +2778,7 @@ document.addEventListener("click", async (e) => {
       const r = await post(`/api/goals/${rev.dataset.rev}/pipeline`, {});
       await refresh();
       alert(`评审卡 #${r.task.id} 已挂在目标 #${r.goal} 下(线「${lineLabel(r.line)}」)。它通过之前,这个目标的拆解会被拦住。`);
-    }catch(err){ alert("起评审卡失败:" + err.message); }
+    }catch(err){ alert("起评审卡失败:" + copyError(err)); }
     finally{ rev.disabled = false; rev.textContent = lab; }
     return;
   }
@@ -2763,7 +2814,7 @@ document.addEventListener("click", async (e) => {
   if (as){
     pick.classList.remove("show");
     try { await post(`/api/tasks/${as.dataset.assign}/update`, { line: as.dataset.line || null, expected_version:Number(pick.dataset.version) }); }
-    catch(err){ alert("移线失败:" + err.message); }
+    catch(err){ alert("移线失败:" + copyError(err)); }
     await refresh(); return;
   }
 
@@ -2774,11 +2825,11 @@ document.addEventListener("click", async (e) => {
     try{
       const r = await post(`/api/context/${line}/compact`, {});
       alert(`${line} 压缩完成
-${kfmt(r.before)} → ${kfmt(r.after)} tok
+${kfmt(r.before)} → ${kfmt(r.after)} 词元
 
 它给自己写的保留指示:
 ${r.memo}`);
-    }catch(err){ alert("压缩失败:" + err.message); }
+    }catch(err){ alert("压缩失败:" + copyError(err)); }
     finally{ cx.disabled = false; cx.textContent = old; await refresh(); }
     return;
   }
@@ -2814,7 +2865,7 @@ ${r.memo}`);
       return;
     }
     if (executedApply && !receipt){
-      alert("请先填写执行回执,再交回 Agent。");
+      alert("请先填写执行回执,再交回智能体。");
       return;
     }
     if (decide.dataset.armed !== "1"){
@@ -2822,7 +2873,7 @@ ${r.memo}`);
       decide.dataset.armed = "1"; decide.dataset.orig = decide.textContent;
       decide.classList.add("armed");
       armSwap(decide, incompleteApply
-        ? `再按=交回 Agent 补齐 ${opt.key}`
+        ? `再按=交回智能体 补齐 ${opt.key}`
         : executedApply && outcome === "failure" ? `再按=确认 ${opt.key} 执行失败并退回修正`
         : executedApply ? `再按=确认 ${opt.key} 执行成功并附回执` : `再按=采用 ${opt.key}`);
       setTimeout(() => { if (decide.dataset.armed === "1"){
@@ -2842,7 +2893,7 @@ ${r.memo}`);
         note:extra });
       verdictDraft.delete(id); decisionChoice.delete(id); receiptDraft.delete(id); outcomeDraft.delete(id);
       closeDecisionModal(); await refresh();
-    }catch(err){ alert("裁定失败:" + err.message); decide.disabled = false;
+    }catch(err){ alert("裁定失败:" + copyError(err)); decide.disabled = false;
       syncDecision(decide.closest("[data-decision-scope]") || decide.closest(".card"), t); }
     return;
   }
@@ -2866,7 +2917,7 @@ ${r.memo}`);
       await post(`/api/tasks/${id}/resolve`, { verdict:"approve", note:"", resolved_by:"human" });
       verdictDraft.delete(id); decisionChoice.delete(id); receiptDraft.delete(id); outcomeDraft.delete(id);
       closeDecisionModal(); await refresh();
-    }catch(err){ alert("通过失败:" + err.message); finalClose.disabled = false; }
+    }catch(err){ alert("通过失败:" + copyError(err)); finalClose.disabled = false; }
     return;
   }
 
@@ -2881,7 +2932,7 @@ ${r.memo}`);
         alert(`${wk.dataset.wk}: ${r.note}` + (r.released && r.released.length ? `
 在途 ${r.released.join(",")} 已回收至未开始。` : ""));
     }
-    catch(err){ alert("worker 操作失败:" + err.message); }
+    catch(err){ alert("执行器操作失败:" + copyError(err)); }
     setTimeout(refresh, 400); return;
   }
 
@@ -2932,7 +2983,7 @@ ${r.memo}`);
     else if (a === "hold")    await post(`/api/tasks/${id}/release`, { released: false });
     else if (a === "archive") await post(`/api/tasks/${id}/archive`, {expected_version:Number(b.dataset.version)});
     await refresh();
-  }catch(err){ alert("操作失败:" + err.message); }
+  }catch(err){ alert("操作失败:" + copyError(err)); }
   finally{ b.disabled = false; }
 });
 async function post(url, body){
@@ -3048,7 +3099,7 @@ document.getElementById("upg").addEventListener("click", async (e) => {
     else await refresh();
   } catch (err) {
     btn.disabled = false; btn.textContent = label;
-    alert("没能更新:" + err.message); await refresh();
+    alert("没能更新:" + copyError(err)); await refresh();
   }
 });
 
@@ -3106,13 +3157,13 @@ document.getElementById("guide").addEventListener("click", async (e) => {
       await refresh();
     }
     else if (quick){ quick.disabled = true; await post("/api/requests", { kind: quick.dataset.guideQuick, params: { days: 14, authorized: true } }); await refresh(); }
-  } catch (err) { alert("这一步没能完成:" + err.message); await refresh(); }
+  } catch (err) { alert("这一步没能完成:" + copyError(err)); await refresh(); }
 });
 
 // v0.5: shortcut requests. Kinds are the server's closed domain; the seat
 // executes them (coordinator-seat skill) and closes the loop with ack/done.
 const QUICK_LABEL = { "propose-lines": "起草线路", "mount-sentries": "接收通知",
-  "install-worker-constraints": "装 worker 守则", "enable-review": "打开自动审阅", "board-briefing": "板上现状" };
+  "install-worker-constraints": "装 执行器守则", "enable-review": "打开自动审阅", "board-briefing": "板上现状" };
 function renderQuick(list){
   const el = document.getElementById("quick-list");
   if (!el) return;
@@ -3139,7 +3190,7 @@ document.getElementById("quick").addEventListener("click", async (e) => {
     note.textContent = `已发出 #${r.request.id} —— 接着通知的 Claude 会收到,接手后这里会变`;
     await refresh();
   } catch (err) {
-    note.textContent = "发送失败:" + err.message;
+    note.textContent = "发送失败:" + copyError(err);
   } finally { b.disabled = false; }
 });
 
@@ -3177,7 +3228,7 @@ document.getElementById("line-add").addEventListener("submit", async (e) => {
     await refresh();
   } catch (err) {
     note.className = "note bad";
-    note.textContent = "加线失败:" + err.message;
+    note.textContent = "加线失败:" + copyError(err);
   }
 });
 
@@ -3185,13 +3236,20 @@ document.getElementById("line-add").addEventListener("submit", async (e) => {
 // (1s redraw, zero server load)
 const es = window.boardSession.events("/api/events");
 es.onopen = () => {
+  liveOpen = true;
   if (restartPending){
     if (hasUnsavedInput()){ showRevBar(null, "看板已重启"); restartPending = null; live(true, "实时"); return; }
     location.reload(); return;
   }
   live(true, "实时");
+  if (boardDown) refresh();   // 恢复时立即读取，不等后续轮询。
 };
-es.onerror = () => live(false, "断线重连中");
+es.onerror = () => {
+  liveOpen = false;
+  if (boardDown) { live(false, downText()); return; }
+  live(false, "断线重连中");
+  if (!restartPending) refresh();
+};
 // ⭐ Event kinds are NOT enumerated here. Enumerated, every kind the server adds
 //   later silently stops arriving (measured: 8 of 16 subscribed). The server sends
 //   everything as `change`; the kind rides in data.type.
@@ -3261,6 +3319,72 @@ function homeHealthWhat(code) {
   const m = /^(SCHEDULER|NODE)_(LOCK_[A-Z_]+|OWNER_UNKNOWN)$/.exec(String(code));
   return m ? (m[1] === "SCHEDULER" ? "调度器" : "节点运行器") + "运行锁异常" : "运行检查报告了问题";
 }
+// 同一故障家族合成一条提示，依次说明可能原因、症状和优先处理的一步。
+const HOME_FAMILY = [
+  ["scheduler", /^SCHEDULER_/, "调度器"], ["node", /^NODE_(?!SYNC_)/, "节点运行器"], ["sync", /^NODE_SYNC_/, "跨机同步"],
+  ["storage", /^STORAGE_/, "磁盘"], ["broker", /^BROKER_/, "执行分派"], ["budget", /^CALL_BUDGET_/, "调用额度"],
+  ["delivery", /^DELIVERY_/, "跨机交付"],
+];
+const HOME_SYMPTOM = {
+  HEARTBEAT_STALE: "心跳超时", LOCK_MISSING: "没有运行锁", LOCK_ORPHAN: "运行锁的进程已不在",
+  LOCK_MISMATCH: "运行锁与记录不符", LOCK_UNREADABLE: "运行锁读不了", OWNER_UNKNOWN: "看不出进程还在不在",
+  ATTENTION: "停止情况待核对", COMPONENT_STOPPED: "有组件已停止", COMPONENTS_MISSING: "组件没有上报",
+};
+const HOME_NEXT_FIRST = ["verify_stop_before_lock_recovery", "review_scheduler_stop_evidence", "review_node_stop_evidence",
+  "inspect_scheduler_lock", "inspect_node_lock", "inspect_scheduler_owner", "inspect_node_runtime"];
+/** 运行检查问题按家族合并；skip 跳过远端状态已说明的本机同步重试与积压。 */
+function homeHealthAlerts(issues, { here = "本机", skip = [] } = {}) {
+  const groups = new Map(), out = [];
+  for (const i of issues || []) {
+    if (!i || typeof i.code !== "string" || skip.includes(i.code)) continue;
+    const fam = HOME_FAMILY.find((f) => f[1].test(i.code));
+    const key = fam ? fam[0] : "code:" + i.code + ":" + i.next_action;
+    if (!groups.has(key)) groups.set(key, { fam, items: [] });
+    groups.get(key).items.push(i);
+  }
+  for (const { fam, items } of groups.values()) {
+    const tone = items.some((i) => i.level === "problem") ? "bad" : "warn";
+    const actions = items.map((i) => i.next_action);
+    const next = HOME_HEALTH_NEXT[HOME_NEXT_FIRST.find((a) => actions.includes(a)) || actions[0]] || "检查本机看板的运行日志";
+    if (items.length === 1 || !fam) {
+      const count = items.reduce((sum, i) => sum + (i.count || 1), 0);
+      out.push({ tone, where: here, what: homeHealthWhat(items[0].code) + (count > 1 ? "（" + count + " 项）" : ""), next, go: null });
+      continue;
+    }
+    const tails = items.map((i) => i.code.replace(/^(SCHEDULER|NODE)_/, ""));
+    const symptoms = [...new Set(items.map((i, k) => HOME_SYMPTOM[tails[k]] || homeHealthWhat(i.code)))];
+    const runner = fam[0] === "scheduler" || fam[0] === "node";
+    const cause = !runner ? fam[2] + "有 " + symptoms.length + " 个问题"
+      : tails.some((t) => ["HEARTBEAT_STALE", "LOCK_MISSING", "LOCK_ORPHAN"].includes(t)) ? fam[2] + "可能已经停了" : fam[2] + "状态待核对";
+    out.push({ tone, where: here, what: cause + "：" + symptoms.join("、"), next, go: null });
+  }
+  return out;
+}
+// 同步客户端记录连接错误码；页面只据此区分电脑连不上与服务没有应答。
+const HOME_SERVICE_DOWN = ["bad", "电脑在线，但它的看板服务没有应答", "到这台电脑上运行 node cli/status.mjs，它会说明原因和下一步"];
+const HOME_PEER_REJECTED = ["bad", "对方不认本机的连接凭据", "在全局视图核对两台电脑的配对"];
+const HOME_PEER_ERROR = {
+  PEER_UNREACHABLE: ["bad", "连不上这台电脑（可能关机或断网）", "确认它已开机、联网"],
+  PEER_REFUSED: HOME_SERVICE_DOWN, REMOTE_502: HOME_SERVICE_DOWN, REMOTE_503: HOME_SERVICE_DOWN, REMOTE_504: HOME_SERVICE_DOWN,
+  REMOTE_401: HOME_PEER_REJECTED, REMOTE_403: HOME_PEER_REJECTED,
+};
+function homeNodeState(n) {
+  if (n && n.connection_state === "failed")
+    for (const p of n.projects || []) if (p && HOME_PEER_ERROR[p.error_code]) return HOME_PEER_ERROR[p.error_code];
+  return HOME_SYNC[n && n.connection_state] || ["warn", "状态未知", "在全局视图查看"];
+}
+/** 服务断开时只显示这一件事，其余均为断开前的数据；回环地址才可断言本机在线。 */
+function homeOutage(down, here) {
+  const since = down.since ? "（" + down.since + " 起）" : "", start = "node cli/start.mjs --background";
+  if (down.kind === "error")
+    return { tone: "bad", line: "看板服务出错，下面是出错前的内容", alerts: [{ tone: "bad", where: here, go: null, copy: null,
+      what: "看板服务出错" + (down.status ? "（HTTP " + down.status + "）" : "") + since,
+      next: "看数据目录里的 board.log 找原因；重启看板：先 node cli/stop.mjs，再 " + start }] };
+  const alert = down.local
+    ? { what: "电脑在线，看板服务没有应答" + since, next: "在这台电脑上重新启动看板（已有任务和结果都保留）：" + start }
+    : { what: "连不上「" + here + "」上的看板" + since, next: "电脑关着就先开机；开着就在它上面运行 " + start };
+  return { tone: "bad", line: "看板服务没有应答，下面是断开前的内容", alerts: [{ tone: "bad", where: here, go: null, copy: start, ...alert }] };
+}
 /** Where one task stands for the person looking: which list, its state, the next step.
  *  `t.hb` is hbClass(t) for this board's cards; `t.progress_blockers` is the server's own
  *  stuckWhy — the same reasons pendingReview and claim use, so a card the machine will not
@@ -3269,8 +3393,15 @@ function homeHealthWhat(code) {
 function homeStep(t, { autoReview = false, remoteName = null } = {}) {
   if (t.status === "in_progress") {
     const rt = HOME_RUNTIME[t.last_runtime] ? HOME_RUNTIME[t.last_runtime] + " " : "";
-    if (t.hb === "dead") return { lane: "running", state: rt + "执行中 · 心跳中断", tone: "warn", next: "检查执行线", rank: 0 };
-    return { lane: "running", state: rt + "执行中", tone: "", next: "等待完成", rank: 1 };
+    // 领取、心跳和启动许可都不能证明模型已开工；只采用本轮绑定的观察。
+    const trace = t.execution_trace?.run_id === t.run_id ? t.execution_trace : null;
+    const stage = trace?.process_state === "not_started" ? "已领取 · 进程未启动"
+      : trace?.work_state === "activity_observed" ? "已领取 · 有输出记录"
+      : trace?.process_state === "observed" ? "进程已启动 · 开工待核实"
+      : trace?.launch_requested_at ? "已请求启动 · 开工待核实" : "已领取 · 开工待核实";
+    if (t.hb === "dead") return { lane: "running", state: rt + stage + " · 心跳中断", tone: "warn", next: "检查执行线", rank: 0 };
+    if (trace?.process_state === "not_started") return { lane: "running", state: rt + stage, tone: "warn", next: "检查启动回执", rank: 0 };
+    return { lane: "running", state: rt + stage, tone: "", next: remoteName ? "等待所属电脑同步执行回执" : "等待执行回执", rank: 1 };
   }
   const blockers = (Array.isArray(t.progress_blockers) ? t.progress_blockers : []).filter((b) => b && typeof b.code === "string");
   const besides = (...codes) => blockers.filter((b) => !codes.includes(b.code));
@@ -3351,36 +3482,19 @@ function homeLists({ tasks = [], localName = "本机", remote = [], actions = nu
   history.sort((a, b) => b.updated.localeCompare(a.updated));
   return { mine, running, history };
 }
-/** One line about the computers, plus the alerts that line folds away when all is well.
- *  `boardDown` = this very board is not answering (the page is stale by definition, so this
- *  shape only appears from a reconnect attempt telling the truth about the last state). */
-function homeStatus({ localName = "本机", nodes = null, fleetError = null, health = null, healthError = null, setup = null, boardDown = false } = {}) {
+/** 设备状态及待处理提示；服务断开时不并列展示断开前的旧告警。 */
+function homeStatus({ localName = "本机", nodes = null, fleetError = null, health = null, healthError = null, setup = null, down = null } = {}) {
   const here = homeName(localName, "本机"), alerts = [], remotes = (nodes || []).filter((n) => !n.local);
-  // 交接说明 第 4 批: 「电脑在线」与「看板服务正常」是两回事。页面还在渲染只说明浏览器
-  // 有缓存;看板没应答时不要假装读到了状态——一条坏消息,恢复动作就是重新连接。
-  if (boardDown) {
-    return { tone: "bad", line: "看板服务没有应答 —— 这台电脑开着,是看板停了",
-             alerts: [{ tone: "bad", where: here, what: "看板服务没有应答",
-                        next: "本机恢复: node cli/start.mjs --background;或按右边重试连接", go: "retry" }] };
-  }
+  if (down) return homeOutage(down, here);
   for (const n of remotes) {
-    const s = HOME_SYNC[n.connection_state] || ["warn", "状态未知", "在全局视图查看"];
+    const s = homeNodeState(n);
     if (s[0] !== "ok") alerts.push({ tone: s[0], where: homeName(n.display_name), what: s[1], next: s[2], go: "fleet" });
   }
-  if (fleetError) alerts.push({ tone: "warn", where: "多机视图", what: "暂时读不到", next: "稍后会自动重试", go: null });
-  // 同类合并: 同 kind(码+下一步)的问题只说一次,数量并进来——三条「磁盘不足」是
-  // 一件事,不是三件事(第 4 批: 同一故障合并成一条提示)。
-  const healthFold = new Map();
-  for (const i of (health && health.issues) || []) {
-    const key = i.code + "|" + i.next_action;
-    const prior = healthFold.get(key);
-    if (prior) prior.count += i.count; else healthFold.set(key, { ...i, count: i.count || 1 });
-  }
-  for (const i of healthFold.values())
-    alerts.push({ tone: i.level === "problem" ? "bad" : "warn", where: here,
-                  what: homeHealthWhat(i.code) + (i.count > 1 ? "（" + i.count + " 项）" : ""),
-                  next: HOME_HEALTH_NEXT[i.next_action] || "检查本机看板的运行日志", go: null });
-  if (healthError) alerts.push({ tone: "warn", where: here, what: "运行检查暂时读不到", next: "稍后会自动重试", go: null });
+  const remoteTrouble = alerts.length > 0;
+  if (fleetError && healthError) alerts.push({ tone: "warn", where: here, what: "多机视图和运行检查暂时读不到", next: "稍后会自动重试", go: null });
+  else if (fleetError) alerts.push({ tone: "warn", where: "多机视图", what: "暂时读不到", next: "稍后会自动重试", go: null });
+  alerts.push(...homeHealthAlerts(health && health.issues, { here, skip: remoteTrouble ? ["NODE_SYNC_RETRY", "NODE_SYNC_PENDING"] : [] }));
+  if (healthError && !fleetError) alerts.push({ tone: "warn", where: here, what: "运行检查暂时读不到", next: "稍后会自动重试", go: null });
   if (setup && setup.steps && !setup.complete) {
     // A step the server can do in one request (generate the config, confirm the version,
     // restart) gets its button right here; anything else is done in the guide on 全部任务.
@@ -3418,10 +3532,10 @@ function sideFallback(t, { lineName = (l) => l, wfLabels = {} } = {}) {
     return { state: "排队中", next: "等待" + who + "领取" };
   }
   if (t.status === "waiting") {
-    const what = wfLabels[t.waiting_for] || t.waiting_for || "处理";
+    const what = wfLabels[t.waiting_for] || "处理";
     return { state: "等待中 · " + what, next: "等待" + what };
   }
-  return { state: t.status, next: "无需操作" };
+  return { state: "状态待核实", next: "核对任务记录" };
 }
 /** 首页「新建任务」的请求体: 标题必填;只能交给已配置的非评审线(评审线审别人的活,不接新任务)。
  *  不带任何内部编号——编号由看板分配。 */
@@ -3430,6 +3544,20 @@ function newTaskBody({ title = "", description = "", line = "" } = {}, { lines =
   if (!subject) return { error: "先写一个标题:要做什么。" };
   if (!lines.filter((l) => !reviewLines.includes(l)).includes(line)) return { error: "选一条执行线。" };
   return { body: { subject, description: String(description).trim(), line } };
+}
+/** 只展示当前可见列表已有的关联，不把缺失卡猜成已归档或已完成。 */
+function sideRelations(t, rows = []) {
+  if (!t) return [];
+  const visible = new Map(rows.map((r) => [Number(r.id), r]));
+  const item = (id) => {
+    const r = visible.get(Number(id));
+    return { id: Number(id), title: r ? String(r.subject || "未命名任务") : "当前列表不可见", status: r?.status || null, visible: !!r };
+  };
+  return [
+    { label: "父任务", items: t.parent_id == null ? [] : [item(t.parent_id)] },
+    { label: "子任务", items: rows.filter((r) => r.parent_id != null && Number(r.parent_id) === Number(t.id)).map((r) => item(r.id)) },
+    { label: "前置依赖", items: [...new Set(Array.isArray(t.blocked_by) ? t.blocked_by : [])].map(item) },
+  ].filter((g) => g.items.length);
 }
 // ── /home-model ──
 
@@ -3528,32 +3656,106 @@ function sideControlsBox(t, ctl){
   if (ctl.kind === "accept") box.append(homeEl("p", "留空按「通过」= 结案;写了一句再按 = 打回给原执行方继续。按两次才生效。"));
   return box;
 }
+function sideTaskStep(t, item){
+  const autoReview = workers.some((w) => w.line === "review" && w.running);
+  const step = t ? homeStep({ ...t, hb: hbClass(t) }, { autoReview }) : null;
+  if (t && !step?.lane) return { ...step, ...sideFallback(t, { lineName: lineLabel, wfLabels: meta.wf_labels || {} }) };
+  return step || { state: item?.state || "当前状态待核实", next: item?.next || "在它所属的电脑上处理" };
+}
+/** 每秒仅更新状态文字，不重建输入框、焦点或待第二次确认的按钮。 */
+function updateSideLive(){
+  if (!sideRef || document.getElementById("task-side").hidden) return;
+  const t = sideCard(), item = sideRef.item || null, step = sideTaskStep(t, item);
+  const where = homeMulti() ? (t ? homeLocalName() || "本机" : item?.computer) : null;
+  const state = document.getElementById("task-side-state"), next = document.getElementById("task-side-next");
+  if (state) { state.textContent = [where, step.state].filter(Boolean).join(" · "); state.dataset.tone = step.tone || ""; }
+  if (next) next.textContent = "下一步：" + (step.next || "无需操作");
+}
+function sideExecution(t){
+  const section = homeEl("section", undefined, "side-sec");
+  section.id = "task-side-execution";
+  section.dataset.signature = JSON.stringify([t.execution_trace, t.released, t.run_id]);
+  section.append(homeEl("h3", "派发与领取"));
+  const trace = t.execution_trace && t.execution_trace.run_id === t.run_id ? t.execution_trace : { released_at: t.execution_trace?.released_at };
+  const rows = [
+    ["最近放行", trace.released_at ? localTime(trace.released_at) : t.released ? "时间未记录" : "尚未放行"],
+    ["本轮领取", trace.claimed_at ? localTime(trace.claimed_at) : t.run_id ? "时间待核实" : "尚无领取记录"],
+  ];
+  if (t.run_id) {
+    rows.push(["启动请求", trace.launch_requested_at ? localTime(trace.launch_requested_at) : "尚无记录"]);
+    rows.push(["进程观察", trace.process_state === "observed" ? (trace.process_started_at ? localTime(trace.process_started_at) : "已启动，时间未记录")
+      : trace.process_state === "not_started" ? "未启动" : "待核实"]);
+    if (trace.last_activity_at) rows.push(["最近输出观察", localTime(trace.last_activity_at)]);
+    if (trace.ended_at) rows.push(["本轮结束", localTime(trace.ended_at)]);
+    rows.push(["模型开工", "待核实；进程、心跳和输出不等于有效工作"]);
+  }
+  const dl = homeEl("dl", undefined, "side-trace");
+  for (const [label, value] of rows) dl.append(homeEl("dt", label), homeEl("dd", value));
+  section.append(dl);
+  return section;
+}
+function sideRelationshipBox(t){
+  const section = homeEl("section", undefined, "side-sec");
+  section.id = "task-side-relations";
+  section.append(homeEl("h3", "关联任务"));
+  const groups = sideRelations(t, tasks);
+  section.dataset.signature = JSON.stringify([groups, !!fleetApi]);
+  if (!groups.length) section.append(homeEl("p", "当前可见列表中没有关联任务。", "side-state"));
+  const status = { not_started: "未开始", in_progress: "已领取", waiting: "等待处理", done: "已完成" };
+  for (const g of groups) {
+    section.append(homeEl("p", g.label, "side-state"));
+    const links = homeEl("div", undefined, "side-links");
+    for (const r of g.items) {
+      const text = r.title + (r.visible ? " · " + (status[r.status] || "状态待核实") : "（编号 " + r.id + "）");
+      const b = homeEl(r.visible ? "button" : "span", text);
+      if (r.visible) { b.type = "button"; b.addEventListener("click", () => openSide({ id: r.id, uid: null, item: null })); }
+      links.append(b);
+    }
+    section.append(links);
+  }
+  if (t.task_uid && fleetApi) {
+    const full = homeEl("button", "查看完整追溯"); full.type = "button";
+    full.addEventListener("click", () => fleetApi.showTask(t.task_uid)); section.append(full);
+  }
+  return section;
+}
+/** 关联任务或执行回执变化时，只刷新只读区，保留当前任务的输入与确认按钮。 */
+function updateSideContext(t){
+  if (!t) return;
+  for (const [id, build] of [["task-side-execution", sideExecution], ["task-side-relations", sideRelationshipBox]]) {
+    const current = document.getElementById(id);
+    if (!current) continue;
+    const fresh = build(t);
+    if (current.dataset.signature === fresh.dataset.signature) continue;
+    current.replaceChildren(...fresh.children); current.dataset.signature = fresh.dataset.signature;
+  }
+}
 function renderSide(){
   if (!sideRef || document.getElementById("task-side").hidden) return;
   const t = sideCard(), item = sideRef.item || null;
+  const step = sideTaskStep(t, item), ctl = sideControls(t, { remote: !t, mine: step?.lane === "mine" });
   const sig = JSON.stringify(t ? [t.id, t.status, t.waiting_for, t.aggregate_version, t.human_gate, t.result,
-                                  t.verdict_note, t.description, t.acceptance, (t.decision_package?.options || []).length]
+                                  t.verdict_note, t.description, t.acceptance, (t.decision_package?.options || []).length,
+                                  ctl.kind, ctl.primary]
                                : ["remote", sideRef.uid, item?.title, item?.state, item?.next]);
-  if (sig === sideSig) return;
+  if (sig === sideSig) { updateSideLive(); updateSideContext(t); return; }
   sideSig = sig;
   const body = document.getElementById("task-side-body"), out = [];
   document.getElementById("task-side-title").textContent = t ? t.subject : (item?.title || "任务");
-  const autoReview = workers.some((w) => w.line === "review" && w.running);
-  const step0 = t ? homeStep({ ...t, hb: hbClass(t) }, { autoReview }) : null;
-  const step = t && !step0?.lane ? { ...step0, ...sideFallback(t, { lineName: lineLabel, wfLabels: meta.wf_labels || {} }) } : step0;
   const where = homeMulti() ? (t ? homeLocalName() || "本机" : item?.computer) : null;
-  out.push(homeEl("p", [where, step?.state || item?.state].filter(Boolean).join(" · "), "side-state"));
+  const state = homeEl("p", [where, step?.state || item?.state].filter(Boolean).join(" · "), "side-state");
+  state.id = "task-side-state"; state.dataset.tone = step?.tone || ""; out.push(state);
   // 唯一的下一步
-  const ctl = sideControls(t, { remote: !t, mine: step?.lane === "mine" });
   const next = homeEl("div", undefined, "side-next");
   if (!ctl.primary) next.dataset.tone = "quiet";
   const nextText = step?.next || item?.next || (t ? "无需操作" : "在它所属的电脑上处理");
-  next.append(homeEl("h3", "下一步：" + nextText));
+  const nextTitle = homeEl("h3", "下一步：" + nextText); nextTitle.id = "task-side-next"; next.append(nextTitle);
   if (!t) next.append(homeEl("p", item ? "这是其他电脑的任务缓存,这里只能查看。" : "这张卡不在本机看板里:可能已归档,或属于另一台电脑。"));
   const ctlBox = ctl.kind === "none" ? null : sideControlsBox(t, ctl);
   if (ctlBox && ctl.primary) next.append(ctlBox);
   out.push(next);
   if (t) {
+    out.push(sideExecution(t), sideRelationshipBox(t));
     for (const [title, text] of [["任务说明", t.description], ["验收条件", t.acceptance], ["执行结果", t.result], ["裁定记录", t.verdict_note]]) {
       const sec = sideSection(title, text); if (sec) out.push(sec);
     }
@@ -3644,7 +3846,7 @@ document.getElementById("home-new-form").addEventListener("submit", async (e) =>
     newClear();
     await refresh();
     openSide({ id: j.task.id, uid: j.task.task_uid || null, item: null });
-  } catch (x) { err.textContent = "创建失败:" + x.message; err.hidden = false; }
+  } catch (x) { err.textContent = "创建失败:" + copyError(x); err.hidden = false; }
   finally { btn.disabled = false; }
 });
 const homeEl = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
@@ -3696,19 +3898,20 @@ function renderHomeViews(){
   if (homeView === "home"){
     const s = homeStatus({ localName: homeLocalName(), nodes, fleetError: homeFleetError, health: homeHealth,
                            healthError: homeHealthError, setup: lastSetup,
-                           // 曾成功加载过(homeReady)之后连续两次取数失败 = 看板停了;
-                           // 从未加载成功是「正在读取」,不是停机。
-                           boardDown: homeReady && boardDownStreak >= 2 });
-    // The computers are known only once the fleet reads answered — until then say so rather
-    // than print "no other computer" for a board that has one.
-    const known = homeExtrasAt > 0;
+                           down: boardDown && { since: hhmm(boardDown.at), kind: boardDown.kind, status: boardDown.status, local: HOME_LOCAL_PAGE } });
+    // 设备列表未读到时不推断没有其他电脑；已确认服务断开则直接显示故障。
+    const known = homeExtrasAt > 0 || !!boardDown;
+    document.getElementById("home-view").classList.toggle("stale", !!boardDown);
     homeFill(document.getElementById("home-status"), JSON.stringify([known, s]), () => {
       const line = homeEl("div", undefined, "hs-line");
       line.append(homeEl("span", undefined, "dot" + (!known || s.tone === "ok" ? "" : s.tone === "bad" ? " off" : " warn")),
                   homeEl("span", known ? s.line : "正在读取设备状态…", "hs-text"));
       return [line, ...(known ? s.alerts : []).map((a) => {
         const row = homeEl("div", undefined, "hs-alert"); row.dataset.tone = a.tone;
-        row.append(homeEl("span", a.where, "hs-where"), homeEl("span", a.what, "hs-what"), homeEl("span", "下一步：" + a.next, "hs-next"));
+        const nx = homeEl("span", "下一步：", "hs-next");
+        for (const part of a.next.split(/(node cli\/[\w-]+\.mjs(?: --?[\w-]+)*)/))
+          if (part) nx.append(part.startsWith("node cli/") ? homeEl("code", part, "hs-cmd") : part);
+        row.append(homeEl("span", a.where, "hs-where"), homeEl("span", a.what, "hs-what"), nx);
         if (a.action){
           const b = homeEl("button", a.action.label, "pri"); b.type = "button";
           b.addEventListener("click", () => homeSetupAction(a.action, b));
@@ -3720,6 +3923,14 @@ function renderHomeViews(){
             if (a.go === "board") setView("board");
             else if (a.go === "retry"){ b.disabled = true; b.textContent = "重试中…"; refresh().finally(() => loadHomeExtras(true)); }
             else fleetApi?.open();
+          });
+          row.append(b);
+        }
+        if (a.copy){
+          const b = homeEl("button", "复制命令"); b.type = "button";
+          b.addEventListener("click", async () => {
+            try { await navigator.clipboard.writeText(a.copy); b.textContent = "已复制"; }
+            catch { b.textContent = "复制不了，请手动选中上面的命令"; }
           });
           row.append(b);
         }
@@ -3759,7 +3970,7 @@ async function homeSetupAction(action, button){
     if (r === null){ button.disabled = false; return; }
     if (r && r.restarting){ noteRestart(r); return; }
     await refresh();
-  } catch (err) { button.disabled = false; alert("这一步没能完成:" + err.message); await refresh(); }
+  } catch (err) { button.disabled = false; alert("这一步没能完成:" + copyError(err)); await refresh(); }
 }
 async function homeGet(path){
   const r = await fetch(path, { headers: WH, cache: "no-store" });
@@ -3814,7 +4025,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
 // Global read view stays within the existing operator panel. Remote strings are text.
 (()=>{
  const $=id=>document.getElementById(id),dialog=$("fleet-dialog"),detail=$("fleet-detail"),nodes=$("fleet-nodes"),notice=$("fleet-notice"),owner=$("fleet-owner"),project=$("fleet-project"),query=$("fleet-query");
- const states={not_started:"未开始",in_progress:"进行中",waiting:"等待处理",done:"已完成"},connections={local:"本机",recent:"最近已同步",stale:"缓存可能过期",failed:"同步失败",syncing:"同步未追平",recovery:"恢复待核对",clock_unknown:"时间待核对",unknown:"尚未取得列表"};
+ const states={not_started:"未开始",in_progress:"已领取",waiting:"等待处理",done:"已完成"},connections={local:"本机",recent:"最近已同步",stale:"缓存可能过期",failed:"同步失败",syncing:"同步未追平",recovery:"恢复待核对",clock_unknown:"时间待核对",unknown:"尚未取得列表"};
  const ownerNames=new Map(),projectNames=new Set(),folds=new Map();let generation=0,detailGeneration=0,limit=1000,timer=null,controller=null,last=null;
  const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
  // Ids, hashes and receipts are for checking, not for reading the board: they sit folded under 技术信息.
@@ -3826,32 +4037,32 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   const byUid=new Map(tasks.map(t=>[t.task_uid,t])),children=new Map(),roots=[];
   for(const t of tasks){if(t.parent_uid&&byUid.has(t.parent_uid)&&byUid.get(t.parent_uid).owner_node_id===t.owner_node_id){if(!children.has(t.parent_uid))children.set(t.parent_uid,[]);children.get(t.parent_uid).push(t);}else roots.push(t);}
   const seen=new Set(),stack=roots.slice().reverse().map(t=>[t,0,false]);
-  function walk(){while(stack.length){const[t,depth,broken]=stack.pop();if(seen.has(t.task_uid))continue;seen.add(t.task_uid);const row=el("button",undefined,"fleet-task");row.type="button";row.dataset.state=t.status;row.style.setProperty("--indent",Math.min(depth,8)*12+"px");row.setAttribute("aria-label",t.subject+"，"+(states[t.status]||t.status));
+  function walk(){while(stack.length){const[t,depth,broken]=stack.pop();if(seen.has(t.task_uid))continue;seen.add(t.task_uid);const row=el("button",undefined,"fleet-task");row.type="button";row.dataset.state=t.status;row.style.setProperty("--indent",Math.min(depth,8)*12+"px");row.setAttribute("aria-label",t.subject+"，"+(copyLabel(states,t.status)));
    const title=el("span",t.subject,"fleet-task-title"),extra=[t.local_id!==null?"#"+t.local_id:t.task_uid.slice(-8),t.project_id||"未绑定项目",t.read_only?"远端缓存":"本机任务"];
    if(t.recovery_state)extra.push(t.recovery_state==="missing_review"?"来源恢复后缺失，待核对":"等待新快照");if(t.parent_unavailable)extra.push("父任务不在可见范围");if(t.parent_uid&&!byUid.has(t.parent_uid))extra.push("父任务未在当前筛选中");if(broken)extra.push("父子关系待核对");if(depth>8)extra.push("层级 "+depth);
-   title.append(el("span",extra.join(" · "),"fleet-task-meta"));row.append(title,el("span",states[t.status]||t.status,"fleet-badge "+t.status));row.addEventListener("click",()=>showTask(t.task_uid));container.append(row);for(const child of (children.get(t.task_uid)||[]).slice().reverse())stack.push([child,depth+1,false]);
+   title.append(el("span",extra.join(" · "),"fleet-task-meta"));row.append(title,el("span",copyLabel(states,t.status),"fleet-badge "+t.status));row.addEventListener("click",()=>showTask(t.task_uid));container.append(row);for(const child of (children.get(t.task_uid)||[]).slice().reverse())stack.push([child,depth+1,false]);
   }}walk();for(const t of tasks)if(!seen.has(t.task_uid)){stack.push([t,0,true]);walk();}
  }
  const moduleNames={delegation:"委派",binding:"端点绑定",registration:"关系登记",cancellation:"取消",runs:"执行历史",dispatch:"执行分派",results:"交付候选",artifacts:"交付产物",verification:"来源验证",integration:"来源合并",completion:"双端结案"},moduleStates={not_configured:"尚未配置",upgrade_required:"需要升级"};
  const historyStates={pending:"待送达",received:"已收到",accepted_unconfirmed:"已接收，待确认关系",rejected:"已拒绝",prepared:"已准备",confirmed:"已确认",cancelled:"已取消",proposed:"待登记",withdrawn:"已撤回",completed:"已登记结案",stopped:"已有停止回执",unverified:"记录待核对",observed:"已读取登记状态",applied:"结构已提交",released:"已放行"};
- function taskButton(t){if(!t)return el("span","端点未共享、不可见或尚未建卡","fleet-note fleet-warning");const b=el("button",t.owner_name+" · "+t.subject,"fleet-endpoint");b.type="button";b.title=t.task_uid;b.addEventListener("click",()=>showTask(t.task_uid));if(!t.in_view)b.append(el("small","（当前列表外）"));return b;}
+ function taskButton(t){if(!t)return el("span","关联任务未共享、不可见或尚未创建","fleet-note fleet-warning");const b=el("button",t.owner_name+" · "+t.subject,"fleet-endpoint");b.type="button";b.title=t.task_uid;b.addEventListener("click",()=>showTask(t.task_uid));if(!t.in_view)b.append(el("small","（当前列表外）"));return b;}
  function relationships(value,container){
   container.replaceChildren();container.append(el("h3","跨终端委派"));
   if(!value){container.append(el("p","尚无关系视图。","fleet-note"));return;}
   if(value.unverified_records)container.append(el("p",value.unverified_records+" 条关系记录摘要不一致，未展示其内容。","fleet-note fleet-warning"));
   const unavailable=Object.entries(value.modules).filter(([,s])=>s!=="available");
-  container.append(el("p","本机保存的关系记录 · "+value.total+" 条"+(value.offset!==undefined?" · 当前 "+(value.items.length?value.offset+1:0)+"–"+(value.offset+value.items.length)+" 条":value.truncated?" · 仅显示前 "+value.items.length+" 条":"")+"。下方箭头表示跨端委派；上方缩进表示终端内父子关系。历史确认不代表当前允许启动。","fleet-note"));
-  if(unavailable.length)container.append(el("p","部分关系信息尚不可用："+unavailable.map(([k,s])=>(moduleNames[k]||k)+"："+(moduleStates[s]||s)).join("，"),"fleet-note fleet-warning"));
+  container.append(el("p","本机保存的关系记录 · "+value.total+" 条"+(value.offset!==undefined?" · 当前 "+(value.items.length?value.offset+1:0)+"–"+(value.offset+value.items.length)+" 条":value.truncated?" · 仅显示前 "+value.items.length+" 条":"")+"。下方箭头表示跨端委派；上方缩进表示同一电脑上的父子关系。历史确认不代表当前允许启动。","fleet-note"));
+  if(unavailable.length)container.append(el("p","部分关系信息尚不可用："+unavailable.map(([k,s])=>(copyLabel(moduleNames,k,"其他模块"))+"："+(copyLabel(moduleStates,s))).join("，"),"fleet-note fleet-warning"));
   for(const r of value.items){const card=el("article",undefined,"fleet-edge"),path=el("div",undefined,"fleet-edge-path");path.append(taskButton(r.source),el("span","→","fleet-arrow"),taskButton(r.target));card.append(path);
-   const labels=[r.project_id];for(const[k,label]of [["offer_state","委派"],["binding_state","端点绑定"],["registration_state","关系登记"],["cancellation_state","取消"]])if(r[k])labels.push(label+"："+(historyStates[r[k]]||r[k]));
-   if(r.closed)labels.push("本机绑定已关闭");if(r.identity_current===false)labels.push("旧节点代次记录");card.append(el("p",labels.join(" · "),"fleet-note"),techIds([["委派",r.delegation_id],...(r.relation_id?[["关系",r.relation_id]]:[])]));container.append(card);
+   const labels=[r.project_id];for(const[k,label]of [["offer_state","委派"],["binding_state","端点绑定"],["registration_state","关系登记"],["cancellation_state","取消"]])if(r[k])labels.push(label+"："+(copyLabel(historyStates,r[k])));
+   if(r.closed)labels.push("本机绑定已关闭");if(r.identity_current===false)labels.push("旧运行代次记录");card.append(el("p",labels.join(" · "),"fleet-note"),techIds([["委派",r.delegation_id],...(r.relation_id?[["关系",r.relation_id]]:[])]));container.append(card);
   }
   if(!value.items.length)container.append(el("p","当前范围未找到可显示的关系记录；远端未共享的历史不会出现在这里。","fleet-note"));
  }
  function evidencePage(initial,uid,key,label,container,draw){
   const content=el("div"),controls=el("div",undefined,"fleet-edge-path"),status=el("p",undefined,"fleet-note"),previous=el("button","上一页"),next=el("button","下一页"),reset=el("button","返回最新记录");
   container.dataset.evidenceSection=key;status.setAttribute("role","status");
-  for(const[b,name]of [[previous,"上一页"],[next,"下一页"],[reset,"返回最新记录"]]){b.type="button";b.setAttribute("aria-label",label+name);}
+  for(const[b,name]of [[previous,"上一页"],[next,"下一页"],[reset,"返回最新记录"]]){b.type="button";b.setAttribute("aria-label",label+"："+name);}
   controls.append(previous,next,reset);container.append(status,controls,content);
   let current=initial,cursors=[initial.cursor],index=0,busy=false,failed=false;const detailId=detailGeneration;
   function buttons(){previous.disabled=busy||failed||index===0;next.disabled=busy||failed||!current.next_cursor;reset.disabled=busy;controls.hidden=!busy&&!failed&&current.total<=current.limit&&index===0;}
@@ -3861,7 +4072,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
    try{const q=new URLSearchParams({uid,section:key});if(cursor)q.set("cursor",cursor);const result=await request("/api/fleet/evidence?"+q);
     if(detailId!==detailGeneration||!detail.open)return;
     current=result.page;failed=false;if(latest)cursors=[current.cursor];else cursors[to]=current.cursor;index=latest?0:to;render();
-   }catch(e){if(detailId!==detailGeneration||!detail.open)return;failed=true;content.replaceChildren();status.textContent=e.message;}
+   }catch(e){if(detailId!==detailGeneration||!detail.open)return;failed=true;content.replaceChildren();status.textContent=copyError(e);}
    finally{busy=false;if(detailId===detailGeneration&&detail.open)buttons();}
   }
   previous.addEventListener("click",()=>load(cursors[index-1],index-1));next.addEventListener("click",()=>load(current.next_cursor,index+1));reset.addEventListener("click",()=>load(null,0,true));render();
@@ -3873,18 +4084,18 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   if(value.scope_truncated)body.append(el("p","任务树范围已截断，请打开具体子任务继续查看。","fleet-note fleet-warning"));
   const related=el("section");evidencePage(value.relations,value.task_uid,"relations","跨终端委派",related,relationships);body.append(related);
   const groups=[
-   ["执行记录","runs",r=>[["任务",r.task_uid],["运行",r.run_id],["执行器",r.runtime||"未记录"],["身份",r.role_id],["模型",r.model||"未记录"],["运行状态",r.state],["策略摘要",r.policy_integrity],["分派状态",r.dispatch?.phase||"未记录"],["调用模式",r.dispatch?.execution_mode||"未记录"],["开始",time(r.started_at)],["结束",time(r.ended_at)]]],
-   ["交付候选","results",r=>[["候选",r.result_id],["运行",r.run_id||"不在可见范围"],["执行器",r.execution?.runtime||"未共享"],["调用模式",r.execution?.execution_mode||"未共享"],["进程结果",r.process_status],["记录",time(r.created_at)]]],
+   ["执行记录","runs",r=>[["任务",r.task_uid],["运行",r.run_id],["执行器",r.runtime?routeLabel(r.runtime):"未记录"],["身份",r.role_id],["模型",r.model||"未记录"],["持卡状态",copyLabel({running:"持卡中",ended:"已结束"},r.state)],["策略摘要",copyLabel({digest_checked:"摘要已核对",unverified:"待核实"},r.policy_integrity)],["分派状态",copyLabel({prepared:"已领取，尚未请求启动",launch_committed:"已请求启动，待核对",settled:"本轮已结算",interrupted:"已中断，待核对",abandoned:"已放弃"},r.dispatch?.phase,r.dispatch?"状态待核实":"未记录")],["调用模式",copyLabel({fixture:"模拟执行",provider:"供应商执行"},r.dispatch?.execution_mode,r.dispatch?"模式待核实":"未记录")],["领取记录",time(r.started_at)],["结束",time(r.ended_at)]]],
+   ["交付候选","results",r=>[["候选",r.result_id],["运行",r.run_id||"不在可见范围"],["执行器",r.execution?.runtime?routeLabel(r.execution.runtime):"未共享"],["调用模式",copyLabel({fixture:"模拟执行",provider:"供应商执行"},r.execution?.execution_mode,r.execution?"模式待核实":"未共享")],["进程结果",copyLabel({success:"执行成功",failed:"执行失败",timeout:"超时",cancelled:"已取消"},r.process_status)],["记录",time(r.created_at)]]],
    ["交付产物","artifacts",r=>[["传输",r.transfer_id],["候选",r.result_id],["提交",r.commit||"待核对"],["文件数",r.file_count??"未知"],["字节",r.bytes],["接收回执",r.received_receipt_recorded?"已记录":"尚无"],["内容检查回执",r.content_check_receipt_recorded?"已记录":"尚无"]]],
-   ["验证回执","verifications",r=>[["验证",r.verification_id],["传输",r.transfer_id],["回执",r.receipt_state],["检查",r.checks_passed===null?"未知":r.checks_passed?"通过":"未通过"]]],
-   ["来源合并","integrations",r=>[["合并",r.integration_id],["候选",r.result_id],["回执",r.receipt_state],["写入来源",r.source_applied===null?"未知":r.source_applied?"已记录":"未确认"],["提交",r.merge_commit||"未记录"]]],
-   ["历史验收","completions",r=>[["结案",r.completion_id],["候选",r.result_id],["回执",r.receipt_state],["当时验收",r.historical_accepted?"通过":"未证实"],["任务版本",r.accepted_task_version??"未知"],["模拟运行数",r.fixture_runs??"未知"],["验收时间",time(r.settled_at)]]]
+   ["验证回执","verifications",r=>[["验证",r.verification_id],["传输",r.transfer_id],["回执",copyLabel({digest_checked:"摘要已核对",unverified:"待核实",not_recorded:"尚无记录"},r.receipt_state)],["检查",r.checks_passed===null?"未知":r.checks_passed?"通过":"未通过"]]],
+   ["来源合并","integrations",r=>[["合并",r.integration_id],["候选",r.result_id],["回执",copyLabel({digest_checked:"摘要已核对",unverified:"待核实",not_recorded:"尚无记录"},r.receipt_state)],["写入来源",r.source_applied===null?"未知":r.source_applied?"已记录":"未确认"],["提交",r.merge_commit||"未记录"]]],
+   ["历史验收","completions",r=>[["结案",r.completion_id],["候选",r.result_id],["回执",copyLabel({digest_checked:"摘要已核对",unverified:"待核实",not_recorded:"尚无记录"},r.receipt_state)],["当时验收",r.historical_accepted?"通过":"未证实"],["任务版本",r.accepted_task_version??"未知"],["模拟运行数",r.fixture_runs??"未知"],["验收时间",time(r.settled_at)]]]
   ];
   for(const[label,key,fields]of groups){const valuePage=value[key],section=el("details",undefined,"fleet-trace"),heading=el("summary");section.open=valuePage.items.length>0;section.append(heading);
    evidencePage(valuePage,value.task_uid,key,label,section,(page,container)=>{heading.textContent=label+" · 本机记录 "+page.total;container.replaceChildren();for(const item of page.items){const dl=el("dl");for(const[k,v]of fields(item))dl.append(el("dt",k),el("dd",String(v??"未记录")));container.append(dl);}});body.append(section);
   }
   if(Object.values(value.unverified_records||{}).some(n=>n>0))body.append(el("p","部分候选或产物记录未通过摘要核对，已隐藏；请核查原始回执。","fleet-note fleet-warning"));
-  const unavailable=Object.entries(value.modules).filter(([,s])=>s!=="available");if(unavailable.length)body.append(el("p","未读取的证据模块："+unavailable.map(([k,s])=>(moduleNames[k]||k)+"："+(moduleStates[s]||s)).join("，"),"fleet-note fleet-warning"));
+  const unavailable=Object.entries(value.modules).filter(([,s])=>s!=="available");if(unavailable.length)body.append(el("p","未读取的证据模块："+unavailable.map(([k,s])=>(copyLabel(moduleNames,k,"其他模块"))+"："+(copyLabel(moduleStates,s))).join("，"),"fleet-note fleet-warning"));
  }
 
 
@@ -3914,9 +4125,9 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   try{
    const response=await fetch("/api/fleet/actions",{method:"POST",headers:{...WH,"Content-Type":"application/json"},body:JSON.stringify(draft.frozen),signal:AbortSignal.timeout(15000)});
    const value=await response.json();if(!response.ok)throw operationError(value,response.status);
-   actionStatus.textContent=(actionStates[value.state]||value.state)+" · 请求 "+value.action_id+"。请在操作回执中查看后续状态。";
+   actionStatus.textContent=(copyLabel(actionStates,value.state))+" · 请求 "+value.action_id+"。请在操作回执中查看后续状态。";
    actionSubmit.textContent="已保存";load();
-  }catch(error){const retry=error.retrySameRequest!==false;actionStatus.textContent=error.message+(retry?"。通信结果未确认，可使用原编号和原内容重试；不会自动提交。":"。请关闭此窗口，刷新并核对后再操作。");actionSubmit.disabled=!retry;actionSubmit.textContent=retry?"重试同一请求":"需关闭并核对";}
+  }catch(error){const retry=error.retrySameRequest!==false;actionStatus.textContent=copyError(error)+(retry?"。通信结果未确认，可使用原编号和原内容重试；不会自动提交。":"。请关闭此窗口，刷新并核对后再操作。");actionSubmit.disabled=!retry;actionSubmit.textContent=retry?"重试同一请求":"需关闭并核对";}
   finally{actionBusy=false;}
  });
 
@@ -3925,7 +4136,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   if(!v?.enabled){section.append(el("p","尚未配置本机接收仓库与独立检查。","fleet-note"));box.append(section);return;}
   for(const a of v.artifacts){
    const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-   const state=({prepared:"待发送",receiving:"接收中",received:"文件已收齐",content_verified:"内容已核验",accepted:"已验收",rejected:"已退回",cancel_pending:"等待停止"}[a.state]||a.state);
+   const state=copyLabel({prepared:"待发送",receiving:"接收中",received:"文件已收齐",content_verified:"内容已核验",accepted:"已验收",rejected:"已退回",cancel_pending:"等待停止"},a.state);
    card.append(el("p",a.repo_id+" · "+state,"fleet-task-title"),el("p",a.project_id+" · "+(a.side==="source"?"来源端":"执行端")+" · "+a.bytes+" 字节","fleet-note"),el("p",a.transfer_id,"fleet-id"));
    const review="项目："+a.project_id+"\n候选："+a.result_id+"\n传输："+a.transfer_id+"\n仓库："+a.repo_id+"\n原始基线："+a.base_commit+"\n大小："+a.bytes+" 字节";
    if(a.side==="target"&&["prepared","receiving","received","content_verified"].includes(a.state))bar.append(actionButton("发送或续传原文件",a.project_id,"send_artifact",{id:a.transfer_id},review+"\n继续同一文件包；不重新执行任务。"));
@@ -3942,7 +4153,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   for(const vfy of v.verifications){
    const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-   const state=vfy.phase==="settled"?(vfy.checks_passed?"检查通过 · 详见合并与验收回执":"检查未通过"):({ready:"输入已准备",preparing:"输入准备未完成",launch_committed:"已启动 · 需核对回执"}[vfy.phase]||vfy.phase);
+   const state=vfy.phase==="settled"?(vfy.checks_passed?"检查通过 · 详见合并与验收回执":"检查未通过"):copyLabel({ready:"输入已准备",preparing:"输入准备未完成",launch_committed:"已请求启动 · 需核对回执"},vfy.phase);
    card.append(el("p",state,"fleet-task-title"),el("p",vfy.project_id+" · "+vfy.verification_id,"fleet-id"));
    const review="项目："+vfy.project_id+"\n检查："+vfy.verification_id+"\n传输："+vfy.transfer_id+"\n固定配置："+vfy.profile_id;
    if(vfy.phase==="ready")bar.append(actionButton("执行本机独立检查",vfy.project_id,"run_verification",{id:vfy.verification_id},review+"\n将运行本机管理者批准的固定测试程序，并记录实际退出和停止状态；本步骤不批准任务。"));
@@ -3969,7 +4180,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   section.append(el("h4","来源合并与双端结案"));
   for(const i of v.integrations){
    const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-   const state=({ready:"合并内容已准备",preparing:"准备未完成，保留原意图",launch_committed:"合并已启动，待核对",settled:"来源已合并",abandoned:"合并已放弃"}[i.phase]||i.phase);
+   const state=copyLabel({ready:"合并内容已准备",preparing:"准备未完成，保留原意图",launch_committed:"合并已请求启动，待核对",settled:"来源已合并",abandoned:"合并已放弃"},i.phase);
    card.append(el("p",state,"fleet-task-title"),el("p",i.project_id+" · "+i.ref,"fleet-note"),el("p",i.integration_id,"fleet-id"));
    const review="项目："+i.project_id+"\n候选："+i.result_id+"\n合并："+i.integration_id+"\n来源引用："+i.ref+"\n原基线："+i.base_commit+"\n交付提交："+i.artifact_commit;
    if(i.phase==="ready")bar.append(actionButton("确认合并到来源引用",i.project_id,"apply_integration",{id:i.integration_id},review+"\n仅当引用仍是原基线才更新；本步骤尚不验收任务。"));
@@ -3985,7 +4196,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   for(const c of v.completions){
    const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-   const state=({prepared:"验收决定已保存，尚未取得对端回执",ready:"执行端已就绪，等待双方登记确认",retired:"双方登记已完成，可结案",settled:"本端已验收结案"}[c.phase]||c.phase);
+   const state=copyLabel({prepared:"验收决定已保存，尚未取得对端回执",ready:"执行端已就绪，等待双方登记确认",retired:"双方登记已完成，可结案",settled:"本端已验收结案"},c.phase);
    card.append(el("p",state+(c.fixture_runs?" · 模拟任务":""),"fleet-task-title"),el("p",c.project_id+" · "+(c.side==="source"?"来源端":"执行端"),"fleet-note"),el("p",c.completion_id,"fleet-id"),el("p",c.note,"fleet-note"));
    const review="项目："+c.project_id+"\n候选："+c.result_id+"\n结案："+c.completion_id+"\n来源合并提交："+c.source_merge_commit+"\n验收说明："+c.note;
    if(c.side==="source"&&c.phase==="prepared")bar.append(actionButton("发送原验收决定",c.project_id,"send_completion",{id:c.completion_id},review));
@@ -4001,30 +4212,30 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   if(!v.enabled){section.append(el("p","尚未登记阶段计划与外部确认记录。","fleet-note"));return;}
   section.append(el("p","本机管理者登记的计划与确认记录 · 读取于 "+time(v.generated_at)+"。任务已完成或测试通过不会自动计入阶段验收。","fleet-note"));
   for(const plan of v.plans)projectNames.add(plan.project_id);choices();
-  const labels={accepted:"已验收",pending_acceptance:"待验收",pending:"待确认",rejected:"未通过",stale:"旧确认已失效",invalid:"确认记录无效",not_submitted:"未提交确认",planned:"计划中",ready:"可开始",in_progress:"进行中",verifying:"待验收",blocked:"阻塞"};
+  const labels={accepted:"已验收",pending_acceptance:"待验收",pending:"待确认",rejected:"未通过",stale:"旧确认已失效",invalid:"确认记录无效",not_submitted:"未提交确认",planned:"计划中",ready:"可开始",in_progress:"进行中",verifying:"待验收",blocked:"受阻"};
   for(const p of v.plans){
    const card=el("article",undefined,"fleet-edge"),c=p.counts;card.append(el("h4",p.plan_id+" · "+p.project_id),el("p","任务验收 "+c.accepted_tasks+" / "+c.total_tasks+"（"+c.task_percent+"%） · 阶段验收 "+c.accepted_phases+" / "+c.total_phases+"（"+c.phase_percent+"%）","fleet-task-title"));
    const meter=el("progress");meter.max=100;meter.value=c.task_percent;meter.setAttribute("aria-label",p.plan_id+" 任务验收百分比");card.append(meter,el("p","阻塞 "+c.blocked_tasks+" · 待验收 "+c.pending_acceptance_tasks+" · 有实现证据 "+c.with_implementation_evidence+" · 有验证记录 "+c.with_verification_records,"fleet-note"));
-   for(const phase of p.phases){const row=el("details",undefined,"fleet-trace"),key="progress:"+p.plan_id+":"+phase.phase_id;row.open=actionFolds.get(key)??false;row.addEventListener("toggle",()=>actionFolds.set(key,row.open));row.append(el("summary",phase.phase_id+" "+phase.title+" · "+phase.gate_id+" · "+(labels[phase.state]||phase.state)));
+   for(const phase of p.phases){const row=el("details",undefined,"fleet-trace"),key="progress:"+p.plan_id+":"+phase.phase_id;row.open=actionFolds.get(key)??false;row.addEventListener("toggle",()=>actionFolds.set(key,row.open));row.append(el("summary",phase.phase_id+" "+phase.title+" · "+phase.gate_id+" · "+(copyLabel(labels,phase.state))));
     row.append(el("p","需确认角色："+phase.required_roles.join("、"),"fleet-note"));if(phase.blocked_by.length)row.append(el("p","前置阶段尚未验收："+phase.blocked_by.join("、"),"fleet-note fleet-warning"));
-    for(const t of phase.tasks){const item=el("div",undefined,"fleet-edge");item.append(el("p",t.id+" "+t.subject+" · "+(labels[t.state]||t.state),"fleet-task-title"),el("p","实现证据 "+t.implementation_evidence_count+" · 验证记录："+({local_component_passed:"本机组件通过",passed:"通过",failed:"未通过"}[t.verification_result]||t.verification_result||"尚无记录"),"fleet-note"));if(t.blocker)item.append(el("p","阻塞："+t.blocker.reason+"；解除条件："+(t.blocker.release_condition||"待填写")+"；责任角色："+(t.blocker.responsible_role||"待填写")+"；复核："+time(t.blocker.next_review_at),"fleet-note fleet-warning"));row.append(item);}
-    for(const h of phase.history){const note=el("div",undefined,"fleet-edge");note.append(el("p","确认记录 · "+(labels[h.state]||h.state)+" · 登记者 "+h.registered_by+" · "+time(h.registered_at),"fleet-task-title"));if(h.reason)note.append(el("p",h.reason,"fleet-note fleet-warning"));if(h.note)note.append(el("p",h.note,"fleet-note"));for(const x of h.confirmations)note.append(el("p",x.role+" · "+x.instance_id+" · "+time(x.at)+" · "+x.reference,"fleet-note"));note.append(el("p","回执摘要："+h.sha256,"fleet-id"));row.append(note);}
+    for(const t of phase.tasks){const item=el("div",undefined,"fleet-edge");item.append(el("p",t.id+" "+t.subject+" · "+(copyLabel(labels,t.state)),"fleet-task-title"),el("p","已记录实现证据 "+t.implementation_evidence_count+" · 验证记录："+copyLabel({local_component_passed:"本机组件通过",passed:"通过",failed:"未通过"},t.verification_result,t.verification_result?"状态待核实":"尚无记录"),"fleet-note"));if(t.blocker)item.append(el("p","受阻："+t.blocker.reason+"；解除条件："+(t.blocker.release_condition||"待填写")+"；责任角色："+(t.blocker.responsible_role||"待填写")+"；复核："+time(t.blocker.next_review_at),"fleet-note fleet-warning"));row.append(item);}
+    for(const h of phase.history){const note=el("div",undefined,"fleet-edge");note.append(el("p","确认记录 · "+(copyLabel(labels,h.state))+" · 登记者 "+h.registered_by+" · "+time(h.registered_at),"fleet-task-title"));if(h.reason)note.append(el("p",h.reason,"fleet-note fleet-warning"));if(h.note)note.append(el("p",h.note,"fleet-note"));for(const x of h.confirmations)note.append(el("p",x.role+" · "+x.instance_id+" · "+time(x.at)+" · "+x.reference,"fleet-note"));note.append(el("p","回执摘要："+h.sha256,"fleet-id"));row.append(note);}
     if(!phase.history.length)row.append(el("p","尚无确认记录。","fleet-note"));card.append(row);
    }section.append(card);
   }
   if(!v.plans.length)section.append(el("p","当前项目没有登记的阶段计划。","fleet-note"));
  }
- async function loadProgress(id,signal){try{const v=await request("/api/fleet/progress"+(project.value?"?project="+encodeURIComponent(project.value):""),signal);if(id===generation)renderProgress(v);}catch(e){if(e.name!=="AbortError"&&id===generation)$("fleet-progress").replaceChildren(el("p","阶段进度不可用："+e.message,"fleet-note fleet-warning"));}}
+ async function loadProgress(id,signal){try{const v=await request("/api/fleet/progress"+(project.value?"?project="+encodeURIComponent(project.value):""),signal);if(id===generation)renderProgress(v);}catch(e){if(e.name!=="AbortError"&&id===generation)$("fleet-progress").replaceChildren(el("p","阶段进度不可用："+copyError(e),"fleet-note fleet-warning"));}}
 
  function renderActions(v){
   const box=$("fleet-actions");box.replaceChildren(el("h3","跨端操作与回执"));
-  if(!v.enabled){box.append(el("p",v.error||"尚未配置本机协调身份和对端连接。","fleet-note"));return;}
+  if(!v.enabled){box.append(el("p",v.error?copyError(v.error):"尚未配置本机协调身份和对端连接。","fleet-note"));return;}
   box.append(el("p","此处使用本机协调身份。接收委派只建立待确认任务；关系登记、双方就绪后才能放行。送达回执不等于执行完成。","fleet-note"));
   const structures=el("details",undefined,"fleet-trace");structures.open=actionFolds.get("项目结构登记")??true;structures.addEventListener("toggle",()=>actionFolds.set("项目结构登记",structures.open));structures.append(el("summary","项目结构登记"));
   for(const t of v.topologies||[]){const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");card.append(el("p",t.project_id,"fleet-task-title"));
    if(!t.configured)card.append(el("p","尚未配置本机项目的固定登记节点，请先完成节点部署。 ["+t.error_code+"]","fleet-note"));
    else{
-    card.append(el("p","本机结构："+({unregistered:"未登记",ready:"已登记",pending:"等待回执"}[t.phase]||t.phase)+" · 修订 "+t.revision+(t.observed?" · 登记状态读取于 "+time(t.observed.observed_at):" · 尚未读取登记状态"),"fleet-note"));
+    card.append(el("p","本机结构："+copyLabel({unregistered:"未登记",ready:"已登记",pending:"等待回执"},t.phase)+" · 修订 "+t.revision+(t.observed?" · 登记状态读取于 "+time(t.observed.observed_at):" · 尚未读取登记状态"),"fleet-note"));
     const review="项目："+t.project_id+"\n登记节点："+t.registrar_node_id+"\n本机结构修订："+t.revision;
     if(!t.operation_id&&["unregistered","ready"].includes(t.phase))bar.append(actionButton("登记当前结构",t.project_id,"publish_topology",{expected_revision:t.revision},review+"\n提交本机当前任务树和依赖；取得回执前保持等待。"));
     if(t.operation_id){bar.append(actionButton("恢复原结构提交",t.project_id,"resend_topology",{id:t.operation_id},review),actionButton("取消未确认结构提交",t.project_id,"cancel_topology",{id:t.operation_id},review+"\n未知结果必须先恢复原请求，不能直接回退。"));}
@@ -4036,7 +4247,7 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
    const section=el("details",undefined,"fleet-trace");section.open=actionFolds.get(label)??(label==="待接收委派"&&items.some(r=>r.state==="received"));section.addEventListener("toggle",()=>actionFolds.set(label,section.open));section.append(el("summary",label+" · "+items.length));
    for(const r of items){
     const card=el("article",undefined,"fleet-edge"),bar=el("div",undefined,"fleet-edge-path");
-    card.append(el("p",r.subject||r.result_id||r.relation_id,"fleet-task-title"),el("p",r.project_id+" · "+(label==="待确认绑定"&&r.state==="pending"?"待本方确认":historyStates[r.state]||({accepted:"已验收",delivered:"已送达 · 待决定"}[r.state])||r.state),"fleet-note"));
+    card.append(el("p",r.subject||r.result_id||r.relation_id,"fleet-task-title"),el("p",r.project_id+" · "+(label==="待确认绑定"&&r.state==="pending"?"待本方确认":copyLabel({...historyStates,accepted:"已验收",delivered:"已送达 · 待决定"},r.state)),"fleet-note"));
     const review=(r.subject?r.subject+"\n":"")+"项目："+r.project_id+(label==="交付候选"?"\n候选："+r.result_id:"\n对象："+(r.delegation_id||r.relation_id||r.result_id));
     if(!r.identity_current){card.append(el("p","旧节点代次，仅供查看。","fleet-note fleet-warning"));}
     else if(label==="待接收委派"){
@@ -4088,11 +4299,11 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   }
   renderDelivery(v.delivery,box);
   const receipts=el("details",undefined,"fleet-trace");receipts.open=true;receipts.append(el("summary","操作回执 · "+v.actions.length));
-  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(commandNames[a.command]||a.command)+" · "+(actionStates[a.state]||a.state),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+({integration_ready:"合并内容已准备",integration_launched:"合并已启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已启动 · 待回执"}[a.result.state]||historyStates[a.result.state]||a.result.state):"")+(a.conflict?.message?" · "+a.conflict.message:a.last_error_code?" · "+a.last_error_code:""),"fleet-note"),techIds([["请求",a.action_id]]));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(commandNames[a.command]||a.command)+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
+  for(const a of v.actions){const row=el("div",undefined,"fleet-edge");row.append(el("p",(copyLabel(commandNames,a.command,"其他操作"))+" · "+(copyLabel(actionStates,a.state)),"fleet-task-title"),el("p",a.project_id+" · 尝试 "+a.attempts+" 次 · "+time(a.updated_at)+(a.result.state?" · 对象状态："+copyLabel({...historyStates,integration_ready:"合并内容已准备",integration_launched:"合并已请求启动，待核对",source_applied:"来源已合并，尚未验收",completion_prepared:"验收决定已保存",completion_ready:"执行端已就绪",completion_retired:"双端登记已完成",completion_settled:"本端已验收结案",queued:"待处理",ready:"输入已准备",checks_passed:"检查通过 · 待验收",checks_failed:"检查未通过",retry_scheduled:"原操作已重新排队",target_registered:"接收已授权",content_verified:"内容已核验",launch_committed:"已请求启动 · 待回执"},a.result.state):"")+(a.conflict?.message?" · "+copyError(a.conflict.message):a.last_error_code?" · 错误码："+a.last_error_code:""),"fleet-note"),techIds([["请求",a.action_id]]));if(a.state==="blocked"&&["register_artifact_target","prepare_artifact","send_artifact","verify_artifact","prepare_verification","run_verification","reconcile_verification","prepare_integration","apply_integration","reconcile_integration","check_integration","prepare_completion","send_completion","register_completion","poll_completion","settle_completion"].includes(a.command))row.append(actionButton("恢复原交付操作",a.project_id,"resume_delivery",{id:a.action_id},"项目："+a.project_id+"\n原请求："+a.action_id+"\n操作："+(copyLabel(commandNames,a.command,"其他操作"))+"\n复用原参数并重新检查权限和任务版本。检查已经启动时只核对保留观察，不重复执行。"));receipts.append(row);}
   if(!v.actions.length)receipts.append(el("p","从本机任务详情发起委派，或处理收到的委派。","fleet-note"));box.append(receipts);
   if(v.truncated)box.append(el("p","每类最多显示 100 条；请缩小项目范围。","fleet-note fleet-warning"));
  }
- async function loadActions(id,signal){try{const v=await request("/api/fleet/actions"+(project.value?"?project="+encodeURIComponent(project.value):""),signal);if(id===generation)renderActions(v);}catch(e){if(e.name!=="AbortError"&&id===generation)$("fleet-actions").replaceChildren(el("p","操作入口暂不可用："+e.message,"fleet-note fleet-warning"));}}
+ async function loadActions(id,signal){try{const v=await request("/api/fleet/actions"+(project.value?"?project="+encodeURIComponent(project.value):""),signal);if(id===generation)renderActions(v);}catch(e){if(e.name!=="AbortError"&&id===generation)$("fleet-actions").replaceChildren(el("p","操作入口暂不可用："+copyError(e),"fleet-note fleet-warning"));}}
  async function taskActions(t,body,id){
   const section=el("section",undefined,"fleet-edge");section.append(el("h3","任务操作"));body.append(section);
   if(t.read_only){section.append(el("p","这是远端缓存，请在所属终端处理任务；本机只发送已有委派关系的请求。","fleet-note"));return;}
@@ -4106,20 +4317,20 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
    const button=el("button","发起跨端委派");button.type="button";button.disabled=t.status==="done";
    button.addEventListener("click",()=>{const peer=peers.find(p=>p.node_id===select.value);if(peer)openAction("发起跨端委派",t.project_id,"create_delegation",{task_uid:t.task_uid,expected_version:t.aggregate_version,target_node_id:peer.node_id,target_epoch:peer.node_epoch},t.subject+"\n来源任务："+t.task_uid+"\n当前版本："+t.aggregate_version+"\n目标终端："+peer.node_id+"\n任务说明："+(t.description||"")+"\n验收条件："+(t.acceptance||""));});
    const bar=el("div",undefined,"fleet-edge-path");bar.append(label,button);section.append(bar);
-  }catch(e){if(id===detailGeneration)section.append(el("p","操作入口暂不可用："+e.message,"fleet-note fleet-warning"));}
+  }catch(e){if(id===detailGeneration)section.append(el("p","操作入口暂不可用："+copyError(e),"fleet-note fleet-warning"));}
  }
 
  function render(value){last=value;for(const n of value.nodes)ownerNames.set(n.node_id,n.display_name);for(const p of value.projects)projectNames.add(p);choices();nodes.replaceChildren();$("fleet-summary").replaceChildren(el("span",value.nodes.length+" 个终端"),el("span",value.total_matching+" 项匹配任务"),el("span",value.pending_publications+" 项待发布"),el("span",value.pending_acknowledgements+" 项同步待确认"));
   for(const n of value.nodes){const section=el("details",undefined,"fleet-node");section.open=folds.get(n.node_id)!==false;section.addEventListener("toggle",()=>folds.set(n.node_id,section.open));const heading=el("summary");heading.append(el("h3",n.display_name),el("span",connections[n.connection_state],"fleet-badge"));section.append(heading,techIds([["终端身份",n.node_id]]));
-   if(n.counts)section.append(el("p",(n.local?"当前筛选":"已缓存可见")+" "+n.counts.total+" 项 · 进行中 "+n.counts.in_progress+" · 等待 "+n.counts.waiting+" · 已完成 "+n.counts.done,"fleet-note"));else section.append(el("p","任务数量未知；取得远端列表后才显示数量。","fleet-note fleet-warning"));
+   if(n.counts)section.append(el("p",(n.local?"当前筛选":"已缓存可见")+" "+n.counts.total+" 项 · 已领取 "+n.counts.in_progress+" · 等待 "+n.counts.waiting+" · 已完成 "+n.counts.done,"fleet-note"));else section.append(el("p","任务数量未知；取得远端列表后才显示数量。","fleet-note fleet-warning"));
    for(const p of n.projects)section.append(el("p",p.project_id+" · "+connections[p.state]+" · 上次同步 "+time(p.last_sync_at)+(p.error_code?" · "+p.error_code:""),"fleet-note"));
    const tasks=value.tasks.filter(t=>t.owner_node_id===n.node_id),list=el("div",undefined,"fleet-tasks");if(tasks.length)taskRows(tasks,list);else list.append(el("p",n.counts?"当前筛选没有可显示的已知任务。":"此终端尚无可用任务列表。","fleet-note"));section.append(list);nodes.append(section);
   }
   relationships(value.relations,$("fleet-relations"));
-  notice.className="fleet-note";notice.textContent="视图更新于 "+time(value.generated_at)+(value.sync_state==="not_configured"?" · 本机尚未配置联邦同步":value.sync_state==="upgrade_required"?" · 同步存储需要升级，未读取远端数据":"")+(value.truncated?" · 仅显示前 "+value.returned+" 项，请缩小筛选或显示更多":"");$("fleet-more").hidden=!value.truncated||limit>=10000;
+  notice.className="fleet-note";notice.textContent="视图更新于 "+time(value.generated_at)+(value.sync_state==="not_configured"?" · 本机尚未配置多电脑同步":value.sync_state==="upgrade_required"?" · 同步存储需要升级，未读取远端数据":"")+(value.truncated?" · 仅显示前 "+value.returned+" 项，请缩小筛选或显示更多":"");$("fleet-more").hidden=!value.truncated||limit>=10000;
  }
  async function load(){if(!dialog.open)return;const id=++generation;controller?.abort();controller=new AbortController();const params=new URLSearchParams({limit:String(limit)});if(owner.value)params.set("owner",owner.value);if(project.value)params.set("project",project.value);if(query.value.trim())params.set("q",query.value.trim());notice.textContent="正在更新…";loadActions(id,controller.signal);loadProgress(id,controller.signal);
-  try{const value=await request("/api/fleet?"+params,controller.signal);if(id===generation)render(value);}catch(e){if(e.name==="AbortError")return;if(id===generation){notice.className="fleet-note fleet-warning";notice.textContent=(last?"更新失败，保留上次视图。":"视图读取失败。")+e.message;}}
+  try{const value=await request("/api/fleet?"+params,controller.signal);if(id===generation)render(value);}catch(e){if(e.name==="AbortError")return;if(id===generation){notice.className="fleet-note fleet-warning";notice.textContent=(last?"更新失败，保留上次视图。":"视图读取失败。")+copyError(e);}}
  }
  async function showTask(uid){
   const id=++detailGeneration;$("fleet-detail-title").textContent="任务详情";if(!detail.open)detail.showModal();
@@ -4127,17 +4338,17 @@ setInterval(refresh, 15000);    // fallback poll: a dead SSE never leaves a stal
   try{
    const t=await request("/api/fleet/task?uid="+encodeURIComponent(uid));if(id!==detailGeneration||!detail.open)return;
    $("fleet-detail-title").textContent=t.subject;body.replaceChildren();
-   const card=t.local_id!==null?byId.get(t.local_id):null,wait=t.status==="waiting"&&t.waiting_for?" · "+(meta.wf_labels?.[t.waiting_for]||t.waiting_for):"";
+   const card=t.local_id!==null?byId.get(t.local_id):null,wait=t.status==="waiting"&&t.waiting_for?" · "+(meta.wf_labels?.[t.waiting_for]||"等待处理"):"";
    // One computer: which computer, where the data came from and an unbound project say nothing.
    const dl=el("dl"),multi=homeMulti()||t.read_only;
-   for(const[label,value]of [...(multi?[["所属电脑",homeName(t.owner_name,t.read_only?"另一台电脑":"本机")]]:[]),["状态",(states[t.status]||t.status)+wait],...(multi||t.project_id?[["项目",t.project_id||"未绑定"]]:[]),...(multi?[["数据来源",t.read_only?"其他电脑的缓存 · 同步于 "+time(t.last_sync_at):"本机"]]:[]),["更新",time(t.updated_at)],...(t.local_id!==null?[[multi?"本机编号":"编号","#"+t.local_id]]:[])])dl.append(el("dt",label),el("dd",value));
+   for(const[label,value]of [...(multi?[["所属电脑",homeName(t.owner_name,t.read_only?"另一台电脑":"本机")]]:[]),["状态",(copyLabel(states,t.status))+wait],...(multi||t.project_id?[["项目",t.project_id||"未绑定"]]:[]),...(multi?[["数据来源",t.read_only?"其他电脑的缓存 · 同步于 "+time(t.last_sync_at):"本机"]]:[]),["更新",time(t.updated_at)],...(t.local_id!==null?[[multi?"本机编号":"编号","#"+t.local_id]]:[])])dl.append(el("dt",label),el("dd",value));
    body.append(dl);nextStep(t,card,body);
    for(const[label,value]of [["任务说明",t.description],["验收条件",t.acceptance],["执行结果",t.result],["裁定",t.verdict_note]])if(value){body.append(el("h3",label),el("pre",value));}
    if(multi||t.project_id)taskActions(t,body,id);
    const tech=techIds([["终端身份",t.owner_node_id],["任务 UID",t.task_uid],["父任务",t.parent_uid||"根任务"],["运行",t.run_id||"尚无运行"],["任务版本",t.aggregate_version],...(t.read_only?[["数据代次",t.source_epoch],["收到于",time(t.received_at)]]:[])]);
    tech.classList.add("fleet-trace");evidence(t.evidence,tech);body.append(tech);
    if(t.local_id!==null){const locate=el("button","在「全部任务」中定位");locate.type="button";locate.addEventListener("click",()=>{detail.close();dialog.close();locateOnBoard(t.local_id);});body.append(locate);}
-  }catch(e){if(id===detailGeneration)body.replaceChildren(el("p",e.message,"fleet-note fleet-warning"));}
+  }catch(e){if(id===detailGeneration)body.replaceChildren(el("p",copyError(e),"fleet-note fleet-warning"));}
  }
  // The same words the home lists use (homeStep): what state, what to do next, and for a card
  // of this board a way to the place where it is done.

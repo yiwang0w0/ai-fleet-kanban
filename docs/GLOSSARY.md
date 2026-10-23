@@ -17,6 +17,9 @@ labels have one source since v0.14.1. Migration is documented in
 | term | layer | meaning |
 |---|---|---|
 | `not_started` / `in_progress` / `waiting` / `done` | machine | the four task statuses — there is no fifth; "blocked" is not a status |
+| `execution_trace` | machine | `/api/tasks` 与单任务详情的只读投影：`run_id`、`released_at`、`claimed_at`、`launch_requested_at`、`process_started_at`、`last_activity_at`、`ended_at`、`process_state`、`work_state`。不新增任务状态、执行权限或重派入口 |
+| 最近放行 / 本轮领取 / 启动请求 / 进程观察 | display | 分别依据真实放行事件、本轮领取事件、启动许可及通过校验的进程回执。领取事务写入的 `task_runs.started_at` 与 `work_spans` 不是模型开工时间；缺失记录不按心跳或更新时间补造 |
+| 已领取 · 开工待核实 / 有输出记录 | display | `in_progress` 表示持卡，不保证进程或模型正在工作。输出活动也不证明有效进展；本轮交付和最终验收继续沿用原门禁 |
 | 未开始 / 进行中 / 等待中 / 已完成 | display | their Chinese labels — **one copy**, `STATUS_LABEL` in `core/store.js`, served on `GET /api/meta`; the panel columns and `cli/board.py` read it from there and keep none (v0.14.1; before that, two hand-written copies) |
 | `waiting_for` = `review` / `confirm` / `decision` / `dep` / `rearm` | machine | why a card waits: delivered–unreviewed / options need a human / worker exhausted attempts / dependency / parked until children finish |
 | 待验收 / 待确认 / 待裁定 / 待依赖 / 等待重审 | display | their labels — **one copy**, `WF_LABEL` in `core/store.js`, served on `GET /api/meta` (v0.14.1) |
@@ -38,7 +41,7 @@ labels have one source since v0.14.1. Migration is documented in
 | `WORKER_ROLE_KIND` / `WORKER_TOOL_PROFILE` / `WORKER_CHARTER` | machine | v0.22: the identity, handed to the slot by `slotEnv` (absent = `implement` / `write` / none — a plain line is byte-identical to v0.21). The loop refuses (exit 3) an out-of-domain value, a missing charter, or a charter outside the gated subtree |
 | `review.anti_affinity` = `runtime` (fleet config) · `?runtime=` + `held[]` / `anti_affinity` / `reviewer_runtime` on `GET /api/review/pending` · `review_hold` = `same_family` on a card · `review_lines` / `review_anti_affinity` on `GET /api/workers` · `REVIEWER_ANTI_AFFINITY` | machine | v0.23 auto-review anti-affinity: the reviewer never judges a delivery made by its own runtime family (`last_runtime`); such cards are listed as `held`, never dropped, and stay in 待验收 for a human or another family. Closed domain (only `runtime`; anything else refuses startup). Unknown author (no `last_runtime`) is never held |
 | `POST /api/goals/:id/pipeline` `{line?}` → 201 `{goal, line, task}` · `POST /api/goals/:id/decompose` `{model?, force?}` → 409 `{needs_force, pending_review[], hint}` · `add` event actor `decompose(forced)` | machine | v0.23 pipeline: the plan-review card (one child on a review-kind line; 409 while one is still open, 409 when no review line exists, 400 for a non-review line) and the decompose gate (refuses while a review child is not done; `force` passes and the children's history says so) |
-| 待异族审阅 · 起评审卡 · 强制拆解 | display | `review_hold=same_family` badge · the goal card's pipeline button · the decompose gate's confirm |
+| 待独立审阅 · 起评审卡 · 强制拆解 | display | `review_hold=same_family` 提示仍要求其他模型家族或人工审阅；显示词改变，不改变隔离审阅规则 |
 | 实现 / 评审 · 只读 · 章程 · ⚠偏离身份座席 | display | the identity words on the rig, the add-line form and the startup line — `implement` / `review` · `read-only` · `charter` · `seat_drift` |
 | panel verbs 通过 / 打回 (delivery) · 同意 / 否决 (question, `waiting_for=decision`) | display | v0.21 operator ruling: the button names the human act; the API verdicts stay `approve` / `reject`. 「结案」 left the operator's path (it survives only as the ledger term 联动结案) |
 | `POST /api/setup/bless` `{confirm_tree}` · `POST /api/setup/restart` `{force?}` · `POST /api/upgrade/apply` `{confirm_tree, force?}` | machine | v0.18 panel buttons (operator token). `confirm_tree` = the tree hash the human was shown; a mismatch with `HEAD:<gated_subtree>` is 409 — what you saw is what you accept. restart/apply refuse with 409 `{in_progress, needs_force, hint}` while cards are in flight unless `force`; 202 body = `{restarting, mode, from, to, lines:{stop,resume}, log_path, accepted}` |
@@ -71,7 +74,7 @@ labels have one source since v0.14.1. Migration is documented in
 | term | layer | meaning |
 |---|---|---|
 | `stop_reason` = `stopped-by-user` / `stopped-with-board` / `crash` / `exit-normal` | machine | recorded by the stop's INITIATOR before the tree kill; only `crash` triggers backoff restart |
-| 用户停止 / 随看板停止 / 崩溃 code=N / 正常结束 / 启动被拒绝 code=3 | display | `stopText` wordings (single mapping site in the server; the panel maps nothing) |
+| 用户停止 / 随看板停止 / 崩溃（退出码 N） / 正常结束 / 启动被拒绝（退出码 3） | display | `stopText` 展示词，仍由服务端统一生成；退出码及停止判定不变 |
 | exit code `3` (`REFUSED_EXIT` js / `EXIT_REFUSED` py) | machine | a gate refusal — deterministic, never restarted, **paired across the two languages**: change one alone and refusals silently degrade to crashes |
 | error codes `NOT_FOUND` `CONFLICT` `BAD_INPUT` `INTERNAL` → 404/409/400/500 | machine | the original board error taxonomy; unclassified falls to 400 `typed:false`. Peer/broker protocols have additional typed errors (see their qualified contracts below) |
 
@@ -81,6 +84,7 @@ labels have one source since v0.14.1. Migration is documented in
 |---|---|---|
 | option `kind` = `none` / `apply` (legacy `no_sql` / `sql_apply` normalized) | machine | whether a human must take files away and apply them |
 | file `role` = `apply` / `rollback` / `companion` | machine | executable (downloadable) vs view-only attachment |
+| 最终裁定 / 推荐方案 / 成本与风险 / 交接目录 | display | 裁定与附件提示用词；执行文件、回退文件、参考文件分别对应 `apply`、`rollback`、`companion`，不改变下载、执行回执或归档授权 |
 | `files` (legacy wire alias `sql_files`) | machine | option attachment list |
 | handoff target `{id, label, dir, exts, name_pattern}` | machine | operator-authorized destination (allowlist polarity: undeclared dirs are never written) |
 | `decision_action` = `continue` / `request_completion` / `confirm_executed` | machine | the human's action on a confirm card |

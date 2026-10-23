@@ -142,14 +142,24 @@ test("HTTP protocol rejects old workers and stale child/report/retry/heartbeat w
   writeFileSync(config,JSON.stringify({lines:[{id:"alpha",role:{kind:"implement",tools:"write"}}]}));
   const proc=spawn(process.execPath,[join(ROOT,"core/server.mjs")],{
     env:{...process.env,BOARD_PORT:String(port),BOARD_DATA_DIR:TMP,BOARD_DB:join(TMP,"http.db"),
-      BOARD_CONFIG:config,BOARD_ALLOW_UNPINNED:"1",BOARD_RESTART_MODE:"off"},
+      BOARD_CONFIG:config,BOARD_ALLOW_UNPINNED:"1",BOARD_RESTART_MODE:"exit"},
     windowsHide:true,stdio:["ignore","pipe","pipe"]});
   let out="";proc.stdout.on("data",b=>out+=b);proc.stderr.on("data",b=>out+=b);
   const base="http://127.0.0.1:"+port;
   try {
-    let ready=false;
-    for(let i=0;i<100;i++){try{ready=(await fetch(base+"/health")).ok;}catch{}if(ready)break;await new Promise(r=>setTimeout(r,100));}
-    assert.equal(ready,true,out);
+    // Windows CI 冷启动可能超过十秒；只等待同一子进程，不重启或重试任何协议写入。
+    let ready=false,lastProbe="未收到健康响应";
+    const startupDeadline=Date.now()+30000;
+    while(Date.now()<startupDeadline) {
+      if(proc.exitCode!==null||proc.signalCode!==null)break;
+      try {
+        const response=await fetch(base+"/health",{signal:AbortSignal.timeout(500)});
+        ready=response.ok;lastProbe="HTTP "+response.status;
+      } catch(error) {lastProbe=error.message;}
+      if(ready)break;
+      await new Promise(r=>setTimeout(r,100));
+    }
+    assert.equal(ready,true,`隔离服务未就绪；退出码=${proc.exitCode}，信号=${proc.signalCode}，最后探测=${lastProbe}\n${out}`);
     const op=readFileSync(join(TMP,"board_token"),"utf8").trim(), wk=readFileSync(join(TMP,"worker_token"),"utf8").trim();
     async function api(method,path,body,token=op) {
       body=await fixtureVersion(base,token,method,path,body);
@@ -203,7 +213,7 @@ test("HTTP protocol rejects old workers and stale child/report/retry/heartbeat w
     assert.equal(unassignedRuns.body.runs[0].role_id,"alpha");
     assert.equal(unassignedRuns.body.runs[0].worker,"alpha-2");
   } finally {
-    if(proc.exitCode===null){proc.kill();await new Promise(r=>proc.once("exit",r));}
+    if(proc.exitCode===null&&proc.signalCode===null){proc.kill();await new Promise(r=>proc.once("exit",r));}
   }
 });
 

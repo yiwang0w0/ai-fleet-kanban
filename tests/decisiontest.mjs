@@ -42,7 +42,8 @@ const renderDecisionPanel = panelPresent ? (() => {
   if (start < 0 || end < 0) throw new Error("decisionPanel not found in panel.html");
   const esc = (s) => String(s ?? "").replace(/[&<>\"]/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }[c]));
-  return Function("decisionChoice", "esc", `${sourceHtml.slice(start, end)}\nreturn decisionPanel;`)(new Map(), esc);
+  const copyStart = sourceHtml.indexOf("// ── display-copy(pure;tests/panelcopytest.mjs)──"), copyEnd = sourceHtml.indexOf("// ── /display-copy ──", copyStart);
+  return Function("decisionChoice", "esc", `${sourceHtml.slice(copyStart, copyEnd)}\n${sourceHtml.slice(start, end)}\nreturn decisionPanel;`)(new Map(), esc);
 })() : null;
 
 let pass = 0, fail = 0;

@@ -897,6 +897,8 @@ def prompt_selftest():
        rules and all(r.startswith(("Read(", "Edit(")) for r in rules), str([r for r in rules if not r.startswith(("Read(", "Edit("))][:3]))
     ok("⭐每个受保护文件名各一条 Read 一条 Edit,登记簿也是",
        len(rules) == 2 * len(PROTECTED) + 2 and sum(1 for r in rules if "verify_registry" in r) == 2, f"{len(rules)} 条")
+    ok("浏览器会话授权记录禁止模型读取和修改",
+       all(f"{tool}({deny_path(DATA)}/panel_sessions.json)" in rules for tool in ("Read", "Edit")))
     ok("deny 规则里没有反斜杠(正斜杠,两平台一致)", all("\\" not in r for r in rules))
     if os.name != "nt":
         ok("⭐POSIX 上绝对路径以 // 开头(单斜杠是项目根相对 —— v0.17.0 一条都没匹配上,2026-09-28 实测)",

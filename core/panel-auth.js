@@ -7,6 +7,13 @@
  const key='ai-fleet-board-pairing-v1',form=document.getElementById('board-pair-form'),input=document.getElementById('board-pair-token'),note=document.getElementById('board-pair-note'),pair=document.getElementById('board-pair'),shell=document.getElementById('board-shell'),keep=document.getElementById('board-pair-remember');
  const nativeFetch=window.fetch.bind(window),streams=new Set();let token='',paired=false,resolveReady;
  const ready=new Promise(resolve=>resolveReady=resolve);
+ // 只翻译浏览器异常的显示文案，不改变认证、请求或重试判定。
+ function pairingMessage(error){
+  if(error?.name==='TypeError')return '暂时连不上看板，请确认看板正在运行后重试。';
+  if(error?.name==='TimeoutError'||error?.name==='AbortError')return '连接看板超时，请确认看板正在运行后重试。';
+  if(error?.name==='SyntaxError')return '看板返回的数据无法识别，请刷新页面后重新配对。';
+  return typeof error?.message==='string'&&error.message?error.message:'连接失败，请稍后重试。';
+ }
  const stores=()=>{const out=[];try{out.push(sessionStorage);}catch{}try{out.push(localStorage);}catch{}return out;};
  // Ticked: this browser keeps it (and no tab copy). Unticked: this tab keeps it, and a copy in
  // this browser goes only if it is this same credential — another tab's choice stays.
@@ -66,7 +73,7 @@
  }
  async function authenticatedFetch(path,options={}){
   const url=new URL(path,location.href);
-  if(url.origin!==location.origin||!url.pathname.startsWith('/api/')||url.username||url.password)throw Error('面板仅访问本来源的看板接口。');
+  if(url.origin!==location.origin||!url.pathname.startsWith('/api/')||url.username||url.password)throw Error('面板只能访问当前看板地址下的接口。');
   if(!token)throw Error('请先配对本机看板。');
   const headers=new Headers(options.headers);headers.set('X-Board-Token',token);
   const response=await nativeFetch(url.href,{...options,headers,credentials:'omit',cache:'no-store',redirect:'error'});
@@ -95,13 +102,13 @@
    if(!closed&&token){notify('error');await new Promise(r=>setTimeout(r,2000));}
   }})();return stream;
  }
- form.addEventListener('submit',async event=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;note.textContent='正在核对…';try{await connect(input.value);}catch(e){note.textContent=e.message;}finally{button.disabled=false;}});
+ form.addEventListener('submit',async event=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;note.textContent='正在核对…';try{await connect(input.value);}catch(e){note.textContent=pairingMessage(e);}finally{button.disabled=false;}});
  document.getElementById('board-logout').addEventListener('click',()=>forget('已退出连接，这台电脑不再记住授权。',true));
  window.addEventListener('pagehide',()=>{for(const stream of streams)stream.close();});
  window.boardSession=Object.freeze({ready,fetch:authenticatedFetch,events});
  // A fresh code wins over a remembered credential (the person just asked for this browser to
  // be paired); a code that fails falls back to the remembered one before the form is shown.
  const code=fragmentCode(),stored=saved();
- if(code){note.textContent='正在用配对码连接…';redeem(code).catch(e=>stored?restore(stored).catch(()=>{note.textContent=e.message;}):(note.textContent=e.message));}
- else if(stored)restore(stored).catch(e=>{note.textContent=e.message;});
+ if(code){note.textContent='正在用配对码连接…';redeem(code).catch(e=>stored?restore(stored).catch(()=>{note.textContent=pairingMessage(e);}):(note.textContent=pairingMessage(e)));}
+ else if(stored)restore(stored).catch(e=>{note.textContent=pairingMessage(e);});
 })();

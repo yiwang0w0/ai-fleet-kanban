@@ -1,104 +1,83 @@
-// `node cli/status.mjs` — one command that answers "现在怎么了,怎么拉起来", for the
-// moments the home page can't answer because the page itself is what's down.
-//
-// It distinguishes the two failures people confuse (交接说明 第 4 批): 这台电脑在不在
-// (the machine is up — you are running this on it) and 看板服务正不正常 (the board
-// answers /health or it does not). Everything else folds into one line per problem,
-// each with the command that addresses it. Read-only: nothing here starts, stops or
-// repairs — those stay with start/stop/open and the panel.
+// `node cli/status.mjs` (= npm run status) — one place to see whether the board on this machine is
+// running, what needs attention and what to do next. The words are the home page's own
+// (core/home-model.mjs): the same merged alerts, the same next steps. Read-only: it starts, stops
+// and repairs nothing — when the board is down it says so, shows the end of its log and names the
+// command that brings it back.
+//   exit code: 0 running, nothing marked red · 2 running, something red · 1 not running
+import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
 import { boardUp, localBoard } from "../core/local-board.mjs";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { loadHomeModel } from "../core/home-model.mjs";
 
-const { url, port, dataDir, logFile, token } = localBoard();
-
-const out = [];
-let problems = 0;
+// Returns its exit code instead of calling process.exit(): see cli/open.mjs (Node 24 on Windows
+// aborts in libuv when exiting that way after requests to a running board).
+process.exitCode = await main();
 
 async function main() {
-  // ① The board service itself.
-  const up = await boardUp(url);
-  if (up) out.push(`✓ 看板服务正常(${url})`);
-  else {
-    problems++;
-    const listening = existsSync(logFile) ? `日志: ${logFile}` : "没有找到运行日志";
-    out.push(`✗ 看板服务没有应答(${port} 端口无人监听)—— 这台电脑是开着的,是看板停了。`);
-    out.push(`  下一步: node cli/start.mjs --background   (${listening})`);
+  const { url, dataDir, logFile, token } = localBoard();
+  if (!(await boardUp(url))) return notRunning(url, dataDir, logFile);
+  let key;
+  try { key = token(); }
+  catch (e) { console.log(`本机:电脑在线 · 看板服务正常(${url})`); console.error(`  读不到更多状态: ${e.message}`); return 2; }
+  const read = async (path) => {
+    const r = await fetch(url + path, { signal: AbortSignal.timeout(10000), headers: { "X-Board-Token": key } });
+    const v = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(v.error || `读取失败(${r.status})`), { status: r.status });
+    return v;
+  };
+  const [setup, workers, meta, fleet, health] = await Promise.allSettled(
+    ["/api/setup", "/api/workers", "/api/meta", "/api/fleet?limit=1", "/api/fleet/health"].map(read));
+  const ok = (r) => (r.status === "fulfilled" ? r.value : null), why = (r) => (r.status === "rejected" ? r.reason.message : null);
+  // 服务在线不等于状态可读；必需读取失败不能被可选的健康提醒掩盖。
+  const unreadable = [["配置", setup], ["执行器", workers], ["本机状态", meta]].filter(([, r]) => r.status === "rejected");
+  if (unreadable.length) {
+    console.log(`本机:电脑在线 · 看板服务有应答(${url})`);
+    const denied = unreadable.some(([, r]) => [401, 403].includes(r.reason?.status));
+    console.error(`  ${denied ? "操作员授权未通过" : "状态读取受阻"}：${unreadable.map(([label, r]) => label + "（" + why(r) + "）").join("、")}`);
+    console.log(denied ? "下一步:核对启动命令、数据目录和操作员授权，再重试；不要重建或公开令牌。" : "下一步:查看数据目录里的 board.log，排除读取问题后重试。");
+    return 2;
   }
-
-  // ② Authenticated reads — only meaningful when the board answers.
-  if (up) {
-    let tok = "";
-    try { tok = token(); } catch (e) { tok = ""; out.push(`✗ 读不到操作员令牌: ${e.message}`); problems++; }
-    const get = async (path) => {
-      // Connection: close — the default keep-alive pool leaves an open handle, and
-      // process.exit over a live undici socket trips a libuv assertion on Windows
-      // (measured: exit=127 after a fully printed report). One-shot command, no pool.
-      const r = await fetch(url + path, { headers: { "X-Board-Token": tok, Connection: "close" }, signal: AbortSignal.timeout(5000), cache: "no-store" });
-      const v = await r.json().catch(() => ({}));
-      if (!r.ok) throw Object.assign(Error(v.error || `HTTP ${r.status}`), { code: r.status });
-      return v;
-    };
-    try {
-      const counts = await get("/api/meta");
-      const c = counts.counts;
-      out.push(`✓ 数据可读: 未开始 ${c.not_started} · 进行中 ${c.in_progress} · 等待中 ${c.waiting} · 已完成 ${c.done}(任务与结果都在)`);
-    } catch (e) {
-      problems++;
-      out.push(`✗ 数据读不了(${e.message})—— 多为令牌不对: 重新配对 node cli/open.mjs`);
-    }
-    try {
-      const health = await get("/api/fleet/health");
-      // One line per kind of problem, however many records are behind it — the same
-      // folding the home page does; each carries the command that addresses it.
-      const issues = health.issues || [];
-      if (!issues.length) out.push("✓ 运行检查没有发现问题");
-      else for (const i of issues) {
-        problems++;
-        const n = i.count > 1 ? `（${i.count} 项）` : "";
-        out.push(`✗ ${HEALTH_WORDS[i.code] || i.code}${n} —— 下一步: ${NEXT_WORDS[i.next_action] || "看板运行日志"}`);
-      }
-    } catch (e) {
-      problems++;
-      out.push(`✗ 运行检查读不了(${e.message})`);
-    }
-  } else {
-    // The data directory is the operator's reassurance that nothing was lost: its
-    // database file is the tasks and results, untouched by the service being down.
-    const db = existsSync(`${dataDir}\\board.db`) || existsSync(`${dataDir}/board.db`);
-    out.push(db ? `  数据完好: ${dataDir}(任务与结果都在,重启后原样回来)`
-                : `  还没有数据目录(${dataDir})—— 首次安装跑 node cli/setup.mjs`);
-  }
-
-  console.log(out.join("\n"));
-  // ⚠ No process.exit()/reallyExit() here. This process has fetched over undici; both
-  //   exits, over the pooled (or closing) socket, trip a libuv assertion on Windows and
-  //   the crash code 127 overwrites ours (measured: exit()=127, reallyExit()=127,
-  //   natural drain=0). Let the loop drain; exitCode carries the verdict.
-  process.exitCode = problems ? 1 : 0;
+  const M = loadHomeModel(), name = ok(meta)?.node?.display_name, version = ok(setup)?.version;
+  const s = M.homeStatus({ localName: name, nodes: ok(fleet)?.nodes || null, fleetError: why(fleet),
+                           health: ok(health), healthError: why(health), setup: ok(setup) });
+  console.log(`本机「${M.homeName(name, "本机")}」:电脑在线 · 看板服务正常(${url}${version ? ",版本 " + version : ""})`);
+  const lines = linesNow(ok(workers));
+  if (lines) console.log(`  执行线:${lines}`);
+  console.log(`  ${s.line}`);
+  for (const a of s.alerts) console.log(`  ${a.tone === "bad" ? "✗" : "!"} ${a.where}:${a.what} —— 下一步:${a.next}`);
+  return s.alerts.some((a) => a.tone === "bad") ? 2 : 0;
 }
 
-const HEALTH_WORDS = {
-  BROKER_INTERRUPTED: "有一次执行分派中断", BROKER_PREPARED_STALE: "有执行分派长时间没有启动",
-  CALL_BUDGET_OVERRUN: "调用额度记账超出上限", CALL_BUDGET_EXHAUSTED: "调用额度已用完",
-  STORAGE_LOW: "磁盘空间不足", STORAGE_UNAVAILABLE: "读不到磁盘空间",
-  DELIVERY_BLOCKED: "有跨机交付操作受阻", DELIVERY_RETRY_PENDING: "有跨机交付在等待重发",
-  SCHEDULER_ATTENTION: "调度器的停止情况待核对", SCHEDULER_HEARTBEAT_STALE: "调度器心跳超时",
-  NODE_ATTENTION: "节点运行器的停止情况待核对", NODE_HEARTBEAT_STALE: "节点运行器心跳超时",
-  NODE_SYNC_RETRY: "同步正在重试", NODE_SYNC_PENDING: "同步有积压",
-  NODE_SYNC_OBSERVATION_STALE: "同步状态长时间没有更新", NODE_COMPONENT_STOPPED: "节点组件已停止",
-  NODE_COMPONENTS_MISSING: "节点组件没有上报", CLOCK_UNKNOWN: "时间记录对不上", STALE_EPOCH_RECORD: "有旧代次的遗留记录",
-};
-const NEXT_WORDS = {
-  dispatch_stale_then_reconcile: "核对后在面板恢复这次分派", review_prepared_dispatch: "核对没有启动的分派",
-  inspect_call_quota_ledger: "核对额度记账(mcp-admin)", review_explicit_call_budget: "决定是否追加额度",
-  inspect_storage_before_new_work: "先腾出磁盘空间再派新任务", inspect_storage_observation: "检查数据盘",
-  review_fleet_action: "在面板全局视图核对受阻操作", check_peer_then_resume_same_action: "检查对端电脑后重发原操作",
-  review_scheduler_stop_evidence: "核对调度器的停止证明", review_node_stop_evidence: "核对节点运行器的停止证明",
-  inspect_scheduler_owner: "检查调度器进程(node cli/node-runtime.mjs status)", inspect_node_runtime: "检查节点运行器(node cli/node-runtime.mjs status)",
-  inspect_scheduler_lock: "检查调度器运行锁", inspect_node_lock: "检查节点运行锁",
-  verify_stop_before_lock_recovery: "确认进程已停止,再恢复运行锁",
-  inspect_node_sync_then_peer: "检查本机同步和对端", inspect_sync_backlog: "查看同步积压(面板全局视图)",
-  check_local_clock: "核对两台电脑的系统时间", review_epoch_recovery: "核对代次恢复记录",
-};
+/** Each configured line once, by its label: running if any of its slots runs. */
+function linesNow(w) {
+  if (!w || !Array.isArray(w.lines) || !w.lines.length) return "";
+  const labels = w.line_labels || {}, workers = Array.isArray(w.workers) ? w.workers : [];
+  return w.lines.map((l) => (labels[l] || l) + " " + (workers.some((x) => x.line === l && x.running) ? "运行中" : "已停止")).join("、");
+}
 
-main();
+function notRunning(url, dataDir, logFile) {
+  console.log(`本机:电脑在线 · 看板服务没有运行(${url} 没有应答)`);
+  const tail = logTail(logFile, 8);
+  if (tail.length) {
+    console.log(`  后台运行的日志最后 ${tail.length} 行(${logFile}):`);
+    for (const l of tail) console.log("    " + l);
+  } else console.log(`  没有后台运行的日志(${logFile})`);
+  console.log(`  已有的任务和结果都在 ${dataDir} 里,重新启动后照原样回来。`);
+  console.log("下一步:node cli/start.mjs --background");
+  return 1;
+}
+
+/** The last `n` non-empty lines of the log, reading only its end (the log keeps every run). The
+ *  cut is by bytes, so a line split by it is dropped rather than shown half-decoded. */
+function logTail(file, n) {
+  if (!existsSync(file)) return [];
+  let fd;
+  try {
+    fd = openSync(file, "r");
+    const size = fstatSync(fd).size, len = Math.min(size, 64 * 1024), buf = Buffer.alloc(len);
+    readSync(fd, buf, 0, len, size - len);
+    const lines = buf.toString("utf8").split(/\r?\n/);
+    if (len < size) lines.shift();
+    return lines.map((l) => l.trimEnd()).filter(Boolean).slice(-n);
+  } catch { return []; }
+  finally { if (fd !== undefined) closeSync(fd); }
+}

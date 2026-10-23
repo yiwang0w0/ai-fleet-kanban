@@ -63,7 +63,7 @@ test('three authenticated sources converge after staggered partitions, a lost co
   for(const n of nodes)update(n,1);
   shareTask(a.db,{id:a.ids[1],projectId:project,expectedVersion:store.get(a.db,a.ids[1]).aggregate_version,enabled:false});
   const unavailable=[];
-  for(const source of [b,c]){const result=await pull(route(source,a));assert.equal(result.state,'error');assert.equal(result.error_code,'NETWORK_ERROR');unavailable.push(source.alias);}
+  for(const source of [b,c]){const result=await pull(route(source,a));assert.equal(result.state,'error');assert.equal(result.error_code,'PEER_REFUSED');unavailable.push(source.alias);}
   assert.equal(digest(listReplicas(b.db,{projectId:project})),cacheB);assert.equal(digest(listReplicas(c.db,{projectId:project})),cacheC);
   // B returns first; both peers converge without using C as a relay or authority.
   reopen(b);await start(b);await drain(route(b,a));await drain(route(a,b));verify(a,b);verify(b,a);

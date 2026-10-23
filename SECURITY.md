@@ -16,8 +16,8 @@ from a named incident (see `docs/INCIDENTS.md`):
 
 - **Local board UI/API only.** `core/server.mjs` binds `127.0.0.1` and refuses
   to listen wider. Do not reverse-proxy this UI/API onto the tailnet or public
-  network. Its writes require `X-Board-Token`; its reads retain the local trust
-  boundary described below. The separate peer gateway is the only planned
+  network. 操作性读写均要求对应角色的凭据；匿名访问仅开放配对页面及有限的健康／协议发现。
+  The separate peer gateway is the only planned
   tailnet-facing surface.
 - **Three credential classes** (v0.2, INCIDENT-12: an agent granted the board
   folder read the token and approved its own card). `board_token` = operator,
@@ -65,6 +65,9 @@ from a named incident (see `docs/INCIDENTS.md`):
   the boundary is the prompt, which is discipline, not structure. On a shared
   machine run the fleet as its own OS user; `doctor` and the server both say
   which case a deployment is in.
+  浏览器使用可撤销、会过期的独立操作员凭据；`panel_sessions.json` 仅保存凭据摘要和签发时间，
+  但修改该文件会影响授权，所以同样列入 Claude 路径级 `Read`／`Edit` 禁用清单。
+  原子写临时文件由既有 `*.tmp` 规则覆盖；证据输出目录仍不受这些规则覆盖。
 - **Card text is never a command line.** The worker refuses `.bat/.cmd` CLIs
   (CVE-2024-24576, "BatBadBut": cmd.exe re-parses arguments, so a card body
   could become an executable command line). The gate judges by extension on
@@ -90,7 +93,7 @@ from a named incident (see `docs/INCIDENTS.md`):
 
 | surface | caller and credential | exposure |
 |---|---|---|
-| original board UI / `/api/*` | local operator/worker/review token classes; original reads remain unauthenticated | loopback only; do not proxy |
+| original board UI / `/api/*` | 本机 operator／worker／review 及独立浏览器凭据；操作性读写均鉴权 | loopback only; do not proxy |
 | independent `/peer/v1/*` gateway | receiver-issued bearer bound to peer node, epoch, credential version, scope and project | explicit loopback port; only this port is intended for a Tailscale private HTTPS proxy |
 | `/local/v1/tools/list` and `/local/v1/tools/call` broker | per-principal bearer bound to local node epoch, role version and projects; execution principal also bound to agent/run | loopback only; internal HTTP, not a public MCP transport |
 | `cli/mcp.mjs` | desktop/agent MCP stdio bridge with a restricted credential file | JSON-RPC on stdio; diagnostics on stderr; no database path or operator token given to the bridge |
